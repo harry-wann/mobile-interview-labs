@@ -88,6 +88,18 @@ fun OrderSummary(qty: String) {
 
 - 在函式本體直接呼叫下單 API，重組幾次就下幾次單。因為 Composable 會被反覆執行，Compose 也不保證會執行幾次。
 
+```kotlin
+@Composable
+fun OrderSummaryWrong(qty: String, api: OrderApi) {
+    // 錯：函式本體直接打 API，每次重組都會再下一次單
+    api.submit(qty)
+
+    Text("數量：$qty")
+}
+```
+
+畫面每重組一次（輸入的數量改了、旋轉螢幕重建都算），就多送出一筆訂單，同一張單可能被送出好幾次。
+
 #### State：Compose 盯著看的變數
 
 **這是什麼**
@@ -130,9 +142,22 @@ fun SubmitCounter() {
 - 把 `sent` 寫成普通的區域變數，點了按鈕，畫面永遠是「已送出：0 筆」。`sent` 真的變成了 1，但 Compose 看不到這個變數，沒有人通知它重組。
 
 ```kotlin
-// 普通的區域變數，Compose 看不到它
-var sent = 0
+@Composable
+fun SubmitCounterWrong() {
+    // 錯：普通的區域變數，Compose 看不到它
+    var sent = 0
+
+    Column {
+        Text("已送出：$sent 筆")
+
+        Button(onClick = { sent++ }) {
+            Text("送出")
+        }
+    }
+}
 ```
+
+不管點幾次「送出」，畫面都停在「已送出：0 筆」。
 
 #### `remember`
 
@@ -165,6 +190,24 @@ fun PriceText(price: Long) {
 **不這樣寫會怎樣**
 
 - 把計數器的 `remember` 拿掉（`var sent by mutableIntStateOf(0)`），點按鈕畫面永遠是 0。State 有被寫入、Compose 也重組了，但重組時函式從頭跑，又建出一個值為 0 的新 State。
+
+```kotlin
+@Composable
+fun SubmitCounterNoRemember() {
+    // 錯：少了 remember，每次重組都建一個值為 0 的新 State
+    var sent by mutableIntStateOf(0)
+
+    Column {
+        Text("已送出：$sent 筆")
+
+        Button(onClick = { sent++ }) {
+            Text("送出")
+        }
+    }
+}
+```
+
+點「送出」之後畫面還是「已送出：0 筆」，因為每次重組，`sent` 都被重建成 0。
 
 三種寫法並排比較：
 
@@ -249,7 +292,20 @@ fun SideToggle() {
 **不這樣寫會怎樣**
 
 - 把 `MutableState` 直接公開給外面（沒有 `private set`），任何程式都能改它的值，出了問題找不到是誰改的。因為 State 本身不限制誰可以寫，限制要自己加。
-- 換成普通的 `var`，或漏了 `remember`，症狀和原因已經在第 1 題看過。
+
+```kotlin
+class OrderFormWrong {
+    // 錯：沒有 private set，外面任何程式都能直接改
+    var side by mutableStateOf("BUY")
+}
+
+fun onLogoutClicked(form: OrderFormWrong) {
+    // 別的檔案裡的程式也能偷偷改，之後很難追是誰改的
+    form.side = "SELL"
+}
+```
+
+畫面上的買賣方向被改成 SELL，卻沒有人知道是從哪裡改的。
 
 #### `by` 和 `.value` 差在哪
 
@@ -296,6 +352,18 @@ fun PriceBoard() {
 
 - 用了 `by` 卻沒 import `androidx.compose.runtime.getValue` 和 `setValue`，編譯不過。因為 `by` 靠這兩個函式才知道怎麼讀寫 State（Android Studio 通常會替你補上）。
 
+```kotlin
+@Composable
+fun PriceBoardWrong() {
+    // 錯：檔案頂端沒有 import getValue 和 setValue
+    var open by remember { mutableLongStateOf(0L) }
+
+    Text("開盤 $open")
+}
+```
+
+建置時編譯失敗，訊息說這個型別沒有 `getValue`，不能當 delegate（Android Studio 通常會提示補上 import）。
+
 #### 把讀取往下推：只重畫價格那一行
 
 **這是什麼**
@@ -337,6 +405,24 @@ fun LivePrice(price: State<Long>) {
 
 - 在上層先讀成 `Long` 再傳下去（`OrderForm(price = priceState.value)`），價格每變一次，呼叫端和 `OrderForm` 都要重組。因為讀取發生在呼叫端，Compose 記下的是「呼叫端依賴價格」。
 
+```kotlin
+@Composable
+fun ScreenWrong(priceState: State<Long>) {
+    // 錯：在呼叫端先讀 value，ScreenWrong 就依賴了價格
+    OrderFormWrong(price = priceState.value)
+}
+
+@Composable
+fun OrderFormWrong(price: Long) {
+    Column {
+        Text("下單表單")
+        Text("即時價格：$price")
+    }
+}
+```
+
+價格每變一次，`ScreenWrong` 和 `OrderFormWrong` 都要重新執行，不只價格那一行。
+
 #### `mutableIntStateOf` 家族
 
 **這是什麼**
@@ -366,7 +452,33 @@ fun PriceAndUnread() {
 **不這樣寫會怎樣**
 
 - 用 `mutableStateOf(0L)` 存每秒更新幾十次的價格，畫面照樣正常，看不出問題，卻每次寫入都多一個短命物件（-128 到 127 的小整數會共用快取，超過就新建），增加記憶體回收的負擔。Android Studio 的 lint（內建的程式碼檢查工具）`AutoboxingStateCreation` 會提醒。
+
+```kotlin
+@Composable
+fun PriceAndUnreadWrong() {
+    // 錯：數字用 mutableStateOf，每次寫入都要把數字裝箱成物件
+    var price by remember { mutableStateOf(0L) }
+    var unread by remember { mutableStateOf(0) }
+
+    Text("價格：$price，未讀：$unread")
+}
+```
+
+畫面顯示和執行結果都正常，只有 Android Studio 的 lint 會在這兩行標出 `AutoboxingStateCreation` 警告。
+
 - 用了 primitive 版卻去讀 `.value`，一樣會 boxing。要改讀 `longValue` 或用 `by`，lint 的 `AutoboxingStateValueProperty` 會提醒。
+
+```kotlin
+@Composable
+fun PriceLabelWrong() {
+    val price = remember { mutableLongStateOf(0L) }
+
+    // 錯：用了 Long 版卻讀 .value，一樣會裝箱
+    Text("價格：${price.value}")
+}
+```
+
+畫面照常顯示，但 lint 會標出 `AutoboxingStateValueProperty`，提醒改讀 `longValue`。
 
 #### 對應到 SwiftUI
 
@@ -452,7 +564,42 @@ fun OrderList() {
 **不這樣寫會怎樣**
 
 - 項目是 `class` 又原地改欄位（`orders[1].filled = 0.5`），清單那一列的畫面不更新。因為清單只認得自己內容的改變（新增、刪除、換掉某一格），不看項目裡面；項目要用 `data class` 加 `val`，更新時換掉那一格：`orders[1] = orders[1].copy(filled = 0.5)`（演練 1）。
+
+```kotlin
+class OrderRowWrong(val symbol: String, var filled: Double)
+
+@Composable
+fun OrderListWrong(orders: SnapshotStateList<OrderRowWrong>) {
+    Button(onClick = {
+        // 錯：原地改欄位，清單本身沒變，Compose 不知道
+        orders[0].filled = 0.5
+    }) {
+        Text("已成交 ${orders[0].filled}")
+    }
+}
+```
+
+按下按鈕後，欄位其實已經變成 0.5，但按鈕上的「已成交」還是 0.0。
+
 - 一邊走訪一邊修改，會丟 `ConcurrentModificationException`（走訪的同時改動集合會出的錯）。因為走訪到一半，清單的內容被改了；要刪除符合條件的項目，用 `removeAll { }`。
+
+```kotlin
+@Composable
+fun CleanupButtonWrong(orders: SnapshotStateList<OrderRow>) {
+    Button(onClick = {
+        for (row in orders) {
+            if (row.filled >= 1.0) {
+                // 錯：一邊走訪一邊刪除
+                orders.remove(row)
+            }
+        }
+    }) {
+        Text("清掉已成交")
+    }
+}
+```
+
+清單裡有好幾筆已成交的項目時，按下按鈕會丟 `ConcurrentModificationException`，App 閃退。
 
 #### `mutableStateMapOf`
 
@@ -491,6 +638,24 @@ fun LatestPrices() {
 
 - `mutableStateOf(mutableMapOf())` 之後原地 `put`，畫面不更新。State 的值還是同一個 map，Compose 以為沒有換。
 
+```kotlin
+@Composable
+fun LatestPricesWrong() {
+    val latest = remember {
+        mutableStateOf(mutableMapOf<String, Long>())
+    }
+
+    Button(onClick = {
+        // 錯：原地 put，State 的值還是同一個 map
+        latest.value["BTC_JPY"] = 1_000_123L
+    }) {
+        Text("BTC_JPY：${latest.value["BTC_JPY"] ?: "--"}")
+    }
+}
+```
+
+按下按鈕後，按鈕上還是「BTC_JPY：--」，lint 的 `MutableCollectionMutableState` 也會在宣告那一行警告。
+
 #### `mutableStateOf(listOf(…))`：整個換掉
 
 **這是什麼**
@@ -521,6 +686,22 @@ fun BidBook() {
 **不這樣寫會怎樣**
 
 - 把 `mutableListOf()` 放進 `mutableStateOf` 再原地 `add`，畫面不動（Kotlin06 演練 2）。因為 State 的值還是同一個 list 物件，Compose 只比「換沒換」，看不到裡面多了一筆。
+
+```kotlin
+@Composable
+fun BidBookWrong() {
+    val bids = remember { mutableStateOf(mutableListOf<Long>()) }
+
+    Button(onClick = {
+        // 錯：原地 add，State 的值還是同一個 list
+        bids.value.add(101L)
+    }) {
+        Text("收到訂單簿快照，目前 ${bids.value.size} 檔")
+    }
+}
+```
+
+按幾次按鈕，畫面都停在「目前 0 檔」。
 
 #### 對應到 SwiftUI
 
@@ -604,6 +785,26 @@ fun TickLabel() {
 
 - 領域物件 `Order` 的 `equals` 只比 `id`，訂單 A1 的狀態從 New 變成 Filled，畫面卻停在 New，連 State 裡存的都還是舊物件。因為新舊 `Order` 的 `id` 一樣，`equals` 說相等，寫入就被丟掉了（演練 2）。
 
+```kotlin
+class Order(val id: String, val status: String) {
+    override fun equals(other: Any?) = other is Order && other.id == id
+
+    override fun hashCode() = id.hashCode()
+}
+
+@Composable
+fun OrderBadgeWrong() {
+    // 錯：預設 policy 用 equals 比，id 一樣就被當成沒變
+    var order by remember { mutableStateOf(Order("A1", "New")) }
+
+    Button(onClick = { order = Order("A1", "Filled") }) {
+        Text("訂單 ${order.id}：${order.status}")
+    }
+}
+```
+
+點按鈕後，畫面還是「訂單 A1：New」，連 `order` 裡存的都還是舊的那個物件。
+
 #### `referentialEqualityPolicy()`
 
 **這是什麼**
@@ -644,6 +845,20 @@ fun OrderStatus() {
 
 - 用預設 policy，同樣的程式點了按鈕，畫面還是 New。因為 `equals` 只比 `id`，寫入被當成沒變而丟掉（演練 2）。
 
+```kotlin
+@Composable
+fun OrderStatusWrong() {
+    // 錯：沒有傳 referentialEqualityPolicy()，預設用 equals 比
+    var order by remember { mutableStateOf(Order("A1", "New")) }
+
+    Button(onClick = { order = Order("A1", "Filled") }) {
+        Text("訂單 ${order.id}：${order.status}")
+    }
+}
+```
+
+這裡的 `Order` 就是上面範例那個只比 `id` 的類別；點按鈕後，畫面還是「訂單 A1：New」。
+
 #### `neverEqualPolicy()`
 
 **這是什麼**
@@ -678,7 +893,45 @@ fun BestBid(book: OrderBook) {
 **不這樣寫會怎樣**
 
 - 用預設 policy，最佳買價停在舊的 100。因為寫進去的是同一個物件，`equals` 當然相等，這次寫入被當成沒變（演練 3）。
+
+```kotlin
+@Composable
+fun BestBidWrong(book: OrderBook) {
+    // 錯：預設 policy，同一個物件寫回去被當成沒變
+    val state = remember { mutableStateOf(book) }
+
+    Button(onClick = {
+        book.update(101, 1.5)
+        state.value = book
+    }) {
+        Text("最佳買價：${state.value.bestBid()}")
+    }
+}
+```
+
+點按鈕後，訂單簿裡的資料已經更新，畫面上的最佳買價卻還是 100。
+
 - 拿它當成「再顯示一次相同的錯誤訊息」的工具，訊息不會再出現。因為 `LaunchedEffect(message)`（在 Composable 裡啟動 coroutine 的入口，coroutine 是 Kotlin 可以中途暫停等待的輕量非同步工作；key 變了才重新啟動）比較 key 用的還是 `equals`，相同字串不會重啟；一次性事件要包成帶 id 的物件，或照 Kotlin05 第 3 題的做法。
+
+```kotlin
+@Composable
+fun ErrorMessageWrong(snackbar: SnackbarHostState) {
+    val message = remember {
+        mutableStateOf("網路錯誤", neverEqualPolicy())
+    }
+
+    // 錯：key 用 equals 比，相同字串不會重啟 effect
+    LaunchedEffect(message.value) {
+        snackbar.showSnackbar(message.value)
+    }
+
+    Button(onClick = { message.value = "網路錯誤" }) {
+        Text("再顯示一次")
+    }
+}
+```
+
+畫面進來時顯示一次「網路錯誤」，之後再按「再顯示一次」，Composable 雖然重組了，訊息卻不會再出現。
 
 #### 自訂 `SnapshotMutationPolicy`
 
@@ -720,6 +973,22 @@ fun PolicyTick() {
 **不這樣寫會怎樣**
 
 - 用預設 policy，每一筆行情都重組，連價格沒變也一樣。因為 `receivedAt` 每筆都不同，`equals` 永遠說不相等。
+
+```kotlin
+@Composable
+fun PolicyTickWrong() {
+    // 錯：預設 policy 連接收時間都比，時間不同就算不一樣
+    var tick by remember {
+        mutableStateOf(Tick("BTC_JPY", 100, 1))
+    }
+
+    Button(onClick = { tick = Tick("BTC_JPY", 100, 2) }) {
+        Text("${tick.symbol} ${tick.price}")
+    }
+}
+```
+
+畫面上的文字看起來沒變，但每寫入一筆價格相同的行情，這個 Composable 就白白重組一次。
 
 #### 對應到 SwiftUI
 
@@ -803,7 +1072,32 @@ fun PriceText(price: Long, tickSize: Double) {
 **不這樣寫會怎樣**
 
 - 沒寫 key，切換交易對之後價格的格式停在上一個交易對的。因為 `remember` 只算一次，不知道 `tickSize` 變了（Kotlin06 演練 6）。
+
+```kotlin
+@Composable
+fun PriceTextWrong(price: Long, tickSize: Double) {
+    // 錯：沒有放 key，tickSize 變了也不會重建
+    val formatter = remember { PriceFormatter(tickSize) }
+
+    Text(formatter.format(price))
+}
+```
+
+從 BTC_JPY 切到 ETH_JPY 之後，價格的小數位數還是 BTC_JPY 的格式。
+
 - 沒有 `remember`，每次重組都重建一個格式化器。因為函式每次執行都從頭跑。
+
+```kotlin
+@Composable
+fun PriceTextNoRemember(price: Long, tickSize: Double) {
+    // 錯：沒有 remember，每次重組都重建一個格式化器
+    val formatter = PriceFormatter(tickSize)
+
+    Text(formatter.format(price))
+}
+```
+
+畫面顯示是對的，但價格每變一次，就多建一個格式化器，白白浪費時間和記憶體。
 
 #### `rememberSaveable`
 
@@ -847,7 +1141,22 @@ fun OrderInputs(symbol: String) {
 **不這樣寫會怎樣**
 
 - 輸入框用 `remember`，輸入 `0.25` 後旋轉螢幕，欄位清空要重打。因為旋轉時 Activity 被銷毀重建，`remember` 的值跟著一起沒了（Kotlin06 演練 5）。
-- 放 Bundle 收不下的型別（一般的 data class、`SnapshotStateList`、lambda），畫面一打開就閃退。下一節講怎麼解決。
+
+```kotlin
+@Composable
+fun OrderInputsWrong() {
+    // 錯：用 remember，旋轉螢幕後值就沒了
+    var qty by remember { mutableStateOf("") }
+
+    OutlinedTextField(
+        value = qty,
+        onValueChange = { qty = it },
+        label = { Text("數量") },
+    )
+}
+```
+
+在數量欄輸入 `0.25` 之後旋轉螢幕，欄位變成空的。
 
 #### `Saver`（`listSaver`、`mapSaver`）
 
@@ -909,7 +1218,40 @@ val draftMapSaver = mapSaver<OrderDraft>(
 **不這樣寫會怎樣**
 
 - 不給 Saver 就放 data class，一打開畫面就閃退，丟 `IllegalArgumentException`。因為 Bundle 收不下自訂型別，組合畫面的當下就檢查出來了（演練 4）。
+
+```kotlin
+data class OrderDraft(val symbol: String, val qty: Double)
+
+@Composable
+fun DraftEditorWrong() {
+    // 錯：OrderDraft 不是 Bundle 收得下的型別，又沒給 Saver
+    var draft by rememberSaveable {
+        mutableStateOf(OrderDraft("BTC_JPY", 0.1))
+    }
+
+    Text("${draft.symbol} ${draft.qty}")
+}
+```
+
+畫面一打開就丟 `IllegalArgumentException`，手機上就是閃退。
+
 - 為 `OrderDraft` 加了新欄位，卻忘了改 Saver，旋轉後那個欄位靜悄悄地歸零。因為 `restore` 用預設值補沒存的欄位，編譯器不會提醒（演練 5）；給 Saver 寫一個「存起來再還原，確認每個欄位都一樣」的單元測試。
+
+```kotlin
+data class OrderDraft(
+    val symbol: String,
+    val qty: Double,
+    val side: String = "BUY",
+)
+
+val draftSaver = listSaver<OrderDraft, Any>(
+    // 錯：新增了 side 欄位，save 和 restore 都沒跟著改
+    save = { listOf(it.symbol, it.qty) },
+    restore = { OrderDraft(it[0] as String, it[1] as Double) },
+)
+```
+
+使用者選了賣出（`SELL`）再旋轉螢幕，畫面回來時 `side` 變回預設的 `BUY`，沒有任何錯誤訊息。
 
 #### `rememberUpdatedState`
 
@@ -946,7 +1288,35 @@ fun SubmitTimeout(onTimeout: () -> Unit) {
 **不這樣寫會怎樣**
 
 - 直接呼叫 `onTimeout`，時間到時呼叫到舊版 callback。因為 effect 抓著的是第一次進來的那一份。
+
+```kotlin
+@Composable
+fun SubmitTimeoutWrong(onTimeout: () -> Unit) {
+    LaunchedEffect(Unit) {
+        delay(10_000)
+
+        // 錯：抓著第一次進來的 onTimeout，之後換了新版也不知道
+        onTimeout()
+    }
+}
+```
+
+倒數期間 `onTimeout` 換成新版，10 秒到時呼叫的還是最早的那一份。
+
 - 把 `onTimeout` 放進 `LaunchedEffect` 的 key，callback 一換，10 秒就重新計時。因為 key 變了，effect 被取消重啟（Kotlin07 演練 5）。
+
+```kotlin
+@Composable
+fun SubmitTimeoutKeyWrong(onTimeout: () -> Unit) {
+    // 錯：把 onTimeout 放進 key，callback 一換 effect 就重啟
+    LaunchedEffect(onTimeout) {
+        delay(10_000)
+        onTimeout()
+    }
+}
+```
+
+只要父層重組、傳進新的 lambda，10 秒就重新計時，如果一直換，可能永遠等不到時間到。
 
 #### 對應到 SwiftUI
 
@@ -1032,8 +1402,54 @@ fun PriceAlert(price: State<Long>, alertLine: Long) {
 **不這樣寫會怎樣**
 
 - 直接寫 `val over = price.value > alertLine`，價格每變一次，這個 Composable 就重組一次，儘管 `over` 根本沒換邊。因為 Composable 自己讀了 `price.value`。
+
+```kotlin
+@Composable
+fun PriceAlertWrong(price: State<Long>, alertLine: Long) {
+    // 錯：直接讀 price.value，價格每變一次就重組
+    val over = price.value > alertLine
+
+    if (over) {
+        Text("價格超過警示線", color = Color.Red)
+    }
+}
+```
+
+價格在警示線同一側漲跌時，畫面看起來沒變，但這個 Composable 每次都重新執行一遍。
+
 - 漏了 `remember`，每次重組都建一個新的 derived state，快取等於沒有。實測：外層重組 10 次，沒有 `remember` 的計算式執行 11 次，有 `remember` 的只執行 1 次。
+
+```kotlin
+@Composable
+fun PriceAlertNoRememberWrong(price: State<Long>, alertLine: Long) {
+    // 錯：沒有 remember，每次重組都建一個新的 derived state
+    val over by derivedStateOf { price.value > alertLine }
+
+    if (over) {
+        Text("價格超過警示線", color = Color.Red)
+    }
+}
+```
+
+畫面顯示是對的，但快取等於沒有，每次重組計算式都重新執行。
+
 - 一般參數沒當 key，警示線調高了，畫面還顯示「超過」。因為 `derivedStateOf` 看不到一般參數，沒有 key 的 `remember` 又只建一次，一直抓著第一次的 `alertLine`（演練 6）。
+
+```kotlin
+@Composable
+fun PriceAlertKeyWrong(price: State<Long>, alertLine: Long) {
+    // 錯：alertLine 是一般參數，卻沒有當 remember 的 key
+    val over by remember {
+        derivedStateOf { price.value > alertLine }
+    }
+
+    if (over) {
+        Text("價格超過警示線", color = Color.Red)
+    }
+}
+```
+
+價格 120、警示線 100 時顯示「超過」；警示線調高到 200 之後，畫面還是顯示「超過」。
 
 #### `snapshotFlow`
 
@@ -1070,7 +1486,23 @@ fun SymbolPicker(analytics: Analytics) {
 **不這樣寫會怎樣**
 
 - 先把 State 讀出來再放進 lambda（`val s = symbol` 再 `snapshotFlow { s }`），永遠只收到第一個值。因為 lambda 裡面沒有讀 State，Compose 沒有東西可以追蹤。
-- 在沒有 Compose 在跑的環境，例如單元測試，收不到後續的變化。原因見下一節的 Snapshot 與演練 8。
+
+```kotlin
+@Composable
+fun SymbolPickerWrong(analytics: Analytics) {
+    var symbol by remember { mutableStateOf("BTC_JPY") }
+
+    LaunchedEffect(Unit) {
+        // 錯：先把 State 讀成普通的值，大括號裡沒有讀 State
+        val current = symbol
+        snapshotFlow { current }.collect {
+            analytics.log("symbol_changed", it)
+        }
+    }
+}
+```
+
+只在畫面出現時回報一次 `BTC_JPY`，之後不管換幾次交易對，都沒有再回報。
 
 #### `produceState`
 
@@ -1107,7 +1539,37 @@ fun rememberLastPrice(socket: PriceSocket): State<Long> {
 **不這樣寫會怎樣**
 
 - callback 版沒用 `awaitDispose` 解除，畫面離開了 listener 還掛在 socket 上。因為 Compose 不知道要怎麼拆掉你加的 listener（Kotlin07 演練 6）。
+
+```kotlin
+@Composable
+fun rememberLastPriceWrong(socket: PriceSocket): State<Long> {
+    return produceState(initialValue = 0L, socket) {
+        val listener = PriceSocket.Listener { value = it }
+
+        // 錯：加了 listener，卻沒有用 awaitDispose 拿掉
+        socket.addListener(listener)
+    }
+}
+```
+
+離開畫面之後，listener 還掛在 socket 上，一直收到價格，造成記憶體洩漏。
+
 - 漏放 key，參數變了卻不重跑。規則和 `LaunchedEffect` 完全相同（Kotlin07 演練 2）。
+
+```kotlin
+@Composable
+fun rememberLastPriceKeyWrong(socket: PriceSocket): State<Long> {
+    // 錯：沒有把 socket 放進 key，換了 socket 也不會重跑
+    return produceState(initialValue = 0L) {
+        val listener = PriceSocket.Listener { value = it }
+        socket.addListener(listener)
+
+        awaitDispose { socket.removeListener(listener) }
+    }
+}
+```
+
+`socket` 換成另一條連線之後，State 還是在聽舊的那一條，價格不再更新。
 
 #### Snapshot 是什麼？
 
@@ -1149,6 +1611,23 @@ class OrderFormState {
 **不這樣寫會怎樣**
 
 - 單元測試裡 `snapshotFlow` 只收到第一筆。因為寫入要「套用並通知」，別人才看得到；有 Compose 畫面在跑時，Compose 自動做這件事，單元測試裡沒有人做，要自己呼叫 `Snapshot.sendApplyNotifications()`（演練 8；實測：呼叫之前只收到第一筆，呼叫之後收到最後一筆）。
+
+```kotlin
+@Test
+fun snapshotFlowInTestWrong() = runTest {
+    var price by mutableLongStateOf(100L)
+    val seen = mutableListOf<Long>()
+    val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+        snapshotFlow { price }.toList(seen)
+    }
+
+    // 錯：沒有 Compose 在跑，寫入沒有人套用並通知
+    price = 105L
+    job.cancel()
+}
+```
+
+`seen` 裡只有 `[100]`，收不到後來寫入的 105。
 
 #### 對應到 SwiftUI
 
@@ -1244,6 +1723,18 @@ fun LivePriceLine(prices: StateFlow<Long>) {
 
 - 在 Android 畫面用它收行情，App 退到背景後，畫面還在更新。實測（演練 7，伺服器每 50 ms 推一筆價格）：退到背景 0.5 秒，畫面又更新了 9 次，行情還有 1 個收集者在收。因為它只看畫面還在不在 composition 裡，不看 lifecycle。
 
+```kotlin
+@Composable
+fun LivePriceLineWrong(prices: StateFlow<Long>) {
+    // 錯：Android 畫面用 collectAsState，不管 lifecycle
+    val price by prices.collectAsState()
+
+    Text("即時價格：$price")
+}
+```
+
+App 退到背景之後，畫面還在每一筆新價格都重組（演練 7：退到背景 0.5 秒，又更新了 9 次）。
+
 #### `collectAsStateWithLifecycle()`
 
 **這是什麼**
@@ -1284,8 +1775,47 @@ fun PriceHeader(vm: PriceViewModel) {
 **不這樣寫會怎樣**
 
 - 把 cold Flow 直接交給它，每次回到前景，上游都從頭再跑一次（例如重開 WebSocket）。因為每次重新收集，cold Flow 都是新的一份；先在 ViewModel 用 `stateIn` 轉成 `StateFlow`，設 `WhileSubscribed(5000)`。
+
+```kotlin
+class PriceViewModelWrong(client: PriceClient) : ViewModel() {
+    // 錯：cold Flow 直接給畫面，沒有用 stateIn 轉成 StateFlow
+    val priceFlow: Flow<Long> = flow {
+        // 每次有人收集，就重新連線、從頭開始
+        client.connect()
+        emitAll(client.prices())
+    }
+}
+```
+
+App 退到背景再回到前景，連線會被重開一次，上游從頭再跑。
+
 - `initial` 給 `0` 這種像真的數字，使用者會以為價格真的是 0。用 `null` 或 `Loading` 這種明確的「還沒有資料」。
+
+```kotlin
+@Composable
+fun PriceHeaderInitWrong(vm: PriceViewModel) {
+    // 錯：initialValue 給 0，看起來像真的價格
+    val last by vm.priceFlow.collectAsStateWithLifecycle(initialValue = 0L)
+
+    Text("$last JPY")
+}
+```
+
+收到第一筆價格之前，畫面顯示「0 JPY」，使用者會以為價格真的是 0。
+
 - 在 Composable 裡直接讀 `stateFlow.value`，值變了畫面不會更新。因為讀 `.value` 不會觀察變化，lint 的 `StateFlowValueCalledInComposition` 會警告。
+
+```kotlin
+@Composable
+fun PriceHeaderValueWrong(vm: PriceViewModel) {
+    // 錯：直接讀 .value，Compose 沒有在觀察它
+    val price = vm.price.value
+
+    Text("即時價格：$price")
+}
+```
+
+畫面只顯示讀到的那一刻的價格，之後價格再怎麼變，畫面都不會跟著動。
 
 #### `LiveData.observeAsState()`
 
@@ -1316,6 +1846,18 @@ fun LegacyPrice(vm: LegacyPriceViewModel) {
 **不這樣寫會怎樣**
 
 - 在 Composable 裡直接讀 `liveData.value`，值變了畫面不會更新。因為和 `stateFlow.value` 一樣，讀 `.value` 不會觀察變化。
+
+```kotlin
+@Composable
+fun LegacyPriceWrong(vm: LegacyPriceViewModel) {
+    // 錯：直接讀 LiveData 的 value，不會觀察變化
+    val price = vm.priceLiveData.value
+
+    Text(price?.let { "$it JPY" } ?: "--")
+}
+```
+
+畫面停在第一次讀到的值（常常是還沒有資料的「--」），之後 LiveData 更新了也不會變。
 
 #### 對應到 SwiftUI
 
@@ -1409,7 +1951,41 @@ fun OrderPrice(vm: OrderViewModel = viewModel()) {
 **不這樣寫會怎樣**
 
 - 對外直接公開 `MutableStateFlow`，任何地方都能改，出問題時找不到是誰改的。因為可寫的版本沒有被藏起來。
+
+```kotlin
+class OrderViewModelWrong : ViewModel() {
+    // 錯：直接公開可寫的 MutableStateFlow
+    val state = MutableStateFlow(OrderUiState())
+}
+
+fun onSomethingElse(vm: OrderViewModelWrong) {
+    // 任何地方都能直接改，之後很難追是誰改的
+    vm.state.value = OrderUiState(price = 0L)
+}
+```
+
+畫面上的價格被別的程式碼改成 0，ViewModel 自己完全不知情。
+
 - 兩個 coroutine 各自 `_state.value = _state.value.copy(…)`，其中一個的修改會被蓋掉。因為「讀、改、寫」不是原子的，要用 `update { }`。
+
+```kotlin
+data class FormUi(val price: Long? = null, val qty: String = "")
+
+class FormViewModelWrong : ViewModel() {
+    private val _state = MutableStateFlow(FormUi())
+
+    fun onPrice(p: Long) {
+        // 錯：讀、改、寫不是原子的，會蓋掉別人剛寫的欄位
+        _state.value = _state.value.copy(price = p)
+    }
+
+    fun onQty(q: String) {
+        _state.value = _state.value.copy(qty = q)
+    }
+}
+```
+
+兩個 coroutine 同時呼叫 `onPrice` 和 `onQty` 時，偶爾其中一個欄位的更新會憑空消失。
 
 #### ViewModel 裡的 `mutableStateOf`
 
@@ -1456,6 +2032,22 @@ fun QtyScreen(vm: FormViewModel = viewModel()) {
 
 - 在 Worker 或單元測試裡觀察它，收不到後續的變化。因為 `snapshotFlow` 要有 Compose 在跑，才會有人通知它「有寫入了」（演練 8）。
 
+```kotlin
+class FormViewModel : ViewModel() {
+    var qty by mutableStateOf("")
+        private set
+}
+
+class QtyUploaderWrong(private val vm: FormViewModel) {
+    suspend fun watch() {
+        // 錯：沒有 Compose 在跑，snapshotFlow 收不到後續變化
+        snapshotFlow { vm.qty }.collect { upload(it) }
+    }
+}
+```
+
+在單元測試或沒有 Compose 畫面的環境裡，只會上傳一開始的空字串，使用者後來打的字都收不到。
+
 #### state hoisting（狀態提升）
 
 **這是什麼**
@@ -1495,6 +2087,26 @@ fun QtyField(qty: String, onQtyChange: (String) -> Unit) {
 **不這樣寫會怎樣**
 
 - 每個子元件各自 `remember` 一份數量，輸入框改了，「預估金額」不會動。因為兩邊各是一份獨立的 State，沒有共用。
+
+```kotlin
+@Composable
+fun OrderFormWrong() {
+    var qty by rememberSaveable { mutableStateOf("") }
+
+    QtyFieldWrong()
+    Text("預估金額：${estimate(qty)}")
+}
+
+@Composable
+fun QtyFieldWrong() {
+    // 錯：輸入框自己存一份 qty，父層的 qty 不會跟著變
+    var qty by remember { mutableStateOf("") }
+
+    OutlinedTextField(value = qty, onValueChange = { qty = it })
+}
+```
+
+在輸入框打字，輸入框顯示正常，但「預估金額」始終不變。
 
 #### state holder、`rememberCoroutineScope`、`viewModelScope`：狀態放哪一層
 
@@ -1542,7 +2154,36 @@ fun rememberPriceHolder(repo: PriceRepo): PriceHolder {
 **不這樣寫會怎樣**
 
 - 把送出訂單放在 `rememberCoroutineScope` 裡，使用者一離開畫面，訂單可能只送到一半。因為這個 scope 綁在 Composable 上，離開畫面就取消。
+
+```kotlin
+@Composable
+fun SubmitButtonWrong(api: OrderApi, order: OrderRow) {
+    // 錯：送出訂單綁在 Composable 的 scope，離開畫面就取消
+    val scope = rememberCoroutineScope()
+
+    Button(onClick = { scope.launch { api.send(order) } }) {
+        Text("送出")
+    }
+}
+```
+
+按下「送出」後馬上離開畫面（或旋轉螢幕），這個 scope 被取消，送單的請求可能只送到一半。
+
 - 把畫面邏輯 holder 當成業務資料的家，旋轉螢幕後狀態重來。因為 holder 是用 `remember` 建的，旋轉時跟著重建。
+
+```kotlin
+class PriceHolderWrong(private val repo: PriceRepo) {
+    // 錯：業務資料放在 holder，旋轉螢幕時跟著重建而歸零
+    var price by mutableLongStateOf(0L)
+        private set
+
+    suspend fun refresh() {
+        price = repo.fetch()
+    }
+}
+```
+
+載入完價格之後旋轉螢幕，holder 被重建，價格變回 0，要重新載入一次。
 
 #### 對應到 SwiftUI
 
@@ -1888,7 +2529,7 @@ android/solution/kotlin/kotlin11-compose-state/L08_ViewModelState.kt#fixed
 
 ## iOS / Android 對照
 
-第 1 到 8 題的最後各有一節「對應到 SwiftUI」，把那一題的 API 和 SwiftUI 的寫法並排比較；第 9 題的速查表是 Compose 版。
+整個單元已經是 SwiftUI 對照，完整的「情境、SwiftUI、Compose」三欄速查表在第 9 題。
 
 ## 名詞對照
 
