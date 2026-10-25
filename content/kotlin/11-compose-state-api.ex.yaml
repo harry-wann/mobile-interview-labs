@@ -1,10 +1,115 @@
+- id: kotlin-compose-state-api-21
+  type: single
+  level: 1
+  priority: P0
+  tags: [state, recomposition, basics]
+  prompt: |
+    下單表單按下「送出」，要顯示「已送出幾筆」。下面的程式，點了按鈕之後 `sent` 的值真的變成 1，畫面卻一直顯示「已送出：0 筆」。為什麼？（見第 1 題）
+  codeLang: kotlin
+  code: |
+    @Composable
+    fun SubmitCounter() {
+        var sent = 0
+        Column {
+            Text("已送出：$sent 筆")
+            Button(onClick = { sent++ }) { Text("送出") }
+        }
+    }
+  options:
+    - "`sent` 是普通的區域變數，Compose 看不到它。改了它沒有人通知，Composable 不會重新執行，畫面就不會更新"
+    - "`onClick` 裡面不能修改變數，所以 `sent++` 根本沒有執行"
+    - "`Text` 只會在第一次顯示時讀一次字串，之後不管資料怎麼變都不會更新"
+    - "要在 `sent++` 之後呼叫 `invalidate()` 或 `notifyDataSetChanged()`，畫面才會更新"
+    - "`sent` 應該宣告成 `val`，不是 `var`"
+  answer: 0
+  explain: |
+    - 第 1 項正確。Compose 的畫面是「Composable 函式描述出來的」，要更新畫面，就是讓函式用新的資料再執行一次（重組）。Compose 只會在它追蹤的 State 被寫入時，才去重新執行讀過那個 State 的 Composable。普通的 `var` Compose 看不到，`sent` 變成 1 了，卻沒有人通知它，函式不會再執行，畫面當然停在 0。修法是 `var sent by remember { mutableIntStateOf(0) }`。
+    - 第 2 項錯：`onClick` 裡可以修改變數，`sent++` 有執行，`sent` 真的變成 1。問題不在改不改得動，而是改了之後沒有人通知 Compose。
+    - 第 3 項錯：`Text("已送出：$sent 筆")` 是在「描述」畫面，每次 Composable 重新執行，就會用最新的資料描述一次。問題是這個 Composable 根本沒有重新執行。
+    - 第 4 項錯：`invalidate()`、`notifyDataSetChanged()` 是 View 系統「手動通知畫面更新」的做法。Compose 不這樣做，而是把值放進 State，由 Compose 自己追蹤、自己通知。
+    - 第 5 項錯：`val` 不能重新指派，`sent++` 會編譯失敗。
+
+- id: kotlin-compose-state-api-22
+  type: single
+  level: 1
+  priority: P0
+  tags: [state, remember, basics]
+  prompt: |
+    把上一題修成 State，但漏了 `remember`。點「送出」好幾次，畫面會怎樣？（見第 1 題）
+  codeLang: kotlin
+  code: |
+    @Composable
+    fun SubmitCounter() {
+        var sent by mutableIntStateOf(0)      // 沒有 remember
+        Column {
+            Text("已送出：$sent 筆")
+            Button(onClick = { sent++ }) { Text("送出") }
+        }
+    }
+  options:
+    - "畫面正常，每點一次就加 1"
+    - "編譯失敗，State 一定要放進 `remember` 才能編譯"
+    - "State 有被寫入，Compose 也重組了，但重組時函式從頭再跑一次，又建立一個值為 0 的新 State，所以畫面永遠是 0"
+    - "第一次點擊畫面會變成 1，第二次以後才歸零"
+    - "App 會當掉，因為 State 不能在 Composable 裡建立"
+  answer: 2
+  explain: |
+    - 第 3 項正確。Composable 每次執行，裡面的程式碼都會從頭再跑。沒有 `remember`，`mutableIntStateOf(0)` 每次重組都建立一個全新的、值為 0 的 State，上一次寫入的 1 跟著舊的 State 一起被丟掉。所以「有重組、但畫面看起來沒反應」。`remember { … }` 的作用就是：第一次執行時把結果存起來，之後重組直接拿同一個。
+    - 第 1 項錯：沒有 `remember`，值撐不過重組。
+    - 第 2 項錯：這樣寫能編譯，不會報錯；Compose 的 lint `UnrememberedMutableState` 會在編輯器裡提醒你，但不會擋住編譯。
+    - 第 4 項錯：連第一次點擊也看不到 1。寫入之後馬上重組，重組時新建的 State 又是 0。
+    - 第 5 項錯：在 Composable 裡建立 State 是正常用法，只是要用 `remember` 存起來。
+
+- id: kotlin-compose-state-api-23
+  type: single
+  level: 2
+  priority: P0
+  tags: [state-read, recomposition, deferred-read]
+  prompt: |
+    下單表單最下面有一條即時價格，`priceState` 每秒更新幾十次。希望價格變的時候，只重新執行顯示價格的那一小塊，表單其他部分（數量輸入框、送出按鈕）完全不動。下列哪一種寫法最能做到？（見第 2 題）
+  codeLang: kotlin
+  code: |
+    // A：價格以 Long 傳進來，在表單裡顯示
+    @Composable
+    fun OrderForm(price: Long) {
+        Column { QtyField(); Text("即時價格：$price") }
+    }
+    // 呼叫端：OrderForm(price = priceState.value)
+
+    // B：把 State 本身傳進來，交給小的 Composable 去讀
+    @Composable
+    fun OrderForm(price: State<Long>) {
+        Column { QtyField(); LivePrice(price) }
+    }
+    @Composable
+    fun LivePrice(price: State<Long>) { Text("即時價格：${price.value}") }
+
+    // C：在 OrderForm 開頭先把價格讀成區域變數
+    @Composable
+    fun OrderForm(price: State<Long>) {
+        val p = price.value
+        Column { QtyField(); Text("即時價格：$p") }
+    }
+  options:
+    - "A：價格是普通的 `Long`，Compose 一定會跳過 `OrderForm` 的其他部分"
+    - "B：讀取只發生在 `LivePrice` 裡，價格變時只有 `LivePrice` 重新執行"
+    - "C：用區域變數 `p` 暫存，讀取變得更精確，只有 `Text` 會重組"
+    - "三種寫法一樣，Compose 會自動判斷只重畫價格那一行"
+  answer: 1
+  explain: |
+    重組的範圍取決於「哪個 Composable 函式讀了 State」。
+    - 第 2 項正確。B 把 `State` 本身往下傳，`price.value` 的讀取發生在 `LivePrice` 的函式內容裡，價格變了，Compose 只重新執行 `LivePrice`，`OrderForm` 完全不動。
+    - 第 1 項錯：A 的 `Long` 是呼叫端先讀 `priceState.value` 才能傳進來，讀取發生在呼叫端。價格一變，呼叫端和 `OrderForm` 的函式內容都要再跑一遍；沒變的子 Composable 雖然可以被跳過，但已經不是「只有價格那一行動」了。
+    - 第 3 項錯：C 的 `val p = price.value` 寫在 `OrderForm` 的函式內容裡，讀取發生在 `OrderForm`，重組的範圍是整個 `OrderForm`。暫存成區域變數不會改變「是誰讀的」。`Column` 的大括號也不會自己成為另一個重組範圍（Kotlin06 第 1 題）。
+    - 第 4 項錯：Compose 只依「哪個函式讀了 State」決定重組範圍，不會替你猜。要縮小範圍，得由你把讀取往下推。
+
 - id: kotlin-compose-state-api-01
   type: single
   level: 1
   priority: P0
   tags: [mutablestateof, primitive-state, boxing]
   prompt: |
-    行情畫面要顯示「未讀委託數」，這個整數每秒會更新好幾次。下列哪一種寫法最合適？
+    行情畫面要顯示「未讀委託數」，這個整數每秒會更新好幾次。下列哪一種寫法最合適？（見第 2 題）
   options:
     - "`var unread by remember { mutableStateOf(0) }`"
     - "`var unread by remember { mutableIntStateOf(0) }`"
@@ -12,8 +117,8 @@
     - "`val unread = remember { AtomicInteger() }`，更新時呼叫 `set`"
   answer: 1
   explain: |
-    - 第 2 項正確。`mutableIntStateOf` 是 `Int` 的 primitive 版，直接存 `int`，沒有 boxing（把 `Int` 包成 `Integer` 物件）的成本；每秒更新很多次的計數特別適合。
-    - 第 1 項錯：功能上可以運作，但 `MutableState<Int>` 的 `Int` 是泛型參數，每次寫入都要包成 `Integer` 物件（超過 -128 到 127 就是新物件），會製造一堆短命的物件。Compose 的 lint `AutoboxingStateCreation` 會提醒你改用 `mutableIntStateOf`。
+    - 第 2 項正確。`mutableIntStateOf` 是 `Int` 的 primitive 版，直接存 `int`，不會多包一層物件；每秒更新很多次的計數特別適合。
+    - 第 1 項錯：功能上可以運作，但 `MutableState<Int>` 的 `Int` 是泛型參數，每次寫入都要包成 `Integer` 物件（這叫 boxing，意思是多包一層物件、多耗記憶體；超過 -128 到 127 就是新物件），會製造一堆短命的物件。Compose 的 lint `AutoboxingStateCreation` 會提醒你改用 `mutableIntStateOf`。
     - 第 3 項錯：`mutableStateListOf` 是給「一筆一筆增減」的清單用的，拿來存單一個整數，既繞路又多了清單操作的成本。
     - 第 4 項錯：`AtomicInteger` 不是 Compose 的 State，`set` 之後 Compose 不知道，畫面不會重組。
 
@@ -23,7 +128,7 @@
   priority: P0
   tags: [mutablestatelistof, snapshotstatelist]
   prompt: |
-    關於 `mutableStateListOf`（`SnapshotStateList`），哪些敘述正確？（複選）
+    關於 `mutableStateListOf`（Compose 追蹤的清單，型別是 `SnapshotStateList`），哪些敘述正確？（複選，見第 3 題）
   options:
     - "對清單呼叫 `add`、`removeAt`、`set`、`clear`，會通知讀過這個清單的 Composable"
     - "清單的項目是 `class OrderRow(var filled: Double)`，直接改 `orders[1].filled = 0.5`，畫面就會重組"
@@ -35,8 +140,8 @@
     - 第 1 項正確。清單本身的內容（新增、刪除、換掉某一格、清空）改變，才是它通知 Compose 的時機。
     - 第 2 項錯：清單只認得自己內容的改變，不看項目裡面。原地改 `filled`，清單還是同樣的物件，Compose 不知道。項目要用 `data class` 加 `val`，更新時換掉那一格：`orders[1] = orders[1].copy(filled = 0.5)`。
     - 第 3 項錯：`mutableStateOf` 追蹤的是「State 的值有沒有被換掉」，`value` 一直是同一個 `MutableList`，原地 `add` 不會通知（Compose 的 lint `MutableCollectionMutableState` 也會警告）。
-    - 第 4 項正確。這和一般的 `MutableList` 一樣；要刪除符合條件的項目，用 `removeAll { }`。
-    - 第 5 項錯：`SnapshotStateList` 既不是 `Serializable` 也不是 `Parcelable`，預設的 `rememberSaveable` 存不了它，組合時會丟 `IllegalArgumentException`。要自己寫 `listSaver`，存成 `List`，還原時用 `toMutableStateList()` 轉回來。
+    - 第 4 項正確。這和一般的 `MutableList` 一樣：一邊走訪一邊改動集合，就會丟 `ConcurrentModificationException`。要刪除符合條件的項目，用 `removeAll { }`。
+    - 第 5 項錯：`SnapshotStateList` 既不是 `Serializable` 也不是 `Parcelable`，預設的 `rememberSaveable` 存不了它，組合時會丟 `IllegalArgumentException`。要自己寫 `listSaver`（第 5 題），存成 `List`，還原時用 `toMutableStateList()` 轉回來。
 
 - id: kotlin-compose-state-api-03
   type: predict
@@ -44,7 +149,7 @@
   priority: P0
   tags: [policy, structuralequalitypolicy, referentialequalitypolicy, neverequalpolicy]
   prompt: |
-    印出什麼？（`Reader` 的 `SideEffect` 在每次函式內容成功執行完就把計數加 1。三個 `Reader` 第一次組合後，計數都是 1。下面三行寫入之後，Compose 都已經重組完畢。依序印出 a、b、c，以空白分隔。）
+    印出什麼？（見第 4 題。`Reader` 裡的 `SideEffect` 是「這次組合成功完成之後執行一次」的區塊，這裡用來數 `Reader` 重組了幾次：每次函式內容成功執行完就把計數加 1。三個 `Reader` 第一次組合後，計數都是 1。下面三行寫入之後，Compose 都已經重組完畢。依序印出 a、b、c，以空白分隔。）
   codeLang: kotlin
   code: |
     data class Tick(val symbol: String, val price: Long)
@@ -81,7 +186,7 @@
   priority: P1
   tags: [policy, equals, bug]
   prompt: |
-    領域物件 `Order` 的 `equals` 只比 `id`。同一筆訂單 A1 的狀態從 New 變成 Filled，程式寫了 `order.value = Order("A1", "Filled")`，畫面卻停在 New，連 `order.value` 讀回來都還是舊的物件。下列哪些做法可以讓畫面更新？（複選）
+    領域物件 `Order` 的 `equals` 只比 `id`。同一筆訂單 A1 的狀態從 New 變成 Filled，程式寫了 `order.value = Order("A1", "Filled")`，畫面卻停在 New，連 `order.value` 讀回來都還是舊的物件。下列哪些做法可以讓畫面更新？（複選，見第 4 題）
   codeLang: kotlin
   code: |
     class Order(val id: String, val status: String) {
@@ -111,7 +216,7 @@
   priority: P0
   tags: [remembersaveable, saver, listsaver]
   prompt: |
-    下單草稿 `OrderDraft` 是自訂的 data class，要放進 `rememberSaveable`，讓旋轉螢幕之後還在。補上兩處：第一處是存得了狀態的 API，第二處是把 `OrderDraft` 拆成 `List` 再組回來的 Saver 函式。
+    下單草稿 `OrderDraft` 是自訂的 data class，要放進 `rememberSaveable`，讓旋轉螢幕之後還在。補上兩處：第一處是「撐得過旋轉」的 `remember`，第二處是把 `OrderDraft` 拆成 `List` 再組回來的 Saver 函式。（見第 5 題）
   codeLang: kotlin
   code: |
     data class OrderDraft(val symbol: String, val qty: Double)
@@ -126,7 +231,7 @@
     - [rememberSaveable]
     - [listSaver]
   explain: |
-    - 第一格是 `rememberSaveable`。`remember` 只活過重組；`rememberSaveable` 把狀態放進 saved instance state，旋轉螢幕、行程被系統殺掉重開都還在。
+    - 第一格是 `rememberSaveable`。`remember` 只活過重組；`rememberSaveable` 把狀態放進 saved instance state（Android 讓你在畫面被銷毀前存一小份資料、重建時還原的機制），旋轉螢幕、行程被系統殺掉重開都還在。
     - 第二格是 `listSaver`。`OrderDraft` 沒有實作 `Serializable` 或 `Parcelable`，預設的規則存不了，組合畫面時會丟 `IllegalArgumentException`。`listSaver` 的 `save` 把物件拆成只含 `String`、`Double` 的 `List`，`restore` 再組回來，用位置（`it[0]`、`it[1]`）對應欄位。欄位多、之後可能增加，改用 `mapSaver`，用 key 對應比較不容易對錯。
     - 因為放的是 `MutableState`，參數名稱是 `stateSaver`；放一般值（不是 `MutableState`）時，參數名稱是 `saver`。
 
@@ -136,7 +241,7 @@
   priority: P0
   tags: [remembersaveable, bundle]
   prompt: |
-    下列哪些型別可以直接放進 `rememberSaveable`，不需要自己寫 Saver？（複選）
+    下列哪些型別可以直接放進 `rememberSaveable`，不需要自己寫 Saver？（複選，見第 5 題）
   options:
     - "`String`、`Int`、`Boolean`"
     - "加上 `@Parcelize`、實作 `Parcelable` 的 data class"
@@ -145,7 +250,7 @@
     - "lambda，例如 `() -> Unit`"
   answer: [0, 1]
   explain: |
-    `rememberSaveable` 的狀態最後要放進 Bundle（Android 用來保存畫面狀態的容器），所以預設只收得下 Bundle 能放的型別：基本型別、`String`、`Parcelable`、`Serializable` 等。
+    `rememberSaveable` 的狀態最後要放進 Bundle（Android 用來暫存畫面狀態的容器，可以想成只收固定幾種型別的 key-value 字典），所以預設只收得下 Bundle 能放的型別：基本型別、`String`、`Parcelable`、`Serializable` 等。
     - 第 1 項、第 2 項正確。
     - 第 3 項錯：一般的 data class 不在清單裡，組合畫面時就丟 `IllegalArgumentException`（訊息含「cannot be saved using the current SaveableStateRegistry」），手機上是畫面一打開就閃退。解法是給 `Saver`。
     - 第 4 項錯：`SnapshotStateList` 既不是 `Serializable` 也不是 `Parcelable`。要寫 `listSaver`，存成 `List`，還原時用 `toMutableStateList()` 轉回來。
@@ -157,7 +262,7 @@
   priority: P1
   tags: [remembersaveable, process-death, viewmodel]
   prompt: |
-    使用者在下單畫面輸入數量到一半，把 App 切到背景。系統為了回收記憶體，把 App 的行程整個殺掉。使用者回到 App，在**不做額外處理**的前提下，哪一種寫法的數量還在？
+    使用者在下單畫面輸入數量到一半，把 App 切到背景。系統為了回收記憶體，把 App 的行程整個殺掉（process death）。使用者回到 App，在**不做額外處理**的前提下，哪一種寫法的數量還在？（見第 5 題）
   options:
     - "`var qty by remember { mutableStateOf(\"\") }`"
     - "`var qty by rememberSaveable { mutableStateOf(\"\") }`"
@@ -177,7 +282,7 @@
   priority: P0
   tags: [derivedstateof, remember, bug]
   prompt: |
-    價格提醒元件：價格是 State、每秒變很多次；警示線 `alertLine` 是使用者設定、從外面傳進來的參數。價格 120、警示線 100 時畫面顯示「超過警示線」，使用者把警示線調高到 200，價格不變，畫面仍然顯示「超過警示線」。原因與修法是什麼？
+    價格提醒元件：價格是 State、每秒變很多次；警示線 `alertLine` 是使用者設定、從外面傳進來的一般參數。價格 120、警示線 100 時畫面顯示「超過警示線」，使用者把警示線調高到 200，價格不變，畫面仍然顯示「超過警示線」。原因與修法是什麼？（見第 6 題）
   codeLang: kotlin
   code: |
     @Composable
@@ -204,7 +309,7 @@
   priority: P0
   tags: [derivedstateof, misuse]
   prompt: |
-    下列哪些 `derivedStateOf` 的用法是合適的？（複選）
+    下列哪些 `derivedStateOf` 的用法是合適的？（複選，見第 6 題）
   codeLang: kotlin
   code: |
     // A
@@ -229,108 +334,11 @@
     - "E：依賴一般參數，但 `remember` 沒有 key"
   answer: [0, 2]
   explain: |
-    `derivedStateOf` 只在「輸入變得很頻繁、輸出很少變」時有幫助，而且要包 `remember`，並且只追蹤 State 的讀取。
+    `derivedStateOf` 只在「輸入變得很頻繁、結果很少變」時有幫助，而且要包 `remember`，並且只追蹤 State 的讀取。
     - A、C 正確：輸入一直變，布林值只有跨過門檻才變，Composable 只在結果換邊時才重組。
-    - B 錯：輸出跟著輸入一起變，每次輸入變結果也變，沒有省到任何通知，反而多了一層，直接計算就好（或用 `remember(price, qty)`）。
+    - B 錯：結果跟著輸入一起變，每次輸入變結果也變，沒有省到任何通知，反而多了一層，直接計算就好（或用 `remember(price, qty)`）。
     - D 錯：兩個問題：沒有 `remember`，每次重組都建立新的 derived state，快取等於沒有（本機實測：外層重組 10 次，計算式執行了 11 次，有 `remember` 的只執行 1 次）；而且 `trim()` 的結果跟著輸入一起變，本來就不需要。
     - E 錯：`alertLine` 不是 State，沒有 key 的 `remember` 只建立一次，計算式一直用第一次的值。要寫成 `remember(alertLine) { derivedStateOf { … } }`。
-
-- id: kotlin-compose-state-api-10
-  type: single
-  level: 1
-  priority: P0
-  tags: [collectasstate, lifecycle]
-  prompt: |
-    行情畫面用 `val price by vm.price.collectAsState()` 收一個每 50 ms 更新一次的 `StateFlow`。使用者按 Home 回到桌面，App 進入背景，但這個畫面的 composition 還在。會發生什麼事？
-  options:
-    - "collector 被取消，不再重組"
-    - "collector 還在，每一筆新價格仍然讓畫面重組"
-    - "collector 暫停，回到前景時補送背景期間的所有價格"
-    - "App 會當掉，因為背景不能收集 Flow"
-  answer: 1
-  explain: |
-    - 第 2 項正確。`collectAsState()` 不知道 Android 的 lifecycle，只要畫面還在 composition 裡就一直收集。App 退到背景，collector 還在，每一筆價格都讓畫面重組，耗電也耗流量。
-    - 第 1 項錯：這是 `collectAsStateWithLifecycle()` 的行為，預設在 lifecycle 低於 `STARTED`（退到背景）時取消收集，回到前景再重新收集。
-    - 第 3 項錯：`StateFlow` 只保留最新值，沒有「補送」；`collectAsStateWithLifecycle()` 回到前景後，是馬上拿到目前的最新值。
-    - 第 4 項錯：背景可以收集，只是浪費資源；不會因此當掉。
-
-- id: kotlin-compose-state-api-11
-  type: fill
-  level: 2
-  priority: P0
-  tags: [collectasstatewithlifecycle, initial]
-  prompt: |
-    補上兩處。第一處：用 lifecycle-aware 的 API 收 `StateFlow<UiState>`，App 退到背景時停止收集。第二處：`tickFlow` 是一般的 `Flow<Long>`，沒有「目前值」，要用具名參數給第一個值來之前畫面顯示的初始值（先用 `null` 表示還沒有資料）。
-  codeLang: kotlin
-  code: |
-    // build.gradle.kts: implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
-    val uiState by vm.uiState.____()
-    val lastTick by vm.tickFlow.collectAsStateWithLifecycle(____ = null)
-  blanks:
-    - [collectAsStateWithLifecycle]
-    - [initialValue]
-  explain: |
-    - 第一格是 `collectAsStateWithLifecycle`。它來自 `androidx.lifecycle:lifecycle-runtime-compose`，預設 `minActiveState` 是 `STARTED`：畫面可見才收集，退到背景就取消，回到前景再重新收集。`StateFlow` 一定有目前值，所以不用給初始值。
-    - 第二格是 `initialValue`。一般的 `Flow` 沒有目前值，第一個值來之前畫面要顯示什麼，必須自己給；`Flow<Long>` 搭配 `initialValue = null`，型別會是 `Long?`，畫面顯示 `--`，不要給 `0` 這種看起來合理的假值（使用者會以為價格真的是 0）。
-    - 一般 `Flow` 通常是 cold flow：每次回到前景重新收集，上游就從頭再跑一次（例如重新開 WebSocket）。所以通常先在 ViewModel 用 `stateIn` 轉成 `StateFlow`。
-
-- id: kotlin-compose-state-api-12
-  type: order
-  level: 2
-  priority: P1
-  tags: [collectasstatewithlifecycle, statein, lifecycle]
-  prompt: |
-    ViewModel 用 `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initial)` 把 WebSocket 行情轉成 `StateFlow`，畫面用 `collectAsStateWithLifecycle()` 收。使用者把 App 退到背景，超過 5 秒才回來。把過程依正確順序排列。
-  items:
-    - App 退到背景，畫面的 lifecycle 離開 STARTED
-    - collectAsStateWithLifecycle 取消收集，StateFlow 變成沒有 collector
-    - 5 秒過去，WhileSubscribed(5000) 停掉上游（WebSocket 訂閱）
-    - 使用者回到前景，lifecycle 回到 STARTED，重新收集，上游重新啟動
-    - 畫面先拿到 StateFlow 保留的最近一筆，等新資料到達再更新
-  explain: |
-    - 第 2 步取消收集，是因為 `collectAsStateWithLifecycle()` 在 lifecycle 離開 `minActiveState`（預設 `STARTED`）時取消。如果用 `collectAsState()`，這一步不會發生，collector 一直在，上游也永遠不會停。
-    - 第 3 步的 5 秒是 `WhileSubscribed(5000)`：沒有 collector 之後再等 5 秒才停上游，這 5 秒是為了撐過旋轉螢幕這種瞬間 collector 消失又出現的情況（Kotlin05 第 5 題）。使用者在 5 秒內回來，上游就不會停。
-    - 第 5 步：`StateFlow` 永遠有目前值，重新收集時馬上拿到最近一筆，畫面不會空白，但這一筆可能是舊的，所以新資料到達時畫面會再更新一次。
-
-- id: kotlin-compose-state-api-13
-  type: single
-  level: 3
-  priority: P1
-  tags: [viewmodel, stateflow, mutablestateof, testing]
-  prompt: |
-    `PriceViewModel` 要暴露目前價格，會被三個地方使用：Compose 畫面、用 Turbine 驗證每一筆變化的單元測試、WorkManager 的 Worker（比對價格警示，不是 Compose）。哪一種暴露方式最合適？
-  options:
-    - "`var price by mutableLongStateOf(0L)`，Worker 與測試用 `snapshotFlow { vm.price }` 觀察"
-    - "`val price: StateFlow<Long>`（內部是 `MutableStateFlow`），畫面用 `collectAsStateWithLifecycle()`，Worker 與測試直接 `collect`"
-    - "`val price: MutableLiveData<Long>`，畫面用 `observeAsState()`"
-    - "三個都用 `mutableStateOf`，因為它是 Compose 官方提供的，一定最好"
-  answer: 1
-  explain: |
-    - 第 2 項正確。`StateFlow` 不依賴 Compose，任何 coroutine 都能 `collect`，單元測試可以用 Turbine 逐筆驗證，Worker 也能直接收；畫面端用 `collectAsStateWithLifecycle()` 只在前景收集。
-    - 第 1 項錯：`snapshotFlow` 要等 Compose 通知 snapshot 系統「有寫入了」才會重新計算。單元測試和沒有 Compose 畫面的環境沒有人通知，只會收到第一筆（要自己呼叫 `Snapshot.sendApplyNotifications()` 才收得到後續的），非常脆弱。
-    - 第 3 項錯：LiveData 在單元測試要額外處理主執行緒（例如 `InstantTaskExecutorRule`），Worker 要觀察它也得切到主執行緒，而且不能用 `combine`、`debounce` 這類 Flow 運算子；舊專案並存可以，新程式碼不建議。
-    - 第 4 項錯：「官方提供」不等於適合每一層。`mutableStateOf` 是 Compose 的 State，ViewModel 用它，變化只有 Compose 看得到，而且 ViewModel 也要依賴 Compose runtime。
-
-- id: kotlin-compose-state-api-14
-  type: multi
-  level: 3
-  priority: P1
-  tags: [viewmodel, stateflow, mutablestateof, tradeoff]
-  prompt: |
-    比較 ViewModel 用 `StateFlow` 與用 `mutableStateOf` 暴露畫面狀態，哪些敘述正確？（複選）
-  options:
-    - "`StateFlow` 可以搭配 `combine`、`debounce`、`stateIn` 等 Flow 運算子，而且不需要 Compose"
-    - "ViewModel 用 `mutableStateOf`，Compose 畫面可以直接讀 `vm.state`，不需要 `collectAs…`，寫法最簡單"
-    - "`mutableStateOf` 會跟著 Android lifecycle，App 退到背景就自動停止更新"
-    - "`MutableStateFlow.update { }` 是原子更新，多個 coroutine 同時修改時不會互相蓋掉"
-    - "在 Composable 裡直接讀 `vm.state.value`（`StateFlow`）就會自動觀察變化"
-  answer: [0, 1, 3]
-  explain: |
-    - 第 1 項正確。這是 `StateFlow` 最大的好處：Flow 的整套工具都能用，ViewModel 也不用依賴 Compose。
-    - 第 2 項正確。`mutableStateOf` 在 Compose 裡讀取最直接，沒有 collect、不用處理 initial；代價是變化只有 Compose 看得到。
-    - 第 3 項錯：`mutableStateOf` 沒有「收集」這個動作，也就沒有 lifecycle 可以停；它永遠是最新值。要跟著 lifecycle 停啟的是 `collectAsStateWithLifecycle()`。
-    - 第 4 項正確。`update { }` 用比較並交換（CAS）重試，同時更新不會漏掉別人的修改；`mutableStateOf` 沒有同等的 API。
-    - 第 5 項錯：直接讀 `StateFlow.value` 不會被 Compose 追蹤，值變了畫面不會更新。要用 `collectAsStateWithLifecycle()`；Compose 的 lint `StateFlowValueCalledInComposition` 會警告。
 
 - id: kotlin-compose-state-api-15
   type: predict
@@ -338,7 +346,7 @@
   priority: P1
   tags: [snapshotflow, distinct]
   prompt: |
-    印出什麼？（依序，以空白分隔。`LaunchedEffect` 已經開始收集；下面三行寫入之後，Compose 都已經處理完畢。）
+    印出什麼？（見第 6 題。依序，以空白分隔。`LaunchedEffect` 是在 Composable 裡啟動 coroutine 的入口，這裡已經開始收集；下面三行寫入之後，Compose 都已經處理完畢。）
   codeLang: kotlin
   code: |
     val count = mutableIntStateOf(0)
@@ -359,6 +367,103 @@
     `count` 再改成 2、3，計算式每次都重新執行，結果還是 `true`，和上一個結果相同，`snapshotFlow` 會把連續相同的結果去重，不再發射。
     所以只會印出 `false true`。這個特性讓 `snapshotFlow` 很適合「只在結果真的改變時做事」，例如捲動位置跨過門檻時回報 analytics；如果要的是每一個位置都回報，計算式就回傳位置本身（`snapshotFlow { count.intValue }`）。
 
+- id: kotlin-compose-state-api-10
+  type: single
+  level: 1
+  priority: P0
+  tags: [collectasstate, lifecycle]
+  prompt: |
+    行情畫面用 `val price by vm.price.collectAsState()` 收一個每 50 ms 更新一次的 `StateFlow`（永遠保存最新一個值的 Flow）。使用者按 Home 回到桌面，App 進入背景，但這個畫面還在 composition 裡（沒有被移除）。會發生什麼事？（見第 7 題）
+  options:
+    - "收集被取消，不再重組"
+    - "收集還在，每一筆新價格仍然讓畫面重組"
+    - "收集暫停，回到前景時補送背景期間的所有價格"
+    - "App 會當掉，因為背景不能收集 Flow"
+  answer: 1
+  explain: |
+    - 第 2 項正確。`collectAsState()` 不知道 Android 的 lifecycle（生命週期），只要畫面還在 composition 裡就一直收集。App 退到背景，收集還在，每一筆價格都讓畫面重組，耗電也耗流量。
+    - 第 1 項錯：這是 `collectAsStateWithLifecycle()` 的行為，預設在 lifecycle 低於 `STARTED`（畫面看不到，例如退到背景）時取消收集，回到前景再重新收集。
+    - 第 3 項錯：`StateFlow` 只保留最新值，沒有「補送」；`collectAsStateWithLifecycle()` 回到前景後，是馬上拿到目前的最新值。
+    - 第 4 項錯：背景可以收集，只是浪費資源；不會因此當掉。
+
+- id: kotlin-compose-state-api-11
+  type: fill
+  level: 2
+  priority: P0
+  tags: [collectasstatewithlifecycle, initial]
+  prompt: |
+    補上兩處。第一處：用會跟著 Android lifecycle 的 API 收 `StateFlow<UiState>`，App 退到背景時停止收集。第二處：`tickFlow` 是一般的 `Flow<Long>`，沒有「目前值」，要用具名參數給第一個值來之前畫面顯示的初始值（先用 `null` 表示還沒有資料）。（見第 7 題）
+  codeLang: kotlin
+  code: |
+    // build.gradle.kts: implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    val uiState by vm.uiState.____()
+    val lastTick by vm.tickFlow.collectAsStateWithLifecycle(____ = null)
+  blanks:
+    - [collectAsStateWithLifecycle]
+    - [initialValue]
+  explain: |
+    - 第一格是 `collectAsStateWithLifecycle`。它來自 `androidx.lifecycle:lifecycle-runtime-compose`，預設 `minActiveState` 是 `STARTED`：畫面可見才收集，退到背景就取消，回到前景再重新收集。`StateFlow` 一定有目前值，所以不用給初始值。
+    - 第二格是 `initialValue`。一般的 `Flow` 沒有目前值，第一個值來之前畫面要顯示什麼，必須自己給；`Flow<Long>` 搭配 `initialValue = null`，型別會是 `Long?`，畫面顯示 `--`，不要給 `0` 這種看起來像真的數字（使用者會以為價格真的是 0）。
+    - 一般 `Flow` 通常是 cold flow（有人收集才開始跑，每個收集者各跑一份）：每次回到前景重新收集，上游就從頭再跑一次（例如重新開 WebSocket）。所以通常先在 ViewModel 用 `stateIn` 轉成 `StateFlow`。
+
+- id: kotlin-compose-state-api-12
+  type: order
+  level: 2
+  priority: P1
+  tags: [collectasstatewithlifecycle, statein, lifecycle]
+  prompt: |
+    ViewModel 用 `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initial)` 把 WebSocket 行情轉成 `StateFlow`（`WhileSubscribed(5000)` 的意思是：沒有人收集之後，再等 5 秒才停掉上游），畫面用 `collectAsStateWithLifecycle()` 收。使用者把 App 退到背景，超過 5 秒才回來。把過程依正確順序排列。（見第 7 題）
+  items:
+    - App 退到背景，畫面的 lifecycle 離開 STARTED
+    - collectAsStateWithLifecycle 取消收集，StateFlow 變成沒有收集者
+    - 5 秒過去，WhileSubscribed(5000) 停掉上游（WebSocket 訂閱）
+    - 使用者回到前景，lifecycle 回到 STARTED，重新收集，上游重新啟動
+    - 畫面先拿到 StateFlow 保留的最近一筆，等新資料到達再更新
+  explain: |
+    - 第 2 步取消收集，是因為 `collectAsStateWithLifecycle()` 在 lifecycle 離開 `minActiveState`（預設 `STARTED`）時取消。如果用 `collectAsState()`，這一步不會發生，收集一直在，上游也永遠不會停。
+    - 第 3 步的 5 秒是 `WhileSubscribed(5000)`：沒有收集者之後再等 5 秒才停上游，這 5 秒是為了撐過旋轉螢幕這種瞬間收集者消失又出現的情況（Kotlin05 第 5 題）。使用者在 5 秒內回來，上游就不會停。
+    - 第 5 步：`StateFlow` 永遠有目前值，重新收集時馬上拿到最近一筆，畫面不會空白，但這一筆可能是舊的，所以新資料到達時畫面會再更新一次。
+
+- id: kotlin-compose-state-api-13
+  type: single
+  level: 3
+  priority: P1
+  tags: [viewmodel, stateflow, mutablestateof, testing]
+  prompt: |
+    `PriceViewModel` 要暴露目前價格，會被三個地方使用：Compose 畫面、用 Turbine（測試 Flow 的函式庫）驗證每一筆變化的單元測試、WorkManager 的 Worker（在背景比對價格警示，不是 Compose）。哪一種暴露方式最合適？（見第 8 題）
+  options:
+    - "`var price by mutableLongStateOf(0L)`，Worker 與測試用 `snapshotFlow { vm.price }` 觀察"
+    - "`val price: StateFlow<Long>`（內部是 `MutableStateFlow`），畫面用 `collectAsStateWithLifecycle()`，Worker 與測試直接 `collect`"
+    - "`val price: MutableLiveData<Long>`，畫面用 `observeAsState()`"
+    - "三個都用 `mutableStateOf`，因為它是 Compose 官方提供的，一定最好"
+  answer: 1
+  explain: |
+    - 第 2 項正確。`StateFlow` 不依賴 Compose，任何 coroutine 都能 `collect`，單元測試可以用 Turbine 逐筆驗證，Worker 也能直接收；畫面端用 `collectAsStateWithLifecycle()` 只在前景收集。
+    - 第 1 項錯：`snapshotFlow` 要等 Compose 通知 snapshot 系統「有寫入了」才會重新計算。單元測試和沒有 Compose 畫面的環境沒有人通知，只會收到第一筆（要自己呼叫 `Snapshot.sendApplyNotifications()` 才收得到後續的），非常脆弱。
+    - 第 3 項錯：LiveData 在單元測試要額外處理主執行緒（例如 `InstantTaskExecutorRule`），Worker 要觀察它也得切到主執行緒，而且不能用 `combine`、`debounce` 這類 Flow 運算子；舊專案並存可以，新程式碼不建議。
+    - 第 4 項錯：「官方提供」不等於適合每一層。`mutableStateOf` 是 Compose 的 State，ViewModel 用它，變化只有 Compose 看得到，而且 ViewModel 也要依賴 Compose runtime。
+
+- id: kotlin-compose-state-api-14
+  type: multi
+  level: 3
+  priority: P1
+  tags: [viewmodel, stateflow, mutablestateof, tradeoff]
+  prompt: |
+    比較 ViewModel 用 `StateFlow` 與用 `mutableStateOf` 暴露畫面狀態，哪些敘述正確？（複選，見第 8 題）
+  options:
+    - "`StateFlow` 可以搭配 `combine`、`debounce`、`stateIn` 等 Flow 運算子，而且不需要 Compose"
+    - "ViewModel 用 `mutableStateOf`，Compose 畫面可以直接讀 `vm.state`，不需要 `collectAs…`，寫法最簡單"
+    - "`mutableStateOf` 會跟著 Android lifecycle，App 退到背景就自動停止更新"
+    - "`MutableStateFlow.update { }` 是原子更新，多個 coroutine 同時修改時不會互相蓋掉"
+    - "在 Composable 裡直接讀 `vm.state.value`（`StateFlow`）就會自動觀察變化"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確。這是 `StateFlow` 最大的好處：Flow 的整套工具都能用，ViewModel 也不用依賴 Compose。
+    - 第 2 項正確。`mutableStateOf` 在 Compose 裡讀取最直接，沒有 collect、不用處理 initial；代價是變化只有 Compose 看得到。
+    - 第 3 項錯：`mutableStateOf` 沒有「收集」這個動作，也就沒有 lifecycle 可以停；它永遠是最新值。要跟著 lifecycle 停啟的是 `collectAsStateWithLifecycle()`。
+    - 第 4 項正確。`update { }` 用比較並交換（CAS）重試，同時更新不會漏掉別人的修改；`mutableStateOf` 沒有同等的 API。
+    - 第 5 項錯：直接讀 `StateFlow.value` 不會被 Compose 追蹤，值變了畫面不會更新。要用 `collectAsStateWithLifecycle()`；Compose 的 lint `StateFlowValueCalledInComposition` 會警告。
+
 - id: kotlin-compose-state-api-16
   type: flash
   level: 1
@@ -367,6 +472,7 @@
   front: |
     `collectAsState()` 和 `collectAsStateWithLifecycle()` 差在哪？
   back: |
+    - 名字只差 `WithLifecycle` 這幾個字，行為差在 App 退到背景之後。
     - `collectAsState()`：Compose 本體提供，進入 composition 就開始收，離開才停，**不管 Android lifecycle**。App 退到背景，只要畫面還在 composition 裡就繼續收、繼續重組。
     - `collectAsStateWithLifecycle()`：來自 `androidx.lifecycle:lifecycle-runtime-compose`（要自己加依賴），預設 `minActiveState = STARTED`，退到背景取消收集，回前景再重新收。
     - Android 畫面預設用後者。`StateFlow` 不用給初始值；一般 `Flow` 要給 `initialValue`。
@@ -379,7 +485,7 @@
   front: |
     為什麼有 `mutableIntStateOf`、`mutableLongStateOf`、`mutableFloatStateOf`、`mutableDoubleStateOf`？
   back: |
-    `MutableState<Int>` 的 `Int` 是泛型參數，每次寫入都要把 `Int` 包成 `Integer` 物件（boxing）。primitive 版直接存 `int`，用 `intValue`、`longValue` 等讀寫，沒有這個成本，適合每秒更新很多次的計數、位置、價格（`Long`）。
+    `MutableState<Int>` 的 `Int` 是泛型參數，每次寫入都要把 `Int` 包成 `Integer` 物件（boxing：多包一層物件、多耗記憶體）。primitive 版直接存 `int`，用 `intValue`、`longValue` 等讀寫，沒有這個成本，適合每秒更新很多次的計數、位置、價格（`Long`）。
     `Boolean` 沒有 primitive 版（包起來的 `Boolean` 只有兩個共用的物件，不會產生新物件）。用了 primitive 版卻讀 `.value`，一樣會 boxing；Compose 的 lint `AutoboxingStateCreation`、`AutoboxingStateValueProperty` 會提醒。
 
 - id: kotlin-compose-state-api-18
@@ -390,7 +496,7 @@
   front: |
     `derivedStateOf`、`snapshotFlow`、`produceState` 各自的轉換方向？`derivedStateOf` 和 `remember(key)` 差在哪？
   back: |
-    - `derivedStateOf`：State → 另一個 State，輸入頻繁、輸出很少變時減少通知，要包 `remember`。
+    - `derivedStateOf`：State → 另一個 State，輸入頻繁、結果很少變時減少通知，要包 `remember`。
     - `snapshotFlow`：State → Flow，在 lambda 裡讀 State，變了就發射，連續相同的結果會去重。
     - `produceState`：suspend 函式或 callback → State，callback 用 `awaitDispose` 解除。
     - `derivedStateOf` 追蹤 **State 的讀取**；`remember(key)` 追蹤**我放進 key 的一般參數**。依賴一般參數時寫 `remember(param) { derivedStateOf { … } }`。
@@ -399,30 +505,31 @@
   type: open
   level: 2
   priority: P0
-  tags: [state-api, decision, field]
+  tags: [state-api, decision]
   prompt: |
     面試官問：「Compose 的狀態 API 很多，`mutableStateOf`、`remember`、`rememberSaveable`、`StateFlow`、`derivedStateOf` 你平常怎麼選？請用交易所的下單畫面當例子。」
   promptJa: |
     面接官から「Compose の状態 API はたくさんありますが、`mutableStateOf`、`remember`、`rememberSaveable`、`StateFlow`、`derivedStateOf` を普段どう使い分けますか？ 取引所の注文画面を例に説明してください」と聞かれました。
   keyPoints:
+    - "基本模型：State 是 Compose 追蹤的變數，改了才會重組；普通的 var 不會；remember 讓值活過重組"
     - "先問三件事：資料從哪來、要活多久、誰要觀察"
     - "純畫面元素（展開或收合）用 remember；輸入到一半的欄位用 rememberSaveable，自訂型別給 Saver（欄位多了 Saver 要同步改）"
     - "頻繁更新的數字用 primitive 版（mutableLongStateOf）；委託列表用 mutableStateListOf，項目用不可變的 data class，更新時換掉那一格"
     - "業務資料放 ViewModel 的 StateFlow，畫面用 collectAsStateWithLifecycle 只在前景收；cold Flow 先用 stateIn 轉換"
-    - "derivedStateOf 只用在輸入頻繁、輸出很少變，要包 remember，一般參數放 remember 的 key"
+    - "derivedStateOf 只用在輸入頻繁、結果很少變，要包 remember，一般參數放 remember 的 key"
     - "必須做完的下單放 ViewModel 的 viewModelScope，不用 rememberCoroutineScope"
   modelAnswer: |
-    我選狀態 API 先問三件事：資料從哪來、要活多久、誰要觀察。以下單畫面為例：展開或收合這類純畫面元素，用 `remember`；使用者輸入到一半的交易對與數量，用 `rememberSaveable`，旋轉或行程被系統殺掉都還在，如果是自訂型別就給 `listSaver` 或 `mapSaver`，欄位多了 Saver 要同步改。
+    先講基本模型：Compose 的畫面是函式描述出來的，只有 State 改變才會重組，普通的變數改了畫面不會動，所以我選 API 先問三件事：資料從哪來、要活多久、誰要觀察。以下單畫面為例：展開或收合這類純畫面元素，用 `remember`；使用者輸入到一半的交易對與數量，用 `rememberSaveable`，旋轉或行程被系統殺掉都還在，如果是自訂型別就給 `listSaver` 或 `mapSaver`，欄位多了 Saver 要同步改。
 
     行情、委託這類業務資料放在 ViewModel，用 `StateFlow` 對外，畫面用 `collectAsStateWithLifecycle()` 只在前景收集，退到背景就停；cold Flow 先用 `stateIn` 轉成 `StateFlow`。每秒變很多次的數字，我會用 `mutableLongStateOf` 這類 primitive 版避免 boxing；委託列表用 `mutableStateListOf`，項目是不可變的 data class，更新時換掉那一格。
 
-    `derivedStateOf` 只用在輸入變很頻繁、輸出很少變，例如捲動超過門檻才顯示回到頂端，而且要包 `remember`。送出訂單這種必須做完的工作放 ViewModel 的 `viewModelScope`，不用 `rememberCoroutineScope`。我在一個即時行情 App 全面使用 Compose 搭配 Coroutines 與 Flow，交易所 App 的行情與下單畫面也會照這個原則設計。
+    `derivedStateOf` 只用在輸入變很頻繁、結果很少變，例如價格超過警示線才顯示紅字，而且要包 `remember`。送出訂單這種必須做完的工作放 ViewModel 的 `viewModelScope`，不用 `rememberCoroutineScope`。我在做過的即時行情 App 裡全面使用 Compose 搭配 Coroutines 與 Flow，到交易所也會照這個原則設計行情與下單畫面。
   modelAnswerJa: |
-    状態 API を選ぶときは、まず「データはどこから来るか」「どれだけ長く生きる必要があるか」「誰が観測するか」の 3 つを考えます。注文画面で言うと、展開・折りたたみのような画面だけの要素は `remember`、入力途中の通貨ペアや数量は `rememberSaveable` を使い、回転やプロセス終了後も残るようにします。独自の型なら `listSaver` や `mapSaver` を渡し、フィールドが増えたら Saver も合わせて直します。
+    まず基本モデルとして、Compose の画面は関数で記述され、State が変わったときだけ再コンポジションされます。通常の変数を変えても画面は動きません。そのうえで状態 API を選ぶときは、「データはどこから来るか」「どれだけ長く生きる必要があるか」「誰が観測するか」の 3 つを考えます。注文画面で言うと、展開・折りたたみのような画面だけの要素は `remember`、入力途中の通貨ペアや数量は `rememberSaveable` を使い、回転やプロセス終了後も残るようにします。独自の型なら `listSaver` や `mapSaver` を渡し、フィールドが増えたら Saver も合わせて直します。
 
     相場や注文といった業務データは ViewModel に置き、`StateFlow` として公開し、画面側は `collectAsStateWithLifecycle()` でフォアグラウンドのときだけ収集します。cold Flow は `stateIn` で `StateFlow` に変換します。1 秒に何度も変わる数値は `mutableLongStateOf` のようなプリミティブ版でボクシングを避け、注文リストは `mutableStateListOf` と不変の data class を使い、更新時は 1 要素を差し替えます。
 
-    `derivedStateOf` は、入力が頻繁に変わり出力があまり変わらない場合（スクロールが閾値を超えたときだけトップへ戻るボタンを出すなど）に限り、`remember` で包んで使います。注文送信のように必ず完了させたい処理は ViewModel の `viewModelScope` に置き、`rememberCoroutineScope` は使いません。あるリアルタイム相場アプリでは Compose を全面的に使い、Coroutines と Flow でデータフローを扱いました。取引所アプリでも同じ方針で相場画面と注文画面を設計します。
+    `derivedStateOf` は、入力が頻繁に変わり出力があまり変わらない場合（価格が警告ラインを超えたときだけ赤字を出すなど）に限り、`remember` で包んで使います。注文送信のように必ず完了させたい処理は ViewModel の `viewModelScope` に置き、`rememberCoroutineScope` は使いません。これまで開発したリアルタイム相場アプリでは Compose を全面的に使い、Coroutines と Flow でデータフローを扱いました。取引所でも同じ方針で相場画面と注文画面を設計します。
   followUps:
     - rememberSaveable に大きなデータを入れるとどうなる？
     - ViewModel で mutableStateOf と StateFlow を使い分ける基準は？
@@ -439,16 +546,16 @@
   promptJa: |
     面接官から「ユーザーから、相場画面をバックグラウンドにしてもアプリの電池消費と通信量が減らないと報告がありました。Compose の状態 API のレイヤーからどう調べ、どう直しますか？」と聞かれました。
   keyPoints:
-    - "先確認背景時是不是還有 collector：用 Profiler 看網路與 CPU，或在 SharedFlow／StateFlow 的 subscriptionCount 打 log"
+    - "先確認背景時是不是還有收集者：用 Profiler 看網路與 CPU，或在 SharedFlow／StateFlow 的 subscriptionCount 打 log"
     - "檢查畫面是不是用 collectAsState()：它不管 lifecycle，改成 collectAsStateWithLifecycle()"
     - "檢查 ViewModel 的 stateIn 用的是 Eagerly／Lazily，或 WhileSubscribed 的 timeout 太長；建議 WhileSubscribed(5000)"
     - "檢查是不是有人在 lifecycleScope.launch 或 LaunchedEffect 裡直接 collect，沒有 repeatOnLifecycle"
     - "cold Flow 直接交給畫面收，回前景會重新連線；先 stateIn 轉成 StateFlow"
     - "修完驗證：退到背景一陣子後 subscriptionCount 歸零、網路請求停止；回前景資料馬上更新"
   modelAnswer: |
-    我會先確認「背景時是不是還有人在收」：用 Android Studio 的 Profiler 看背景的網路與 CPU，再在 ViewModel 的 `StateFlow` 上看 `subscriptionCount`，退到背景之後是不是還大於 0。
+    我會先確認「背景時是不是還有人在收」：用 Android Studio 的 Profiler 看背景的網路與 CPU，再在 ViewModel 的 `StateFlow` 上看 `subscriptionCount`（目前有幾個收集者），退到背景之後是不是還大於 0。
 
-    接著從畫面往上查。第一，畫面是不是用 `collectAsState()`：它不管 lifecycle，只要畫面還在 composition 裡就一直收，應該改成 `collectAsStateWithLifecycle()`，預設在 STARTED 才收。第二，有沒有人在 `lifecycleScope.launch` 或 `LaunchedEffect` 裡直接 `collect`，沒有用 `repeatOnLifecycle`。第三，ViewModel 的 `stateIn` 是不是 `Eagerly` 或 `Lazily`，這兩種上游永遠不會停；建議用 `WhileSubscribed(5000)`，沒有 collector 超過 5 秒才停掉 WebSocket。第四，是不是把 cold Flow 直接丟給畫面收，這樣每次回前景都重新連線。
+    接著從畫面往上查。第一，畫面是不是用 `collectAsState()`：它不管 lifecycle，只要畫面還在 composition 裡就一直收，應該改成 `collectAsStateWithLifecycle()`，預設在 STARTED 才收。第二，有沒有人在 `lifecycleScope.launch` 或 `LaunchedEffect` 裡直接 `collect`，沒有用 `repeatOnLifecycle`。第三，ViewModel 的 `stateIn` 是不是 `Eagerly` 或 `Lazily`，這兩種上游永遠不會停；建議用 `WhileSubscribed(5000)`，沒有收集者超過 5 秒才停掉 WebSocket。第四，是不是把 cold Flow 直接丟給畫面收，這樣每次回前景都重新連線。
 
     修完之後我會驗證：退到背景一陣子，`subscriptionCount` 歸零、網路請求停止；回到前景，資料馬上更新。如果業務上背景一定要持續收（例如價格警示），那不是畫面的工作，要用 foreground service 或 WorkManager。
   modelAnswerJa: |

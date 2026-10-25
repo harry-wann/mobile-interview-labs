@@ -1,5 +1,5 @@
 // L07：App 退到背景，畫面還一直在更新（collectAsState 與 collectAsStateWithLifecycle）
-// 對應複習站：Kotlin11ComposeState 第 5 題「外部資料怎麼變成 State？collectAsState 還是 collectAsStateWithLifecycle？」
+// 對應複習站：Kotlin11ComposeState 第 7 題「外部資料怎麼變成 State？collectAsState 還是 collectAsStateWithLifecycle？」
 //
 // 情境：行情畫面用 StateFlow 收價格（伺服器每 50 ms 推一筆，不管畫面在不在前景）。
 //        演練用自己的 lifecycle 模擬畫面：前景（STARTED）0.3 秒 → 退到背景（STOPPED）0.5 秒 → 回到前景 0.2 秒。
@@ -120,7 +120,7 @@ private fun price(lines: List<String>, prefix: String): Int? =
 val l07 = Lab(
     id = "L07",
     title = "App 退到背景，畫面還一直在更新",
-    question = "第 5 題：外部資料怎麼變成 State？collectAsState 還是 collectAsStateWithLifecycle？",
+    question = "第 7 題：外部資料怎麼變成 State？collectAsState 還是 collectAsStateWithLifecycle？",
     goal = "行情畫面退到背景（STOPPED）後，不該再收價格。看 collectAsState 為什麼停不下來，再改用 collectAsStateWithLifecycle。先寫出 Bug 版，確認問題重現，再寫修正版。",
     steps = listOf(
         "打開 practice/kotlin/kotlin11-compose-state/L07_CollectLifecycle.kt，寫 TODO ①（Bug 版）。",

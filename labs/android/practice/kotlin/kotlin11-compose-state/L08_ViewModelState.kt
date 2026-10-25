@@ -1,5 +1,5 @@
 // L08：價格警示在單元測試裡只收到第一筆（ViewModel 用 mutableStateOf 暴露狀態，非 Compose 的程式收不到變化）
-// 對應複習站：Kotlin11ComposeState 第 6 題「ViewModel 的畫面狀態用 mutableStateOf 還是 StateFlow？」
+// 對應複習站：Kotlin11ComposeState 第 8 題「ViewModel 的畫面狀態用 mutableStateOf 還是 StateFlow？」
 //
 // 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 practice/kotlin/test/Kotlin11StateTest.kt（已經寫好，不用改）。
 // （為什麼不在 App 裡跑：App 本身是 Compose 畫面，畫面在跑的時候 Compose 會替你通知 snapshot 系統「有寫入了」，
@@ -104,7 +104,7 @@ private fun current(lines: List<String>): Long? =
 val l08 = Lab(
     id = "L08",
     title = "價格警示在單元測試裡只收到第一筆",
-    question = "第 6 題：ViewModel 的畫面狀態用 mutableStateOf 還是 StateFlow？",
+    question = "第 8 題：ViewModel 的畫面狀態用 mutableStateOf 還是 StateFlow？",
     goal = "價格警示不是 Compose，只會用 Flow。看 ViewModel 用 mutableStateOf 時，單元測試裡為什麼只收到第一筆，再改成 StateFlow。先寫出 Bug 版，確認問題重現，再寫修正版。",
     steps = listOf(
         "這題不用開 App，在電腦上跑單元測試。先寫 TODO ①（Bug 版）、TODO ②（修正版）。",

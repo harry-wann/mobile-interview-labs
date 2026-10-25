@@ -1,5 +1,5 @@
 // L01：成交了一部分，委託列表那一列卻沒變（mutableStateListOf 裡的物件被原地修改）
-// 對應複習站：Kotlin11ComposeState 第 1 題「mutableStateOf 與它的家族該怎麼選？」
+// 對應複習站：Kotlin11ComposeState 第 3 題「mutableStateOf 與它的家族該怎麼選？」
 //
 // 情境：委託列表放在 mutableStateListOf 裡，畫面顯示每一筆委託已成交多少。收到「ETH_JPY 成交了 0.5」的回報後，要更新那一列。
 //        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
@@ -88,7 +88,7 @@ private fun line(lines: List<String>, prefix: String): String? =
 val l01 = Lab(
     id = "L01",
     title = "成交了一部分，委託那一列卻沒變",
-    question = "第 1 題：mutableStateOf 與它的家族該怎麼選？",
+    question = "第 3 題：mutableStateOf 與它的家族該怎麼選？",
     goal = "收到「ETH_JPY 成交 0.5」的回報後更新委託列表。看原地修改 mutableStateListOf 裡的物件為什麼不會讓畫面更新，再改成換掉清單的那一格。",
     steps = listOf(
         "選「Bug 版」執行，比較「清單裡的資料」和「畫面顯示」，再看「畫面共更新了 N 次」。",

@@ -1,5 +1,5 @@
 // L04：下單草稿用 rememberSaveable 存，畫面一打開就當掉（自訂型別沒寫 Saver）
-// 對應複習站：Kotlin11ComposeState 第 3 題「remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？」
+// 對應複習站：Kotlin11ComposeState 第 5 題「remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？」
 //
 // 情境：下單畫面把草稿（交易對加數量）放在 rememberSaveable，希望旋轉螢幕後還在。草稿是自訂的 class OrderDraft。
 //        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose，
@@ -84,7 +84,7 @@ private fun line(lines: List<String>, prefix: String): String? =
 val l04 = Lab(
     id = "L04",
     title = "下單草稿用 rememberSaveable，一打開就當掉",
-    question = "第 3 題：remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？",
+    question = "第 5 題：remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？",
     goal = "把自訂的 OrderDraft 放進 rememberSaveable。看沒寫 Saver 為什麼存不下、丟什麼例外，再用 listSaver 寫一個 Saver，讓旋轉後草稿還在。先寫出 Bug 版，確認問題重現，再寫修正版。",
     steps = listOf(
         "打開 practice/kotlin/kotlin11-compose-state/L04_NoSaver.kt，寫 TODO ①（Bug 版）。",

@@ -1,5 +1,5 @@
 // L06：把警示線調高了，畫面還是顯示「超過警示線」（derivedStateOf 只追蹤 State，不追蹤一般參數）
-// 對應複習站：Kotlin11ComposeState 第 4 題「derivedStateOf、snapshotFlow、produceState 怎麼選？」
+// 對應複習站：Kotlin11ComposeState 第 6 題「derivedStateOf、snapshotFlow、produceState 怎麼選？」
 //
 // 情境：價格提醒元件 PriceAlert 的價格是 State（每秒變很多次），警示線 alertLine 是使用者設定、從外面傳進來的一般參數。
 //        畫面只關心「價格有沒有超過警示線」這個布林值，所以用 derivedStateOf。
@@ -66,7 +66,7 @@ private fun line(lines: List<String>, prefix: String): String? =
 val l06 = Lab(
     id = "L06",
     title = "警示線調高了，畫面還是顯示超過",
-    question = "第 4 題：derivedStateOf、snapshotFlow、produceState 怎麼選？",
+    question = "第 6 題：derivedStateOf、snapshotFlow、produceState 怎麼選？",
     goal = "價格是 State、警示線是一般參數，用 derivedStateOf 判斷有沒有超過。看警示線變了為什麼畫面不跟著變，再把警示線放進 remember 的 key。",
     steps = listOf(
         "選「Bug 版」執行，比較兩行「畫面顯示」：警示線調高之後，結果有沒有跟著變。",

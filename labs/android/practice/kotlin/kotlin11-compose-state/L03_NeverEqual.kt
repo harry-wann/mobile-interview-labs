@@ -1,5 +1,5 @@
 // L03：訂單簿明明更新了，最佳買價卻不動（neverEqualPolicy）
-// 對應複習站：Kotlin11ComposeState 第 2 題「mutableStateOf 怎麼判斷『值變了』？什麼時候要換 policy？」
+// 對應複習站：Kotlin11ComposeState 第 4 題「mutableStateOf 怎麼判斷『值變了』？什麼時候要換 policy？」
 //
 // 情境：訂單簿引擎 OrderBook 為了效率，內部用 TreeMap 就地更新，整個 App 共用同一個物件，不會每次複製一份。
 //        收到深度更新（價位 101 有 1.5 BTC 的買單）後，畫面要顯示最新的最佳買價。
@@ -83,7 +83,7 @@ private fun line(lines: List<String>, prefix: String): String? =
 val l03 = Lab(
     id = "L03",
     title = "訂單簿更新了，最佳買價卻不動",
-    question = "第 2 題：mutableStateOf 怎麼判斷「值變了」？什麼時候要換 policy？",
+    question = "第 4 題：mutableStateOf 怎麼判斷「值變了」？什麼時候要換 policy？",
     goal = "訂單簿引擎就地更新、整個 App 共用同一個物件。看再寫一次同一個物件為什麼不會通知畫面，再換成 neverEqualPolicy。先寫出 Bug 版，確認問題重現，再寫修正版。",
     steps = listOf(
         "打開 practice/kotlin/kotlin11-compose-state/L03_NeverEqual.kt，寫 TODO ①（Bug 版）。",

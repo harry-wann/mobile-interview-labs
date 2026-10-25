@@ -1,5 +1,5 @@
 // L02：訂單狀態變成 Filled，畫面卻停在 New（structuralEqualityPolicy 與 referentialEqualityPolicy）
-// 對應複習站：Kotlin11ComposeState 第 2 題「mutableStateOf 怎麼判斷『值變了』？什麼時候要換 policy？」
+// 對應複習站：Kotlin11ComposeState 第 4 題「mutableStateOf 怎麼判斷『值變了』？什麼時候要換 policy？」
 //
 // 情境：領域模型 Order 的 equals 只比 id（Room 的 entity 和領域物件常見這樣寫）。同一筆訂單 A1 的狀態從 New 變成 Filled，
 //        要把新的 Order 寫進 State。
@@ -75,7 +75,7 @@ private fun line(lines: List<String>, prefix: String): String? =
 val l02 = Lab(
     id = "L02",
     title = "訂單狀態變成 Filled，畫面卻停在 New",
-    question = "第 2 題：mutableStateOf 怎麼判斷「值變了」？什麼時候要換 policy？",
+    question = "第 4 題：mutableStateOf 怎麼判斷「值變了」？什麼時候要換 policy？",
     goal = "Order 的 equals 只比 id。同一筆訂單的狀態從 New 變成 Filled，看預設的比較方式為什麼把這次寫入丟掉，再換成 referentialEqualityPolicy。先寫出 Bug 版，確認問題重現，再寫修正版。",
     steps = listOf(
         "打開 practice/kotlin/kotlin11-compose-state/L02_EqualsById.kt，寫 TODO ①（Bug 版）。",

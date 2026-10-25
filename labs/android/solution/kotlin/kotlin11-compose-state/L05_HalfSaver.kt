@@ -1,5 +1,5 @@
 // L05：旋轉螢幕後，下單數量歸零了（Saver 只存了一半的欄位）
-// 對應複習站：Kotlin11ComposeState 第 3 題「remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？」
+// 對應複習站：Kotlin11ComposeState 第 5 題「remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？」
 //
 // 情境：下單草稿 OrderDraft 本來只有交易對和買賣方向，Saver 是那時候寫的。後來為了「數量」加了一個新欄位 qty（有預設值 0.0），
 //        Saver 沒跟著改。使用者把草稿填成 ETH_JPY、賣出、0.25，然後旋轉螢幕。
@@ -79,7 +79,7 @@ private fun line(lines: List<String>, prefix: String): String? =
 val l05 = Lab(
     id = "L05",
     title = "旋轉螢幕後，下單數量歸零了",
-    question = "第 3 題：remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？",
+    question = "第 5 題：remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？",
     goal = "OrderDraft 後來多了 qty 欄位，Saver 沒跟著改。看旋轉後數量為什麼靜悄悄地歸零，再讓 Saver 把每個欄位都存起來、還原回來。",
     steps = listOf(
         "選「Bug 版」執行，比較「旋轉前」和「旋轉後」畫面顯示的草稿。沒有例外、沒有當掉，只有數量不對。",
