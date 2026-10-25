@@ -1,0 +1,127 @@
+/* 設計 token。所有顏色都在 :root（light 值）；dark 在兩處重定義（系統偏好＋手動切換），兩處的值必須相同。 */
+:root {
+  color-scheme: light;
+
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #eceff4;
+  --surface-3: #e0e5ed;
+  --border: #d5dbe5;
+  --border-strong: #b6c0cf;
+  --text: #19202e;
+  --text-2: #465165;
+  --text-3: #5b667a;
+
+  --primary: #0b6e8f;
+  --primary-strong: #085572;
+  --primary-soft: #dcedf3;
+  --on-primary: #ffffff;
+  --focus: #1a8cb5;
+
+  --ok: #17794a;
+  --ok-soft: #dff3e8;
+  --bad: #c0303b;
+  --bad-soft: #fbe3e5;
+  --warn: #9a5b00;
+  --warn-soft: #fbefd5;
+
+  --overlay: rgba(15, 22, 33, 0.5);
+
+  --code-bg: #eef1f6;
+  --syn-comment: #5b6679;
+  --syn-keyword: #a3245c;
+  --syn-string: #12703f;
+  --syn-number: #a8470f;
+  --syn-type: #1f5fae;
+  --syn-function: #6b3fb3;
+  --syn-attr: #8a5700;
+  --syn-prop: #0e6a85;
+
+  --font-sans: 'Noto Sans TC', 'PingFang TC', 'Hiragino Sans CNS', 'Microsoft JhengHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ja: 'Noto Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, 'Noto Sans TC', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --radius: 4px;
+  --topbar-h: 56px;
+  --sidebar-w: 276px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg: #0e131a;
+    --surface: #151b24;
+    --surface-2: #1b232e;
+    --surface-3: #242e3b;
+    --border: #2a3340;
+    --border-strong: #3c4859;
+    --text: #e5e9f0;
+    --text-2: #b0b9c8;
+    --text-3: #8e99ab;
+
+    --primary: #4db6dc;
+    --primary-strong: #7cccea;
+    --primary-soft: #12303d;
+    --on-primary: #04202b;
+    --focus: #6fc8e8;
+
+    --ok: #4cc38a;
+    --ok-soft: #12301f;
+    --bad: #f0707a;
+    --bad-soft: #3a1b20;
+    --warn: #e0a64a;
+    --warn-soft: #33270f;
+
+    --overlay: rgba(0, 0, 0, 0.62);
+
+    --code-bg: #10161f;
+    --syn-comment: #8b97aa;
+    --syn-keyword: #f08aab;
+    --syn-string: #7fd6a4;
+    --syn-number: #f2a56d;
+    --syn-type: #7db3f5;
+    --syn-function: #c3a6f5;
+    --syn-attr: #e3b96f;
+    --syn-prop: #6dcae6;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0e131a;
+  --surface: #151b24;
+  --surface-2: #1b232e;
+  --surface-3: #242e3b;
+  --border: #2a3340;
+  --border-strong: #3c4859;
+  --text: #e5e9f0;
+  --text-2: #b0b9c8;
+  --text-3: #8e99ab;
+
+  --primary: #4db6dc;
+  --primary-strong: #7cccea;
+  --primary-soft: #12303d;
+  --on-primary: #04202b;
+  --focus: #6fc8e8;
+
+  --ok: #4cc38a;
+  --ok-soft: #12301f;
+  --bad: #f0707a;
+  --bad-soft: #3a1b20;
+  --warn: #e0a64a;
+  --warn-soft: #33270f;
+
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  --code-bg: #10161f;
+  --syn-comment: #8b97aa;
+  --syn-keyword: #f08aab;
+  --syn-string: #7fd6a4;
+  --syn-number: #f2a56d;
+  --syn-type: #7db3f5;
+  --syn-function: #c3a6f5;
+  --syn-attr: #e3b96f;
+  --syn-prop: #6dcae6;
+}

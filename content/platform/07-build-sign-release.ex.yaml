@@ -1,0 +1,237 @@
+- id: platform-build-sign-release-01
+  type: single
+  level: 2
+  priority: P1
+  tags: [fastlane, match, code-signing]
+  prompt: |
+    團隊有 5 位 iOS 工程師加上 CI（持續整合，自動建置與測試的伺服器），常常遇到「在我的機器上可以簽署，CI 上卻失敗」，或是誤建了很多張 Distribution 憑證。fastlane 的 `match` 解決什麼問題？CI 上該怎麼用？
+  options:
+    - "`match` 把憑證與 provisioning profile 加密後存放在私有 git 或雲端儲存，所有人與 CI 共用同一份；CI 上用 `readonly: true`，只下載、不建立新憑證"
+    - "`match` 會自動把 App 提交 App Store 審查"
+    - "`match` 取代 Xcode 的 Automatic Signing，使用後就不需要 provisioning profile"
+    - "`match` 只用在 Android 的 keystore 管理"
+  answer: 0
+  explain: |
+    `match` 的重點是「所有人只用同一份」：團隊成員與 CI 取得同一組憑證與 profile，不再各自建立。種類有 `development`、`adhoc`、`appstore`；新增裝置後要重新產生 profile，才會包含新裝置。
+
+    CI 如果沒有加 `readonly`，可能在拿不到憑證時偷偷建立新的，造成憑證數量用完或影響其他人。CI 的認證用 App Store Connect API key（JWT，一種簽過名的短效憑證），可以避開 Apple ID 的雙重驗證。
+
+    其他選項錯在哪裡：
+    - 第 2 項：`match` 管的是憑證和 profile，提交審查是 `deliver` 之類的 action 的工作。
+    - 第 3 項：`match` 還是會產生並使用 provisioning profile，它只是統一管理這些檔案。
+    - 第 4 項：`match` 是 iOS 的工具，Android 的 keystore 不由它管理。
+
+- id: platform-build-sign-release-02
+  type: multi
+  level: 3
+  priority: P0
+  tags: [testflight, phased-release, staged-rollout]
+  prompt: |
+    關於兩個平台的測試與分階段發布，哪些敘述正確？（複選）
+  options:
+    - "TestFlight 內部測試者（最多 100 人）不需要 Beta App Review"
+    - "TestFlight 外部測試者的每個版本第一個 build 需要 Beta App Review"
+    - "iOS 的 phased release 會限制所有使用者，包含自己到 App Store 手動更新的人"
+    - "iOS 的 phased release 是固定 7 天，從 1% 開始逐步放量到 100%，可以暫停"
+    - "Android 的 staged rollout 暫停後，已更新的使用者會被自動降版回舊版本"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：內部測試者是 App Store Connect 裡的使用者，不需要 Beta 審查。
+    - 第 2 項正確：外部測試者最多 10,000 人，每個版本的第一個 build 要通過 Beta App Review，build 在 90 天後過期。
+    - 第 3 項錯誤：phased release 只針對**開啟自動更新**的使用者；手動更新與新安裝的人可以直接拿到最新版。
+    - 第 4 項正確：固定的 7 天，依序是 1%、2%、5%、10%、20%、50%、100%，最多可以暫停 30 天。
+    - 第 5 項錯誤：兩個平台都不能把已更新的使用者降版。Android 暫停 rollout 只是阻止更多人更新，要修復需要發布 `versionCode` 更高的新版本。iOS 也一樣，只能提交修正版（可以申請加急審查）。
+
+- id: platform-build-sign-release-03
+  type: single
+  level: 2
+  priority: P0
+  tags: [app-review, crypto, exchange]
+  prompt: |
+    依 App Store Review Guidelines 對加密貨幣交易所的規定（3.1.5(iii) Exchanges 與 5.1.1(ix)），這類「交易所 App」在 Apple 上架時，哪個說法最正確？
+  options:
+    - "任何個人開發者帳號都能提交，只要 App 內有風險警語"
+    - "必須在 App 內關閉所有加密貨幣功能，改由網頁操作"
+    - "只能在 App 具有相應執照與許可的國家或地區提供，實務上由持牌主體提交，並限定上架地區（例如日本），審查備註要附上執照證明與測試帳號"
+    - "只要完成 App Privacy 宣告，就不需要其他證明"
+  answer: 2
+  explain: |
+    3.1.5(iii) Exchanges 的重點：交易所類的 App 只能在具備適當執照與許可的國家或地區提供交易所功能。5.1.1(ix) 要求銀行與金融服務等高度管制領域的 App，由提供服務的法人提交，不能由個人開發者提交。在日本，交易所必須是向財務局登錄的暗号資産交換業者，所以由持牌主體提交、上架地區限定日本，審查時要提供執照資料與可以登入的測試帳號（例如已完成 eKYC，也就是線上身分驗證的測試帳號與操作說明）。條號以 Apple 當前的 Guidelines 為準。
+
+    其他選項錯在哪裡：
+    - 第 1 項：個人開發者帳號不能提交受高度管制的金融服務 App，風險警語也不能取代執照。
+    - 第 2 項：規定沒有要求關閉功能，而是限制「只在有執照的地區」提供。
+    - 第 4 項：App Privacy 只是隱私資料宣告，只是眾多要求之一，不能取代執照證明；其他常見要求還有 App 內刪除帳號。
+
+- id: platform-build-sign-release-04
+  type: multi
+  level: 2
+  priority: P1
+  tags: [android, signing, aab]
+  prompt: |
+    關於 Android 的簽署與發布，哪些敘述正確？（複選）
+  options:
+    - "使用 Play App Signing 時，Google 保管 App 簽署金鑰，開發者用上傳金鑰簽署 AAB（Android App Bundle）再上傳"
+    - "私有 repo 可以把 release keystore 的密碼直接寫在 `build.gradle.kts` 並提交"
+    - "新 App 上架 Google Play 必須使用 AAB（自 2021 年 8 月起）"
+    - "staged rollout 暫停後，已更新的使用者會被降版回舊版本"
+    - "上傳金鑰遺失時，可以向 Google Play 申請重設上傳金鑰"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：簽署金鑰在 Google 手上，這也是 `assetlinks.json` 要放「應用程式簽署金鑰」指紋的原因。
+    - 第 2 項錯誤：就算是私有 repo，密碼進版控也是常見的安全債，只要有人能讀到 repo 就洩漏了。要改用 `keystore.properties`（加進 `.gitignore`）或 CI 的 secret，並輪換可能已經洩漏的密碼。
+    - 第 3 項正確：新 App 自 2021 年 8 月起必須使用 AAB，由 Google Play 替各種裝置產生專用的 APK（Android 的安裝檔）。
+    - 第 4 項錯誤：暫停只是阻止更多人更新，已更新的使用者不會被降版。
+    - 第 5 項正確：這正是 Play App Signing 的好處：上傳金鑰遺失，可以申請重設，不會像簽署金鑰遺失那樣無法更新 App。
+
+- id: platform-build-sign-release-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [dsym, mapping, crashlytics]
+  prompt: |
+    上線後 Crashlytics 顯示的 crash 堆疊，iOS 是一串十六進位位址，Android 是 `a.b.c` 這種混淆過的名稱。最可能的原因與修法是？
+  options:
+    - "Crashlytics 服務暫時故障，等一下就會好"
+    - "iOS 版本沒有上傳對應的 dSYM（iOS 的 debug symbol 對照檔），Android 版本沒有上傳 R8（Android 的程式碼縮減與混淆工具）的 `mapping.txt`。在 CI 的發布流程加入 dSYM（`upload-symbols`）與 mapping 的自動上傳，並確認上傳的對照檔和 build 是同一個版本"
+    - "要在 App 內關閉混淆，並移除 symbols"
+    - "要在 Release 版本開啟 bitcode"
+  answer: 1
+  explain: |
+    要把位址或混淆後的名稱還原成函式名稱與行號，需要 build 當下產生的對照檔：iOS 是 dSYM（Xcode 14 起沒有 bitcode，本機 Archive 就會產生 dSYM，不需要再從 App Store 下載）；Android 是 `mapping.txt`（Crashlytics Gradle plugin 會自動上傳，Play Console 也可以上傳）。解法是把上傳放進發布流程，並保存每個版本的對照檔。
+
+    其他選項錯在哪裡：
+    - 第 1 項：兩個平台同時出現這種現象，是流程問題，不是服務暫時故障。
+    - 第 3 項：關閉混淆會讓 App 更容易被逆向，而且 release 的混淆本來就是正常設計，缺的是對照檔。
+    - 第 4 項：Xcode 14 起已經不再支援 bitcode，而且 bitcode 與對照檔是否上傳無關。
+
+- id: platform-build-sign-release-06
+  type: order
+  level: 2
+  priority: P1
+  tags: [release, process]
+  prompt: |
+    排列一個交易所 App 的合理發布流程。（ANR 是 Application Not Responding，指 App 太久沒有回應；QA 是 quality assurance，品質驗證。）
+  items:
+    - "建立 release 分支／tag，遞增版本與 build number"
+    - "CI 建置並簽署，上傳 TestFlight／內部測試軌，並上傳 dSYM／mapping"
+    - "QA 與自動化測試通過"
+    - "送審（iOS）／上傳 production track 並設定 staged rollout（Android）"
+    - "以 1–5% 開始放量，觀察 crash-free users、ANR 與核心流程成功率"
+    - "指標正常就逐步放量到 100%；異常則暫停並準備修正版"
+  explain: |
+    順序的理由：
+    1. 先建立 release 分支或 tag 並遞增版本，後面所有產物才有明確的版本可以追蹤。
+    2. CI 建置簽署並上傳測試軌時，就要同時上傳 dSYM 與 mapping，避免版本上線後才發現 crash 無法還原名稱。
+    3. 測試軌拿到 build 之後，QA 與自動化測試才有東西可以驗。
+    4. 測試通過才送審或上傳到 production。
+    5. 上線時先放 1 到 5%，並盯著明確的指標；交易所尤其要看下單、入金等核心流程的成功率，不只是 crash。
+    6. 指標正常才擴大，異常就暫停。因為不能降版，修復一定是「發新版」，要預先想好加急審查（iOS）與遠端 feature flag（功能開關，由伺服器控制功能的開啟與關閉）的應對。
+
+- id: platform-build-sign-release-07
+  type: fill
+  level: 2
+  priority: P1
+  tags: [fastlane, testflight]
+  prompt: |
+    補上 fastlane 的 action：同步 appstore 這種用途的憑證（CI 上唯讀），建置後上傳到 TestFlight。
+  codeLang: text
+  code: |
+    lane :beta do
+      ____(type: "appstore", readonly: is_ci)
+      build_app(scheme: "App")
+      ____(skip_waiting_for_build_processing: true)
+      upload_symbols_to_crashlytics
+    end
+  blanks:
+    - [match]
+    - [upload_to_testflight, pilot]
+  explain: |
+    - `match`：同步憑證與 provisioning profile，CI 上加 `readonly` 只下載、不建立新憑證。
+    - `build_app`（舊名 `gym`）：建置並產生 ipa（iOS 的安裝檔格式）與 dSYM。
+    - `upload_to_testflight`（別名 `pilot`）：上傳 build 到 TestFlight；`skip_waiting_for_build_processing` 讓 lane 不用等 Apple 處理完成。
+    - `upload_symbols_to_crashlytics`：把 dSYM 上傳到 Crashlytics，這樣之後的 crash 才能還原成函式名稱。
+
+- id: platform-build-sign-release-08
+  type: single
+  level: 3
+  priority: P1
+  tags: [rollback, incident]
+  prompt: |
+    新版 iOS App 的 phased release 進行到第 3 天（約 5% 使用者），監控顯示「下單失敗率」明顯上升。下列哪個處置最合理？
+  options:
+    - "在 App Store Connect 把版本退回上一版，所有使用者自動降版"
+    - "刪除 App，重新上架"
+    - "不處理，等 phased release 跑完 7 天再看"
+    - "暫停 phased release，伺服器端先確認或調整相容性，用遠端 feature flag 關閉有問題的功能，同時準備修正版並申請加急審查；已更新的使用者無法降版"
+  answer: 3
+  explain: |
+    iOS 無法降版。可行的組合是：(1) 暫停 phased release（最多暫停 30 天），阻止更多人更新；(2) 伺服器端先止血（相容性、限流、回應調整）；(3) 用遠端 feature flag 關閉有問題的功能；(4) 準備修正版並申請加急審查。
+
+    其他選項錯在哪裡：
+    - 第 1 項：App Store Connect 沒有讓所有使用者自動降版的功能。
+    - 第 2 項：刪除 App 會讓所有使用者失去 App，還會遺失評價與下載紀錄，問題也沒有解決。
+    - 第 3 項：下單失敗是核心功能出問題，繼續放量只會讓更多使用者受影響，必須先暫停。
+
+    這也是為什麼分階段發布期間要有明確的指標與暫停條件，並讓伺服器同時支援新舊版 App。
+
+- id: platform-build-sign-release-09
+  type: open
+  level: 2
+  priority: P1
+  tags: [release]
+  prompt: |
+    請說明你從建置、簽署到上架與分階段發布的完整流程（iOS 與 Android）。出問題時怎麼止血？並說明加密貨幣交易所 App 在審查上的特殊要求，以及你實際的 CI／CD（持續整合與持續交付）經驗。
+  promptJa: |
+    ビルド、署名からストア公開、段階的リリースまでの流れ（iOS と Android）を説明してください。問題が起きたときの止血方法、暗号資産取引所アプリに特有の審査要件、実際の CI/CD の経験も説明してください。
+  keyPoints:
+    - "簽署：iOS 用 match 共用憑證（CI 加 `readonly`）、App Store Connect API key 認證；Android 用 Play App Signing，上傳金鑰與簽署金鑰分開，密碼不進 repo"
+    - "流程：遞增版本、CI 建置簽署、上傳 TestFlight 或內部測試軌、QA、送審或 production、分階段放量，同時上傳 dSYM 與 mapping"
+    - "分階段發布：iOS phased release 固定 7 天；Android staged rollout 自訂百分比；觀察 crash-free、ANR、下單成功率"
+    - "止血：不能降版，只能暫停放量、伺服器端止血、遠端 feature flag、修正版與加急審查；要有強制更新機制"
+    - "交易所審查：Apple 3.1.5(iii) 限有執照的地區、5.1.1(ix) 要求法人（持牌主體）提交，並限定上架地區、審查備註附執照與測試帳號；帳號刪除、隱私宣告、加密合規；Google Play 的金融服務政策"
+    - "過去經驗：長期負責雙平台的送審與發布；在社交 App 用 Fastlane 搭配 Codemagic、CircleCI 建立自動建置與發布流程；在即時行情 App 建立 Fastlane 自動發布流程"
+    - "換成交易所 App：簽署密碼放 CI secret 並定期輪換；分階段發布把下單與入金成功率納入暫停條件"
+  modelAnswer: |
+    簽署上，iOS 我會用 fastlane match 讓團隊和 CI 共用同一份憑證，CI 加 `readonly`，認證用 App Store Connect API key；Android 用 Play App Signing，上傳金鑰和簽署金鑰分開，密碼放 CI 的 secret，不進 repo。流程是遞增版本、CI 建置簽署、上傳 TestFlight 或內部測試軌，同時上傳 dSYM 與 mapping，QA 通過後送審，然後分階段放量。iOS 是固定七天的 phased release，Android 是自訂比例的 staged rollout，我會從 1 到 5% 開始，看 crash-free、ANR，以及交易所最重要的下單和入金成功率。
+
+    出問題時，兩個平台都不能降版：我會暫停放量、伺服器端先止血、用遠端 feature flag 關掉問題功能、準備修正版，iOS 再申請加急審查。所以強制更新機制和伺服器對新舊版的相容很重要。
+
+    交易所的審查有特殊要求：Apple 的 3.1.5(iii) 要求交易所功能只在有執照的地區提供，5.1.1(ix) 要求受高度管制的金融服務由法人（持牌主體）提交，審查備註要附上執照證明和測試帳號，另外還有帳號刪除和隱私宣告。
+
+    經驗上，我長期負責 App Store Connect 與 Google Play Console 的送審和發布。在一個社交 App 用 Fastlane 搭配 Codemagic、CircleCI 建立雙平台的自動建置與發布流程，包含上傳 TestFlight、把 dSYM 上傳到 Crashlytics、產生 release note 和關閉 Jira 工作單；在一個即時行情 App 建立了 Fastlane 自動發布流程，涵蓋版號遞增、建置、簽署、上傳 TestFlight 與 Firebase App Distribution，並發送 Slack 通知。換成交易所 App，我會把簽署密碼放在 CI secret 並定期輪換，分階段發布時把下單和入金成功率也納入暫停條件。
+  modelAnswerJa: |
+    署名については、iOS では fastlane match でチームと CI が同じ証明書を共有し、CI では `readonly` と App Store Connect API キーを使います。Android では Play App Signing を使い、アップロードキーと署名キーを分け、パスワードは CI のシークレットに置いてリポジトリには入れません。流れは、バージョンの更新、CI でのビルドと署名、TestFlight または内部テストトラックへのアップロード（同時に dSYM と mapping も）、QA、審査提出、そして段階的な公開です。iOS は固定 7 日の phased release、Android は割合を指定できる staged rollout で、1〜5% から始め、crash-free と ANR に加えて、取引所で最も重要な注文と入金の成功率を見ます。
+
+    問題が起きた場合、どちらのプラットフォームでもダウングレードはできません。公開の一時停止、サーバー側での止血、リモート feature flag による問題機能の無効化、修正版の準備を行い、iOS では緊急審査を申請します。そのため、強制アップデートの仕組みと、サーバーが新旧バージョンの両方に対応することが重要です。
+
+    取引所アプリには審査上の特別な要件があります。Apple のガイドライン 3.1.5(iii) では、取引所の機能は免許のある国・地域でのみ提供でき、5.1.1(ix) により、金融サービスのような高度に規制された分野のアプリは、そのサービスを提供する法人（免許を持つ主体）が提出します。審査メモに免許の証明とテストアカウントを添え、アカウント削除とプライバシー申告も必要です。
+
+    経験としては、App Store Connect と Google Play Console での審査提出と公開を長く担当してきました。あるソーシャルアプリでは Fastlane に Codemagic と CircleCI を組み合わせて、両プラットフォームの自動ビルドとリリースの仕組みを構築し、TestFlight へのアップロード、Crashlytics への dSYM アップロード、リリースノートの生成、Jira チケットのクローズまで自動化しました。あるリアルタイム相場アプリでは、バージョン更新、ビルド、署名、TestFlight と Firebase App Distribution へのアップロード、Slack 通知までを含む Fastlane の自動リリースを構築しました。取引所アプリでは、署名用のパスワードを CI のシークレットで管理して定期的にローテーションし、段階的リリースでは注文と入金の成功率も一時停止の条件に加えます。
+  followUps:
+    - "審査で「ログインできない」と言われないために、どんなテストアカウントを用意しますか。"
+    - "ロールアウト中に旧バージョンと新バージョンが混在するとき、API はどう互換性を保ちますか。"
+    - "dSYM が見つからないビルドが出てしまったとき、あとから符号化するにはどうしますか。"
+  timeLimitSec: 150
+
+- id: platform-build-sign-release-10
+  type: flash
+  level: 1
+  priority: P1
+  tags: [release]
+  front: iOS 與 Android 的測試軌、分階段發布與回滾，一次整理
+  back: |
+    **iOS**
+    - TestFlight 內部測試：100 人，免 Beta 審查
+    - TestFlight 外部測試：10,000 人，每個版本的第一個 build 需要 Beta App Review，90 天過期
+    - **phased release**：固定 7 天，1%、2%、5%、10%、20%、50%、100%，只針對自動更新的使用者，最多暫停 30 天
+
+    **Android**
+    - 內部測試軌（100 人）、封閉測試、公開測試、production
+    - **staged rollout**：自訂百分比，可暫停與提高
+
+    **共通**
+    - **兩邊都不能降版**：暫停放量、伺服器止血、feature flag、發修正版（iOS 可申請加急審查）
+    - 簽署：match（CI 加 `readonly`）；Play App Signing（上傳金鑰不等於簽署金鑰）
+    - crash 對照檔：dSYM 與 mapping 一定要上傳
+    - Apple 3.1.5(iii)：交易所功能只能在有執照的地區提供；5.1.1(ix)：高度管制的金融服務 App 須由法人（持牌主體）提交

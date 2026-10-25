@@ -1,0 +1,197 @@
+- id: platform-secure-storage-db-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [keychain, accessibility]
+  prompt: |
+    iOS 交易所 App 要把 refresh token 存進 Keychain。App 需要在背景處理推播（Notification Service Extension）與背景更新時讀取它，而且這個 token 不應該隨備份或 iCloud 鑰匙圈到其他裝置。哪個 accessibility 設定最合適？
+  options:
+    - "`kSecAttrAccessibleWhenUnlocked`"
+    - "`kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly`"
+    - "`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`"
+    - "不指定，並開啟 `kSecAttrSynchronizable` 讓使用者換裝置免重新登入"
+  answer: 2
+  explain: |
+    背景流程可能在裝置鎖定的時候執行，所以要選「開機後解鎖過一次就能讀」的 `AfterFirstUnlock`；再加上 `ThisDeviceOnly`，項目就只能留在這支手機，不會搬到新手機，也不會同步到其他裝置。
+
+    - 第 1 項錯：`WhenUnlocked` 只有在裝置解鎖時才能讀，背景處理推播時手機可能是鎖著的，讀不到。
+    - 第 2 項錯：`WhenPasscodeSetThisDeviceOnly` 同樣要求解鎖，鎖定時讀不到。它適合最敏感、只在前景使用的資料。
+    - 第 4 項錯：開 `kSecAttrSynchronizable` 會讓項目經由 iCloud 鑰匙圈同步到其他裝置，交易所的 session 與 token 不應該這樣做；而且未指定時的預設值是 `WhenUnlocked`，背景同樣讀不到。
+
+- id: platform-secure-storage-db-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [secure-enclave, keychain]
+  prompt: |
+    關於 iOS 的 Keychain 與 Secure Enclave，哪些敘述正確？（複選）
+  options:
+    - "Secure Enclave 不支援 secp256k1；簽章金鑰是 P-256，私鑰不會離開晶片"
+    - "可以把既有的 AES 金鑰匯入 Secure Enclave 來保護"
+    - "App 被刪除後，Keychain 的內容通常仍然保留，重新安裝後還在，所以首次啟動要處理殘留的 token"
+    - "`LAContext.evaluatePolicy` 回傳 `true` 就代表資料已經受到硬體層級的保護"
+    - "帶 `ThisDeviceOnly` 的 Keychain 項目不會隨備份還原到新裝置"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：Secure Enclave 傳統上只支援 P-256 的簽章與金鑰協商，不支援區塊鏈常用的 secp256k1，所以不能直接拿它簽比特幣或以太坊的交易。
+    - 第 2 項錯：Secure Enclave 不能匯入金鑰，只能在裡面產生並在內部使用。要保護既有的資料，要用它的金鑰搭配 ECIES 等方式。
+    - 第 3 項正確：`UserDefaults` 會隨 App 一起被刪除，但 Keychain 不會，可以利用這個差異在首次啟動時清掉殘留的 token。
+    - 第 4 項錯：`evaluatePolicy` 只是回報使用者通過了驗證，是 App 自己判斷的閘門，被攻破的環境可以繞過。要讓系統強制，應該把項目綁在 `SecAccessControl`（例如 `.biometryCurrentSet`）上，讀取時由系統驗證。
+    - 第 5 項正確：`ThisDeviceOnly` 的項目只能還原到同一台裝置，不會隨備份搬到新裝置，也不同步到其他裝置。
+
+- id: platform-secure-storage-db-03
+  type: single
+  level: 2
+  priority: P0
+  tags: [android, tink, keystore]
+  prompt: |
+    某個 Android 版 App 把 access／refresh token 存在一般資料庫與未加密的 `SharedPreferences`。要改善，下列哪個方案最合適？
+  options:
+    - "改用 `Base64` 編碼後存回 `SharedPreferences`"
+    - "用 Android Keystore 保管金鑰，以 Tink 的 AEAD（AES-256-GCM）加密 token 後存進 DataStore；`associatedData` 綁定用途；並處理 Auto Backup 還原後無法解密的情況"
+    - "把加密金鑰寫死在 `BuildConfig`，用 AES 加密 token 後儲存"
+    - "把 token 存到外部儲存空間（`getExternalFilesDir`），讓使用者可以備份"
+  answer: 1
+  explain: |
+    正確做法是金鑰放在 Keystore（金鑰不可匯出，也可以要求使用者驗證），資料用 Tink 的 AEAD 加密後再存。
+
+    - 第 1 項錯：Base64 只是編碼，不是加密，任何人都可以直接還原。
+    - 第 3 項錯：金鑰寫進 `BuildConfig` 會被打包進 APK，反編譯就看得到，等於公開。
+    - 第 4 項錯：外部儲存空間更不安全，其他 App 或使用者都可能讀取。
+
+    另外要注意：Jetpack 的 `EncryptedSharedPreferences` 已被標為 deprecated；Auto Backup 會還原密文但不會還原 Keystore 金鑰，所以要排除備份，或在解密失敗時清除資料並要求重新登入。
+
+- id: platform-secure-storage-db-04
+  type: multi
+  level: 2
+  priority: P0
+  tags: [android, strongbox, backup]
+  prompt: |
+    關於 Android Keystore 與 StrongBox，哪些敘述正確？（複選）
+  options:
+    - "StrongBox 不是所有裝置都有，要處理 `StrongBoxUnavailableException` 並降級為一般（TEE）Keystore"
+    - "Keystore 金鑰可以匯出私鑰，供使用者備份到雲端"
+    - "Auto Backup 會把加密的 SharedPreferences 還原到新裝置，但 Keystore 金鑰不會跟著還原，造成解密失敗"
+    - "與生物辨識綁定的金鑰，在使用者新增指紋後預設仍然有效"
+    - "Jetpack 的 `EncryptedSharedPreferences` 已被標為 deprecated"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：StrongBox 是 API 28 起的獨立安全晶片，延遲較高、支援的演算法較少，適合少量高價值的金鑰，而且不是每支手機都有，沒有的時候要降級。
+    - 第 2 項錯：Keystore 的金鑰不可匯出，只能請系統用它做運算。
+    - 第 3 項正確：備份只含檔案，不含 Keystore 裡的金鑰，所以要排除加密檔案的備份，並處理解密失敗。
+    - 第 4 項錯：要求使用者驗證的金鑰，預設會在新增生物特徵後失效（丟出 `KeyPermanentlyInvalidatedException`）。可以用 `setInvalidatedByBiometricEnrollment(false)` 改變，但會降低安全性，交易所通常保持預設，並提供重新驗證的流程。
+    - 第 5 項正確：新專案建議改用 Tink 搭配 DataStore。
+
+- id: platform-secure-storage-db-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [room, migration]
+  prompt: |
+    Room 資料庫要新增一個欄位，工程師為了趕版本，在 `databaseBuilder` 加上 `.fallbackToDestructiveMigration()`。上線後會發生什麼？
+  options:
+    - "Room 會自動比對 schema 並無損遷移"
+    - "只會刪除新增欄位所在的資料表，其他資料保留"
+    - "App 會 crash，直到使用者清除資料"
+    - "找不到對應 migration 時，Room 會**刪除整個資料庫重建**，使用者的本機資料全部遺失；應提供 `AutoMigration` 或手動 `Migration`，並用 `MigrationTestHelper` 測試"
+  answer: 3
+  explain: |
+    `fallbackToDestructiveMigration()` 的意思就是「沒有 migration 路徑時，刪除整個資料庫再重建」。如果資料庫只是可以重新抓取的快取，那可能可以接受；但若放了使用者設定、草稿、尚未同步的資料，就是資料遺失。
+
+    - 第 1 項錯：自動比對 schema 的是 `AutoMigration`，而且必須明確宣告；`fallbackToDestructiveMigration()` 不會遷移任何資料。
+    - 第 2 項錯：它不是只刪一張表，而是整個資料庫。
+    - 第 3 項錯：加上這個設定的目的就是讓 Room 在找不到 migration 時不要丟出錯誤，而是直接刪除重建，所以不會 crash。
+
+    Room 2.4 起有 `AutoMigration`（需要 `exportSchema = true`）處理簡單變更；複雜的寫 `Migration`，並以 `MigrationTestHelper` 驗證舊版本的資料庫能順利升級。
+
+- id: platform-secure-storage-db-06
+  type: fill
+  level: 2
+  priority: P1
+  tags: [room, automigration]
+  prompt: |
+    補上 Room 自動 migration 的設定（資料庫版本從 2 升到 3）。
+  codeLang: kotlin
+  code: |
+    @Database(
+        entities = [OrderEntity::class],
+        version = 3,
+        ____ = [____(from = 2, to = 3)],
+        exportSchema = true
+    )
+    abstract class AppDatabase : RoomDatabase()
+  blanks:
+    - [autoMigrations]
+    - [AutoMigration]
+  explain: |
+    `autoMigrations` 接收 `AutoMigration` 的陣列。Room 會根據匯出的 schema JSON（需要 `exportSchema = true`，並設定 schema 的輸出目錄），比對兩個版本的結構，自動產生 migration。
+
+    重新命名或刪除欄位這類 Room 無法自動判斷的變更，需要另外提供 `AutoMigrationSpec`；更複雜的變更就要手寫 `Migration`。
+
+- id: platform-secure-storage-db-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [migration, database, encryption]
+  prompt: |
+    關於本機資料庫的選型與 migration，哪些敘述正確？（複選）
+  options:
+    - "如果 App 最低支援 iOS 15，就不能使用需要 iOS 17 的 SwiftData"
+    - "Core Data 的 lightweight migration 可以處理任意欄位型別的轉換，永遠不需要 mapping model"
+    - "Room 的 `exportSchema = true` 會輸出 schema JSON，可用於 `AutoMigration` 與 migration 測試"
+    - "加密資料庫（SQLCipher、Realm 加密）的金鑰應放在 Keychain／Keystore，而不是寫死在程式碼"
+    - "`fallbackToDestructiveMigration()` 只清除快取，對使用者資料沒有風險"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 1 項正確：SwiftData 需要 iOS 17，最低支援版本更低的 App 不能使用。
+    - 第 2 項錯：lightweight migration 適合新增或刪除屬性、重新命名（需設定 renaming identifier）等簡單變更；型別轉換或資料重組需要 mapping model，或分段 migration。
+    - 第 3 項正確：`exportSchema = true` 會在編譯時輸出每個版本的 schema JSON，Room 靠它產生 `AutoMigration`，`MigrationTestHelper` 也靠它驗證 migration。
+    - 第 4 項正確：金鑰寫死在程式碼或 `BuildConfig`，反編譯就看得到，資料庫加密就失去意義。
+    - 第 5 項錯：破壞性 fallback 有沒有風險，取決於資料能不能重建；只要有使用者設定、草稿或尚未同步的資料，就會造成資料遺失。
+
+- id: platform-secure-storage-db-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [security, storage]
+  prompt: |
+    交易所 App 要儲存 access／refresh token、API 金鑰與使用者的偏好。請說明 iOS 與 Android 各自怎麼存、用什麼保護、備份與重新安裝要注意什麼，並說明你在本機儲存上的相關經驗。
+  promptJa: |
+    取引所アプリでアクセストークン、リフレッシュトークン、API キー、ユーザー設定を保存する場合、iOS と Android それぞれでどう保存し、何で保護し、バックアップや再インストールで何に注意しますか。ローカル保存に関する経験も説明してください。
+  keyPoints:
+    - "iOS：Keychain，token 用 `AfterFirstUnlockThisDeviceOnly`（背景流程要讀），不開 `kSecAttrSynchronizable`；高敏感操作用 `SecAccessControl` 綁生物辨識；Secure Enclave 用於 P-256 簽章金鑰"
+    - "Android：Keystore 保管金鑰，Tink AEAD 加密後存 DataStore；StrongBox 可用就用並有降級；`associatedData` 綁用途"
+    - "備份與還原：iOS Keychain 重新安裝後仍在，首次啟動清殘留；Android Auto Backup 會還原密文但不還原 Keystore 金鑰，要排除備份並處理解密失敗"
+    - "登出時清除 token、快取與資料庫；不把 token 放在網址參數或 log"
+    - "資料庫：選型、migration 測試、不使用破壞性 fallback，加密金鑰放 Keychain／Keystore"
+    - "經驗：社交 App 雙平台用 Realm，iOS 包在 actor、Android 用單一執行緒 dispatcher 加 `copyFromRealm`；即時行情 App 的 Android 以 Tink 加 Keystore 加密 cookie 存 DataStore，iOS 用 Keychain"
+    - "交易所 App：iOS 用 `AfterFirstUnlockThisDeviceOnly`，Android 用 Keystore 加 Tink，關掉不必要的雲端同步與備份還原"
+  modelAnswer: |
+    iOS 我用 Keychain，token 設 `AfterFirstUnlockThisDeviceOnly`，因為背景處理推播和更新時要讀，又不該進備份或同步；不開 `kSecAttrSynchronizable`。高敏感的操作把項目綁在 `SecAccessControl` 上，由系統強制生物辨識。Android 用 Keystore 保管金鑰，Tink 的 AES-256-GCM 加密後存 DataStore，`associatedData` 綁用途；StrongBox 可用就用，沒有就降級。
+
+    備份和重新安裝要注意：iOS 的 Keychain 在重新安裝後還在，首次啟動要清掉殘留；Android 的 Auto Backup 會還原密文，卻不會還原 Keystore 金鑰，造成解密失敗，所以要排除備份並處理解密失敗，退回要求重新登入。登出要清除 token、快取和資料庫。
+
+    經驗上，我做過的社交 App 雙平台都用 Realm，iOS 把存取包在 actor 裡，Android 用單一執行緒的 dispatcher 加 `copyFromRealm`，對外只傳獨立的資料；一個即時行情 App 的 Android 用 Tink 加 Keystore 的 master key 加密 cookie，存放在 DataStore，iOS 則用 Keychain 保存登入狀態。換成交易所 App，我會把 token 統一成上面的設計。
+  modelAnswerJa: |
+    iOS では Keychain を使い、トークンには `AfterFirstUnlockThisDeviceOnly` を設定します。バックグラウンドでのプッシュ処理や更新で読む必要があり、かつバックアップや同期の対象にすべきではないためです。`kSecAttrSynchronizable` は有効にしません。特に機微な操作では、項目を `SecAccessControl` に結び付け、システムに生体認証を強制させます。Android では Keystore に鍵を保管し、Tink の AES-256-GCM で暗号化して DataStore に保存します。`associatedData` で用途を結び付け、StrongBox が使えれば使い、なければ通常の Keystore にフォールバックします。
+
+    バックアップと再インストールにも注意が必要です。iOS の Keychain は再インストール後も残るため、初回起動時に前回の残りを消します。Android の Auto Backup は暗号文を復元しますが Keystore の鍵は復元しないため、復号に失敗します。そのためバックアップから除外し、復号失敗時は再ログインを求めます。ログアウト時にはトークン、キャッシュ、データベースを消去します。
+
+    経験としては、以前のソーシャルアプリでは iOS と Android の両方で Realm を使い、iOS は actor、Android は単一スレッドの dispatcher と `copyFromRealm` で包んで、外部には独立したデータだけを渡していました。あるリアルタイム相場アプリの Android では、Tink と Keystore の master key で cookie を暗号化して DataStore に保存し、iOS では Keychain にログイン状態を保存していました。取引所アプリでは、トークンの保存を上記の設計に統一します。
+  followUps:
+    - "Keychain の項目を使うたびに生体認証を求めたい場合、どう実装する？"
+    - "ルート化／脱獄端末で、保存したトークンはどこまで守れる？"
+    - "Android で復号に失敗したとき、ユーザーへの見せ方は？"
+  timeLimitSec: 150
+
+- id: platform-secure-storage-db-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [keychain, keystore]
+  front: Keychain accessibility 與 Android Keystore 速記（含備份陷阱）
+  back: |
+    - iOS：`WhenUnlocked`（預設）／`AfterFirstUnlock`（背景可讀，token 常用）／`WhenPasscodeSet…`；`ThisDeviceOnly` 只能留在這支手機（不搬到新手機、不同步）；`kSecAttrSynchronizable` ＝ iCloud 同步（交易所不開）；重新安裝後 Keychain 仍在。
+    - Secure Enclave：傳統上只有 P-256（不支援 secp256k1；新版以官方文件為準），私鑰不出晶片，不能匯入。
+    - Android：Keystore 金鑰不可匯出；StrongBox（API 28 起）不是每台都有；Tink AEAD 加 DataStore；`EncryptedSharedPreferences` 已 deprecated。
+    - Android Auto Backup 還原密文但不還原金鑰 → 要排除備份、處理解密失敗。

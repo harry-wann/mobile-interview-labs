@@ -1,0 +1,704 @@
+- id: exchange-wallet-web3-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [network, withdraw, ux]
+  prompt: |
+    某個資產同時存在於多條鏈（例如同一個穩定幣有 EVM 版本與 Tron 版本），出金畫面該怎麼設計「選擇網路」？
+  options:
+    - "預設選最常用的網路，使用者需要時再切換，減少操作步驟"
+    - "網路不設預設值，強制使用者明確選擇；地址欄與確認頁都顯示網路名稱；地址格式與網路不相容時直接擋下，並附上最小額度與到帳時間的警語"
+    - "由地址格式自動判斷網路，使用者不需要選"
+    - "只要地址的校驗碼正確，就代表網路也正確，不需要額外處理"
+  answer: 1
+  explain: |
+    選錯網路是最常見、也最昂貴的錯誤。EVM 系的鏈使用相同的 `0x` 地址格式，**格式與校驗碼分辨不出是哪一條鏈**。
+
+    其他選項錯在哪裡：
+    - 第 1 項：預設值會讓使用者「順手按下去」，沒注意到就選錯網路，資產送到錯的鏈。
+    - 第 3 項：EVM 系的地址格式完全相同，無法由格式判斷網路，自動判斷一定會猜錯。
+    - 第 4 項：校驗碼只能擋掉打錯字，同一個 `0x` 地址在各條 EVM 鏈上都是合法的，校驗碼正確不代表網路正確。
+
+    第 2 項是正確做法。格式明顯不相容的情況（例如 Tron 的 `T…` 地址填在 EVM 網路）可以直接擋下，地址簿也要同時記錄資產、網路、地址與 tag。這套 API 的文件裡，出金申請沒有網路參數，多條鏈的資產如何處理文件沒有說明（未證實），是面試時值得詢問的點。
+
+- id: exchange-wallet-web3-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [memo, destination-tag, overflow]
+  prompt: |
+    XRP 出金需要 Destination Tag（0 到 4294967295 的整數）；這套 API 的出金申請有選填的 `addr-tag` 字串欄位，記錄裡是 `address-tag`。Android 工程師寫了 `val tag = input.toInt()` 儲存，再轉回字串送出。下列哪個做法正確？
+  options:
+    - "沒問題，tag 是數字，轉成 `Int` 儲存最省空間"
+    - "tag 保持字串；依網路驗證格式與範圍（XRP：整數且不大於 4294967295，用 `Long` 或 `UInt` 解析）；網路必須填時不能略過，可不填時要有明確的「我確認不需要」；不要自動補值"
+    - "改用 `Double` 儲存，這樣大數字不會溢位"
+    - "使用者沒填時自動補 0，這樣欄位永遠有值"
+  answer: 1
+  explain: |
+    Android 的 `Int` 是 32 位元有號整數，最大只到 2147483647。`"4294967295".toInt()` 會丟出例外，`toIntOrNull()` 回傳 null；用 `toLong().toInt()` 強制轉換則會**悄悄溢位成 -1**。使用者輸入的 tag 變成別的數字，錢就入到錯誤（或無法歸戶）的帳。
+
+    其他選項錯在哪裡：
+    - 第 1 項：省的那一點空間不值得，而且 `Int` 放不下 XRP 的 tag 範圍。
+    - 第 3 項：`Double` 在大整數上不可靠，而且 tag 是識別碼，不是拿來計算的數字。
+    - 第 4 項：tag `0` 本身是合法值，自動補 0 會改變意義，錢可能入到 tag 為 0 的帳。
+
+    保持字串、驗證範圍，是最不會出錯的做法。有些網路的 memo 是文字，要保留開頭的 0。
+
+- id: exchange-wallet-web3-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [address, validation, checksum]
+  prompt: |
+    關於加密資產地址的驗證，哪些敘述正確？（複選）
+  options:
+    - "Base58Check 地址的最後 4 個 byte 是 `SHA256(SHA256(版本 byte ＋ payload))` 的前 4 個 byte；字串開頭每個 `1` 代表一個 `0x00` byte"
+    - "EIP-55：大小寫混合的 `0x` 地址帶有校驗碼；全小寫的 `0x` 地址格式合法，但沒有校驗碼"
+    - "EIP-55 所需的雜湊可以直接用 JDK 的 `MessageDigest.getInstance(\"SHA3-256\")` 計算"
+    - "同一個 `0x` 地址在 Ethereum、BSC、Polygon 等 EVM 鏈上格式都合法，所以格式驗證分辨不出網路"
+    - "App 端驗證通過後，伺服器就不需要再驗證地址"
+    - "Bech32 地址（`bc1…`）不是 Base58Check；全小寫或全大寫都合法，大小寫混用則無效"
+  answer: [0, 1, 3, 5]
+  explain: |
+    - 第 1 項正確：校驗碼是兩次 SHA-256 的前 4 個位元組；開頭的 `1` 在轉成大整數時會消失，要自己補回 `0x00`。
+    - 第 2 項正確：EIP-55 用大小寫編碼校驗碼，全小寫的地址沒有校驗碼，只能當作格式合法。
+    - 第 3 項錯：EIP-55 使用的是 **Keccak-256**，不是 NIST 標準化後的 SHA3-256。兩者填充規則不同，輸出也不同，JDK 的 `SHA3-256` 與 CryptoKit 都不是 Keccak-256，需要第三方函式庫。
+    - 第 4 項正確：格式和校驗碼只能擋手誤，分辨不出網路。
+    - 第 5 項錯：驗證要分層。App 端做格式與校驗碼（快速回饋），伺服器端一定要再驗（這套 API 文件有 `ad-ethereum-address` 錯誤碼，顯示伺服器端也會驗），語意檢查（白名單、已知的合約或交易所地址）也由伺服器做。
+    - 第 6 項正確：Bech32 是另一種編碼，大小寫混用的地址無效。
+
+- id: exchange-wallet-web3-04
+  type: predict
+  level: 2
+  priority: P1
+  tags: [overflow, kotlin, destination-tag]
+  prompt: |
+    下列 Kotlin 程式依序印出什麼？（這是 XRP 的 Destination Tag 最大值 4294967295，要存進手機的情境）
+  codeLang: kotlin
+  code: |
+    fun main() {
+        val tag = "4294967295"
+        println(tag.toIntOrNull())
+        println(tag.toLongOrNull())
+        println(tag.toUIntOrNull())
+        println(tag.toLong().toInt())
+    }
+  answer: |
+    null 4294967295 4294967295 -1
+  explain: |
+    - `toIntOrNull()`：4294967295 超出 `Int.MAX_VALUE`（2147483647），無法轉換，回傳 `null`。
+    - `toLongOrNull()` 與 `toUIntOrNull()`：`Long`（64 位元）與 `UInt`（32 位元無號整數）都能完整表示 4294967295。
+    - `toLong().toInt()`：先轉成 `Long`，再強制轉成 `Int`，只保留低 32 位元，這些位元全是 1，用有號整數解讀就是 `-1`。**沒有例外、沒有警告**，這是最危險的一種。
+
+    XRP 的 Destination Tag 範圍是 0 到 4294967295，Android 上要用 `Long` 或 `UInt`，或乾脆保持字串。Swift 的 `Int` 在 64 位元平台是 64 位元，不會有這個問題，但跨平台一致的做法仍是保持字串。
+
+- id: exchange-wallet-web3-05
+  type: code
+  level: 3
+  priority: P1
+  tags: [base58check, sha256, address]
+  timeLimitSec: 1500
+  prompt: |
+    實作 `decodeBase58Check(s)`：解碼 Base58Check 字串（比特幣地址的格式）並驗證校驗碼。
+
+    - 字母表：`123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz`（拿掉容易看錯的 `0`、`O`、`I`、`l`）；含有其他字元 → `nil`／`null`
+    - 轉成 byte：把字串當成 58 進位的大整數，轉成 byte 序列。**每個開頭的 `1` 對應一個 `0x00` byte**（轉成大整數時開頭的 0 會消失，必須補回）
+    - byte 總長度小於 5（至少要有 1 byte 版本與 4 byte 校驗碼）→ 無效
+    - 校驗碼是 `SHA256(SHA256(除了最後 4 byte 之外的部分))` 的前 4 byte，必須等於最後 4 byte，否則無效
+    - 成功時回傳 `version`（第一個 byte，**0 到 255，不可為負**）與 `payloadHex`（中間的 byte，小寫十六進位字串，沒有 payload 時為空字串）
+    - 空字串 → 無效
+  hints:
+    - "Swift：用 base-256 的 byte 陣列做 `num = num * 58 + digit`。Kotlin：用 `BigInteger`。"
+    - "`BigInteger.toByteArray()` 會多一個符號用的 byte，值為 0 時還會回傳 `[0]`，要處理。"
+    - "Kotlin 的 `Byte` 有正負號，要轉成 0 到 255 要用 `b.toInt() and 0xFF`。"
+  swift:
+    starter: |
+      struct Base58Decoded: Equatable {
+          let version: Int
+          let payloadHex: String
+      }
+
+      func decodeBase58Check(_ s: String) -> Base58Decoded? {
+          // TODO
+          return nil
+      }
+    solution: |
+      import Foundation
+      import CryptoKit
+
+      struct Base58Decoded: Equatable {
+          let version: Int
+          let payloadHex: String
+      }
+
+      func decodeBase58Check(_ s: String) -> Base58Decoded? {
+          let alphabet = Array("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+          var num: [UInt8] = []   // 小端的 base-256
+          for ch in s {
+              guard let idx = alphabet.firstIndex(of: ch) else { return nil }
+              var carry = idx
+              for j in 0..<num.count {
+                  carry += Int(num[j]) * 58
+                  num[j] = UInt8(carry & 0xff)
+                  carry >>= 8
+              }
+              while carry > 0 {
+                  num.append(UInt8(carry & 0xff))
+                  carry >>= 8
+              }
+          }
+          let zeros = s.prefix { $0 == "1" }.count
+          let bytes = [UInt8](repeating: 0, count: zeros) + num.reversed()
+          guard bytes.count >= 5 else { return nil }
+          let body = Data(bytes[0..<(bytes.count - 4)])
+          let first = SHA256.hash(data: body)
+          let second = SHA256.hash(data: Data(first))
+          let checksum = Array(second.prefix(4))
+          guard checksum == Array(bytes[(bytes.count - 4)...]) else { return nil }
+          let payload = bytes[1..<(bytes.count - 4)]
+          let hex = payload.map { String(format: "%02x", $0) }.joined()
+          return Base58Decoded(version: Int(bytes[0]), payloadHex: hex)
+      }
+    tests: |
+      checkEqual("Bitcoin P2PKH（創世區塊地址）：版本 0", Base58Decoded(version: 0, payloadHex: "62e907b15cbf27d5425399ebf6f0fb50ebb88f18")) {
+          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") ?? Base58Decoded(version: -1, payloadHex: "")
+      }
+      checkEqual("P2SH：版本 5", Base58Decoded(version: 5, payloadHex: "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb")) {
+          decodeBase58Check("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy") ?? Base58Decoded(version: -1, payloadHex: "")
+      }
+      checkEqual("測試網地址：版本 111", Base58Decoded(version: 111, payloadHex: "243f1394f44554f4ce3fd68649c19adc483ce924")) {
+          decodeBase58Check("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn") ?? Base58Decoded(version: -1, payloadHex: "")
+      }
+      check("開頭的 1 要補回 0x00 byte") {
+          decodeBase58Check("11111111111111111111BZbvjr")
+              == Base58Decoded(version: 0, payloadHex: "0000000000000000000000000000000000000001")
+      }
+      check("版本大於 127 時不可為負；沒有 payload 的最短合法長度（5 byte）") {
+          decodeBase58Check("8sXb2f1n7Zag8Gj3tCF747dZUT7mX")
+              == Base58Decoded(version: 128, payloadHex: "0102030405060708090a0b0c0d0e0f10")
+              && decodeBase58Check("1Wh4bh") == Base58Decoded(version: 0, payloadHex: "")
+      }
+      check("校驗碼不符：改最後一個字元、交換兩個字元都無效") {
+          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb") == nil
+              && decodeBase58Check("1A1z1PeP5QGefi2DMPTfTL5SLmv7DivfNa") == nil
+      }
+      check("非法字元：0、O、I、l；Bech32 地址也不是 Base58Check") {
+          decodeBase58Check("0A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") == nil
+              && decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNl") == nil
+              && decodeBase58Check("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") == nil
+      }
+      check("空字串或太短都無效") {
+          decodeBase58Check("") == nil && decodeBase58Check("1") == nil && decodeBase58Check("111") == nil
+      }
+  kotlin:
+    starter: |
+      data class Base58Decoded(val version: Int, val payloadHex: String)
+
+      fun decodeBase58Check(s: String): Base58Decoded? {
+          // TODO
+          return null
+      }
+    solution: |
+      import java.math.BigInteger
+      import java.security.MessageDigest
+
+      data class Base58Decoded(val version: Int, val payloadHex: String)
+
+      private const val B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+      fun decodeBase58Check(s: String): Base58Decoded? {
+          var n = BigInteger.ZERO
+          val base = BigInteger.valueOf(58)
+          for (c in s) {
+              val idx = B58_ALPHABET.indexOf(c)
+              if (idx < 0) return null
+              n = n.multiply(base).add(BigInteger.valueOf(idx.toLong()))
+          }
+          val magnitude: ByteArray = if (n.signum() == 0) {
+              ByteArray(0)
+          } else {
+              val raw = n.toByteArray()
+              if (raw[0] == 0.toByte()) raw.copyOfRange(1, raw.size) else raw
+          }
+          val zeros = s.takeWhile { it == '1' }.length
+          val bytes = ByteArray(zeros) + magnitude
+          if (bytes.size < 5) return null
+          val body = bytes.copyOfRange(0, bytes.size - 4)
+          val sha = MessageDigest.getInstance("SHA-256")
+          val checksum = sha.digest(sha.digest(body)).copyOfRange(0, 4)
+          if (!checksum.contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))) return null
+          val payload = bytes.copyOfRange(1, bytes.size - 4)
+          val hex = payload.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+          return Base58Decoded(bytes[0].toInt() and 0xFF, hex)
+      }
+    tests: |
+      checkEqual("Bitcoin P2PKH（創世區塊地址）：版本 0", Base58Decoded(0, "62e907b15cbf27d5425399ebf6f0fb50ebb88f18")) {
+          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") ?: Base58Decoded(-1, "")
+      }
+      checkEqual("P2SH：版本 5", Base58Decoded(5, "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb")) {
+          decodeBase58Check("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy") ?: Base58Decoded(-1, "")
+      }
+      checkEqual("測試網地址：版本 111", Base58Decoded(111, "243f1394f44554f4ce3fd68649c19adc483ce924")) {
+          decodeBase58Check("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn") ?: Base58Decoded(-1, "")
+      }
+      check("開頭的 1 要補回 0x00 byte") {
+          decodeBase58Check("11111111111111111111BZbvjr") ==
+              Base58Decoded(0, "0000000000000000000000000000000000000001")
+      }
+      check("版本大於 127 時不可為負；沒有 payload 的最短合法長度（5 byte）") {
+          decodeBase58Check("8sXb2f1n7Zag8Gj3tCF747dZUT7mX") ==
+              Base58Decoded(128, "0102030405060708090a0b0c0d0e0f10") &&
+              decodeBase58Check("1Wh4bh") == Base58Decoded(0, "")
+      }
+      check("校驗碼不符：改最後一個字元、交換兩個字元都無效") {
+          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb") == null &&
+              decodeBase58Check("1A1z1PeP5QGefi2DMPTfTL5SLmv7DivfNa") == null
+      }
+      check("非法字元：0、O、I、l；Bech32 地址也不是 Base58Check") {
+          decodeBase58Check("0A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") == null &&
+              decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNl") == null &&
+              decodeBase58Check("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") == null
+      }
+      check("空字串或太短都無效") {
+          decodeBase58Check("") == null && decodeBase58Check("1") == null && decodeBase58Check("111") == null
+      }
+
+- id: exchange-wallet-web3-06
+  type: code
+  level: 3
+  priority: P1
+  tags: [bip21, uri, parsing]
+  timeLimitSec: 1500
+  prompt: |
+    實作 `parseBip21(uri)`：解析掃描 QR 得到的 `bitcoin:` 付款連結（BIP21，比特幣的付款連結格式）。不要使用 `URLDecoder` 或 `URLComponents` 的百分比解碼（`%XX` 代表一個 byte 的編碼方式；這兩個工具的行為與規則不同），自己解碼。
+
+    **本題的規則比 BIP21 文法嚴格（自訂規則）**：BIP21 的文法允許 `.5`、`1.` 這類寫法，也沒有 8 位小數的上限；本題為了防呆一律拒絕。
+
+    - scheme `bitcoin:` **不分大小寫**，否則 → `nil`／`null`
+    - 地址是 `:` 之後到第一個 `?`（或結尾）之間的字串：不可為空，只能是英數字（`A-Z a-z 0-9`），否則 → 無效
+    - 查詢字串用 `&` 分隔，每段是 `key=value`（沒有 `=` 時值為空字串）；空的段落略過
+    - **同一個 key 出現兩次** → 無效；key 以 `req-` 開頭（代表「必須理解」）→ 無效；其他不認識的 key 直接忽略
+    - 只處理 `amount`、`label`、`message`：值要做百分比解碼（`%XX` 是 UTF-8 的 byte；**`+` 是字面的加號，不是空白**）。`%` 後面不是兩個十六進位字元，或解碼後不是合法的 UTF-8 → 無效
+    - `amount` 解碼後必須是 `數字+` 或 `數字+.數字{1,8}`（沒有指數、負號、千分位、只有小數點的寫法），否則 → 無效；成功時**保留字串**，不要轉成 Double
+    - 任何一項無效都回傳 `nil`／`null`（整個連結無效）
+  hints:
+    - "先寫 `percentDecode(s): String?`：逐個 byte 掃描，遇到 `%` 就讀後面兩個十六進位字元。"
+    - "Kotlin 的 `String(bytes, UTF_8)` 遇到非法序列會用 U+FFFD 取代，不會報錯；要嚴格檢查，就用 `CharsetDecoder` 並設定 `CodingErrorAction.REPORT`。"
+  swift:
+    starter: |
+      struct PaymentRequest: Equatable {
+          var address: String
+          var amount: String?
+          var label: String?
+          var message: String?
+      }
+
+      func parseBip21(_ uri: String) -> PaymentRequest? {
+          // TODO
+          return nil
+      }
+    solution: |
+      import Foundation
+
+      struct PaymentRequest: Equatable {
+          var address: String
+          var amount: String?
+          var label: String?
+          var message: String?
+      }
+
+      func percentDecode(_ s: String) -> String? {
+          func hex(_ c: UInt8) -> UInt8? {
+              switch c {
+              case 48...57: return c - 48
+              case 65...70: return c - 55
+              case 97...102: return c - 87
+              default: return nil
+              }
+          }
+          let u = Array(s.utf8)
+          var out: [UInt8] = []
+          var i = 0
+          while i < u.count {
+              if u[i] == 0x25 {
+                  guard i + 2 < u.count, let h = hex(u[i + 1]), let l = hex(u[i + 2]) else { return nil }
+                  out.append(h * 16 + l)
+                  i += 3
+              } else {
+                  out.append(u[i])
+                  i += 1
+              }
+          }
+          return String(bytes: out, encoding: .utf8)
+      }
+
+      func isValidAmount(_ s: String) -> Bool {
+          func digits(_ p: Substring) -> Bool {
+              return !p.isEmpty && p.allSatisfy { ch in
+                  if let a = ch.asciiValue { return a >= 48 && a <= 57 }
+                  return false
+              }
+          }
+          let parts = s.split(separator: ".", omittingEmptySubsequences: false)
+          if parts.count == 1 { return digits(parts[0]) }
+          if parts.count == 2 { return digits(parts[0]) && digits(parts[1]) && parts[1].count <= 8 }
+          return false
+      }
+
+      func parseBip21(_ uri: String) -> PaymentRequest? {
+          let scheme = "bitcoin:"
+          guard uri.count >= scheme.count, uri.prefix(scheme.count).lowercased() == scheme else { return nil }
+          let rest = uri.dropFirst(scheme.count)
+          let parts = rest.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+          let address = String(parts[0])
+          guard !address.isEmpty, address.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
+
+          var result = PaymentRequest(address: address, amount: nil, label: nil, message: nil)
+          var seen = Set<String>()
+          if parts.count == 2 {
+              for seg in parts[1].split(separator: "&", omittingEmptySubsequences: true) {
+                  let kv = seg.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                  let key = String(kv[0])
+                  let raw = kv.count == 2 ? String(kv[1]) : ""
+                  if !seen.insert(key).inserted { return nil }
+                  if key.hasPrefix("req-") { return nil }
+                  switch key {
+                  case "amount":
+                      guard let d = percentDecode(raw), isValidAmount(d) else { return nil }
+                      result.amount = d
+                  case "label":
+                      guard let d = percentDecode(raw) else { return nil }
+                      result.label = d
+                  case "message":
+                      guard let d = percentDecode(raw) else { return nil }
+                      result.message = d
+                  default:
+                      break
+                  }
+              }
+          }
+          return result
+      }
+    tests: |
+      let sample = "bitcoin:175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W"
+
+      checkEqual("只有地址", PaymentRequest(address: "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", amount: nil, label: nil, message: nil)) {
+          parseBip21(sample) ?? PaymentRequest(address: "", amount: nil, label: nil, message: nil)
+      }
+      checkEqual("BIP21 範例：amount、label、message", PaymentRequest(address: "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", amount: "20.3", label: "Luke-Jr", message: "Donation for project xyz")) {
+          parseBip21(sample + "?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz")
+              ?? PaymentRequest(address: "", amount: nil, label: nil, message: nil)
+      }
+      check("scheme 不分大小寫；其他 scheme、空地址、含空白的地址都無效") {
+          parseBip21("BITCOIN:abc?amount=1")?.amount == "1"
+              && parseBip21("litecoin:abc") == nil
+              && parseBip21("bitcoin:") == nil
+              && parseBip21("bitcoin:?amount=1") == nil
+              && parseBip21("bitcoin:abc def") == nil
+      }
+      check("百分比解碼：UTF-8、+ 是字面加號、%31%30 解成 10") {
+          let r = parseBip21("bitcoin:abc?label=%E6%97%A5%E6%9C%AC&message=a+b")
+          return r?.label == "日本" && r?.message == "a+b" && parseBip21("bitcoin:abc?amount=%31%30")?.amount == "10"
+      }
+      check("百分比編碼不合法或不是合法 UTF-8 → 無效") {
+          parseBip21("bitcoin:abc?label=%G1") == nil
+              && parseBip21("bitcoin:abc?label=%FF") == nil
+              && parseBip21("bitcoin:abc?label=%E6%97") == nil
+              && parseBip21("bitcoin:abc?label=%4") == nil
+      }
+      check("amount 不合法的寫法都無效；8 位小數合法") {
+          let bad = ["1e3", "-1", "1,5", "0.123456789", ".5", "1.", "", "1.2.3", "abc"]
+          let allNil = bad.allSatisfy { parseBip21("bitcoin:abc?amount=\($0)") == nil }
+          return allNil && parseBip21("bitcoin:abc?amount=0.12345678")?.amount == "0.12345678"
+      }
+      check("req- 參數無效、不認識的參數忽略、重複的 key 無效、空段落略過、沒有 = 的值為空字串") {
+          parseBip21("bitcoin:abc?amount=1&req-pay=x") == nil
+              && parseBip21("bitcoin:abc?amount=1&foo=bar&label=x") == PaymentRequest(address: "abc", amount: "1", label: "x", message: nil)
+              && parseBip21("bitcoin:abc?amount=1&amount=2") == nil
+              && parseBip21("bitcoin:abc?&&amount=5&")?.amount == "5"
+              && parseBip21("bitcoin:abc?label")?.label == ""
+      }
+  kotlin:
+    starter: |
+      data class PaymentRequest(
+          val address: String,
+          val amount: String?,
+          val label: String?,
+          val message: String?,
+      )
+
+      fun parseBip21(uri: String): PaymentRequest? {
+          // TODO
+          return null
+      }
+    solution: |
+      import java.io.ByteArrayOutputStream
+      import java.nio.ByteBuffer
+      import java.nio.charset.CharacterCodingException
+      import java.nio.charset.CodingErrorAction
+
+      data class PaymentRequest(
+          val address: String,
+          val amount: String?,
+          val label: String?,
+          val message: String?,
+      )
+
+      fun percentDecode(s: String): String? {
+          fun hex(b: Byte): Int = when (val c = b.toInt()) {
+              in 48..57 -> c - 48
+              in 65..70 -> c - 55
+              in 97..102 -> c - 87
+              else -> -1
+          }
+          val u = s.toByteArray(Charsets.UTF_8)
+          val out = ByteArrayOutputStream()
+          var i = 0
+          while (i < u.size) {
+              if (u[i] == 0x25.toByte()) {
+                  if (i + 2 >= u.size) return null
+                  val h = hex(u[i + 1])
+                  val l = hex(u[i + 2])
+                  if (h < 0 || l < 0) return null
+                  out.write(h * 16 + l)
+                  i += 3
+              } else {
+                  out.write(u[i].toInt())
+                  i += 1
+              }
+          }
+          return try {
+              Charsets.UTF_8.newDecoder()
+                  .onMalformedInput(CodingErrorAction.REPORT)
+                  .onUnmappableCharacter(CodingErrorAction.REPORT)
+                  .decode(ByteBuffer.wrap(out.toByteArray()))
+                  .toString()
+          } catch (e: CharacterCodingException) {
+              null
+          }
+      }
+
+      fun isValidAmount(s: String): Boolean {
+          fun digits(p: String) = p.isNotEmpty() && p.all { it in '0'..'9' }
+          val parts = s.split('.')
+          return when (parts.size) {
+              1 -> digits(parts[0])
+              2 -> digits(parts[0]) && digits(parts[1]) && parts[1].length <= 8
+              else -> false
+          }
+      }
+
+      fun parseBip21(uri: String): PaymentRequest? {
+          val scheme = "bitcoin:"
+          if (!uri.regionMatches(0, scheme, 0, scheme.length, ignoreCase = true)) return null
+          val rest = uri.substring(scheme.length)
+          val q = rest.indexOf('?')
+          val address = if (q < 0) rest else rest.substring(0, q)
+          if (address.isEmpty() || !address.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }) return null
+
+          var amount: String? = null
+          var label: String? = null
+          var message: String? = null
+          val seen = HashSet<String>()
+          if (q >= 0) {
+              for (seg in rest.substring(q + 1).split('&')) {
+                  if (seg.isEmpty()) continue
+                  val eq = seg.indexOf('=')
+                  val key = if (eq < 0) seg else seg.substring(0, eq)
+                  val raw = if (eq < 0) "" else seg.substring(eq + 1)
+                  if (!seen.add(key)) return null
+                  if (key.startsWith("req-")) return null
+                  when (key) {
+                      "amount" -> {
+                          val d = percentDecode(raw) ?: return null
+                          if (!isValidAmount(d)) return null
+                          amount = d
+                      }
+                      "label" -> label = percentDecode(raw) ?: return null
+                      "message" -> message = percentDecode(raw) ?: return null
+                  }
+              }
+          }
+          return PaymentRequest(address, amount, label, message)
+      }
+    tests: |
+      val sample = "bitcoin:175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W"
+      val empty = PaymentRequest("", null, null, null)
+
+      checkEqual("只有地址", PaymentRequest("175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", null, null, null)) {
+          parseBip21(sample) ?: empty
+      }
+      checkEqual("BIP21 範例：amount、label、message", PaymentRequest("175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", "20.3", "Luke-Jr", "Donation for project xyz")) {
+          parseBip21(sample + "?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz") ?: empty
+      }
+      check("scheme 不分大小寫；其他 scheme、空地址、含空白的地址都無效") {
+          parseBip21("BITCOIN:abc?amount=1")?.amount == "1" &&
+              parseBip21("litecoin:abc") == null &&
+              parseBip21("bitcoin:") == null &&
+              parseBip21("bitcoin:?amount=1") == null &&
+              parseBip21("bitcoin:abc def") == null
+      }
+      check("百分比解碼：UTF-8、+ 是字面加號、%31%30 解成 10") {
+          val r = parseBip21("bitcoin:abc?label=%E6%97%A5%E6%9C%AC&message=a+b")
+          r?.label == "日本" && r?.message == "a+b" && parseBip21("bitcoin:abc?amount=%31%30")?.amount == "10"
+      }
+      check("百分比編碼不合法或不是合法 UTF-8 → 無效") {
+          parseBip21("bitcoin:abc?label=%G1") == null &&
+              parseBip21("bitcoin:abc?label=%FF") == null &&
+              parseBip21("bitcoin:abc?label=%E6%97") == null &&
+              parseBip21("bitcoin:abc?label=%4") == null
+      }
+      check("amount 不合法的寫法都無效；8 位小數合法") {
+          val bad = listOf("1e3", "-1", "1,5", "0.123456789", ".5", "1.", "", "1.2.3", "abc")
+          bad.all { parseBip21("bitcoin:abc?amount=$it") == null } &&
+              parseBip21("bitcoin:abc?amount=0.12345678")?.amount == "0.12345678"
+      }
+      check("req- 參數無效、不認識的參數忽略、重複的 key 無效、空段落略過、沒有 = 的值為空字串") {
+          parseBip21("bitcoin:abc?amount=1&req-pay=x") == null &&
+              parseBip21("bitcoin:abc?amount=1&foo=bar&label=x") == PaymentRequest("abc", "1", "x", null) &&
+              parseBip21("bitcoin:abc?amount=1&amount=2") == null &&
+              parseBip21("bitcoin:abc?&&amount=5&")?.amount == "5" &&
+              parseBip21("bitcoin:abc?label")?.label == ""
+      }
+
+- id: exchange-wallet-web3-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [withdraw, flow]
+  prompt: |
+    把交易所 App 的加密資產出金流程，依合理的順序排列。
+  items:
+    - "選擇資產與網路（網路不設預設值）"
+    - "輸入出金資料：從地址簿選擇或輸入／掃描地址（本機即時驗證格式、校驗碼與網路相容性）、依網路需求填寫 memo／tag、輸入數量，並顯示手續費與實收金額"
+    - "確認頁：顯示完整地址（分組）、網路、tag、數量、手續費與風險提示；使用者確認後通過資金密碼／二階段驗證"
+    - "鎖住送出按鈕並送出簽名請求，取得出金記錄 id"
+    - "以記錄 id 追蹤狀態，映射成使用者看得懂的階段"
+  explain: |
+    - 網路是第一步，因為地址格式的相容性、手續費、最小額度與 tag 的需求都取決於網路。
+    - 確認頁在送出之前，是使用者最後一次能發現錯誤的地方，必須顯示完整資訊。
+    - 送出按鈕要鎖住，避免重複送出（出金申請的文件參數沒有冪等鍵，也就是沒有讓重複請求結果一致的識別碼），送出之後才追蹤狀態。
+    - 地址與數量的輸入先後、資金密碼與二階段驗證放在確認頁之前或之後，依產品而異，所以這裡各自合併成同一步；文件的錯誤碼 `security-require-assets-password` 顯示伺服器會要求資金密碼，但文件沒有列出對應的參數，細節未證實。
+
+- id: exchange-wallet-web3-08
+  type: single
+  level: 3
+  priority: P0
+  tags: [withdraw, timeout, reconciliation]
+  prompt: |
+    使用者按下出金，`POST /v1/dw/withdraw/api/create` 逾時沒有收到回應。文件的出金申請參數只有 `address`、`amount`、`currency`、`fee`、`addr-tag`。下列哪個處理最合理？
+  options:
+    - "自動重送一次，成功率比較高"
+    - "保持按鈕鎖定並顯示「確認中」，用出入金記錄端點（`type=withdraw`）查詢是否已經建立（比對地址、數量、`addr-tag` 與時間）；找到就追蹤該記錄，找不到就告知使用者結果不明，由使用者確認後再送或聯絡客服"
+    - "顯示「失敗」並讓使用者立刻重按，反正伺服器會處理重複"
+    - "在請求加上 `client-order-id` 就能避免重複，因為這是出金 API 的冪等鍵"
+  answer: 1
+  explain: |
+    逾時只代表**沒收到回應**，伺服器可能已經建立了出金。這個端點沒有冪等鍵（讓同一個請求送多次、結果和送一次一樣的識別碼），所以：
+    - 第 1 項錯：重送可能產生兩筆出金，而且是不可逆的金錢轉移。
+    - 第 3 項錯：文件沒有說伺服器會處理重複，不能這樣假設；而且顯示「失敗」會讓使用者以為沒成功，反而去重按。
+    - 第 4 項錯：`client-order-id` 是**下單** API 的欄位，不是出金申請的。
+
+    第 2 項的做法，與下單逾時後查詢訂單的對帳相同：先查再決定。查不到也不代表一定沒成功（記錄可能有延遲），所以要明確告訴使用者「結果不明」，而不是假裝失敗。
+
+- id: exchange-wallet-web3-09
+  type: multi
+  level: 2
+  priority: P1
+  tags: [address-poisoning, qr, clipboard]
+  prompt: |
+    關於出金地址輸入的安全與使用體驗，哪些做法正確？（複選）
+  options:
+    - "確認頁顯示完整地址並分組（例如每 4 碼一組），不要只顯示前 6 後 4，因為 address poisoning 會製造頭尾相同的相似地址"
+    - "掃描 QR 或貼上的內容只填入欄位並重新走完整驗證，不自動送出；QR 帶的 `amount` 也要重新驗證"
+    - "新增的出金地址套用冷卻期或額外驗證（各家實際政策不同）"
+    - "進入畫面時自動讀取剪貼簿，如果內容像地址就直接填入，減少使用者操作"
+    - "地址簿只存地址字串，資產與網路每次由使用者重新選擇，這樣最彈性"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：address poisoning 是攻擊者先發一筆小額交易，使用頭尾和你常用地址相同的假地址，期待你從記錄裡複製。只顯示頭尾就看不出差別。
+    - 第 2 項正確：掃描得到的內容是不可信輸入，只填入欄位，再重新驗證。
+    - 第 3 項正確：新增地址加冷卻期或額外驗證，是業界常見的做法。
+    - 第 4 項錯：自動讀剪貼簿有被劫持的風險（惡意軟體可以替換剪貼簿的內容），iOS 16 起程式讀取其他 App 的剪貼簿也會跳出貼上的許可提示。要讓使用者主動貼上，例如 `UIPasteControl`。
+    - 第 5 項錯：地址簿要記錄**資產、網路、地址、tag** 四樣，讓使用者不必每次重選，也避免選錯網路。
+
+- id: exchange-wallet-web3-10
+  type: multi
+  level: 3
+  priority: P1
+  tags: [walletconnect, siwe, signature]
+  prompt: |
+    App 用 WalletConnect 連接使用者的外部錢包，要用簽名證明使用者擁有該地址。哪些敘述正確？（複選）
+  options:
+    - "連上錢包只告訴 App 一個地址，不等於證明擁有；必須讓錢包簽名，並由伺服器還原簽署者地址再比對"
+    - "簽名訊息應包含 domain、地址、chain id、伺服器發出的一次性 nonce、issued-at 與 expiration（SIWE，EIP-4361），以防重放與網域釣魚"
+    - "nonce 可以由 App 本機產生，再連同簽名一起送給伺服器，這樣伺服器不必保存任何狀態"
+    - "使用者拒絕簽名（EIP-1193 的錯誤碼 4001）是正常流程，UI 應回到可重試的狀態，而不是顯示崩潰或錯誤對話框"
+    - "智慧合約錢包（EIP-1271）也能用 `ecrecover` 還原簽署者地址，不需要特別處理"
+    - "為了免去每次簽名的麻煩，App 可以把使用者錢包的私鑰存在 Keychain"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：連線只告訴 App 一個地址，所有權要靠簽名證明。
+    - 第 2 項正確：SIWE 的訊息有網域、nonce 與有效期限，簽名只能用一次，也能防止假網站騙簽名。
+    - 第 3 項錯：nonce 必須由**伺服器**發出、只能使用一次並有時效。如果由 App 自己產生，攻擊者可以自己挑一個值，伺服器也沒有任何可以比對的狀態，等於沒有防重放。簽名本身無法偽造，但可以被重複使用，所以訊息需要 nonce、時效與網域。
+    - 第 4 項正確：使用者拒絕是很常見的正常情況，畫面要回到可以重試的狀態。
+    - 第 5 項錯：智慧合約錢包沒有單一的私鑰簽名可以還原，要呼叫合約的 `isValidSignature`（EIP-1271）。
+    - 第 6 項錯：外部錢包的私鑰絕對不經過 App，App 只能請錢包簽名。
+
+- id: exchange-wallet-web3-11
+  type: open
+  level: 3
+  priority: P1
+  tags: [wallet, withdraw, design]
+  prompt: |
+    設計交易所 App 的加密資產出金功能，說明地址驗證、memo／tag、網路選擇、送出的可靠性與狀態呈現。並說明你過去的相關經驗可以怎麼延伸。
+  promptJa: |
+    取引所アプリの暗号資産出金機能を設計してください。アドレスの検証、メモ／タグ、ネットワークの選択、送信の信頼性、ステータス表示を説明してください。これまでの関連経験をどう活かせるかも説明してください。
+  keyPoints:
+    - "託管型：App 沒有私鑰，責任是防止誤輸入與確保送出的可靠性"
+    - "地址驗證分層：App 做格式與校驗碼，伺服器一定要再驗；格式正確不代表收款人正確，EVM 系的地址無法由格式判斷網路"
+    - "網路不設預設值、明確選擇，確認頁顯示網路名稱；地址簿存資產、網路、地址與 tag"
+    - "memo／tag 保持字串並驗證範圍（XRP 為 0 到 4294967295，Android 的 Int 會溢位）；必填與可不填都要明確處理"
+    - "確認頁顯示完整地址並分組（防 address poisoning）；掃描與貼上只填入欄位並重新驗證，不自動送出"
+    - "送出的可靠性：鎖住按鈕；沒有冪等鍵，逾時時不重送，先用出入金記錄對帳"
+    - "狀態把 API 的狀態對應成使用者看得懂的階段，拒絕與錯誤要有下一步指引；對應經驗：社交 App 的 WalletConnect 所有權證明與 deep link 返回"
+  modelAnswer: |
+    先說前提：交易所的出金是託管型，App 沒有私鑰，責任是防止誤輸入，以及讓送出可靠。
+
+    驗證分層：App 做格式與校驗碼，即時回饋；伺服器一定要再驗。格式正確不代表收款人正確，EVM 系的鏈使用同樣的 0x 格式，無法由格式判斷網路，所以網路不設預設值，由使用者明確選擇，地址欄與確認頁都顯示網路名稱，地址簿則以資產、網路、地址與 tag 一起儲存。
+
+    memo 與 tag 保持字串，依網路驗證範圍。XRP 的 Destination Tag 是 0 到 4294967295，Android 的 Int 會溢位；網路必須填時不能略過，可不填時要使用者明確確認「不需要」。確認頁顯示完整地址並每 4 碼分組，防 address poisoning；掃描 QR 或貼上只填入欄位、重新驗證，不自動送出。
+
+    送出時鎖住按鈕。因為出金申請沒有冪等鍵，逾時時不重送，而是用出入金記錄端點比對地址、數量、tag 與時間來對帳。狀態則把 API 的狀態對應成使用者看得懂的階段，拒絕與錯誤要有下一步指引。
+
+    經驗方面，我在一個社交 App 做過 WalletConnect 的地址所有權證明，也處理過 deep link 返回。到交易所的 App，出金流程、地址驗證與網路選擇，我會從這幾個防錯重點開始設計。
+  modelAnswerJa: |
+    まず前提として、取引所の出金はカストディアル型（預かり型）なので、アプリに秘密鍵はなく、責任は誤入力を防ぐことと、送信を確実にすることです。
+
+    検証は層に分けます。アプリでは形式とチェックサムで即時に知らせ、サーバーが必ず再検証します。形式が正しくても正しい受取人とは限りませんし、EVM 系は同じ 0x 形式なのでネットワークを判別できません。そのため、ネットワークは既定値なしで明示的に選ばせ、アドレス欄と確認画面にネットワーク名を出し、アドレス帳は資産、ネットワーク、アドレス、タグをセットで保存します。
+
+    memo や tag は文字列のまま持ち、ネットワークごとに範囲を検証します。XRP の Destination Tag は 0 から 4294967295 で、Android の Int ではオーバーフローします。必須のネットワークでは空にできず、任意の場合は「不要であることを確認」させます。確認画面では完全なアドレスを 4 文字ずつ分けて表示し、address poisoning を防ぎます。QR や貼り付けは入力欄に入れるだけにして、再検証し、自動送信はしません。
+
+    送信はボタンをロックし、冪等キーがないので、タイムアウトしても再送せず、入出金履歴の API でアドレス、数量、タグ、時刻を照合します。ステータスは API の状態をユーザー向けの段階に対応付け、拒否やエラーには次の案内を付けます。
+
+    経験としては、ソーシャルアプリで WalletConnect による所有証明を実装し、deep link での戻りも扱いました。取引所アプリでは、出金フロー、アドレス検証、ネットワーク選択を、この防止策の要点から設計します。
+  followUps:
+    - "出金後にユーザーが「届かない」と問い合わせてきたとき、アプリはどんな情報を見せるべきか？"
+    - "新しい出金先アドレスのクールダウン期間をアプリ側でどう扱う？"
+    - "Travel Rule で受取人情報を入力させるとき、UX をどう設計する？"
+  timeLimitSec: 180
+
+- id: exchange-wallet-web3-12
+  type: flash
+  level: 1
+  priority: P1
+  tags: [wallet]
+  front: 錢包與地址速記：驗證、tag、網路、BIP21、簽名
+  back: |
+    - **託管型**：App 沒有私鑰；重點是防錯與送出可靠性。
+    - **地址**：Base58Check＝兩次 SHA-256 的前 4 byte，開頭 `1`＝`0x00`；EIP-55 用 **Keccak-256**（不是 SHA3-256）；`0x` 地址分不出 EVM 鏈；伺服器必須再驗。
+    - **tag／memo**：保持**字串**；XRP 上限 4294967295，Android `Int` 會溢位；tag 0 合法，不要自動補。
+    - **網路**：**不設預設值**；地址簿存資產、網路、地址與 tag。
+    - **BIP21**：scheme 不分大小寫、`+` 是加號、`req-` 必須拒絕、amount 不用指數；掃描只填入，不自動送出。
+    - **送出**：沒有冪等鍵，逾時**先查記錄再決定**；確認頁顯示完整地址。
+    - **WalletConnect**：連線不等於擁有；用 SIWE（nonce、domain、時效），由伺服器驗證。

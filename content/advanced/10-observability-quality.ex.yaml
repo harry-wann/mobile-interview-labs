@@ -1,0 +1,178 @@
+- id: advanced-observability-quality-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [ios, phased-release]
+  prompt: |
+    App Store 的 Phased Release for Automatic Updates（分階段發行，針對自動更新的使用者），預設的放量節奏是？
+  options:
+    - "第 1 天 1%，之後每天翻倍直到 100%，沒有其他選項"
+    - "7 天分批：1%、2%、5%、10%、20%、50%、100%；可以暫停（最長 30 天），只影響自動更新，使用者手動更新不受限"
+    - "固定 30 天，每週增加 25%"
+    - "一次對所有使用者發布，無法分批"
+  answer: 1
+  explain: |
+    - 第二個選項正確：Phased Release 以 7 天為週期逐步放量，並可以暫停。
+    - 第一個選項錯誤：比例不是每天翻倍，而是 1%、2%、5%、10%、20%、50%、100% 這個固定的序列。
+    - 第三個選項錯誤：週期是 7 天，不是 30 天（30 天是暫停的上限）。
+    - 第四個選項錯誤：Apple 有提供分批機制。
+    兩個重要限制：使用者仍然可以在 App Store 手動更新，所以不是絕對的 1%；而且它**不是回復版本**，已經更新的使用者不會退回舊版。
+    Google Play 的 staged rollout（階段式推出）則是自己選百分比，可以暫停、提高或停止。兩者都需要搭配監控指標才有意義。
+
+- id: advanced-observability-quality-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [metrickit]
+  prompt: |
+    關於 MetricKit（Apple 提供、收集真實使用者裝置上效能資料的框架），哪些敘述正確？（複選）
+  options:
+    - "App 註冊 `MXMetricManagerSubscriber` 之後，系統約每天提供一次聚合的 `MXMetricPayload`（啟動時間、hang、記憶體等），不是即時資料"
+    - "iOS 14 起的 `MXDiagnosticPayload` 可以提供 crash、hang、CPU 例外與磁碟寫入例外的診斷資料"
+    - "MetricKit 是即時串流，可以用來做秒級的告警"
+    - "MetricKit 只在 debug build 提供資料，release build 與 TestFlight 都無法使用"
+  answer: [0, 1]
+  explain: |
+    - 第 1 項正確：MetricKit 是系統彙整後，通常每天交付一次，適合看趨勢與分布（搭配 Xcode Organizer）。
+    - 第 2 項正確：iOS 14 起多了診斷資料，可以看到 crash、hang 的呼叫紀錄。
+    - 第 3 項錯誤：它不是即時的，不適合做秒級告警。即時性要靠 Crashlytics 這類 SDK（第三方提供的開發套件）。
+    - 第 4 項錯誤：MetricKit 在 release 版本（含 TestFlight 與 App Store）才有真實的使用者資料，這正是它的用途；把資料送到自己的後端時，要依隱私政策處理。
+
+- id: advanced-observability-quality-03
+  type: single
+  level: 2
+  priority: P0
+  tags: [release-gate]
+  prompt: |
+    新版本以階段式推出到 5%。下列哪個 release gate（擴大發布前要過的檢查）設計最合理？
+  options:
+    - "只要 Crashlytics 當天沒有出現新的 crash 類型，就擴大到 100%"
+    - "預先定義每個版本與上一版比較的指標與門檻（crash-free users 或 sessions、ANR 率、下單成功率、API 錯誤率與 p95 延遲），在足夠的使用者量與觀察時間後才擴大；任何一項低於門檻就暫停放量，並準備 kill switch 與最低版本強制更新"
+    - "放量的比例由工程師憑感覺決定"
+    - "只看應用商店的評分，低於 4 顆星才暫停"
+  answer: 1
+  explain: |
+    gate 要「事前定義、可量化、和上一版比較」，還要考慮樣本數：放量初期使用者不多，數字的跳動很大。除了 crash，也要看關鍵的業務流程（下單成功率）與 ANR（App 沒有回應）。
+    - 第一個選項錯誤：只看有沒有新的 crash 類型，會漏掉 crash 比例上升、ANR、下單失敗這些問題。
+    - 第三個選項錯誤：憑感覺沒有標準，出問題時團隊無法快速決定。
+    - 第四個選項錯誤：商店評分是落後的指標，等評分下降時，已經有很多人受影響。
+    商店沒有真正的回復，已安裝的使用者不會自動退回舊版，所以還要有 kill switch、強制更新與 hotfix 的流程。
+
+- id: advanced-observability-quality-04
+  type: order
+  level: 2
+  priority: P1
+  tags: [rollout, process]
+  prompt: |
+    把一個新版本從完成開發到全面發布的流程，依合理順序排列。
+  items:
+    - 內測（TestFlight 或 Firebase App Distribution），用 release build 跑 smoke test（快速跑一遍關鍵流程）與效能比對
+    - 提交審核，並備妥這個版本對應的 dSYM 與 mapping（上傳 Crashlytics）
+    - 階段式推出：先推 1% 到 5%，等待足夠的使用者量與時間
+    - 對照 gate 指標（crash-free、ANR、下單成功率、API 錯誤率）：達標就擴大比例，不達標就暫停並修正
+    - 全面發布後持續觀察，並依 flag 的到期日清理旗標
+  explain: |
+    符號檔要在放量之前就備妥，否則放量初期出現 crash 時看不懂 stack trace。gate 的重點是「達標才擴大」，而且暫停放量是正常的選項，不是例外。
+    發布完成不是結束：要持續看 vitals 與業務指標，並清理已經穩定的 feature flag，避免 flag debt（沒清掉的旗標越積越多）。
+
+- id: advanced-observability-quality-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [logging, privacy, ios]
+  prompt: |
+    iOS 14 以上使用 `os.Logger` 記錄下單事件，並確保訂單編號在非除錯環境下不會以明文出現在 log。請補上型別名稱與隱私等級。
+  codeLang: swift
+  code: |
+    import os
+
+    let logger = ____(subsystem: "jp.example.app", category: "order")
+    logger.info("order submitted id=\(orderId, privacy: .____)")
+  blanks:
+    - [Logger]
+    - [private, sensitive]
+  explain: |
+    `Logger` 以 subsystem 與 category 分類，方便在 Console（Mac 上查看 log 的 App）過濾。字串插值預設就偏向 private（動態字串在未連接除錯器時會被遮蔽），明確寫 `privacy: .private` 讓意圖更清楚；確定可以公開的值才用 `.public`；`.sensitive`（會以遮罩或雜湊呈現）同樣可以接受。
+    Android 的對應做法：Timber 在 release 版本只種「不輸出」或「只送 breadcrumb」的 Tree；Crashlytics 的 custom key 一樣不放個資。
+
+- id: advanced-observability-quality-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [ab-test, srm]
+  prompt: |
+    一個 A/B 測試設計為 50% 對 50% 分流。兩週後，實際進入分析的人數是 A 組 52.5%、B 組 47.5%（樣本數夠大，統計檢定顯示這個偏離極為顯著），而且 B 組的轉換率顯著比較高。最合理的處置是？
+  options:
+    - "B 組的轉換率比較高，直接全量上線 B"
+    - "這是 SRM（sample ratio mismatch，樣本比例不符）：分流或曝光事件的記錄可能有 bug（例如某一組的 crash 或載入失敗造成事件遺失），結果不可信；先查出分流與事件記錄的問題，再重跑測試"
+    - "樣本數夠大，偏離 2.5% 是正常的隨機誤差"
+    - "把兩組的人數縮到相同，再比較就好"
+  answer: 1
+  explain: |
+    在樣本足夠大的時候，比例的顯著偏離不是隨機誤差，代表進入分析的使用者不是隨機抽樣的結果（例如某一組的畫面更容易 crash、事件更容易遺失）。這種情況下，轉換率的比較已經被汙染。
+    - 第一個選項錯誤：結果不可信，上線可能是被 bug 誤導。
+    - 第三個選項錯誤：樣本越大，隨機誤差越小，偏離 2.5% 且顯著，就不是巧合。
+    - 第四個選項錯誤：把人數縮成一樣，只是丟掉資料，沒有修好造成偏離的原因。
+    處理方式：先檢查分流是否用穩定的 user id、曝光事件是否在同一個時間點送出、各組的 crash 與載入失敗率，修好之後重跑。這也是為什麼 crash、延遲要設成 guardrail metric（不能變差的指標）。
+
+- id: advanced-observability-quality-07
+  type: multi
+  level: 2
+  priority: P1
+  tags: [analytics, privacy]
+  prompt: |
+    關於 analytics（分析使用者行為）的設計，哪些做法是好的？（複選）
+  options:
+    - "包一層自己的 `AnalyticsClient` 介面，方便更換供應商、在測試中斷言事件有送出、集中處理使用者同意"
+    - "事件名稱與屬性有統一的 schema 與版本，並在 CI（自動建置與測試的流程）或測試中驗證"
+    - "把完整的地址、餘額與 token 放在事件屬性裡，方便客服查詢"
+    - "記錄漏斗每一步的延遲與失敗原因，而不只是計數"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：抽象層讓分析不再散落在各個畫面，也能被測試。
+    - 第 2 項正確：schema 避免同一件事有多種寫法，導致漏斗算不出來。
+    - 第 3 項錯誤：個資、地址、餘額、token 絕對不能送到第三方分析。需要客服查詢的資料，應該走自己的、有存取控制的後端，並用去識別的 ID 關聯。
+    - 第 4 項正確：延遲與失敗原因讓分析能回答「使用者為什麼掉下去」，只有計數做不到。
+
+- id: advanced-observability-quality-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [observability, release]
+  prompt: |
+    如果你要替交易所 App 的 mobile 團隊建立可觀測性與 release health 流程，你會怎麼做？請說明你用過的工具，以及你的優先順序。
+  promptJa: |
+    取引所アプリのモバイルチームにオブザーバビリティとリリースヘルスの仕組みを構築するとしたら、どう進めますか。使ったことのあるツールと、優先順位を説明してください。
+  keyPoints:
+    - 用過的工具：Crashlytics、Fastlane 與 Codemagic 自動上傳 dSYM、Amplitude／Google Analytics／Firebase、Remote Config、Mixpanel、Firebase App Distribution、Slack 發布通知
+    - 做過的降噪：在 Crashlytics 過濾「Job was cancelled」這類正常取消的事件
+    - 優先順序：先建立指標與看板（crash-free、ANR、下單成功率、WebSocket 連線成功率、API p95）
+    - release gate：與上一版比較的門檻、分階段發布、暫停條件；kill switch 與最低版本強制更新
+    - log 與 analytics：結構化、關聯 ID、隱私遮罩、包成可測試的抽象
+    - 效能：MetricKit 與 Organizer、Firebase Performance 與 vitals、基準測試放進 CI
+    - 原則：交易所不對金錢流程與風險揭露做實驗；實驗限於 UI 與引導
+  modelAnswer: |
+    我會分三步。第一，用上我已經用過的基礎：在一個社交 App，我用 Crashlytics 監控穩定性，Fastlane 與 Codemagic 在打包時自動上傳 dSYM，並過濾了「Job was cancelled」這類正常取消的雜訊；分析用 Amplitude、Google Analytics 和 Firebase，也用 Remote Config；發布時有 Slack 通知。在一個即時行情 App，我用 Mixpanel 做分析，Fastlane 發布到 TestFlight 和 Firebase App Distribution，並附上 release notes。我長期負責 App Store Connect 和 Google Play Console 的送審與發布。
+    第二，先建立指標。技術面是 crash-free users、ANR、啟動與渲染；業務面更重要：下單成功率與延遲、WebSocket 連線成功率與重連次數、首次看到價格的時間、API 的 p95 與錯誤率。
+    第三，把這些指標變成 release gate：每個版本和上一版比較，分階段發布從 1% 起跳，不達標就暫停；因為商店不能回復版本，所以要有 kill switch 和最低版本強制更新。log 與 analytics 包成可測試的抽象，加上關聯 ID 與隱私遮罩。A/B 測試只做 UI 與引導，不碰金錢流程與風險揭露，並檢查 SRM。
+  modelAnswerJa: |
+    三つのステップで進めます。まず、これまでに使ってきた基盤を活用します。あるソーシャルアプリでは Crashlytics で安定性を監視し、Fastlane と Codemagic でビルド時に dSYM を自動アップロードし、「Job was cancelled」のような正常なキャンセルのノイズは除外しました。分析には Amplitude、Google Analytics、Firebase を使い、Remote Config も利用しました。リリース時には Slack 通知を出していました。あるリアルタイム相場アプリでは Mixpanel で分析し、Fastlane で TestFlight と Firebase App Distribution に配信し、リリースノートを付けました。App Store Connect と Google Play Console での審査提出とリリースも、長く担当しました。
+    次に、指標を整えます。技術面は crash-free users、ANR、起動と描画。ビジネス面がより重要で、注文の成功率とレイテンシ、WebSocket の接続成功率と再接続回数、最初に価格が表示されるまでの時間、API の p95 とエラー率です。
+    最後に、これらをリリースゲートにします。各バージョンを前のバージョンと比較し、1% から段階的に展開し、基準に満たなければ一時停止します。ストアにはロールバックがないため、kill switch と最低バージョンの強制アップデートを用意します。ログと分析はテスト可能な抽象にまとめ、相関 ID とプライバシーのマスキングを付けます。A/B テストは UI とオンボーディングのみで、金銭に関わるフローやリスク開示には使わず、SRM も確認します。
+  followUps:
+    - gate 的門檻（例如 crash-free）你怎麼決定？依據是什麼？
+    - 放量初期樣本數太小，數字抖動很大時怎麼辦？
+    - 強制更新的使用者體驗與風險（例如對審核的影響）怎麼設計？
+  timeLimitSec: 150
+
+- id: advanced-observability-quality-09
+  type: flash
+  level: 2
+  priority: P1
+  tags: [release-gate]
+  front: 商店不能回復版本，release 出問題時，你有哪四道安全網？
+  back: |
+    1. 暫停放量：階段式推出搭配 gate，不達標就暫停。
+    2. kill switch：遠端關閉有問題的功能（預設值寫在 App 內，高風險功能預設關閉）。
+    3. 最低版本強制更新：把使用者推到修復版。
+    4. hotfix 流程：預先備好 CI（自動建置與測試的流程）、符號檔與加速審核的做法。

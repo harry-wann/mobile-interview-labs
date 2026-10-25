@@ -1,0 +1,215 @@
+- id: platform-modularization-01
+  type: single
+  level: 2
+  priority: P1
+  tags: [dependency-direction, architecture]
+  prompt: |
+    團隊要把 App 拆成 `:feature:market`、`:feature:order`、`:feature:wallet` 與 `:core:*`。`order` 需要在下單成功後，跳到 `wallet` 的資產頁。下列哪個設計最符合模組化的依賴原則？
+  options:
+    - "`:feature:order` 直接依賴 `:feature:wallet`，呼叫它的 Activity 或 ViewController"
+    - "`:feature:order` 與 `:feature:wallet` 互相依賴，各自能跳到對方"
+    - "Feature 之間不互相依賴：`order` 透過介面或路由事件（由 `core` 或 `domain` 定義）表達「要去資產頁」，由 App 層（Composition Root，整個 App 唯一負責組裝實作的地方）把實作接起來並導向"
+    - "把 `wallet` 的程式碼複製到 `order` 裡，避免依賴"
+  answer: 2
+  explain: |
+    正確的方向是 Feature 依賴 Domain 或 Core 定義的介面，由 App 層把實作接起來。在 UIKit 專案裡，FlowController（管理畫面跳轉的物件）加上 Navigator 協定扮演的就是這個角色。
+
+    其他選項錯在哪裡：
+    - 第 1 項：Feature 之間直接依賴，會形成網狀依賴，無法獨立建置與測試。
+    - 第 2 項：互相依賴就是循環依賴，兩個模組誰也無法單獨建置，改一個就要重編另一個。
+    - 第 4 項：複製程式碼只會讓邏輯分岔，之後修一個 bug 要修兩份。
+
+- id: platform-modularization-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [gradle, convention-plugin, version-catalog]
+  prompt: |
+    關於 Android 的 Gradle 多模組，哪些敘述正確？（複選）
+  options:
+    - "`implementation` 的依賴不會外洩給使用該模組的下游，上游改動時下游需要重編的範圍較小；`api` 則會把依賴傳遞出去"
+    - "共用的建置設定放在 `buildSrc` 最好，因為它改動時只會重編變動的部分"
+    - "共用設定建議放在 `build-logic`（included build）的 convention plugin"
+    - "version catalog（`gradle/libs.versions.toml`）可以集中管理依賴版本與 plugin 版本"
+    - "annotation processing（編譯時產生程式碼的工具）一律用 kapt（Kotlin Annotation Processing Tool），因為它比 KSP（Kotlin Symbol Processing）快"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 1 項正確：`implementation` 讓依賴不外洩，減少重編範圍；`api` 只用在型別出現在公開 API 的情況。
+    - 第 2 項錯誤：`buildSrc` 的任何變更，都會讓整個專案的建置快取失效，所以現在改推 included build 的 `build-logic`。
+    - 第 3 項正確：convention plugin 把共用的建置設定寫成一個 Gradle plugin，各模組一行就能套用。
+    - 第 4 項正確：version catalog 把版本集中在一個檔案，升級時只改一個地方。
+    - 第 5 項錯誤：KSP 通常比 kapt 快，因為 kapt 要先產生 Java 的中介檔案。Hilt（Google 的依賴注入函式庫）也支援 KSP，從 kapt 換成 KSP 是常見的建置最佳化。
+
+    補充：Android Gradle Plugin 8.0 起，R class（存放資源編號的類別）預設不再傳遞（non-transitive），也能降低重編的範圍。
+
+- id: platform-modularization-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [ios, dynamic-framework, launch-time]
+  prompt: |
+    iOS App 為了「模組化」把程式拆成 30 個動態 framework，結果冷啟動時間變長（冷啟動指 App 從完全沒執行，到開始執行的那一次啟動）。最可能的原因與處理方式是？
+  options:
+    - "Swift 編譯器對多模組版本做了較差的最佳化，必須關閉最佳化"
+    - "每個動態 framework 都要在啟動時由 dyld（dynamic linker，動態連結器）載入與連結，數量多就拉長啟動；可以改成靜態連結或合併模組（使用 Swift Package Manager，簡稱 SPM，時，library 預設的 `automatic` 種類會依使用情況選擇），並用 Instruments 的 App Launch 量測"
+    - "App Store 規定動態 framework 不能超過 10 個，超過會拖慢啟動"
+    - "只要把 framework 改成 XCFramework，啟動就會變快"
+  answer: 1
+  explain: |
+    動態 framework 是獨立的 dylib（動態函式庫），啟動階段 dyld 要找到、載入、重定位並初始化每一個，數量越多越慢。靜態連結把程式碼併入主執行檔，沒有這項成本，但要注意同一個靜態函式庫被多個動態 framework 連結時，會造成重複的符號。
+
+    其他選項錯在哪裡：
+    - 第 1 項：慢的原因是載入動態函式庫，不是編譯器最佳化，關閉最佳化只會讓程式變慢。
+    - 第 3 項：App Store 沒有這種數量限制。
+    - 第 4 項：XCFramework 只是散佈格式，不決定連結方式；改成 XCFramework 但仍是動態的，啟動一樣慢。
+
+- id: platform-modularization-04
+  type: multi
+  level: 2
+  priority: P1
+  tags: [spm, xcframework, access-control]
+  prompt: |
+    關於 iOS 的模組與存取控制，哪些敘述正確？（複選）
+  options:
+    - "Swift 預設的 `internal` 只在同一個模組內可見，要給其他模組使用的 API 才需要 `public`"
+    - "Swift 5.9 的 `package` 存取層級，讓同一個 package 內的不同模組可以共用，但對 package 外部不可見"
+    - "把 framework 做成 XCFramework 散佈時，要開 `BUILD_LIBRARY_FOR_DISTRIBUTION`（library evolution），才能在不同版本的編譯器之間維持穩定"
+    - "SPM 的 `.binaryTarget` 只能指向原始碼，不能指向 XCFramework"
+    - "`@testable import` 讓測試目標可以存取被測模組的 `private` 成員"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：`internal` 是預設，範圍是整個模組。
+    - 第 2 項正確：`package` 適合 Domain 與 Feature 之間共用、但不想暴露給整個 App 的型別。
+    - 第 3 項正確：開了之後會產生 `.swiftinterface` 檔，讓不同版本的 Xcode 也能使用這個二進位檔。
+    - 第 4 項錯誤：`.binaryTarget` 正是用來引用預先編譯好的 XCFramework（本機路徑，或遠端 URL 加 checksum）。
+    - 第 5 項錯誤：`@testable import` 只能存取 `internal`，不能存取 `private` 與 `fileprivate`；被測模組要用 debug 設定建置。
+
+- id: platform-modularization-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [gradle, api, implementation]
+  prompt: |
+    `:core:network` 模組的 `Api` 介面公開回傳 `:core:model` 的型別，OkHttp 只是內部實作細節。補上正確的依賴宣告。
+  codeLang: kotlin
+  code: |
+    dependencies {
+        ____(project(":core:model"))   // 型別出現在本模組的公開 API，使用者也需要看得到
+        ____(libs.okhttp)              // 內部實作，不外洩
+    }
+  blanks:
+    - [api]
+    - [implementation]
+  explain: |
+    公開 API 的簽章中出現的型別（這裡是 `:core:model` 的型別），要用 `api`，下游模組才能編譯。純內部使用的依賴（OkHttp）用 `implementation`，改動時下游不需要重編，也不會有人誤用到不該直接用的函式庫。
+
+    濫用 `api` 會讓依賴圖變粗，增量建置（只重編有變動的部分）的優勢就消失了。
+
+- id: platform-modularization-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [kmp, memory-model, version]
+  prompt: |
+    面試官問：「你以前在 Kotlin 1.4 時代做過 Kotlin Multiplatform（KMP），現在的 KMP 和你當時有什麼不同？」下列哪個回答最準確？
+  options:
+    - "完全一樣，Kotlin 1.4 的做法現在仍是最佳實務"
+    - "現在 KMP 只能共用 UI，不能共用業務邏輯，所以我們當時的做法已經過時"
+    - "我不記得細節，但 KMP 很簡單，一天就能上手"
+    - "當時是 Kotlin 1.4 時代，用 coroutines 的 `native-mt` 版本與舊記憶體模型，Native 物件跨執行緒要 freeze；新記憶體模型自 Kotlin 1.7.20 起預設，已不需要 freezing；KMP 在 Kotlin 1.9.20 宣告穩定，Swift 互通也有 SKIE（改善 Kotlin 在 Swift 端使用體驗的工具）等工具改善。我做過依領域的模組切分與雙平台整合，換成交易所 App 會以新版工具鏈為前提來設計"
+  answer: 3
+  explain: |
+    Kotlin 1.4 時代（約 2020–2021 年），用的是 `native-mt` 版的 coroutines 與舊記憶體模型。能清楚說出當時的做法、版本之間的差異，以及現在的改善，並說明自己做過的事，比籠統地回答更有說服力。
+
+    其他選項錯在哪裡：
+    - 第 1 項：Kotlin 1.4 的做法（freeze、`native-mt`）在新記憶體模型下已經不需要了，不能說成現在的最佳實務。
+    - 第 2 項：KMP 的主要價值是共用不含 UI 的邏輯（網路、模型、規則、資料庫）；UI 的共用是另一個選擇（Compose Multiplatform）。
+    - 第 3 項：回答沒有任何內容，而且「一天就能上手」是不實的說法。
+
+- id: platform-modularization-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [kmp, interop, expect-actual]
+  prompt: |
+    關於 KMP 的互通與記憶體模型，哪些敘述正確？（複選）
+  options:
+    - "舊記憶體模型下，Kotlin/Native 的物件跨執行緒需要 freeze，違規會丟 `InvalidMutabilityException`；`-native-mt` 版的 coroutines 就是為了多執行緒的 Native 而存在"
+    - "新記憶體模型（Kotlin 1.7.20 起預設）已經不需要 freezing"
+    - "Kotlin 1.4 時代的 suspend 函式，在 Swift 端只能以 completion handler 呼叫，需要 `@Throws` 才會把例外轉成 `NSError`"
+    - "KMP 只能共用 UI，不能共用商業邏輯"
+    - "`expect`／`actual` 讓共用程式碼宣告期待的 API，由各平台提供實際實作"
+  answer: [0, 1, 2, 4]
+  explain: |
+    - 第 1 項正確：這是舊記憶體模型的限制，freeze 之後的物件就不能再修改。
+    - 第 2 項正確：新記憶體模型預設啟用後，就不再需要 freezing 與 `-native-mt` 版本的 coroutines。
+    - 第 3 項正確：suspend 函式在 Swift 端是 completion handler，沒有加 `@Throws` 的話，例外會讓 App 直接 crash。
+    - 第 4 項錯誤：KMP 的主要價值就是共用不含 UI 的邏輯（網路、模型、規則、資料庫）；UI 的共用則是另外的選擇（Compose Multiplatform）。
+    - 第 5 項正確：共用程式碼用 `expect` 宣告需要的功能，各平台用 `actual` 實作，例如資料庫驅動。
+
+    補充：新版 Kotlin 與 SKIE 這類工具，可以提供 Swift 的 async／await 與 `AsyncSequence` 橋接；當時是自己寫一層 Swift 的 `ApiHandler<T>` 來包 completion handler。
+
+- id: platform-modularization-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [architecture, modularization, kmp]
+  prompt: |
+    如果交易所的 iOS／Android App 想重整模組結構，你會怎麼規劃？依賴方向、建置速度、KMP 是否導入都要談。並說明你的 KMP 經驗。
+  promptJa: |
+    取引所の iOS／Android アプリのモジュール構成を見直すなら、どう計画しますか。依存の向き、ビルド速度、KMP を導入するかどうかも含めて説明してください。KMP の経験についても説明してください。
+  keyPoints:
+    - "先看痛點再切：建置時間、團隊規模、測試隔離；不為模組化而模組化"
+    - "依賴方向：Feature 依賴 Domain 與 Core，Feature 之間不互相依賴，Composition Root 在 App 層；Domain 保持純淨"
+    - "iOS：SPM local package、用 `internal`／`package`／`public` 控管可見度、注意動態 framework 對啟動的影響；Android：Gradle 多模組、預設用 `implementation`、convention plugin（build-logic）、version catalog、KSP、build cache"
+    - "建置速度用量測驅動：build scan、Build Analyzer、Xcode build timeline"
+    - "KMP：只共用不含 UI 的穩定邏輯（模型、規則、驗證、協定解碼），例如價格與數量的精度；先用共用的測試資料驗證；評估建置時間、除錯與團隊學習成本"
+    - "KMP 經驗：Kotlin 1.4 時代，依領域切成 common／user／manager 等模組，輸出成 CocoaPods framework，用 `expect`／`actual` 處理平台差異，Swift 端自己寫橋接"
+    - "換成交易所 App：以新記憶體模型與 SKIE 這類新工具為前提設計共用層，從價格與數量的精度規則開始"
+  modelAnswer: |
+    我會先看痛點再決定怎麼切：建置時間、團隊規模、測試隔離，不為了模組化而模組化。依賴方向是 Feature 依賴 Domain 和 Core，Feature 之間不互相依賴，跨功能跳轉透過介面，由 App 層的 Composition Root 組裝；Domain 保持純淨，不依賴 UI 和具體的網路或資料庫。
+
+    iOS 我會用 SPM 的 local package，用 `internal` 和 `package` 控制可見度，並注意動態 framework 太多會拖慢冷啟動。Android 用 Gradle 多模組，預設用 `implementation`，共用設定放 `build-logic` 的 convention plugin，版本用 version catalog 管理，annotation processing 盡量用 KSP，並開 build cache。建置速度我會用 build scan 和 Xcode build timeline 量測，再決定要不要調整。
+
+    KMP 我只考慮共用不含 UI 且穩定的邏輯，像是價格和數量的精度規則、驗證、協定解碼，這對交易所的雙平台一致性很有價值。導入前會先用共用的測試資料驗證，並評估建置時間、除錯與團隊的學習成本。
+
+    我做過 KMP，依領域切成 common、user、manager 等模組，輸出成 CocoaPods framework，用 `expect`／`actual` 處理平台差異。那是 Kotlin 1.4 的時代，用的是舊記憶體模型，Swift 端自己寫一層橋接；換成交易所 App，我會以新記憶體模型和 SKIE 這類新工具為前提來設計共用層。
+  modelAnswerJa: |
+    まず課題を見て、切り方を決めます。ビルド時間、チームの規模、テストの分離などで、モジュール化自体を目的にはしません。依存の向きは、Feature が Domain と Core に依存し、Feature 同士は依存しない形にします。画面をまたぐ遷移はインターフェースを介して行い、App 層の Composition Root で組み立てます。Domain は純粋に保ち、UI や具体的なネットワーク、データベースに依存させません。
+
+    iOS では SPM のローカルパッケージを使い、`internal` と `package` で可視性を制御します。動的フレームワークが増えすぎると起動が遅くなる点にも注意します。Android では Gradle のマルチモジュールを使い、依存の既定は `implementation`、共通設定は `build-logic` の convention plugin に置き、依存は version catalog で管理し、アノテーション処理はできるだけ KSP にしてビルドキャッシュを有効にします。ビルド速度は build scan や Xcode の build timeline で計測してから調整します。
+
+    KMP は UI を含まない安定したロジックだけの共有を検討します。価格や数量の精度ルール、バリデーション、プロトコルのデコードなどで、取引所では両プラットフォームの一貫性に価値があります。導入前に、共通のテストデータで検証し、ビルド時間、デバッグ、チームの学習コストを評価します。
+
+    KMP を経験しました。ドメインごとに common、user、manager などのモジュールに分け、CocoaPods のフレームワークとして出力し、`expect`／`actual` でプラットフォーム差を吸収しました。Kotlin 1.4 の時代で、旧メモリモデルを使い、Swift 側は自前のブリッジを書きました。取引所アプリでは、新しいメモリモデルや SKIE などの新しいツールを前提に共有層を設計します。
+  followUps:
+    - "Feature モジュール間の画面遷移は、どの境界で抽象化しますか。"
+    - "既存の巨大な App ターゲットから、リスクを抑えて切り出す順序はどうしますか。"
+    - "KMP の共通ロジックにバグがあったとき、両プラットフォームのリリースはどう調整しますか。"
+  timeLimitSec: 150
+
+- id: platform-modularization-09
+  type: flash
+  level: 1
+  priority: P1
+  tags: [modularization]
+  front: 模組化速記：依賴方向、Gradle 與 iOS 的重點、KMP 的版本節點
+  back: |
+    **依賴方向**
+    - Feature 依賴 Domain 與 Core，Feature 之間互不依賴
+    - Composition Root 在 App 層，負責組裝實作
+
+    **Android（Gradle）**
+    - `implementation` 為預設，`api` 才會外洩依賴
+    - `build-logic` 的 convention plugin（不用 `buildSrc`）
+    - version catalog、KSP、build cache、configuration cache
+
+    **iOS**
+    - SPM local package、XCFramework 加 `BUILD_LIBRARY_FOR_DISTRIBUTION`
+    - 存取控制：`internal`、`package`、`public`
+    - 動態 framework 太多會拖慢冷啟動
+
+    **KMP 版本節點**
+    - Kotlin 1.7.20：新記憶體模型預設，不再需要 freezing
+    - Kotlin 1.9.20：KMP 宣告穩定
+    - 過去的專案是 Kotlin 1.4 時代：`native-mt` coroutines、舊記憶體模型

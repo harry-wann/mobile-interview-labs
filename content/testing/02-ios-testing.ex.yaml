@@ -1,0 +1,87 @@
+- id: testing-ios-01
+  type: fill
+  level: 2
+  priority: P1
+  tags: [swift-testing]
+  prompt: |
+    用 Swift Testing 寫一個參數化測試，驗證 `floorToStep` 的多組輸入。
+  codeLang: swift
+  code: |
+    import Testing
+
+    struct PrecisionTests {
+        @____(arguments: [
+            ("1234.567", "0.01", "1234.56"),
+            ("0.123456789", "0.0001", "0.1234"),
+        ])
+        func floors(value: String, step: String, expected: String) {
+            let result = floorToStep(Decimal(string: value)!, step: Decimal(string: step)!)
+            #____(result == Decimal(string: expected)!)
+        }
+    }
+  blanks:
+    - [Test]
+    - [expect]
+  explain: |
+    `@Test(arguments:)` 讓每一組資料成為獨立的測試案例，失敗時能看出是哪一組。
+    `#expect` 失敗時會自動顯示兩邊的實際值，不需要像 XCTest 那樣從幾十種 `XCTAssert…` 裡挑一個。
+
+- id: testing-ios-02
+  type: single
+  level: 2
+  priority: P1
+  tags: [async, xctest]
+  prompt: |
+    在 XCTest 的 `async` 測試方法裡等待 expectation，下列哪個寫法正確？
+  options:
+    - "`wait(for: [exp], timeout: 1)`"
+    - "`await fulfillment(of: [exp], timeout: 1)`"
+    - "`Thread.sleep(forTimeInterval: 1)`"
+    - "`DispatchQueue.main.sync { }`"
+  answer: 1
+  explain: |
+    - 第 1 項：`wait(for:)` 是同步的，在 async 的測試方法裡呼叫會卡住目前的執行緒，可能造成死結（兩邊互相等待、永遠不會結束）。Xcode 14.3 起要改用 async 版本的 `fulfillment(of:timeout:)`。
+    - 第 3、4 項：`Thread.sleep` 只是空等，不會等到事件發生；在主執行緒上 `DispatchQueue.main.sync` 會直接死結。
+    更好的做法是讓被測的方法本身回傳可以 `await` 的結果，連 expectation 都不需要。
+
+- id: testing-ios-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [xcuitest, flaky]
+  prompt: |
+    哪些做法能讓 XCUITest 更穩定、可重現？（複選）
+  options:
+    - "用 `accessibilityIdentifier` 定位元素"
+    - "用啟動參數（launch argument）讓 App 啟動時把網路、推播、分析換成固定回傳資料的 stub"
+    - "用 `sleep(3)` 等畫面載入"
+    - "關閉動畫、固定語系與時間"
+    - "用 `waitForExistence(timeout:)` 等待元素出現"
+    - "每個測試都從真實的登入流程開始"
+  answer: [0, 1, 3, 4]
+  explain: |
+    - 第 3 項：`sleep` 不是等太久就是等不夠，時間一長或機器一慢就失敗。要用 `waitForExistence`。
+    - 第 6 項：真的登入流程依賴網路和帳號狀態，又慢又不穩定。用啟動參數直接進到要測的畫面和狀態，測試更快也更穩。
+
+- id: testing-ios-04
+  type: open
+  level: 2
+  priority: P1
+  tags: [ios, testing]
+  prompt: |
+    「你會怎麼測試一個 `@MainActor` 的 ViewModel，它訂閱行情串流並每 100ms 更新一次畫面狀態？」
+  promptJa: |
+    「相場ストリームを購読して100ミリ秒ごとに画面状態を更新する @MainActor の ViewModel を、どのようにテストしますか？」
+  keyPoints:
+    - 依賴注入：行情來源換成可以手動送值的假實作（AsyncStream 或 Subject），時間換成可以手動推進的 Clock
+    - 測試方法標 @MainActor；用 await 等待狀態，不用 sleep
+    - 驗證：100 毫秒內的多筆價格合併後，只發出最新的一筆；時間由注入的 Clock 推進
+    - 例外情況：斷線、沒有資料、錯誤
+    - "工具：Swift Testing 的 `#expect`、`confirmation`；XCTest 的 `await fulfillment(of:)`"
+  modelAnswer: |
+    我會先讓 ViewModel 的依賴都能注入：行情來源換成一個我能手動送值的 fake，例如 AsyncStream 的 continuation；時間用可以手動前進的 Clock，而不是真的等 100 毫秒。
+
+    測試方法標成 @MainActor。我先在 100 毫秒內連續送三筆價格，推進 clock，驗證 ViewModel 只發出一次狀態、而且是最後一筆的價格。再測斷線：fake 丟出錯誤，驗證狀態變成「連線中斷」。等待一律用 await，不用 sleep。
+
+    工具上，新的測試我會用 Swift Testing 的 #expect；如果要等事件發生，用 confirmation，或在 XCTest 裡用 await fulfillment。
+  timeLimitSec: 150

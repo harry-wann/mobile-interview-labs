@@ -1,0 +1,364 @@
+- id: kotlin-flow-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [events, stateflow, channel]
+  prompt: |
+    下單成功後 ViewModel 要通知畫面「導航到訂單詳情」。這個事件只能處理一次，而且畫面可能暫時在背景或被重建（旋轉）。依 Android 官方 UI events 的建議，哪個設計最穩健？
+  options:
+    - "`MutableSharedFlow<Event>()`（預設參數，replay 0）"
+    - "`MutableSharedFlow<Event>(replay = 1)`"
+    - "`UiState` 帶一個 `pendingNavigation: OrderId?`；畫面導航後呼叫 `viewModel.onNavigated()`，由 ViewModel 把它清成 `null`"
+    - "`Channel<Event>(Channel.BUFFERED)` 搭配 `receiveAsFlow()`"
+  answer: 2
+  explain: |
+    官方建議把 UI 事件**當成 state**（狀態）：ViewModel 保存「待處理的導航」，UI 處理完後明確通知 ViewModel 清除。state 會一直在，畫面在背景或重建都不會遺失，處理完就清掉所以也不會重複處理。
+    - 第 1 項錯：預設的 `SharedFlow`（replay 0、沒有 buffer）在沒有訂閱者時 emit 的值直接消失，畫面在背景時事件就丟了。
+    - 第 2 項錯：`replay = 1` 的 `SharedFlow` 會把最後一個事件重播給之後的每個訂閱者，旋轉螢幕後新的畫面又收到一次，導航被重複執行。
+    - 第 4 項錯：`Channel` 搭配 `receiveAsFlow()` 是常見的次選，事件會暫存到有人收，每個元素只交給一個接收者，寫起來也簡單。但如果收集端在取出事件之後、尚未處理完之前就被取消（畫面被銷毀），這筆事件就沒有人處理了。Toast 這類漏掉也無妨的事件可以接受，導航與下單結果則建議用 state。
+
+- id: kotlin-flow-02
+  type: predict
+  level: 2
+  priority: P0
+  tags: [stateflow, conflation]
+  prompt: |
+    在單執行緒的 `runBlocking` 內執行，依序印出什麼？（2 行輸出）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+    import kotlinx.coroutines.flow.*
+
+    fun main() = runBlocking {
+        val s = MutableStateFlow(0)
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            s.collect { println("got $it") }
+        }
+        s.value = 1
+        s.value = 1
+        s.value = 2
+        delay(50)
+        job.cancel()
+    }
+  answer: |
+    got 0 got 2
+  explain: |
+    - 第 1 行 `got 0`：`UNDISPATCHED` 讓 collector 立即執行到第一個 suspend 點（暫停點），先收到目前值 `0`。
+    - 第 2 行 `got 2`：之後主流程連續設定 `1`、`1`、`2`，期間沒有讓出執行緒，collector 還沒機會執行。`StateFlow` 只保留**最新值**，中間的 `1` 被蓋掉，而且重複設定相同的值本來就不會發射（去重）。所以 collector 下一次醒來只看到 `2`。
+    `StateFlow` 適合「畫面狀態」，不適合「每一筆都要處理」的資料（例如 order book 的增量更新）。
+
+- id: kotlin-flow-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [sharedflow, replay]
+  prompt: |
+    依序印出什麼？（2 行輸出）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+    import kotlinx.coroutines.flow.*
+
+    fun main() = runBlocking {
+        val plain = MutableSharedFlow<Int>()
+        plain.emit(1)
+        val j1 = launch(start = CoroutineStart.UNDISPATCHED) {
+            plain.collect { println("plain $it") }
+        }
+        plain.emit(2)
+
+        val replayed = MutableSharedFlow<Int>(replay = 1)
+        replayed.emit(10)
+        replayed.emit(11)
+        val j2 = launch(start = CoroutineStart.UNDISPATCHED) {
+            replayed.collect { println("replay $it") }
+        }
+        delay(10)
+        j1.cancel()
+        j2.cancel()
+    }
+  answer: |
+    plain 2 replay 11
+  explain: |
+    - 第 1 行 `plain 2`：預設的 `MutableSharedFlow()` 沒有 replay（補送給新訂閱者的舊資料）、沒有 buffer。`emit(1)` 發生時沒有訂閱者，值直接消失；之後訂閱者只會收到 `2`。
+    - 第 2 行 `replay 11`：`replay = 1` 保留最後一個值給新訂閱者，所以只看到 `11`，`10` 已經被擠掉。
+    這是 `SharedFlow` 最常被誤用的地方：以為它像 `StateFlow` 一樣有「目前值」。
+
+- id: kotlin-flow-04
+  type: multi
+  level: 2
+  priority: P0
+  tags: [backpressure, conflate, sample, debounce]
+  prompt: |
+    像交易所這樣的 App 要把 WebSocket 每秒推送很多筆的行情送進 UI。下列哪些敘述正確？（複選）
+  options:
+    - "對每 50ms 更新一次的價格串流使用 `debounce(300)`，UI 可能長時間得不到更新，因為永遠等不到 300ms 的靜默"
+    - "`conflate()` 適合「最新價」「best bid/ask」這種只在意最後狀態的資料，但不適合 order book 的增量更新"
+    - "`sample(100)` 會每 100ms 固定發射一次最新值；若這 100ms 內沒有新值就不發"
+    - "`buffer(Channel.UNLIMITED)` 是處理突發行情最安全的預設，因為不會丟資料"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：`debounce` 要等到「安靜」才發射，適合搜尋框；每 50 毫秒就來一筆的串流永遠不安靜，UI 幾乎得不到更新。
+    - 第 2 項正確：`conflate()` 只留最新的一筆，適合「最新價」「best bid／best ask（最優買價／賣價）」。但增量更新（delta）每一筆都要依序套用，丟掉一筆，本機維護的 order book 就錯了。做法是背景執行緒依序套用，對外發佈快照（某一刻的完整內容），UI 層再 `conflate`／`sample`。
+    - 第 3 項正確：`sample` 是時間驅動（固定週期），只發期間內最新的一筆，沒有新值就不發。
+    - 第 4 項錯：`UNLIMITED` 沒有上限，上游持續比下游快時記憶體會一路成長，最終 OOM（記憶體用完被系統殺掉）。處理突發流量要設有限的 buffer，或用 `conflate`。
+
+- id: kotlin-flow-05
+  type: predict
+  level: 3
+  priority: P1
+  tags: [debounce, virtual-time, runtest]
+  prompt: |
+    使用 `kotlinx-coroutines-test` 的 `runTest`（虛擬時間，單位毫秒），搜尋框的輸入流依序印出什麼？（`debounce` 是安靜一段時間後才發出最後一筆）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+    import kotlinx.coroutines.flow.*
+    import kotlinx.coroutines.test.*
+
+    fun main() = runTest {
+        val result = mutableListOf<String>()
+        val src = flow {
+            emit("b");    delay(100)
+            emit("bt");   delay(100)
+            emit("btc");  delay(400)
+            emit("btcj"); delay(400)
+        }
+        launch { src.debounce(300).collect { result += "$it@$currentTime" } }
+        advanceUntilIdle()
+        println(result.joinToString(" "))
+    }
+  answer: |
+    btc@500 btcj@900
+  explain: |
+    輸入時間線：`b`@0、`bt`@100、`btc`@200、`btcj`@600。
+    - `b`、`bt` 後面都在 300 毫秒內又有新值，被丟棄。
+    - `btc@500`：`btc` 之後 400 毫秒才有下一個值，安靜滿 300 毫秒時（200 + 300 = 500）發射。
+    - `btcj@900`：`btcj`@600 之後安靜滿 300 毫秒（900）發射，這時上游還在 `delay(400)`，尚未結束。
+    這是 `debounce` 在搜尋框的正確用法（使用者停止輸入才查詢）；套在持續密集更新的價格串流上，則會因永遠不安靜而幾乎不發射。這段需要 `kotlinx-coroutines-test`，本站 runner 的 classpath 沒有。
+
+- id: kotlin-flow-06
+  type: fill
+  level: 2
+  priority: P0
+  tags: [callbackflow, lifecycle]
+  prompt: |
+    補上兩處：第一處讓 `callbackFlow` 在取消或關閉時解除 listener；第二處讓 Fragment 只在 `STARTED` 狀態收集，離開就取消。
+  codeLang: kotlin
+  code: |
+    fun SocketClient.messages(): Flow<Msg> = callbackFlow {
+        val l = Listener { trySend(it) }
+        addListener(l)
+        ____ { removeListener(l) }
+    }
+
+    viewLifecycleOwner.lifecycleScope.launch {
+        viewLifecycleOwner.____(Lifecycle.State.STARTED) {
+            vm.messages.collect { render(it) }
+        }
+    }
+  blanks:
+    - [awaitClose]
+    - [repeatOnLifecycle]
+  explain: |
+    - 第一格 `awaitClose`：讓 producer（發資料的那一側）停在這裡，直到 flow 被取消或 `close()`，並在區塊內解除註冊。沒有它，`callbackFlow` 會直接丟 `IllegalStateException`，這是刻意設計來防止 listener 洩漏的。
+    - 第二格 `repeatOnLifecycle`：在進入 `STARTED`（畫面看得到）時啟動區塊、離開時取消，下次回來重新啟動。直接 `lifecycleScope.launch { collect }` 則會一直收集到 destroy，在背景也持續更新、耗電。
+
+- id: kotlin-flow-07
+  type: single
+  level: 2
+  priority: P0
+  tags: [stateIn, whilesubscribed]
+  prompt: |
+    ViewModel 以 `ticker.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Loading)` 發佈行情。使用者旋轉螢幕時（Activity 重建，collector 短暫消失），下列描述何者正確？
+  options:
+    - "上游（WebSocket 訂閱）立刻停止，新 Activity 出現後重新訂閱，畫面先閃一下 `Loading`"
+    - "上游維持運作，因為 collector 消失的時間小於 5 秒；新 Activity 馬上拿到最近一次的值，不需重建連線"
+    - "`5_000` 代表最多每 5 秒才更新一次 UI"
+    - "`5_000` 代表 `stateIn` 最多只會收集 5000 筆資料"
+  answer: 1
+  explain: |
+    `WhileSubscribed(stopTimeoutMillis)`：訂閱者（collector）數量降到 0 之後，等 `stopTimeoutMillis` 毫秒才停止上游；期間若有新訂閱者出現，上游不會重啟。5 秒足夠撐過旋轉與短暫切換。
+    - 第 1 項錯：上游不會立刻停止，會等滿 5 秒。如果是 `WhileSubscribed(0)`，才會立刻停止。
+    - 第 3 項錯：`5_000` 是「沒有訂閱者之後，等多久才停止上游」，和 UI 更新頻率無關。
+    - 第 4 項錯：`5_000` 是毫秒，不是資料筆數，和收集幾筆資料無關。
+    使用者真的離開 App、超過 5 秒沒有訂閱者，上游才會停，省電也省流量。另外 `stateIn` 保留最後一個值，所以新的 collector 立即拿到它而不是 `Loading`（除非上游從沒發過）。
+
+- id: kotlin-flow-08
+  type: code
+  level: 3
+  priority: P0
+  tags: [callbackflow, conflate, kotlin]
+  prompt: |
+    把 listener 風格的 `PriceSource` 包成 `Flow<Int>`：實作 `PriceSource.prices()`。
+
+    - 收集時註冊 listener，`onPrice` 轉成 flow 的值；`onError(e)` 讓 flow 以該例外結束；`onClosed()` 讓 flow 正常結束。
+    - 收集結束（`take`、取消、錯誤、關閉）時**一定要解除註冊**。
+    - 來源可能在 callback 執行緒瞬間送出大量價格，慢速 collector 不能讓 listener 被擋住，且最後收到的**必須是最新價**。
+  hints:
+    - 用 `callbackFlow`，callback 裡用 `trySend`，最後 `awaitClose { unregister(listener) }`。
+    - 預設 buffer 滿了會丟掉最新值，價格流要在後面加 `.conflate()`。
+  kotlin:
+    starter: |
+      import kotlinx.coroutines.*
+      import kotlinx.coroutines.channels.awaitClose
+      import kotlinx.coroutines.flow.*
+      import java.util.concurrent.CopyOnWriteArrayList
+
+      interface PriceListener {
+          fun onPrice(price: Int)
+          fun onError(e: Throwable)
+          fun onClosed()
+      }
+
+      class PriceSource {
+          private val listeners = CopyOnWriteArrayList<PriceListener>()
+          val listenerCount: Int get() = listeners.size
+          fun register(l: PriceListener) { listeners += l }
+          fun unregister(l: PriceListener) { listeners -= l }
+          fun emit(p: Int) = listeners.forEach { it.onPrice(p) }
+          fun fail(e: Throwable) = listeners.forEach { it.onError(e) }
+          fun close() = listeners.forEach { it.onClosed() }
+      }
+
+      fun PriceSource.prices(): Flow<Int> = callbackFlow {
+          // TODO: 註冊 listener、轉成 flow 的值、結束時解除註冊
+      }
+    solution: |
+      import kotlinx.coroutines.*
+      import kotlinx.coroutines.channels.awaitClose
+      import kotlinx.coroutines.flow.*
+      import java.util.concurrent.CopyOnWriteArrayList
+
+      interface PriceListener {
+          fun onPrice(price: Int)
+          fun onError(e: Throwable)
+          fun onClosed()
+      }
+
+      class PriceSource {
+          private val listeners = CopyOnWriteArrayList<PriceListener>()
+          val listenerCount: Int get() = listeners.size
+          fun register(l: PriceListener) { listeners += l }
+          fun unregister(l: PriceListener) { listeners -= l }
+          fun emit(p: Int) = listeners.forEach { it.onPrice(p) }
+          fun fail(e: Throwable) = listeners.forEach { it.onError(e) }
+          fun close() = listeners.forEach { it.onClosed() }
+      }
+
+      fun PriceSource.prices(): Flow<Int> = callbackFlow {
+          val listener = object : PriceListener {
+              override fun onPrice(price: Int) { trySend(price) }
+              override fun onError(e: Throwable) { close(e) }
+              override fun onClosed() { close() }
+          }
+          register(listener)
+          awaitClose { unregister(listener) }
+      }.conflate()
+    tests: |
+      checkEqual("take(3) 收到前三筆", listOf(1, 2, 3)) {
+          val src = PriceSource()
+          val d = async { src.prices().take(3).toList() }
+          delay(20)
+          listOf(1, 2, 3, 4).forEach { src.emit(it); yield() }
+          d.await()
+      }
+      checkEqual("take 結束後已解除註冊", 0) {
+          val src = PriceSource()
+          val d = async { src.prices().take(1).toList() }
+          delay(20)
+          src.emit(1)
+          d.await()
+          src.listenerCount
+      }
+      checkEqual("收集期間有註冊、取消後解除", "1/0") {
+          val src = PriceSource()
+          val j = launch { src.prices().collect { } }
+          delay(20)
+          val during = src.listenerCount
+          j.cancelAndJoin()
+          "$during/${src.listenerCount}"
+      }
+      checkEqual("onError 讓 flow 以該例外結束", "error:ws down") {
+          val src = PriceSource()
+          val d = async {
+              try {
+                  src.prices().toList()
+                  "completed"
+              } catch (e: IllegalStateException) {
+                  "error:${e.message}"
+              }
+          }
+          delay(20)
+          src.emit(1); yield()
+          src.fail(IllegalStateException("ws down"))
+          d.await()
+      }
+      checkEqual("onClosed 讓 flow 正常結束", listOf(1, 2)) {
+          val src = PriceSource()
+          val d = async { src.prices().toList() }
+          delay(20)
+          src.emit(1); yield()
+          src.emit(2); yield()
+          src.close()
+          d.await()
+      }
+      checkEqual("慢速 collector 面對瞬間大量價格，最後收到的是最新價", 200) {
+          val src = PriceSource()
+          val received = mutableListOf<Int>()
+          val j = launch { src.prices().collect { received += it; delay(50) } }
+          delay(20)
+          for (i in 1..200) src.emit(i)
+          delay(300)
+          j.cancelAndJoin()
+          received.last()
+      }
+
+- id: kotlin-flow-09
+  type: open
+  level: 3
+  priority: P0
+  tags: [market-data, architecture, field]
+  prompt: |
+    設計 Android 端行情畫面的資料流：WebSocket 推送大量 ticker（幾十筆／秒），畫面要顯示自選清單；點進單一交易對後還要看 order book 增量更新。請說明你的 Flow pipeline、背壓策略與生命週期處理，並說明和單一交易對的即時 K 線（SSE）相比，整個行情列表需要多做什麼。
+  promptJa: |
+    Android の相場画面のデータフローを設計してください。WebSocket から高頻度のティッカー（毎秒数十件）が届き、画面にはウォッチリストを表示します。個別銘柄に入ると板（order book）の差分更新も見られます。Flow のパイプライン、バックプレッシャー戦略、ライフサイクルの扱いを説明し、1 銘柄だけのリアルタイムローソク足（SSE）と比べて、相場一覧では何を追加で行う必要があるかも説明してください。
+  keyPoints:
+    - 資料源：WebSocket 包成 callbackFlow（trySend ＋ awaitClose），訊息在 IO／Default 解析，不在主執行緒
+    - 最新價型資料：conflate 或 sample 壓到畫面可承受的頻率（例如 100ms），StateFlow 發佈快照
+    - order book 增量不能丟：背景單執行緒依序套用 delta、維護本地簿，對外發佈快照；偵測序號斷層就重新抓快照
+    - 以 stateIn(WhileSubscribed(5000)) 讓訂閱隨畫面啟停；Compose 用 collectAsStateWithLifecycle，View 用 repeatOnLifecycle
+    - 切換交易對用 flatMapLatest 取消舊訂閱；清單用 key 與 contentType，避免整個列表重組
+    - 重連與補資料：斷線後指數退避加 jitter，重連後重新訂閱並抓快照對齊
+    - 和單一交易對 K 線的差別：即時 K 線是單一交易對的 SSE，事件量小；行情列表有很多檔、頻率高很多，所以要加上 conflate／sample 與 stateIn(WhileSubscribed(5000))
+  modelAnswer: |
+    我會分三層。資料源：WebSocket 用 `callbackFlow` 包起來，callback 裡 `trySend`，`awaitClose` 解除註冊；訊息解析放在 IO 或 Default 的 dispatcher，不碰主執行緒。
+
+    清單畫面的 ticker 是「只在意最新值」的資料，所以在 repository 內先 `conflate`（collector 忙就只留最新），再用 `sample(100)` 壓到畫面能承受的頻率（每 100 毫秒取一筆最新的），用 `stateIn(WhileSubscribed(5000))` 發佈給 ViewModel；5 秒能撐過旋轉，離開畫面超過 5 秒才停掉訂閱。Compose 端用 `collectAsStateWithLifecycle`。
+
+    order book 不一樣，增量更新（delta）每筆都不能丟，所以不能 `conflate`。我會在單一背景執行緒依序套用 delta、維護本機的 order book，偵測到序號斷層就重新抓快照；對外只發佈快照，UI 層再 `conflate` 或 `sample`。切換交易對用 `flatMapLatest` 取消舊的訂閱。
+
+    和單一交易對的即時 K 線比較：K 線是 SSE，事件量小，直接更新資料就夠用。行情列表有很多檔、頻率高很多，所以我會用共享的 repository 加上 `stateIn`，並用指數退避加 jitter（重連間隔每次加倍、再加一點隨機）處理重連。
+  modelAnswerJa: |
+    三つの層で考えます。まずデータソースです。WebSocket は `callbackFlow` で包み、コールバック内では `trySend`、`awaitClose` でリスナーを解除します。メッセージの解析は IO か Default の dispatcher で行い、メインスレッドでは行いません。
+
+    ウォッチリストのティッカーは「最新値だけが重要」なデータなので、repository 内でまず `conflate` し、さらに `sample(100)` で画面が処理できる頻度に落とし、`stateIn(WhileSubscribed(5000))` で ViewModel に公開します。5 秒あれば画面回転を乗り切れ、画面を離れて 5 秒を超えたときだけ購読を止められます。Compose 側は `collectAsStateWithLifecycle` で収集します。
+
+    板（order book）は別です。差分更新は 1 件も落とせないので `conflate` は使えません。単一のバックグラウンドスレッドで差分を順番に適用してローカルの板を維持し、シーケンスの欠落を検知したらスナップショットを取り直します。外にはスナップショットだけを公開し、UI 側で `conflate` か `sample` をかけます。銘柄切り替えは `flatMapLatest` で古い購読をキャンセルします。
+
+    1 銘柄だけのリアルタイムローソク足は SSE で、イベント量が少ないため、そのままデータを更新すれば十分です。相場一覧は銘柄数が多く更新頻度もずっと高いので、共有 repository と `stateIn` を使い、再接続は指数バックオフと jitter で扱います。
+  followUps:
+    - delta 的序號出現斷層時怎麼處理？
+    - WebSocket 在背景被系統斷線，回前景怎麼補資料？
+    - 清單有 200 個交易對，每個都在更新，UI 層怎麼避免整個列表重組？
+
+- id: kotlin-flow-10
+  type: flash
+  level: 2
+  priority: P0
+  tags: [lifecycle, compose]
+  front: Compose 與 View 各自該用什麼收集 Flow，才不會在背景持續更新？
+  back: |
+    Compose：`collectAsStateWithLifecycle()`（`lifecycle-runtime-compose`，預設 `STARTED` 才收集）；`collectAsState()` 不知道 lifecycle，在背景還會繼續收集。
+    View／Fragment：`viewLifecycleOwner.lifecycleScope.launch { viewLifecycleOwner.repeatOnLifecycle(STARTED) { flow.collect { } } }`。
+    搭配上游 `stateIn(WhileSubscribed(5000))`，畫面離開超過 5 秒，連 WebSocket 訂閱都會停。

@@ -1,0 +1,336 @@
+- id: swift-arc-capture-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [unowned, weak]
+  prompt: |
+    下列哪一種情況使用 `[unowned self]` 是合理且安全的？
+  options:
+    - "網路請求的 completion handler：回呼時使用者可能已經離開畫面"
+    - "全域單例（例如 `SocketManager.shared`）呼叫 ViewController 傳進去的 closure"
+    - "ViewModel 自己持有的 `lazy var` 子物件，子物件的 closure 回頭呼叫 ViewModel，而且子物件只由 ViewModel 持有，不會被傳出去"
+    - "`NotificationCenter` 的 block observer：通知可能在任何時間送達"
+  answer: 2
+  explain: |
+    `unowned` 的前提是「closure 執行的時候，self 一定還活著」。子物件只有 ViewModel 持有，ViewModel 被釋放時，子物件和它的 closure 也一起消失，所以 closure 執行時 ViewModel 一定還在。
+    其他三個情境的 closure 都被「外面、活得比較久」的東西持有（網路層、單例、通知中心）。self 可能先被釋放，之後回呼進來讀取 unowned 就會直接 crash。這種 crash 只在特定時機出現（例如網路慢、使用者剛好離開畫面），最難重現。
+    不確定誰活得比較久時就用 `weak`：要多處理 Optional，但不會 crash。
+
+- id: swift-arc-capture-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [combine, retain-cycle, timer]
+  prompt: |
+    ViewModel 的 `init` 裡有下列寫法，`cancellables` 與 `timer` 都是 ViewModel 的屬性。哪些會造成 ViewModel 無法釋放？（複選）
+  options:
+    - "`feed.assign(to: \\.last, on: self).store(in: &cancellables)`"
+    - "`feed.assign(to: &$last)`（iOS 14+）"
+    - "`let doubled = items.map { $0 * self.factor }`"
+    - "`feed.sink { self.last = $0 }.store(in: &cancellables)`"
+    - "`timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in self.tick() }`，沒有任何地方呼叫 `invalidate()`"
+  answer: [0, 3, 4]
+  explain: |
+    - `assign(to:on:)` 會 **strong 持有** `on` 後面的物件（self）。再加上 `store(in: &cancellables)`：self 持有 cancellables，cancellables 持有訂閱，訂閱又持有 self，繞成一圈。
+    - `sink { self… }` 同理：closure 持有 self，要寫成 `[weak self]`。
+    - 會重複執行的 Timer 被主執行緒的 RunLoop 持有，closure 又持有 self，除非呼叫 `invalidate()`，否則 self 永遠不會被釋放。
+    - `assign(to: &$last)` 是 iOS 14 加入的寫法，直接綁到 `@Published` 屬性上，不會持有 self。
+    - `map` 的 closure 當下就執行完，不會被存起來，不會形成循環。
+
+- id: swift-arc-capture-03
+  type: predict
+  level: 2
+  priority: P0
+  tags: [retain-cycle, deinit]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    final class Screen {
+        let name: String
+        var onTap: (() -> Void)?
+        init(_ name: String) { self.name = name }
+        deinit { print("deinit", name) }
+    }
+
+    do {
+        let a = Screen("A")
+        a.onTap = { print(a.name) }
+    }
+    print("after-A")
+
+    do {
+        let b = Screen("B")
+        b.onTap = { [weak b] in print(b?.name ?? "nil") }
+    }
+    print("after-B")
+
+    do {
+        let c = Screen("C")
+        c.onTap = { [unowned c] in print(c.name) }
+    }
+    print("after-C")
+  answer: |
+    after-A deinit B after-B deinit C after-C
+  explain: |
+    - A：closure strong 持有 `a`，`a.onTap` 又持有 closure，互相持有形成循環。離開 `do` 區塊後 `a` 也不會被釋放，所以沒有 `deinit A`，只印 `after-A`。
+    - B：closure 用 weak 持有 `b`，沒有循環。離開 `do` 區塊時 `b` 被釋放，先印 `deinit B`，再印 `after-B`。
+    - C：unowned 也不會讓計數 +1，所以同樣會被釋放。只看「會不會被釋放」，weak 和 unowned 一樣；差別在**釋放之後如果 closure 還被呼叫**：weak 拿到 `nil`，unowned 會 crash。
+
+- id: swift-arc-capture-04
+  type: predict
+  level: 2
+  priority: P1
+  tags: [capture-list]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    final class Counter { var n = 0 }
+
+    var c = Counter()
+    let byRef = { print(c.n) }
+    let byCapture = { [c] in print(c.n) }
+
+    c.n = 5
+    c = Counter()
+    c.n = 9
+    byRef()
+    byCapture()
+  answer: |
+    9 5
+  explain: |
+    `byRef` 捕獲的是**變數 `c` 本身**（closure 和外面共用同一個變數）。後來 `c` 改指向一個新的 `Counter`，`n` 設成 9，所以印 9。
+    `[c]` 寫在 capture list 裡，捕獲的是建立 closure 那一刻 `c` 指向的物件（舊的 `Counter`）。之後 `c.n = 5` 改的還是這個舊物件，所以它的 `n` 是 5；接著 `c` 改指向新物件，不影響 closure 手上的舊物件，所以印 5。
+    重點：capture list 帶走的是「建立 closure 那一刻的值」（對 class 來說，就是那一刻指向的物件）。`[weak self]` 也是同樣的機制。
+
+- id: swift-arc-capture-05
+  type: single
+  level: 2
+  priority: P0
+  tags: [task, retain-cycle]
+  prompt: |
+    使用者離開行情畫面後，`PriceViewModel` 的 `deinit` 沒有被呼叫，Memory Graph 顯示它被 Task 持有。最可能的原因與修法是？
+  codeLang: swift
+  code: |
+    final class PriceViewModel: ObservableObject {
+        private var task: Task<Void, Never>?
+
+        init(stream: AsyncStream<String>) {
+            task = Task {
+                for await price in stream {
+                    handle(price)
+                }
+            }
+        }
+
+        func handle(_ price: String) {}
+        deinit { task?.cancel() }
+    }
+  options:
+    - "Task 的 closure 允許省略 `self.`，所以沒有任何提醒就 strong 持有了 self；只要 stream 不結束，`for await` 迴圈就不結束，Task 一直抓著 self，`deinit` 永遠不會執行，裡面的 `cancel()` 也就永遠執行不到。修法：`[weak self]`，並在每次迴圈裡才 `guard let self`；再由畫面的生命週期負責取消（例如 SwiftUI 的 `.task`）"
+    - "`AsyncStream` 會持有所有訂閱者，必須先呼叫 `stream.finish()` 才能釋放 ViewModel"
+    - "Task 預設在 main actor 執行，主執行緒會一直持有 Task 捕獲的值，直到 App 結束"
+    - "`ObservableObject` 的 `deinit` 在 Combine 底層不會被呼叫，只能改成 `@Observable`"
+  answer: 0
+  explain: |
+    問題是：**`deinit` 裡才取消 Task，但 Task 抓著 self，讓 `deinit` 永遠不會發生**。Swift 允許在 Task 的 closure 裡省略 `self.`，所以寫 `handle(price)` 時編譯器不會提醒你這裡用到了 self。
+    修法有兩層：
+    1. closure 加 `[weak self]`，並且在**迴圈裡每一輪**才 `guard let self`。如果在迴圈外面 guard，整個迴圈期間 self 又變回 strong。
+    2. 由畫面的生命週期明確取消，例如 SwiftUI 的 `.task { … }` 會在 view 消失時自動取消。
+    其他選項描述的都不是 Swift 的行為。
+
+- id: swift-arc-capture-06
+  type: fill
+  level: 2
+  priority: P0
+  tags: [wkwebview, uiviewrepresentable]
+  prompt: |
+    SwiftUI 的 `UIViewRepresentable` 包 `WKWebView`。補上加入與移除 script message handler 的 API，避免 handler 與 Coordinator 洩漏。
+  codeLang: swift
+  code: |
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.userContentController.____(context.coordinator, name: "delayWall")
+        return WKWebView(frame: .zero, configuration: config)
+    }
+
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.configuration.userContentController.____(forName: "delayWall")
+    }
+  blanks:
+    - [add]
+    - [removeScriptMessageHandler]
+  explain: |
+    `WKUserContentController.add(_:name:)` 會 **strong 持有** handler（這裡是 Coordinator），所以 handler 會跟著 WebView 一起活著；如果 handler 又持有 WebView，就形成循環。
+    `dismantleUIView(_:coordinator:)` 是 SwiftUI 移除這個 view 時會呼叫的方法，在這裡呼叫 `removeScriptMessageHandler(forName:)` 解除註冊。
+    另一種做法是註冊一個中間物件，它只用 weak 持有真正的 handler。
+
+- id: swift-arc-capture-08
+  type: code
+  level: 2
+  priority: P1
+  tags: [weak, observer]
+  prompt: |
+    實作 `Broadcaster<Observer: AnyObject>`：一個**不會 retain 觀察者**的註冊表。
+
+    - `add(_:)`：加入觀察者，同一個物件重複加入只算一次
+    - `remove(_:)`：用 `===` 判斷是不是同一個物件，找到就移除
+    - `forEach(_:)`：對仍然存活的觀察者呼叫 `body`，同時清掉已經釋放的
+    - `liveCount`：目前存活的觀察者數量
+    - 觀察者被釋放後，註冊表不能延長它的壽命
+  hints:
+    - "用一個 `final class WeakBox<T: AnyObject> { weak var value: T? }` 包起來，陣列存 box。"
+    - "每個公開方法開頭先 `prune()`，把 `value == nil` 的 box 移除。"
+  swift:
+    starter: |
+      final class Broadcaster<Observer: AnyObject> {
+          // TODO: 目前是強引用，會延長觀察者的壽命。改成只持有 weak reference
+          private var observers: [Observer] = []
+
+          var liveCount: Int { observers.count }
+
+          func add(_ observer: Observer) {
+              if !observers.contains(where: { $0 === observer }) {
+                  observers.append(observer)
+              }
+          }
+
+          func remove(_ observer: Observer) {
+              observers.removeAll { $0 === observer }
+          }
+
+          func forEach(_ body: (Observer) -> Void) {
+              for o in observers { body(o) }
+          }
+      }
+    solution: |
+      final class WeakBox<T: AnyObject> {
+          weak var value: T?
+          init(_ value: T) { self.value = value }
+      }
+
+      final class Broadcaster<Observer: AnyObject> {
+          private var boxes: [WeakBox<Observer>] = []
+
+          var liveCount: Int {
+              prune()
+              return boxes.count
+          }
+
+          func add(_ observer: Observer) {
+              prune()
+              if !boxes.contains(where: { $0.value === observer }) {
+                  boxes.append(WeakBox(observer))
+              }
+          }
+
+          func remove(_ observer: Observer) {
+              boxes.removeAll { $0.value === observer || $0.value == nil }
+          }
+
+          func forEach(_ body: (Observer) -> Void) {
+              prune()
+              for box in boxes {
+                  if let o = box.value { body(o) }
+              }
+          }
+
+          private func prune() {
+              boxes.removeAll { $0.value == nil }
+          }
+      }
+    tests: |
+      final class Probe { var hits = 0 }
+
+      check("存活的觀察者會被呼叫") {
+          let b = Broadcaster<Probe>()
+          let p1 = Probe(), p2 = Probe()
+          b.add(p1); b.add(p2)
+          b.forEach { $0.hits += 1 }
+          return p1.hits == 1 && p2.hits == 1 && b.liveCount == 2
+      }
+      check("同一個物件重複加入只算一次") {
+          let b = Broadcaster<Probe>()
+          let p = Probe()
+          b.add(p); b.add(p)
+          return b.liveCount == 1
+      }
+      check("remove 依物件身分移除") {
+          let b = Broadcaster<Probe>()
+          let p1 = Probe(), p2 = Probe()
+          b.add(p1); b.add(p2)
+          b.remove(p1)
+          var seen: [Probe] = []
+          b.forEach { seen.append($0) }
+          return seen.count == 1 && seen[0] === p2
+      }
+      var probe: Probe? = Probe()
+      weak var weakProbe = probe
+      let registry = Broadcaster<Probe>()
+      registry.add(probe!)
+      probe = nil
+      check("註冊表不會延長觀察者壽命") { weakProbe == nil }
+      check("釋放後 liveCount 歸零且不再被呼叫") {
+          var calls = 0
+          registry.forEach { _ in calls += 1 }
+          return registry.liveCount == 0 && calls == 0
+      }
+      check("釋放一個、保留一個") {
+          let b = Broadcaster<Probe>()
+          let keep = Probe()
+          var gone: Probe? = Probe()
+          b.add(keep); b.add(gone!)
+          gone = nil
+          var calls = 0
+          b.forEach { _ in calls += 1 }
+          return calls == 1 && b.liveCount == 1
+      }
+
+- id: swift-arc-capture-09
+  type: open
+  level: 2
+  priority: P0
+  tags: [memory, debugging, field]
+  prompt: |
+    你怎麼發現和處理記憶體洩漏？請用一個實際的例子，說明怎麼發現、怎麼找出原因、怎麼修，以及怎麼防止再發生。
+  promptJa: |
+    メモリリークはどのように発見し、対処していますか。実際の例を一つ挙げて、発見、原因調査、修正、再発防止の流れを説明してください。
+  keyPoints:
+    - "症狀：離開畫面後，ViewModel 或 ViewController 的 `deinit` 沒有被呼叫；或記憶體隨著反覆進出畫面一直增加"
+    - "找原因的順序：`deinit` log → Xcode Memory Graph Debugger 看是誰抓著它 → Instruments 的 Allocations／Leaks 確認"
+    - "實際例子（即時行情 App）：K 線 WebView 的 `WKScriptMessageHandler` 被 `userContentController` strong 持有，在 `dismantleUIView` 移除"
+    - "原則：依「誰擁有誰」決定 weak 或 unowned，不是每個 closure 都加 `[weak self]`"
+    - "防止再發生：`deinit` log 的習慣；寫測試用 weak 變數確認物件會被釋放；Android 端則在 debug build 加 LeakCanary"
+  modelAnswer: |
+    我會照固定的順序處理。先看離開畫面後，該消失的 ViewModel 或 ViewController 有沒有印出 `deinit` 的 log；沒有的話，用 Xcode 的 Memory Graph Debugger 點選那個物件，看是哪些物件一路抓著它。需要量化的時候，用 Instruments 的 Allocations 反覆進出畫面，比較每一輪多出來的物件。
+
+    一個實際的例子是即時行情 App 的 K 線圖。K 線是用 WebView 載入 TradingView Lightweight Charts，JavaScript 透過 `WKScriptMessageHandler` 呼叫原生程式碼。`userContentController` 會 strong 持有 handler，handler 的壽命就被綁在 WebView 上，所以我在 SwiftUI 的 `dismantleUIView` 裡把 handler 移除。
+
+    我的原則是依擁有關係決定用 weak 還是 unowned：closure 只被 self 自己的子物件持有，才用 unowned；網路、單例、通知這種外部持有的就用 weak。我不會每個 closure 都加 `[weak self]`，因為那會讓生命週期的問題變成「回呼默默沒有執行」，更難發現。
+
+    防止再發生的部分，我會保留在 `deinit` 印 log 的習慣，並且針對重要的 ViewModel 寫測試：用 weak 變數指向它，放掉 strong 參考後確認它變成 nil。Android 端，我也會在 debug build 加 LeakCanary 自動偵測。
+  modelAnswerJa: |
+    決まった順番で対応しています。まず、画面を離れた後に消えるはずの ViewModel や ViewController の `deinit` ログが出ているかを確認します。出ていなければ、Xcode の Memory Graph Debugger でそのオブジェクトを選択し、どのオブジェクトが保持しているかを調べます。定量的に確認したいときは、Instruments の Allocations で画面の出入りを繰り返し、毎回増えるオブジェクトを比較します。
+
+    実例として、リアルタイム相場アプリのローソク足チャートがあります。チャートは WebView で TradingView Lightweight Charts を読み込み、JavaScript から `WKScriptMessageHandler` 経由でネイティブを呼び出しています。`userContentController` は handler を強参照するため、handler の寿命が WebView に結び付いてしまいます。そこで SwiftUI の `dismantleUIView` で handler を削除しています。
+
+    weak と unowned は所有関係で決めています。closure を self 自身の子オブジェクトだけが保持している場合は unowned、ネットワークやシングルトン、通知のように外部が保持している場合は weak です。すべての closure に `[weak self]` を付けることはしません。ライフサイクルの問題が「コールバックが黙って実行されない」形に変わり、かえって気付きにくくなるからです。
+
+    再発防止としては、`deinit` にログを出す習慣を続け、重要な ViewModel には weak 変数で解放を確認するテストを書きます。Android 側では、debug ビルドに LeakCanary を入れて自動検出します。
+  followUps:
+    - "Memory Graph 上で、何を見て循環参照だと判断しますか？"
+    - "`[weak self]` の後に `guard let self` を置くと、どんな問題が起こり得ますか？"
+    - "Task を使った場合の循環参照は、どうやって見つけますか？"
+  timeLimitSec: 150
+
+- id: swift-arc-capture-10
+  type: flash
+  level: 1
+  priority: P0
+  tags: [combine, retain-cycle]
+  front: Combine 裡哪兩種寫法最常造成 ViewModel 的 retain cycle？怎麼修？
+  back: |
+    1. `sink { self.x = $0 }.store(in: &cancellables)`：self 持有 cancellables，cancellables 持有訂閱，訂閱持有 closure，closure 又持有 self，繞成一圈。修法：`[weak self]`。
+    2. `assign(to: \.x, on: self)`：會 strong 持有 `on` 後面的 self。修法：iOS 14 之後用 `assign(to: &$x)`，直接綁到 `@Published` 屬性，不持有 self。
+    相反的錯誤：`sink` 之後沒有 `store`，訂閱會立刻被取消，畫面收不到更新。

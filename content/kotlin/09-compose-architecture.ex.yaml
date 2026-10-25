@@ -1,0 +1,181 @@
+- id: kotlin-compose-architecture-01
+  type: single
+  level: 2
+  priority: P1
+  tags: [state-hoisting]
+  prompt: |
+    下單畫面的「數量」輸入框在 `OrderForm` 裡，而「預估金額」的 `Summary` 也需要讀取同一個數量。應該怎麼放置這個狀態？
+  options:
+    - "兩個 Composable 各自 `remember` 一份，再用 callback 同步"
+    - "放進全域 singleton，讓所有畫面都能讀寫"
+    - "提升（hoist）到 `OrderForm` 與 `Summary` 的最低共同祖先（或其 ViewModel），以 `qty` 往下、`onQtyChange` 往上傳遞"
+    - "用 `CompositionLocal` 把可變的 `qty` 傳給所有子孫"
+  answer: 2
+  explain: |
+    - 第 3 項正確。state hoisting 的規則是把狀態提到「需要它的所有 Composable 的最低共同祖先」，值往下傳、事件往上傳，只有一份真相。
+    - 第 1 項錯：各自保存一份，再用 callback 同步，很容易出現兩邊不同步。
+    - 第 2 項錯：全域 singleton 讓狀態沒辦法限定在這個畫面範圍內，也很難測試。
+    - 第 4 項錯：`CompositionLocal` 適合主題這類整棵樹共用、很少變動的資料；拿來傳可變的業務狀態，會把依賴隱藏起來，從函式簽名看不出它需要什麼。
+
+- id: kotlin-compose-architecture-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [interop, composeview, fragment]
+  prompt: |
+    在 XML／Fragment 專案的畫面裡嵌入 Compose，哪些敘述正確？（複選）
+  options:
+    - "Fragment 內的 `ComposeView` 應設定 `ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed`，讓 composition 隨 Fragment 的 view lifecycle 釋放"
+    - "`ComposeView` 內需要自己提供 `MaterialTheme`，XML 的 theme 不會自動套用到 Compose"
+    - "`ComposeView` 內無法使用 ViewModel，必須由 Fragment 手動傳入 state"
+    - "`AndroidView` 的 `factory` 在每次重組都會被呼叫一次，用來更新 View"
+  answer: [0, 1]
+  explain: |
+    - 第 1 項正確。預設策略是 view 從 window 被拆下（detach）就釋放，這個時機和 Fragment 的 view lifecycle 不一致（轉場動畫期間，或 view 被暫時移出時），行為難以預期；改成 `DisposeOnViewTreeLifecycleDestroyed` 後，composition 就和 view lifecycle 同步。補充：Fragment 進入 back stack 時 `onDestroyView` 會被呼叫，回來時是全新的 view 與 composition，`remember` 的狀態在兩種策略下都不會保留，只有 `rememberSaveable` 會還原。
+    - 第 2 項正確。Compose 有自己的主題系統，XML 的 theme 要用 `MaterialTheme` 重新提供。
+    - 第 3 項錯：ViewModel 在 `ComposeView` 裡照常可用，Hilt 的 `hiltViewModel()` 也可以。
+    - 第 4 項錯：`AndroidView` 的 `factory` 只在 View 建立時執行一次；要更新 View，要寫在 `update` 這個 lambda 裡。
+
+- id: kotlin-compose-architecture-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [navigation, type-safe]
+  prompt: |
+    Navigation Compose 2.8.0 起支援 type-safe 導航。下列哪個寫法符合它的設計？
+  options:
+    - "`navController.navigate(\"detail/${order.id}\")`，目的地用 `NavType.StringType` 解析字串參數"
+    - "定義 `@Serializable data class OrderDetail(val orderId: String)`，用 `composable<OrderDetail> { … }` 宣告，並以 `navController.navigate(OrderDetail(id))` 導航"
+    - "把整個 `Order` 物件序列化成 JSON 放進路由字串"
+    - "以 `rememberSaveable` 在 NavHost 外保存參數，目的地從全域 singleton 讀取"
+  answer: 1
+  explain: |
+    - 第 2 項正確。type-safe 路由把目的地定義成 `@Serializable` 的型別（需要 kotlinx.serialization 的 Gradle plugin），編譯時就能檢查參數，目的地用 `toRoute()` 取回。
+    - 第 1 項錯：這是舊式的字串路由，路由字串拼錯了要到執行時才發現。
+    - 第 3 項錯：這是反模式。路由只傳識別碼，由目的地的 ViewModel 向 repository 取得資料，才不會有傳大物件的大小限制和資料過期的問題。
+    - 第 4 項錯：把參數放在全域 singleton，狀態沒有範圍，也不是 Navigation 的設計方式。
+
+- id: kotlin-compose-architecture-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [navigation, torroute]
+  prompt: |
+    補上 type-safe 目的地的宣告與取得參數的 API。
+  codeLang: kotlin
+  code: |
+    @Serializable data class OrderDetail(val orderId: String)
+
+    NavHost(navController, startDestination = OrderList) {
+        ____<OrderDetail> { entry ->
+            val args: OrderDetail = entry.____()
+            OrderDetailScreen(args.orderId)
+        }
+    }
+  blanks:
+    - [composable]
+    - [toRoute]
+  explain: |
+    - 第一格是 `composable`。`composable<T>` 以型別宣告一個目的地，不再用字串路由。
+    - 第二格是 `toRoute`。`NavBackStackEntry.toRoute<T>()` 把路由物件還原出來。在 ViewModel 裡則是 `SavedStateHandle.toRoute<T>()`，這樣參數不需要手動從 `SavedStateHandle` 取字串再轉型。
+
+- id: kotlin-compose-architecture-05
+  type: single
+  level: 3
+  priority: P1
+  tags: [compositionlocal]
+  prompt: |
+    關於 `compositionLocalOf` 與 `staticCompositionLocalOf`，下列何者正確？
+  options:
+    - "兩者完全相同，只是名稱不同"
+    - "`compositionLocalOf` 追蹤哪些 Composable 讀取了它，值改變時只重組有讀取的地方；`staticCompositionLocalOf` 值改變時，整個提供範圍的內容都會重組，適合幾乎不變的值"
+    - "`staticCompositionLocalOf` 追蹤讀取、效能較好，所以頻繁變動的值（例如目前價格）應該用它"
+    - "兩者都不會觸發重組，因為 CompositionLocal 不是 State"
+  answer: 1
+  explain: |
+    - 第 2 項正確。`staticCompositionLocalOf` 省去追蹤讀取的成本，代價是值一變，`CompositionLocalProvider` 裡面的內容全部重組，所以只用在幾乎不變的值（例如 App 設定、環境物件）。
+    - 第 1 項錯：兩者追蹤的方式不同，重組的範圍也不同。
+    - 第 3 項錯：說反了，`staticCompositionLocalOf` 是「不追蹤」，所以頻繁變動的值用它會讓整個範圍一直重組。
+    - 第 4 項錯：`compositionLocalOf` 提供的值改變時，會讓讀取它的地方重組。
+    頻繁變動的值要用 `compositionLocalOf`，或乾脆不要放 CompositionLocal，改用明確的參數傳遞。
+
+- id: kotlin-compose-architecture-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [mvi, uistate, performance]
+  prompt: |
+    團隊採用 MVI，把整個下單畫面（表單、餘額、逐筆更新的最新價格）放進同一個 `UiState`。上線後輸入數量時偶爾卡頓，最可能的原因與處理是什麼？
+  options:
+    - "MVI 本身太慢，應該改回 MVC"
+    - "每秒更新很多次的價格欄位，每變動一次就產生新的 `UiState`，連帶讓整個畫面的 collector 與 Composable 都要重新檢查；應把行情拆成獨立的 Flow，由讀取價格的小 Composable 各自收集"
+    - "`StateFlow` 無法承載 `data class`，應改用 `LiveData`"
+    - "應把價格欄位改成 `var`，原地修改以避免產生新物件"
+  answer: 1
+  explain: |
+    - 第 2 項正確。單一 `UiState` 的好處是整個畫面只有一份狀態、容易重現，代價是任何欄位變動都會產生新的狀態。每秒更新很多次的欄位混在裡面，會讓與價格無關的區塊也被迫重新檢查。折衷設計是：畫面結構與表單用單一 `UiState`，行情拆成獨立的 Flow（必要時在資料層降低更新頻率），並讓讀取它的 Composable 越小越好。
+    - 第 1 項錯：問題不在 MVI 這個模式本身，而在把不同更新頻率的資料放在同一個狀態裡。
+    - 第 3 項錯：`StateFlow` 可以裝 `data class`，這正是常見的用法。
+    - 第 4 項錯：原地修改 `var` 會讓 `StateFlow` 因為 `equals` 相同而不發射，Compose 也看不到變化，畫面反而不會更新。
+
+- id: kotlin-compose-architecture-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [udf, flow]
+  prompt: |
+    使用者在單向資料流架構中按下「買進」。把資料與事件的流動依正確順序排列。
+  items:
+    - UI 把使用者操作變成事件，呼叫 ViewModel（事件往上）
+    - ViewModel 驗證輸入，把 UiState 更新為 submitting = true
+    - UseCase 透過 repository 送出訂單，收到成功或錯誤
+    - ViewModel 依結果產生新的 UiState（成功或帶錯誤訊息）
+    - UI 以 collectAsStateWithLifecycle 觀察到新的 UiState，重組出結果（狀態往下）
+  explain: |
+    單向資料流的核心是：狀態只有一個來源（ViewModel），UI 不直接改狀態，只發出事件。
+    `submitting = true` 先更新，可以立即鎖住按鈕、避免重複送單。不過交易所 App 還要搭配 `clientOrderId`（由 client 產生的訂單識別碼，伺服器看到相同的識別碼就知道是重複送單）做重複送單的處理，不能只靠 UI 鎖按鈕。
+
+- id: kotlin-compose-architecture-08
+  type: open
+  level: 3
+  priority: P0
+  tags: [migration, xml, field]
+  prompt: |
+    如果交易所 App 的 Android 版是 XML＋Fragment 為主的專案，你要怎麼導入 Compose？請說明畫面承載方式、導航、ViewModel 與 UiState 的邊界，以及你做過的類似遷移經驗。
+  promptJa: |
+    取引所アプリの Android 版が XML＋Fragment 中心のプロジェクトだった場合、Compose をどう導入しますか？ 画面のホスト方法、ナビゲーション、ViewModel と UiState の境界、そして似た移行の経験を説明してください。
+  keyPoints:
+    - "策略：逐頁替換（strangler pattern）。新畫面先用 Compose，舊畫面逐頁換，不一次重寫"
+    - "實務經驗：在一個社交 App 逐頁重構，陸續導入 Compose、Navigation Component、Paging 3，並把 Dagger 遷移到 Hilt"
+    - "承載方式：Fragment 裡放 ComposeView，設定 DisposeOnViewTreeLifecycleDestroyed；ComposeView 裡自己提供 MaterialTheme"
+    - "導航：只留一個權威（既有的 Navigation Component），畫面大多換完才評估 Navigation Compose"
+    - "邊界：ViewModel 與 UiState 不隨 UI 技術改變；Route（取得 ViewModel）與 Screen（stateless）分離，方便預覽與測試"
+    - "共用元件先做 Compose 版，XML 也能用 ComposeView 重用；設計系統集中在 theme"
+    - "風險：兩套 theme、composition strategy 的設定、導航搶 back stack、團隊的學習成本"
+  modelAnswer: |
+    我會走逐頁替換的路線（strangler pattern：新的慢慢取代舊的），不一次重寫。這也是我在一個社交 App 的 Android 版的做法：為了統一程式碼規範、降低技術債，在開發新功能之餘逐頁重構，陸續導入 Compose、Navigation Component 和 Paging 3，並把依賴注入從 Dagger 遷移到 Hilt。
+
+    如果是 XML 加 Fragment 的專案，新畫面我會用 Compose，放在 Fragment 裡的 `ComposeView`，並設定 `DisposeOnViewTreeLifecycleDestroyed`，讓 composition 跟著 Fragment 的 view lifecycle 釋放；`ComposeView` 裡自己提供 `MaterialTheme`。導航只留一個權威，沿用既有的 Navigation Component，等大部分畫面都是 Compose 之後，再評估換成 type-safe 的 Navigation Compose，避免兩套導航搶 back stack。
+
+    邊界上，ViewModel 與 `UiState` 不隨 UI 技術改變；Composable 拆成 `Route`（取得 ViewModel）和 `Screen`（stateless），Screen 可以預覽和測試。共用元件，例如按鈕、列表列，先做 Compose 版，XML 畫面也能透過 `ComposeView` 重用，設計系統集中在 theme。風險是兩套 theme 和團隊的學習成本，所以我會先建立共用的設計 token 和範本。
+  modelAnswerJa: |
+    段階的に画面を置き換える方法（strangler pattern：新しいものが少しずつ古いものを置き換える）を取り、一括で作り直すことはしません。これは、あるソーシャルアプリの Android 版で実際に行った進め方でもあります。コード規約の統一と技術的負債の削減のため、新機能の開発と並行して画面ごとにリファクタリングし、Compose、Navigation Component、Paging 3 を順次導入し、依存性注入を Dagger から Hilt に移行しました。
+
+    XML と Fragment 中心のプロジェクトであれば、新しい画面は Compose で作り、Fragment 内の `ComposeView` でホストします。その際 `DisposeOnViewTreeLifecycleDestroyed` を設定し、composition が Fragment の view lifecycle に従って破棄されるようにします。`ComposeView` の中では自分で `MaterialTheme` を提供します。ナビゲーションは単一の権威を保ち、既存の Navigation Component を使い続けます。多くの画面が Compose になってから、type-safe な Navigation Compose への移行を検討し、2 つのナビゲーションが back stack を奪い合う状況を避けます。
+
+    境界については、ViewModel と `UiState` は UI 技術が変わっても変えません。Composable は `Route`（ViewModel を取得）と `Screen`（stateless）に分け、Screen はプレビューとテストが可能です。ボタンやリスト行などの共通コンポーネントは先に Compose 版を作り、XML 画面からも `ComposeView` で再利用でき、デザインシステムは theme に集約します。リスクは 2 つの theme とチームの学習コストなので、最初に共通のデザイントークンとテンプレートを整えます。
+  followUps:
+    - XML 和 Compose 之間，Theme 與尺寸（dimension）怎麼共用？
+    - 多個 Fragment 共用的 ViewModel 要怎麼處理？
+    - 逐頁遷移的過程中，測試策略會怎麼調整？
+  timeLimitSec: 150
+
+- id: kotlin-compose-architecture-09
+  type: flash
+  level: 2
+  priority: P1
+  tags: [composeview]
+  front: Fragment 內的 ComposeView 要注意什麼？
+  back: |
+    設定 `setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)`，composition 才綁在 Fragment 的 view lifecycle；預設策略是 view 從 window 被拆下（detach）就釋放，與 Fragment 的 view lifecycle 不一致。
+    回到畫面時（進過 back stack）是新的 composition，`remember` 不保留，只有 `rememberSaveable` 會還原。另外要自己在 ComposeView 內提供 `MaterialTheme`；ViewModel 照常可用。

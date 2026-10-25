@@ -1,0 +1,226 @@
+/* ───────── 筆記內容（建置時產生的 HTML）───────── */
+.prose {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.prose > :first-child {
+  margin-top: 0;
+}
+.prose > :last-child {
+  margin-bottom: 0;
+}
+.prose h2 {
+  margin: 2em 0 0.7em;
+  padding-top: 0.9em;
+  border-top: 1px solid var(--border);
+  font-size: 1.3rem;
+}
+.prose h3 {
+  margin: 1.6em 0 0.5em;
+  font-size: 1.08rem;
+  color: var(--text);
+}
+.prose h4 {
+  margin: 1.2em 0 0.4em;
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+  margin: 0.6em 0 1em;
+}
+.prose li {
+  margin: 0.3em 0;
+}
+.prose li > ul,
+.prose li > ol {
+  margin: 0.3em 0;
+}
+.prose strong {
+  font-weight: 700;
+}
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.6em 0;
+}
+.prose blockquote {
+  margin: 1em 0;
+  padding: 2px 14px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-2);
+}
+
+/* 表格：自己捲動，不撐開頁面 */
+.table-wrap {
+  overflow-x: auto;
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.prose th,
+.prose td {
+  padding: 7px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  min-width: 7em;
+  overflow-wrap: anywhere;
+}
+.prose tr:last-child td {
+  border-bottom: 0;
+}
+.prose th {
+  background: var(--surface-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.prose td + td,
+.prose th + th {
+  border-left: 1px solid var(--border);
+}
+
+/* ───────── 程式碼 ───────── */
+pre.code {
+  margin: 1em 0;
+  padding: 12px 14px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  max-width: 100%;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  tab-size: 4;
+  -webkit-overflow-scrolling: touch;
+  color: var(--text);
+}
+pre.code[data-lang]:not([data-lang=''])::before {
+  content: attr(data-lang);
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+/* 實際演練：從 labs/ 擷取的程式碼，上方顯示檔名與區段 */
+pre.code.lab-code::before {
+  content: attr(data-file);
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-3);
+}
+details.lab-solution {
+  margin: 1em 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 0 12px;
+}
+details.lab-solution > summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-weight: 600;
+  color: var(--primary);
+}
+details.lab-solution[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+details.lab-solution > pre.code {
+  margin: 10px 0 12px;
+}
+pre.code code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.t1 {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+.t2 {
+  color: var(--syn-keyword);
+}
+.t3 {
+  color: var(--syn-string);
+}
+.t4 {
+  color: var(--syn-number);
+}
+.t5 {
+  color: var(--syn-type);
+}
+.t6 {
+  color: var(--syn-function);
+}
+.t7 {
+  color: var(--syn-attr);
+}
+.t8 {
+  color: var(--syn-prop);
+}
+
+/* ───────── 提示框（GitHub alert）───────── */
+.alert {
+  --alert-c: var(--text-3);
+  --alert-bg: var(--surface-2);
+  margin: 1.1em 0;
+  padding: 10px 14px 10px 16px;
+  border-left: 4px solid var(--alert-c);
+  background: var(--alert-bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.alert > p:last-child,
+.alert > ul:last-child {
+  margin-bottom: 0;
+}
+.alert-title {
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--alert-c);
+}
+.alert-tip {
+  --alert-c: var(--ok);
+  --alert-bg: var(--ok-soft);
+}
+.alert-warning {
+  --alert-c: var(--warn);
+  --alert-bg: var(--warn-soft);
+}
+.alert-note {
+  --alert-c: var(--text-2);
+  --alert-bg: var(--surface-2);
+}
+.alert-lab {
+  --alert-c: var(--primary);
+  --alert-bg: var(--surface-2);
+}
+.alert-field {
+  --alert-c: var(--primary);
+  --alert-bg: var(--primary-soft);
+  border-left-width: 6px;
+}
+.alert-field .alert-title {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 3px;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.alert code {
+  background: var(--surface);
+}

@@ -1,0 +1,75 @@
+- id: sysdesign-framework-01
+  type: order
+  level: 1
+  priority: P0
+  tags: [framework]
+  prompt: |
+    Mobile 系統設計的作答順序。
+  items:
+    - 釐清需求、非功能需求與規模
+    - API 與資料模型
+    - 高階架構圖與資料流
+    - 深入一到兩個關鍵元件
+    - 邊界情況與取捨
+    - 效能、測試、監控
+  explain: |
+    先釐清需求再設計，是面試官最先觀察的地方。最後一段的測試與監控（上線後怎麼知道它是好的），常常是區分資深與一般工程師的地方。
+
+- id: sysdesign-framework-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [threading]
+  prompt: |
+    設計行情畫面時，哪些工作**不應該**在主執行緒做？（複選）
+  options:
+    - "gzip 解壓縮 WebSocket frame"
+    - "JSON 解析"
+    - "訂單簿增量合併與排序"
+    - "把已經算好的 UI 狀態套用到 View"
+    - "回覆 server 的 ping"
+  answer: [0, 1, 2, 4]
+  explain: |
+    主執行緒只負責把算好的狀態套用到畫面上，其他工作（解壓縮、解析、合併排序）都放背景執行緒，所以只有第 4 項應該在主執行緒做。
+    特別注意回覆 ping：伺服器會定期送 ping 確認連線還活著，App 要回 pong。如果這件事放在主執行緒，畫面一卡頓就可能來不及回，被伺服器斷線（例如 Huobi 相容的交易所，連續 2 次沒回就會斷線）。
+
+- id: sysdesign-framework-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [estimation]
+  prompt: |
+    首頁顯示 40 個交易對，每個交易對每秒推 2 次 ticker。若 UI 改成每 100ms 合併更新一次，主執行緒每秒要套用幾次狀態？
+  options:
+    - "80 次"
+    - "40 次"
+    - "10 次"
+    - "2 次"
+  answer: 2
+  explain: |
+    每秒收到 40 × 2 = 80 則訊息，但它們在背景被合併成一份「每個交易對的最新值」。畫面每 100 毫秒套用一次最新狀態，所以主執行緒每秒只套用 10 次。
+    這是交易所 App 最常用的手法：讓「收到訊息的頻率」和「畫面更新的頻率」分開，訊息再多，畫面更新的次數也有上限。
+
+- id: sysdesign-framework-04
+  type: open
+  level: 2
+  priority: P1
+  tags: [framework, requirements]
+  prompt: |
+    面試官只說了一句：「請設計我們 App 的行情列表。」你在開始畫架構圖之前，會先問哪些問題？
+  promptJa: |
+    「当社アプリの相場一覧画面を設計してください」とだけ言われた場合、設計に入る前にどんな質問をしますか？
+  keyPoints:
+    - 範圍：幾個交易對？有沒有搜尋、排序、自選？點進去是詳細頁嗎？
+    - 資料：需要哪些欄位（最新價、24h 漲跌、成交量、迷你走勢）？販売所價格還是取引所價格？
+    - 即時性：延遲目標？更新頻率？可以接受多久沒更新？
+    - 規模：同時線上人數、server 端是否提供合併好的 ticker 推送（例如 market.tickers）
+    - 平台與版本：iOS 15+、Android 版本；SwiftUI／Compose 還是既有 UIKit／View
+    - 非功能：離線、弱網、電量、無障礙、多種語言與數字格式
+  modelAnswer: |
+    我會先確認五件事。
+
+    第一是範圍：大約幾個交易對、要不要搜尋、排序和自選清單，點進去是不是詳細頁。第二是資料：每列要顯示哪些欄位，例如最新價、24 小時漲跌、成交量、迷你走勢圖；顯示的是販売所的價格還是取引所的價格。第三是即時性：可以接受的延遲、server 的推送頻率，以及多久沒更新要提示使用者。第四是 server 提供什麼：有沒有一次推所有 ticker 的頻道，還是要每個交易對各自訂閱。第五是平台限制：最低 OS 版本、現在是 SwiftUI／Compose 還是 UIKit／View，以及多種語言的數字格式。
+
+    問完之後，我會把假設寫在白板上，例如「40 個交易對、每秒 2 次更新、UI 每 100ms 合併一次」，再開始畫資料流。
+  timeLimitSec: 120

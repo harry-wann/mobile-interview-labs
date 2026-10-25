@@ -1,0 +1,208 @@
+- id: platform-lifecycle-01
+  type: order
+  level: 2
+  priority: P1
+  tags: [android, activity, configuration-change]
+  prompt: |
+    Android 9（API 28）以上，而且 App 的 `targetSdk` 也是 28 以上。使用者旋轉螢幕，Activity 沒有自己處理 `configChanges`，所以系統會把 Activity 銷毀再重建。
+    從 `onPause` 之後開始，依正確順序排列。
+  items:
+    - "onStop"
+    - "onSaveInstanceState"
+    - "onDestroy"
+    - "onCreate（savedInstanceState 不為 null）"
+    - "onStart"
+    - "onRestoreInstanceState"
+    - "onResume"
+  explain: |
+    旋轉屬於 configuration change（會影響畫面長相的系統設定改變），預設做法是把舊的 Activity 銷毀，再建立一個新的。順序是：
+
+    1. `onStop`：畫面變成不可見。
+    2. `onSaveInstanceState`：系統讓你把小量資料放進 Bundle。Android 9（API 28）起、`targetSdk` 也是 28 以上時，它在 `onStop` **之後**呼叫；更早的版本是在 `onStop` 之前。
+    3. `onDestroy`：舊的 Activity 被銷毀。
+    4. `onCreate`：新的 Activity 建立，這次 `savedInstanceState` 不是 null，裡面就是第 2 步存下的 Bundle。
+    5. `onStart`：畫面變成可見。
+    6. `onRestoreInstanceState`：在 `onStart` 之後、`onResume` 之前，把存下的狀態還原到畫面。
+    7. `onResume`：回到最前面，可以操作。
+
+    ViewModel 不會跟著 Activity 一起被銷毀，新的 Activity 會拿到同一個 ViewModel 實例。這也是 ViewModel 能保留旋轉前資料的原因。
+
+- id: platform-lifecycle-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [android, viewmodel, process-death]
+  prompt: |
+    使用者把 Android 版交易所 App 切到背景很久，系統為了回收記憶體，把 App 的行程（process）結束掉。使用者再次開啟 App 時，下列哪個說法正確？
+  options:
+    - "`ViewModel` 的實例和它的欄位都還在，因為 `ViewModel` 可以撐過旋轉這類 configuration change"
+    - "`ViewModel` 會被重建；只有 `onSaveInstanceState`／`SavedStateHandle` 存下的小量狀態，以及持久層（DataStore、Room）的資料還在"
+    - "所有記憶體中的單例（`object`、`companion`）都保留原值，因為行程只是被暫停，不是被結束"
+    - "系統一定會先呼叫 `onDestroy`，所以可以在那裡存檔"
+  answer: 1
+  explain: |
+    行程被結束時，整個 App 的記憶體都消失，所以 `ViewModel`、單例、記憶體快取全部歸零。回來時系統會重新建立行程，並用先前存下的 Bundle 重建 Activity，`SavedStateHandle` 的內容也會從這個 Bundle 還原。
+
+    - 第 1 項錯：`ViewModel` 只能撐過 configuration change（旋轉、深色模式等），那時行程還活著。行程被結束就撐不過去。
+    - 第 3 項錯：背景的 App 被系統回收記憶體時是直接結束行程，不是暫停，單例會回到初始狀態。
+    - 第 4 項錯：行程被結束時，系統不保證呼叫 `onDestroy`。重要的資料要即時寫進持久層，畫面還原需要的小量狀態（例如目前選的交易對 ID）放進 `SavedStateHandle`，其餘由 repository 重新載入。
+
+- id: platform-lifecycle-03
+  type: multi
+  level: 2
+  priority: P1
+  tags: [ios, android, lifecycle]
+  prompt: |
+    關於兩個平台的生命週期，哪些敘述正確？（複選）
+  options:
+    - "iOS 旋轉螢幕不會重建 ViewController，而是觸發版面（layout）與 trait 的變化"
+    - "Android 預設在旋轉時銷毀並重建 Activity，但 `ViewModel` 會保留"
+    - "iOS 的 `applicationWillTerminate` 保證會在 App 被 jetsam 結束之前呼叫"
+    - "Android 9（API 28）起，`onSaveInstanceState` 在 `onStop` 之後呼叫"
+    - "Android 開發者選項的「不要保留活動」等同於模擬 process death"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：iOS 旋轉時 ViewController 不會被重建，只是 Auto Layout 和 trait（描述版面環境的資訊）改變。
+    - 第 2 項正確：Android 的 Activity 會被銷毀重建，但 `ViewModel` 不會跟著被銷毀。
+    - 第 3 項錯：iOS 的 App 在背景被暫停之後，被 jetsam（記憶體不足時結束 App 的機制）結束是**沒有任何通知**的，`applicationWillTerminate` 不保證呼叫。需要保存的狀態要在進背景時就存好。
+    - 第 4 項正確：這是 API 28 之後的順序（`targetSdk` 也要在 28 以上），更早是在 `onStop` 之前。
+    - 第 5 項錯：「不要保留活動」只是每次離開畫面就銷毀 Activity，**行程還活著**，單例與快取都還在，所以不等於 process death。要模擬行程被結束：App 在背景時執行 `adb shell am kill <套件名稱>`。
+
+- id: platform-lifecycle-04
+  type: fill
+  level: 2
+  priority: P0
+  tags: [android, repeatOnLifecycle, flow]
+  prompt: |
+    Fragment 中收集行情 `Flow`：畫面進入前景才收集，進背景就停止，回前景重新開始，而且要綁在 **view** 的生命週期上。
+  codeLang: kotlin
+  code: |
+    viewLifecycleOwner.lifecycleScope.launch {
+        viewLifecycleOwner.____(Lifecycle.State.____) {
+            viewModel.prices.collect { render(it) }
+        }
+    }
+  blanks:
+    - [repeatOnLifecycle]
+    - [STARTED]
+  explain: |
+    `repeatOnLifecycle(STARTED)` 的行為是：生命週期進入 `STARTED`（畫面可見）時啟動區塊，離開 `STARTED`（也就是 `onStop`，進背景或被蓋住）時取消，再進入時重新啟動。不用自己管理 Job。進背景就取消，行情連線的網路與耗電也跟著停止。
+
+    為什麼要用 `viewLifecycleOwner` 而不是 Fragment 本身？因為 Fragment 物件比它的 view 活得久：進到 back stack 時 view 已經銷毀（`onDestroyView`），Fragment 物件還活著。如果綁在 Fragment 本身，協程會繼續去更新一個已經不存在的畫面。
+
+    Compose 的對應寫法是 `collectAsStateWithLifecycle()`。
+
+- id: platform-lifecycle-05
+  type: single
+  level: 1
+  priority: P1
+  tags: [ios, scenephase]
+  prompt: |
+    使用者在 iPhone 上從螢幕頂部下拉出通知中心，此時 SwiftUI 的 `scenePhase` 是什麼？
+  options:
+    - "`.background`"
+    - "`.inactive`"
+    - "`.active`，因為 App 仍然可見"
+    - "沒有任何變化，通知中心不會影響 App 狀態"
+  answer: 1
+  explain: |
+    `.inactive` 的意思是「App 還看得到，但沒有在接收事件」。下拉通知中心、打開 App 切換器、來電、跳出系統對話框（例如 Face ID）時，都是這個狀態。
+
+    - `.background` 錯：真正進入背景（使用者回到桌面或切去別的 App）才是 `.background`。
+    - `.active` 錯：`.active` 代表 App 在前景而且可以接收事件，通知中心蓋在上面時，App 已經沒有在接收觸控。
+    - 「沒有變化」錯：通知中心一定會讓 App 失去焦點。
+
+    交易所 App 的實務：在 `.inactive` 就要疊上遮罩，避免 App 切換器裡的縮圖洩露餘額；但不要在 `.inactive` 就斷開行情連線，因為使用者可能只是看一下通知就回來。
+
+- id: platform-lifecycle-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, fragment, lifecycle]
+  prompt: |
+    某個 Fragment 在 `onViewCreated` 寫了 `lifecycleScope.launch { viewModel.balance.collect { binding.text.text = it } }`。使用者前往下一個畫面（此 Fragment 進入 back stack）後，偶爾會 crash 或洩漏。最可能的原因與修法是？
+  options:
+    - "Fragment 的 `lifecycleScope` 比 view 活得久：進入 back stack 時 view 已被銷毀，但協程還在收集並存取已不存在的 binding。應改用 `viewLifecycleOwner.lifecycleScope` 搭配 `repeatOnLifecycle(STARTED)`"
+    - "`collect` 一定要放在 `Dispatchers.IO`，在主執行緒收集會 crash"
+    - "`ViewModel` 在進入 back stack 時被清除，所以 `balance` 為 null"
+    - "`StateFlow` 不能被 Fragment 收集，要改用 `LiveData`"
+  answer: 0
+  explain: |
+    Fragment 進到 back stack 時，Fragment 物件還活著（它自己的生命週期、也就是 `lifecycleScope`，一直延續到被真正移除），但它的 view 已經 `onDestroyView` 了。在 Fragment 的 scope 裡存取 view，就會碰到已銷毀的 view（binding 已經是 null，或造成記憶體洩漏）。
+
+    修法是用 `viewLifecycleOwner`，讓收集跟著 view 的開始與結束；`repeatOnLifecycle(STARTED)` 再讓 App 進背景時停止收集。
+
+    - 第 2 項錯：`collect` 更新畫面本來就要在主執行緒，放到 `Dispatchers.IO` 反而不能更新畫面。
+    - 第 3 項錯：ViewModel 掛在 Fragment 或 Activity 上，Fragment 在 back stack 時不會被清除。
+    - 第 4 項錯：`StateFlow` 可以在 Fragment 收集，只是要用對生命週期。
+
+- id: platform-lifecycle-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [android, process-death, savedstate]
+  prompt: |
+    關於 Android 的 process death 與狀態保存，哪些敘述正確？（複選）
+  options:
+    - "`onSaveInstanceState` 的 Bundle 有大小限制（與其他 Binder 交易共用約 1 MB 緩衝），應只存 ID 與小量狀態"
+    - "`SavedStateHandle` 中的資料在 process death 後仍可還原，但 `ViewModel` 實例會重建"
+    - "`rememberSaveable` 可以直接保存任何自訂 class，不需要 `Parcelable`、`Serializable` 或自訂 Saver"
+    - "App 在背景時執行 `adb shell am kill <package>` 可以模擬行程被結束"
+    - "`ViewModel.onCleared()` 在 process death 時一定會被呼叫，可用來存檔"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：Bundle 走的是 Binder（行程之間溝通的機制），緩衝區約 1 MB 且與其他交易共用，超過會丟出 `TransactionTooLargeException`。
+    - 第 2 項正確：`SavedStateHandle` 的內容會透過 Bundle 一起被保存，但 `ViewModel` 本身是全新的實例。
+    - 第 3 項錯：`rememberSaveable` 的值要能放進 Bundle，自訂型別需要 `Parcelable`、`Serializable`，或提供自訂的 `Saver`。
+    - 第 4 項正確：`am kill` 只對背景的行程有效，前景的行程不會被結束，所以要先把 App 放到背景。
+    - 第 5 項錯：行程被結束時，整個行程直接消失，沒有機會呼叫 `onCleared()`。它只在 ViewModel 正常被清除（它的擁有者結束）時才呼叫，不能拿來存檔。
+
+- id: platform-lifecycle-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [lifecycle, exchange]
+  prompt: |
+    設計交易所 App 的行情頁與下單頁，在「進背景、回前景、被系統殺掉」三種情況下的行為。請同時說明 iOS 與 Android 的做法，以及你在類似專案（聊天、即時行情）實際做過的部分。
+  promptJa: |
+    取引所アプリの相場画面と注文画面について、「バックグラウンドへ移行」「フォアグラウンドへ復帰」「システムによる強制終了」の 3 つの場合の挙動を設計してください。iOS と Android の両方の方法と、チャットやリアルタイム相場など、類似のアプリで実際に行った内容も説明してください。
+  keyPoints:
+    - "進背景：斷開或降低行情連線頻率；iOS 用 `beginBackgroundTask` 收尾進行中的請求，並在 `sceneWillResignActive` 疊上遮罩；Android 用 `FLAG_SECURE`／`setRecentsScreenshotEnabled`，並用 `repeatOnLifecycle` 停止收集"
+    - "回前景：先用 REST 補快照，再重新訂閱；檢查 token 與生物辨識鎖定；進行中的下單依 `clientOrderId` 查詢狀態，不重送"
+    - "被系統殺掉：iOS 沒有通知、Android 的 ViewModel 會重建；只在 `SavedStateHandle`／`@SceneStorage` 存小量狀態（例如目前的交易對），其餘從 repository 與持久層還原"
+    - "測試：Android 用 `adb shell am kill` 模擬行程被結束；iOS 用 Xcode 停止後從主畫面重新開啟，驗證還原流程"
+    - "實績：在社交 App 的聊天 socket，iOS 進背景時先離房再斷線、回前景用 HTTP 補漏；在即時行情 App，Android 用 `DisposableEffect` 搭配 `LifecycleEventObserver`，iOS 回前景補抓資料，SSE 進背景停止但保留已串流的 K 線"
+    - "交易所 App 的行情頁：Flow 收集統一綁定生命週期（`collectAsStateWithLifecycle`），進背景就停止收集"
+  modelAnswer: |
+    我分三種情況。進背景：行情連線斷開或降頻，因為背景網路不保證能用，也耗電。iOS 用 `beginBackgroundTask` 讓進行中的請求有時間收尾，並在 `sceneWillResignActive` 疊上遮罩，避免 App 切換器洩露餘額；Android 用 `FLAG_SECURE` 或 `setRecentsScreenshotEnabled(false)`，Flow 的收集用 `repeatOnLifecycle(STARTED)`，進背景時自動停止。
+
+    回前景：先用 REST 補一次快照，再重新訂閱，因為背景期間錯過了行情；檢查 token 是否過期、是否需要生物辨識解鎖；如果有下單請求在飛行中，依 `clientOrderId` 查詢狀態，不重送。
+
+    被系統殺掉：iOS 沒有通知，Android 的 ViewModel 會重建，所以只在 `SavedStateHandle`／`@SceneStorage` 存小量狀態，例如目前的交易對，其餘從 repository 載入，也不會還原到「已按下送出」的狀態。測試時 Android 用 `adb shell am kill` 模擬。
+
+    實績上，我做過的社交 App 聊天 socket 在 iOS 進背景時先離開房間再斷線，回前景用 HTTP 同步補漏掉的訊息；即時行情 App 的 SSE 在進背景時停止，但保留已串流的 K 線，回來時再用 REST 補抓。換成交易所 App，我會讓行情頁的 Flow 收集統一用 `collectAsStateWithLifecycle`，畫面進背景就停止收集。
+  modelAnswerJa: |
+    3 つの場合に分けて設計します。バックグラウンドへ移行するときは、バックグラウンドの通信は保証されず電池も消費するため、相場の接続を切るか更新頻度を下げます。iOS では `beginBackgroundTask` で処理中のリクエストを終わらせる時間を確保し、`sceneWillResignActive` でマスクを重ねて、アプリスイッチャーに残高が映らないようにします。Android では `FLAG_SECURE` または `setRecentsScreenshotEnabled(false)` を使い、Flow の収集は `repeatOnLifecycle(STARTED)` でバックグラウンドに入ると自動で止めます。
+
+    フォアグラウンドへ復帰するときは、まず REST で最新のスナップショットを取得してから再購読します。バックグラウンド中の値は取り逃しているためです。あわせてトークンの有効期限や生体認証のロックを確認し、送信中だった注文は `clientOrderId` で状態を照会して、再送はしません。
+
+    システムに強制終了された場合、iOS には通知がなく、Android では ViewModel が作り直されます。そのため `SavedStateHandle` や `@SceneStorage` には現在の取引ペアのような少量の状態だけを保存し、残りは repository から読み込み直します。「送信済み」の状態まで復元することもしません。テストでは Android は `adb shell am kill` で再現します。
+
+    実績としては、以前関わったソーシャルアプリのチャット socket は iOS でバックグラウンドに入るとまずルームを退出してから切断し、復帰時は HTTP 同期で取りこぼしたメッセージを補っていました。リアルタイム相場アプリの SSE はバックグラウンドで停止し、ストリーミング済みのローソク足は保持したまま、復帰時に REST で補完していました。取引所アプリでは、相場画面の Flow 収集を `collectAsStateWithLifecycle` に統一し、画面がバックグラウンドに入ったら収集を止めます。
+  followUps:
+    - "`beginBackgroundTask` 的時間用完時會發生什麼？"
+    - "使用者在下單確認畫面進背景再回來，要保留輸入嗎？有什麼安全顧慮？"
+    - "如何在 CI 中自動化測試 process death 的還原？"
+  timeLimitSec: 150
+
+- id: platform-lifecycle-09
+  type: flash
+  level: 1
+  priority: P1
+  tags: [process-death]
+  front: Android configuration change 與 process death：各保留什麼、各怎麼測？
+  back: |
+    - **configuration change**（旋轉、深色模式、語言、字級、視窗大小）：Activity 銷毀重建；`ViewModel` 保留；`onSaveInstanceState`／`SavedStateHandle` 保留。
+    - **process death**（背景被系統結束）：`ViewModel` 與記憶體中的單例全部消失；只剩 Bundle（約 1 MB 的限制）與持久層（資料庫、DataStore）。
+    - 測試：「不要保留活動」只銷毀 Activity，行程還在；把 App 放到背景後執行 `adb shell am kill <套件名稱>` 才是 process death。
+    - iOS：旋轉不會重建畫面；被 jetsam 結束**沒有通知**，進背景就要存好狀態，用 `@SceneStorage` 或 `NSUserActivity` 還原。

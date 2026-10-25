@@ -1,0 +1,234 @@
+- id: swift-swiftui-uikit-interop-01
+  type: single
+  level: 2
+  priority: P1
+  tags: [ios15, availability]
+  prompt: |
+    專案的最低版本是 iOS 15，你想在 `UICollectionView` 的 cell 內放 SwiftUI 內容，並用 `NavigationStack` 管理導覽。哪個說法正確？
+  options:
+    - "兩者都可以直接使用，Swift concurrency 的 back-deployment（向下部署）也涵蓋 SwiftUI"
+    - "`UIHostingConfiguration` 與 `NavigationStack` 都需要 iOS 16，iOS 15 要改用 child `UIHostingController` 或維持 UIKit cell，導覽由 UIKit（FlowController）負責"
+    - "`UIHostingConfiguration` 可用，只有 `NavigationStack` 需要 iOS 16"
+    - "`NavigationStack` 可用，只有 `UIHostingConfiguration` 需要 iOS 16"
+  answer: 1
+  explain: |
+    我們用 iOS 15 當最低版本實際編譯：`UIHostingConfiguration`、`NavigationStack`、`UIHostingController.sizingOptions`、`sizeThatFits(_:uiView:context:)` 都會報 `only available in iOS 16.0 or newer`。
+
+    - 「兩者都可以用」錯在：Swift concurrency 的向下部署只涵蓋 concurrency 本身的 runtime，不包含 SwiftUI 的新 API。
+    - 「只有 `NavigationStack` 需要 iOS 16」、「只有 `UIHostingConfiguration` 需要 iOS 16」都錯在：兩個都需要 iOS 16，不是只有其中一個。
+
+    iOS 15 專案常見的做法是：導覽由 UIKit 負責，SwiftUI 負責畫面內容；cell 裡的 SwiftUI 要小心使用 child hosting controller，數量很大的列表繼續用 UIKit 的 cell。
+
+- id: swift-swiftui-uikit-interop-02
+  type: predict
+  level: 2
+  priority: P1
+  tags: [uiviewrepresentable, lifecycle]
+  prompt: |
+    `Root` 先把 `value` 更新 3 次，之後 `show` 變成 `false` 讓 `Rep` 從畫面移除。依序印出 `makeCoordinator`、`makeUIView`、`dismantleUIView` 被呼叫的次數。
+  codeLang: swift
+  code: |
+    import SwiftUI
+    import UIKit
+
+    var counts = ["makeCoordinator": 0, "make": 0, "dismantle": 0]
+
+    struct Rep: UIViewRepresentable {
+        let value: Int
+
+        func makeCoordinator() -> Coordinator { counts["makeCoordinator"]! += 1; return Coordinator() }
+        func makeUIView(context: Context) -> UIView { counts["make"]! += 1; return UIView() }
+        func updateUIView(_ view: UIView, context: Context) {}
+        static func dismantleUIView(_ view: UIView, coordinator: Coordinator) { counts["dismantle"]! += 1 }
+
+        final class Coordinator {}
+    }
+
+    struct Root: View {
+        @State var value = 0   // 之後被更新 3 次
+        @State var show = true // 最後變成 false
+        var body: some View {
+            VStack {
+                if show { Rep(value: value) }
+                Text("x")
+            }
+        }
+    }
+
+    // 一切結束後：
+    print(counts["makeCoordinator"]!, counts["make"]!, counts["dismantle"]!)
+  answer: |
+    1 1 1
+  explain: |
+    - `makeCoordinator` 和 `makeUIView`：在這個 view 存在於畫面的期間各只呼叫一次。傳入的 `value` 改變，只會觸發 `updateUIView`，不會重新建立。
+    - `dismantleUIView`：view 離開畫面時呼叫一次。
+
+    我們用 `NSViewRepresentable`（生命週期與 UIKit 版本相同）放進 SwiftUI 視窗實測：`update` 被呼叫了 5 次，其中有一次連輸入都沒變（只是父層重新計算）也被呼叫。所以 `updateUIView` 裡的程式必須冪等（重複執行結果一樣）而且便宜。
+
+- id: swift-swiftui-uikit-interop-03
+  type: multi
+  level: 2
+  priority: P1
+  tags: [uiviewrepresentable, coordinator]
+  prompt: |
+    關於 `UIViewRepresentable`，哪些敘述正確？（複選）
+  options:
+    - "`updateUIView` 在每次 SwiftUI 更新時都可能被呼叫，即使傳入的輸入沒有變，所以要冪等而且便宜"
+    - "`makeUIView` 在每次 `updateUIView` 之前都會被呼叫一次，用來取得最新的 UIKit view"
+    - "Coordinator 適合當 UIKit delegate 的目標，並保存跨更新的狀態（例如上次推送到圖表的時間點）"
+    - "在 `updateUIView` 內直接修改 `@State` 或 `Binding`，是同步更新 SwiftUI 的標準做法，不會有任何警告"
+    - "清理工作（移除 `WKScriptMessageHandler`、observer）放在 `dismantleUIView`"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：`updateUIView` 會被頻繁呼叫，包含輸入沒變的時候。
+    - 第 2 項錯誤：`makeUIView` 只在建立時呼叫一次，之後的更新都走 `updateUIView`。
+    - 第 3 項正確：Representable 是 struct、會一直重建，所以需要 Coordinator（class）來當 delegate 的目標與保存跨更新的狀態。加上「只推送差異」的邏輯（例如圖表 View 的 `lastPushedTime`），可以避免 `updateUIView` 一直重設 UIKit view。
+    - 第 4 項錯誤：在 view 更新的過程中同步修改 state，會出現「Modifying state during view update」的警告，行為也不可預期。要延後一個 run loop 再改。
+    - 第 5 項正確：`dismantleUIView` 在 view 離開畫面時被呼叫，是移除 handler 或 observer 的位置。
+
+- id: swift-swiftui-uikit-interop-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [flowcontroller, architecture]
+  prompt: |
+    某個 UIKit 專案的 FlowController 持有 `UINavigationController`，view controller 只持有 `navigator` 協定。這個設計的主要好處是什麼？
+  options:
+    - "編譯期就能驗證導覽路徑不會出錯"
+    - "view controller 不需要知道下一個畫面是誰，導覽邏輯集中在 FlowController：畫面可以重用、可以用 mock navigator 測試，deep link 只需要一個入口"
+    - "可以取代依賴注入，不需要再傳 ViewModel"
+    - "SwiftUI 的 `NavigationStack` 要求必須有 FlowController 才能運作"
+  answer: 1
+  explain: |
+    FlowController（Coordinator 模式）把「畫面之間怎麼轉場」從 view controller 移出來，集中在一個地方。
+
+    - 「編譯期驗證導覽路徑」錯在：FlowController 只是把導覽邏輯集中，並沒有提供編譯期檢查。
+    - 「取代依賴注入」錯在：FlowController 反而常常是建立 ViewModel 並注入依賴的地方，兩者是搭配使用，不是替代關係。
+    - 「`NavigationStack` 要求有 FlowController」錯在：兩者完全無關。`NavigationStack` 是 SwiftUI 自己的導覽容器，不需要 FlowController 才能運作。
+
+    它的代價是 FlowController 容易變成一個什麼都管的巨大物件（依賴一路往下傳）。解法包括拆成子 flow、建立集中組裝依賴的 factory。
+
+- id: swift-swiftui-uikit-interop-05
+  type: multi
+  level: 3
+  priority: P1
+  tags: [hosting, navigation, tradeoff]
+  prompt: |
+    關於 UIKit 與 SwiftUI 混合架構，哪些敘述正確？（複選）
+  options:
+    - "在一個 `UIHostingController` 的 rootView 上注入的 `environmentObject`，不會自動出現在另一個獨立 `UIHostingController` 的 rootView 裡，每個 hosting 邊界都要自己注入"
+    - "`NavigationStack`、`UIHostingConfiguration`、`UIHostingController.sizingOptions` 都需要 iOS 16"
+    - "SwiftUI 的 `onAppear` 與 UIKit 的 `viewWillAppear` 呼叫時機完全一致，可以互相替代"
+    - "iOS 16 以上的 `NavigationStack(path:)` 以 `path` 為單一真相來源，指派陣列即可 deep link 到多層畫面"
+    - "每個畫面都包一個 `UIHostingController` 沒有任何額外成本，不需要考慮記憶體與尺寸計算"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：每個 `UIHostingController` 的 rootView 都是一棵全新的 SwiftUI 樹，環境不會自動傳過去。
+    - 第 2 項正確：這三個都需要 iOS 16（我們用 iOS 15 當最低版本實際編譯確認過）。
+    - 第 3 項錯誤：`onAppear` 與 `viewWillAppear` 的時機不同（SwiftUI 的 `onAppear` 取決於 view 實際進入畫面與佈局的時機），需要精準時機時要實機確認。
+    - 第 4 項正確：`path` 就是目前導覽到哪些畫面的唯一來源，指派陣列即可跳到多層深的畫面。
+    - 第 5 項錯誤：hosting controller 有自己的 view 階層、safe area 與尺寸計算，在列表 cell 裡大量使用會有可觀的成本。
+
+- id: swift-swiftui-uikit-interop-06
+  type: fill
+  level: 2
+  priority: P1
+  tags: [uiviewrepresentable, wkwebview]
+  prompt: |
+    補上 `UIViewRepresentable` 中「建立 Coordinator」與「view 離開畫面時做清理」的方法名稱。
+  codeLang: swift
+  code: |
+    struct WebChart: UIViewRepresentable {
+        func ____(context: Context) -> Coordinator { Coordinator() }
+
+        func makeUIView(context: Context) -> WKWebView {
+            let config = WKWebViewConfiguration()
+            config.userContentController.add(context.coordinator, name: "delayWall")
+            return WKWebView(frame: .zero, configuration: config)
+        }
+
+        func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+        static func ____(_ uiView: WKWebView, coordinator: Coordinator) {
+            uiView.configuration.userContentController.removeScriptMessageHandler(forName: "delayWall")
+        }
+
+        final class Coordinator: NSObject, WKScriptMessageHandler {
+            func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {}
+        }
+    }
+  blanks:
+    - [makeCoordinator]
+    - [dismantleUIView]
+  explain: |
+    - 第一格填 `makeCoordinator`：它在 Representable 建立時呼叫一次，Coordinator 在整個生命週期內是同一個實例。
+    - 第二格填 `dismantleUIView`：它是 static 方法，在 view 離開畫面時呼叫，是移除 `WKScriptMessageHandler` 的位置。因為 `WKUserContentController` 對 handler 是強持有，不移除的話，handler 與 WebView 會互相拖著而無法釋放。
+
+- id: swift-swiftui-uikit-interop-07
+  type: single
+  level: 2
+  priority: P1
+  tags: [hosting, viewmodel]
+  prompt: |
+    FlowController 要 push 一個用 SwiftUI 寫的畫面 `MarketView`。ViewModel 應該由誰建立、`MarketView` 用什麼 property wrapper 來接？
+  options:
+    - "`MarketView` 內寫 `@ObservedObject var vm = MarketViewModel()`，讓 SwiftUI 自己管理"
+    - "每次需要更新就換一個新的 `rootView`（帶新建立的 ViewModel）"
+    - "FlowController（或 factory）建立 ViewModel 並注入，`MarketView` 用 `@ObservedObject var viewModel`；rootView 只建立一次，之後靠 ViewModel 更新"
+    - "把 ViewModel 設成全域單例，由 `@EnvironmentObject` 讀取"
+  answer: 2
+  explain: |
+    ViewModel 由組裝的地方（FlowController 或 factory）建立並注入，生命週期與 hosting controller 一致，測試時也方便換成假的（mock）。因為物件是外部建立的，SwiftUI 這邊用 `@ObservedObject`；`rootView` 只在建立時設定一次。
+
+    - 「`@ObservedObject` 加預設值」錯在：`@ObservedObject` 不擁有物件，view 每次重建就會再建構一個新的 ViewModel，狀態被重置。
+    - 「每次更新都換新的 `rootView`」錯在：會丟掉 SwiftUI 內部的狀態，也讓每次更新的成本變高。
+    - 「全域單例加 `@EnvironmentObject`」錯在：依賴變成隱含的，不好測試，而且漏了注入還會在執行時 crash。
+
+- id: swift-swiftui-uikit-interop-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [architecture, hybrid, field]
+  prompt: |
+    請說明一種 SwiftUI 加 UIKit 的混合式架構（FlowController 加 Inputs／Outputs）。這樣設計的好處與代價是什麼？如果交易所 App 的專案已經是 UIKit 為主、最低 iOS 15，你會怎麼導入 SwiftUI？
+  promptJa: |
+    SwiftUI と UIKit の混在アーキテクチャ（FlowController と Inputs/Outputs）について説明してください。この設計の利点とコストは何ですか。取引所アプリのプロジェクトがすでに UIKit 中心で最低 iOS 15 の場合、SwiftUI をどのように導入しますか。
+  keyPoints:
+    - "架構概要：FlowController 持有導覽控制器，view controller 用 `static func create` 建立並設定 `navigator`；ViewModel 有 Inputs／Outputs 協定；SwiftUI 以 `UIHostingController` 嵌入"
+    - "好處：UIKit 導覽的控制力強、可以逐個畫面遷移、ViewModel 作為新舊兩邊共通的邊界；最低 iOS 15 沒有 `NavigationStack`，導覽由 FlowController 負責很務實"
+    - "代價：兩套思維；導覽列樣式要橋接（hosting 基底類別）；environment 在每個 hosting 邊界重新注入；依賴多了 FlowController 會變大，需要拆成子 flow"
+    - "導入策略：新畫面先用 SwiftUI 加 hosting，列表等效能敏感處維持 UIKit；ViewModel 由 flow 注入；用一個統一的 hosting 基底類別處理樣式與 environment"
+    - "降低風險：先挑一個低風險的畫面驗證；注意 `onAppear` 與 `viewWillAppear`、safe area、鍵盤的差異；訂定 Representable 與 hosting 的使用規範"
+  modelAnswer: |
+    在我做過的一個社交 App，我用 FlowController 持有導覽用的 `UINavigationController`，由它建立 view controller 與 ViewModel、決定下一個畫面，view controller 只認得 `navigator` 協定。ViewModel 有 Inputs 和 Outputs 兩個協定，分開輸入與輸出。SwiftUI 的畫面用 `UIHostingController` 嵌入，另外有一個加上導覽列樣式的 hosting 基底類別。
+
+    這個架構的好處是 UIKit 導覽的控制力夠，可以逐個畫面遷移，ViewModel 則是新舊兩邊共通的邊界。最低版本是 iOS 15，沒有 `NavigationStack`，導覽交給 FlowController 比較務實。
+
+    代價是兩套思維，導覽列樣式要橋接，environment 在每個 hosting 邊界都要重新注入；而且依賴多了之後 FlowController 會變大，這時我會拆成子 flow。
+
+    如果專案是 UIKit 為主、最低 iOS 15，我會先挑一個低風險的畫面驗證，新畫面用 SwiftUI 加 hosting，行情列表這種效能敏感的地方先維持 UIKit。我會用統一的 hosting 基底類別處理樣式與 environment，ViewModel 由 flow 注入，並把 `UIViewRepresentable` 的規範寫下來，例如 `updateUIView` 要冪等、清理放在 `dismantleUIView`。
+  modelAnswerJa: |
+    あるソーシャルアプリでは、FlowController がナビゲーション用の `UINavigationController` を保持し、ViewController と ViewModel を生成して次の画面を決める構成にしました。ViewController は `navigator` プロトコルだけを知っています。ViewModel は Inputs と Outputs の 2 つのプロトコルで入力と出力を分けています。SwiftUI の画面は `UIHostingController` で埋め込み、ナビゲーションバーのスタイルを付ける hosting の基底クラスも用意しました。
+
+    この構成の利点は、UIKit のナビゲーションが制御しやすいこと、画面単位で段階的に移行できること、そして ViewModel が新旧共通の境界になることです。最低バージョンが iOS 15 で `NavigationStack` が使えないため、ナビゲーションを FlowController に任せるのは現実的な選択でした。
+
+    コストとしては、メンタルモデルが二つになること、ナビゲーションバーのスタイルをブリッジする必要があること、環境値をホスティングの境界ごとに注入し直す必要があることです。また、依存が増えると FlowController が大きくなるので、その場合は子 flow に分割します。
+
+    UIKit 中心で最低 iOS 15 のプロジェクトなら、まずリスクの低い画面で検証し、新しい画面は SwiftUI とホスティングで作り、相場一覧のような性能に敏感な箇所は当面 UIKit のままにします。スタイルと環境値を扱うホスティング基底クラスを一つ用意し、ViewModel は flow から注入します。`UIViewRepresentable` の規約も明文化します。たとえば `updateUIView` は冪等にする、後始末は `dismantleUIView` に置く、などです。
+  followUps:
+    - "FlowController の子 flow は、どのように破棄されますか。"
+    - "SwiftUI の画面で、UIKit の戻る操作（スワイプバック）の挙動をどう合わせますか。"
+    - "ホスティングの境界で、テーマ（ダークモード）をどう伝えますか。"
+  timeLimitSec: 150
+
+- id: swift-swiftui-uikit-interop-09
+  type: flash
+  level: 1
+  priority: P1
+  tags: [uiviewrepresentable]
+  front: UIViewRepresentable 四個方法的呼叫時機
+  back: |
+    - `makeCoordinator()`：建立時，一次。
+    - `makeUIView(context:)`：一次，建立 UIKit view。
+    - `updateUIView(_:context:)`：每次 SwiftUI 更新都可能被呼叫（即使輸入沒變），所以要冪等、便宜；用 Coordinator 記住上次的狀態，只送出差異。
+    - `dismantleUIView(_:coordinator:)`：static 方法，離開畫面時一次，用來移除 handler 或 observer。

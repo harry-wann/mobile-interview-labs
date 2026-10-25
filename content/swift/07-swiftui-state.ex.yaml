@@ -1,0 +1,277 @@
+- id: swift-swiftui-state-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [stateobject, ownership]
+  prompt: |
+    下單頁 `OrderView` 要自己建立並持有 `OrderViewModel`（遵守 `ObservableObject` 的 class），專案最低支援 iOS 15。該用哪個 property wrapper 來宣告？
+  options:
+    - "`@ObservedObject private var vm = OrderViewModel()`"
+    - "`@StateObject private var vm = OrderViewModel()`"
+    - "`@EnvironmentObject private var vm: OrderViewModel`"
+    - "`@State private var vm = OrderViewModel()`，因為 `@State` 可以保留任何型別的狀態"
+  answer: 1
+  explain: |
+    view 自己建立並擁有的 `ObservableObject`，要用 `@StateObject`（iOS 14 起可用）。SwiftUI 會把這個物件另外保管，只建立一次，父層重新計算 `body` 時也不會被重建。
+
+    - `@ObservedObject` 錯在：它不擁有物件，SwiftUI 不會幫它保管。後面寫了預設值，每次 view 的 struct 被重新建立，就會再 new 一個新的 ViewModel，輸入框的內容和進行中的請求都會被重置。
+    - `@EnvironmentObject` 錯在：它是由祖先 view 放進環境的物件，這裡是 view 自己要建立，不是從環境取得。而且沒人注入的話，執行時會 crash。
+    - `@State` 錯在：iOS 15 沒有 Observation，`@State` 持有 class 時只會保管那個物件的參考，物件裡的屬性改變，畫面不會更新。而且 `@State` 的初始值不是 autoclosure，每次 `init` 都會多建一個物件再丟掉。
+
+- id: swift-swiftui-state-02
+  type: predict
+  level: 2
+  priority: P0
+  tags: [stateobject, observedobject, lifecycle]
+  prompt: |
+    畫面顯示後，父層的 `tick` 被更新了 3 次（`Parent` 的 body 共計算 4 次，包含第一次）。依序印出 `VM.created["A"]` 與 `VM.created["B"]` 的值是什麼？
+  codeLang: swift
+  code: |
+    import SwiftUI
+
+    final class VM: ObservableObject {
+        static var created: [String: Int] = [:]
+        init(_ tag: String) { VM.created[tag, default: 0] += 1 }
+    }
+
+    struct ChildA: View {
+        @ObservedObject var vm = VM("A")
+        var body: some View { Text("A") }
+    }
+
+    struct ChildB: View {
+        @StateObject var vm = VM("B")
+        var body: some View { Text("B") }
+    }
+
+    struct Parent: View {
+        @State var tick = 0
+        var body: some View {
+            VStack {
+                Text("\(tick)")
+                ChildA()
+                ChildB()
+                Button("+") { tick += 1 }
+            }
+        }
+    }
+  answer: |
+    4 1
+  explain: |
+    父層的 `body` 每計算一次，就會重新建立一份 `ChildA()` 和 `ChildB()` 的 struct，所以 `init` 會跑 4 次（第一次加上 3 次更新）。
+
+    - `ChildA` 用的是 `@ObservedObject var vm = VM("A")`。後面的預設值是一般的運算式，每次 struct 初始化都會執行，所以 `VM("A")` 被建立 4 次，答案是 4。
+    - `ChildB` 用的是 `@StateObject`。它收到的初始值是 autoclosure（編譯器自動包成「需要時才執行」的小函式），SwiftUI 只在這個 view 第一次出現時執行一次，之後沿用已經保管的物件，答案是 1。
+
+    我們把這段程式放進真的 SwiftUI 視窗（NSHostingView）實際跑過，結果就是 4 與 1。
+
+- id: swift-swiftui-state-03
+  type: predict
+  level: 2
+  priority: P0
+  tags: [state, initialvalue]
+  prompt: |
+    `Parent` 把 `v` 從 0 更新到 2。`Child` 最後一次 body 評估時，依序印出 `local` 與 `value` 是什麼？
+  codeLang: swift
+  code: |
+    import SwiftUI
+
+    struct Child: View {
+        @State private var local: Int
+        let value: Int
+
+        init(value: Int) {
+            self.value = value
+            _local = State(initialValue: value)
+        }
+
+        var body: some View {
+            let _ = print("local=\(local) value=\(value)")
+            Text("\(local) \(value)")
+        }
+    }
+
+    struct Parent: View {
+        @State var v = 0
+        var body: some View { Child(value: v) }   // v 之後被更新為 1、再更新為 2
+    }
+  answer: |
+    0 2
+  explain: |
+    `State(initialValue:)` 給的值，只有在這個 view 第一次出現時才會被採用。之後父層傳進新的 `value`，被 SwiftUI 保管起來的 `local` 仍然是第一次的 0。`value` 是普通的 `let`，每次都是最新的，所以最後是 2。
+
+    我們實際跑過，依序印出 `local=0 value=0`、`local=0 value=1`、`local=0 value=2`。
+
+    如果想讓子層跟著上層變，就不要複製成 `@State`，直接使用傳進來的值，或改用 `@Binding`。如果想要「換一筆資料就從頭開始」，在使用的地方加上 `.id(...)`。
+
+- id: swift-swiftui-state-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [environmentobject]
+  prompt: |
+    某個 sheet 內的 view 使用了 `@EnvironmentObject var session: SessionStore`，但呈現 sheet 的那一層，以及它的所有祖先，都沒有呼叫 `.environmentObject(session)`。會發生什麼事？
+  options:
+    - "編譯錯誤，因為編譯器會檢查環境物件有沒有注入"
+    - "`session` 是 `nil`，view 正常顯示，只是取不到資料"
+    - "執行時 crash：讀取 `session` 的時候，SwiftUI 在環境裡找不到這個型別的物件"
+    - "SwiftUI 自動呼叫 `SessionStore()` 建立一個預設物件"
+  answer: 2
+  explain: |
+    `@EnvironmentObject` 的依賴是隱含的：從 view 的宣告看不出它需要什麼，編譯器沒辦法檢查。漏了注入，要到執行時讀取這個屬性才會 crash，錯誤訊息是找不到該型別的 ObservableObject。
+
+    - 「編譯錯誤」錯在：正因為依賴是隱含的，編譯器抓不到，這正是它的風險。
+    - 「`session` 是 `nil`」錯在：`@EnvironmentObject` 的型別不是 Optional，找不到就是 crash，不會給 `nil`。
+    - 「自動建立預設物件」錯在：SwiftUI 不會替你建立；要建立並擁有物件，得自己用 `@StateObject`。
+
+    最容易漏的地方是 Xcode preview，以及用 `UIHostingController` 包起來再 present 的畫面（它是一棵全新的 SwiftUI 樹）。如果希望從程式碼就看出依賴，可以改用 `@ObservedObject` 以參數明確傳入，也比較好測試。
+
+- id: swift-swiftui-state-05
+  type: multi
+  level: 2
+  priority: P0
+  tags: [observation, observableobject, ios17]
+  prompt: |
+    關於 `ObservableObject` 與 Observation 框架的 `@Observable`，哪些敘述正確？（複選）
+  options:
+    - "`@Observable` 需要 iOS 17，所以最低版本是 iOS 15 的專案，或最低版本是 iOS 16 的專案，都不能直接使用"
+    - "`ObservableObject` 的任何一個 `@Published` 屬性變動，所有觀察該物件的 view，body 都會重新計算，不管有沒有讀到那個屬性"
+    - "`@Observable` 會追蹤 body 實際讀取過的屬性，只有讀過被修改屬性的 view 會需要更新"
+    - "`@Observable` 的 class 必須把屬性標上 `@Published`，畫面才會更新"
+    - "`@State private var model = Model()` 的初始值是 autoclosure，所以建構式保證只執行一次"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：Observation 框架是 iOS 17 才有的，最低版本 iOS 15 或 iOS 16 的專案不能直接用它。
+    - 第 2 項正確：`ObservableObject` 是以整個物件為單位通知，不分是哪個屬性改變。
+    - 第 3 項正確：`@Observable` 在計算 body 時記錄讀了哪些屬性。我們實測過，兩個 view 分別只讀 `a`、`b`，改 `a` 之後，只有讀 `a` 的 view 重算；同樣情況用 `ObservableObject`，兩個都重算。
+    - 第 4 項錯誤：`@Observable` 是 macro（編譯時自動補上程式碼的功能），會自動追蹤屬性，不需要也不用 `@Published`。不想追蹤的屬性才要標 `@ObservationIgnored`。
+    - 第 5 項錯誤：`@State` 的初始值**不是** autoclosure，只有 `@StateObject` 才是。我們實測父層更新 3 次，`Model.init` 被呼叫 4 次（只有第一個被保留），所以建構式要保持輕量，重的工作放到 `.task`。
+
+- id: swift-swiftui-state-06
+  type: predict
+  level: 3
+  priority: P1
+  tags: [observation, observableobject, granularity]
+  prompt: |
+    下列程式依序印出什麼？（`withObservationTracking` 會在「追蹤區塊裡讀過的屬性」第一次改變時，呼叫 `onChange`，而且 `onChange` 只會呼叫一次）
+  codeLang: swift
+  code: |
+    import Observation
+    import Combine
+
+    @Observable final class Model { var a = 0; var b = 0 }
+    final class Old: ObservableObject { @Published var a = 0; @Published var b = 0 }
+
+    let m = Model()
+    withObservationTracking { _ = m.a } onChange: { print("observable: a") }
+    m.b = 1
+    m.a = 1
+    m.a = 2
+
+    let old = Old()
+    let c = old.objectWillChange.sink { print("object: will change") }
+    old.b = 1
+    old.a = 1
+  answer: |
+    observable: a object: will change object: will change
+  explain: |
+    - Observation 只追蹤追蹤區塊裡**讀過的屬性**。區塊裡只讀了 `a`，所以 `m.b = 1` 不會觸發任何輸出；`m.a = 1` 觸發 `onChange`，印出 `observable: a`；`onChange` 只通知一次，之後的 `m.a = 2` 不會再印。
+    - `ObservableObject` 不分屬性：`old.b = 1` 和 `old.a = 1` 各發送一次 `objectWillChange`，所以印出兩行 `object: will change`。
+
+    SwiftUI 計算 body 時用的是同樣的機制：記錄 body 讀過哪些屬性，只有相關的屬性改變，這個 view 才會失效。
+
+- id: swift-swiftui-state-07
+  type: fill
+  level: 2
+  priority: P1
+  tags: [bindable, state, ios17]
+  prompt: |
+    iOS 17 以上使用 `@Observable` 的寫法：第一個空格填「讓子層能對 `@Observable` 物件使用 `$` 綁定」的 property wrapper，第二個空格填「父層擁有這個物件」用的 property wrapper。
+  codeLang: swift
+  code: |
+    @Observable final class Settings { var name = "" }
+
+    struct Editor: View {
+        @____ var settings: Settings
+        var body: some View { TextField("name", text: $settings.name) }
+    }
+
+    struct Host: View {
+        @____ private var settings = Settings()
+        var body: some View { Editor(settings: settings) }
+    }
+  blanks:
+    - [Bindable]
+    - [State]
+  explain: |
+    - 第一格填 `Bindable`：`@Bindable` 讓你對 `@Observable` 物件的屬性寫 `$settings.name` 這種綁定。如果子層只是讀取顯示，不需要綁定，宣告成 `let settings: Settings` 就夠了，Observation 會自動追蹤 body 讀到的屬性。
+    - 第二格填 `State`：擁有物件的 view 用 `@State`，它取代了 `ObservableObject` 時代的 `@StateObject`。
+
+    這些寫法都需要 iOS 17。
+
+- id: swift-swiftui-state-08
+  type: single
+  level: 3
+  priority: P1
+  tags: [performance, observableobject, ios16]
+  prompt: |
+    iOS 16 專案（不能用 Observation）的行情頁：一個 `MarketViewModel`（`ObservableObject`）有 `@Published var tickers: [Ticker]`，100 檔幣種每秒更新很多次，整頁卡頓。下列哪個改善方向最合理？
+  options:
+    - "把 `@StateObject` 改成 `@ObservedObject`，讓 SwiftUI 少管理一些東西"
+    - "在每個 row 上加 `.id(UUID())`，強制重新建立"
+    - "ViewModel 以固定頻率（例如每 200 毫秒）合併後再批次更新；每個 row 只接收自己那一檔的 `Ticker` 值（遵守 `Equatable`，必要時 row 另外用 `EquatableView` 或拆成每列自己的小 ViewModel），避免一個物件變動牽動整個列表"
+    - "把 `tickers` 改成 `CurrentValueSubject`，因為 `@Published` 比較慢"
+  answer: 2
+  explain: |
+    問題的根源是 `ObservableObject` 以整個物件為單位通知：任何一檔變動，所有觀察這個 ViewModel 的 view，body 都會重算。沒有 Observation 的版本，只能靠**縮小觀察範圍、降低更新頻率**：把短時間內的多筆更新合併後再一次更新、讓每個 row 只拿自己的值、讓 row 能判斷「沒變就跳過」。
+
+    - 「改成 `@ObservedObject`」錯在：`@StateObject` 與 `@ObservedObject` 的差別是擁有者，不是效能；ViewModel 沒人擁有反而可能被重建，且完全不改變通知的粒度。
+    - 「`.id(UUID())`」錯在：每次 `id` 都不同，SwiftUI 會把這個 row 當成全新的 view，整個丟掉重建，比原本更慢。
+    - 「`CurrentValueSubject`」錯在：`@Published` 底層就是類似的發布機制，換掉並不會改變「任何變動都通知整個物件」的粒度問題。
+
+- id: swift-swiftui-state-09
+  type: open
+  level: 2
+  priority: P0
+  tags: [swiftui, state, field]
+  prompt: |
+    請說明 SwiftUI 的 ViewModel 在「誰擁有」與「更新粒度」上要怎麼設計。在最低支援 iOS 16 的專案裡，為什麼用 `ObservableObject` 而不是 `@Observable`？如果在最低版本是 iOS 15 的交易所 App 做行情列表，你會怎麼避免整頁一直重算？
+  promptJa: |
+    SwiftUI の ViewModel における所有権と更新粒度の設計について説明してください。最低サポートが iOS 16 のプロジェクトで `@Observable` ではなく `ObservableObject` を使う理由は何ですか。最低バージョンが iOS 15 の取引所アプリで相場一覧を作る場合、画面全体の再計算をどう避けますか。
+  keyPoints:
+    - "誰擁有誰建立：view 自己建立的用 `@StateObject`（或 `@State`），外面傳進來的用 `@ObservedObject`（或 `@Binding`）；在 `@ObservedObject` 後面寫預設值，狀態會被重置"
+    - "最低支援 iOS 16 時，Observation 需要 iOS 17，所以用 `ObservableObject`；這是部署目標決定的"
+    - "`ObservableObject` 以物件為單位通知：任一個 `@Published` 變動，所有觀察者的 body 都重算；`@Observable` 追蹤 body 實際讀取的屬性"
+    - "iOS 15 的做法：資料層合併後批次更新（conflation，約 100–250 毫秒）、row 只接收自己的值並遵守 `Equatable`、必要時拆成每列自己的小 ViewModel"
+    - "改完用 Instruments 的 SwiftUI 模板確認哪些 body 被重算，不是憑感覺"
+  modelAnswer: |
+    誰建立誰擁有。view 自己建立的 ViewModel 用 `@StateObject`，外面傳進來的用 `@ObservedObject`。最常見的 bug，是把預設值寫在 `@ObservedObject` 後面：父層每次重算，就會 new 一個新的 ViewModel，狀態就被重置了。我實際測過，父層更新 3 次，`@ObservedObject` 的預設值被建構 4 次，`@StateObject` 只有 1 次。
+
+    在最低支援 iOS 16 的專案裡，ViewModel 用 `ObservableObject`，因為 `@Observable` 需要 iOS 17。兩者的差別在更新粒度：`ObservableObject` 任何一個 `@Published` 變動，觀察它的 view 都會重算 body；`@Observable` 只追蹤 body 實際讀取的屬性。
+
+    如果最低是 iOS 15，行情列表我會縮小觀察範圍。資料層先用 conflation 合併，大約每 200 毫秒批次更新一次；每一列只接收自己那一檔的 `Ticker` 值，並遵守 `Equatable`，讓沒變的列被 SwiftUI 跳過；有需要再拆成每列自己的小 ViewModel。最後用 Instruments 的 SwiftUI 模板確認，哪些 body 被重算、重算了幾次。
+  modelAnswerJa: |
+    「作った側が所有する」という原則です。View 自身が作る ViewModel は `@StateObject`、外から渡されるものは `@ObservedObject` を使います。よくあるバグは `@ObservedObject` にデフォルト値を書いてしまうことで、親が再評価されるたびに新しい ViewModel が作られ、状態がリセットされます。実際に確認したところ、親を 3 回更新すると、`@ObservedObject` のデフォルト値は 4 回生成され、`@StateObject` は 1 回だけでした。
+
+    最低サポートが iOS 16 のプロジェクトでは、ViewModel に `ObservableObject` を使います。`@Observable` は iOS 17 以降が必要なためです。違いは更新の粒度です。`ObservableObject` は `@Published` のどれか 1 つが変わると、観察している View の body がすべて再計算されます。`@Observable` は body で実際に読まれたプロパティだけを追跡します。
+
+    最低 iOS 15 の場合、相場一覧では観察範囲を小さくします。データ層でコンフレーション（まとめて最新のものだけ残す処理）を行い、約 200 ミリ秒ごとにまとめて更新します。各行は自分の `Ticker` の値だけを受け取り、`Equatable` に準拠させて、変化のない行を SwiftUI がスキップできるようにします。必要であれば、行ごとの小さな ViewModel に分けます。最後に Instruments の SwiftUI テンプレートで、どの body が何回再計算されたかを確認します。
+  followUps:
+    - "`@StateObject` の ViewModel に、親から渡される銘柄コードを使いたい場合はどうしますか。"
+    - "`EnvironmentObject` を使うべきでない場面はどんなときですか。"
+    - "`Equatable` な行で、SwiftUI が本当にスキップしているかをどう確認しますか。"
+  timeLimitSec: 150
+
+- id: swift-swiftui-state-10
+  type: flash
+  level: 1
+  priority: P0
+  tags: [ownership]
+  front: "`@State`／`@Binding`／`@StateObject`／`@ObservedObject`／`@EnvironmentObject`／`@Observable` 各自「誰擁有」的速記"
+  back: |
+    - `@State`：view 自己擁有，用在簡單的值。初始值只在第一次使用。
+    - `@Binding`：不擁有，借用上層的值，可以讀寫。
+    - `@StateObject`：view 自己建立並擁有的 `ObservableObject`，初始值是 autoclosure，只建立一次（iOS 14）。
+    - `@ObservedObject`：不擁有，外面傳進來的。後面寫預設值，每次 view 重建都會再 new 一個，狀態被重置。
+    - `@EnvironmentObject`：不擁有，祖先放進環境的。漏注入，執行時才 crash。
+    - `@Observable`（iOS 17）：搭配 `@State` 擁有、`@Bindable` 取得綁定；以屬性為單位追蹤。

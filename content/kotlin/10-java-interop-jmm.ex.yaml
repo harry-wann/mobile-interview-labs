@@ -1,0 +1,228 @@
+- id: kotlin-java-interop-jmm-01
+  type: predict
+  level: 2
+  priority: P1
+  tags: [jvm-annotations, reflection]
+  prompt: |
+    下列程式依序印出什麼？（`Modifier.isStatic` 檢查的是 `Greeter` 類別本身的方法）
+  codeLang: kotlin
+  code: |
+    import java.lang.reflect.Modifier
+
+    class Greeter {
+        @JvmOverloads
+        fun hi(name: String = "a", times: Int = 1) = "$name$times"
+
+        companion object {
+            @JvmStatic fun create() = Greeter()
+            fun other() = 1
+        }
+    }
+
+    fun main() {
+        val ms = Greeter::class.java.declaredMethods
+        println(ms.filter { it.name == "hi" }.map { it.parameterCount }.sorted().joinToString(" "))
+        println(ms.any { it.name == "create" && Modifier.isStatic(it.modifiers) })
+        println(ms.any { it.name == "other" })
+    }
+  answer: |
+    0 1 2 true false
+  explain: |
+    - 第一行是 `0 1 2`：`@JvmOverloads` 為兩個有預設值的參數產生 `hi()`、`hi(String)`、`hi(String, Int)` 三個多載（由右往左省略），所以參數個數是 0、1、2。編譯器內部另外產生的輔助方法，名稱不是 `hi`，不會被算進來。
+    - 第二行是 `true`：`@JvmStatic` 讓 `Greeter` 類別上多出一個真正的 `static create()`。
+    - 第三行是 `false`：沒有加註解的 `other()` 只存在於 `Greeter.Companion`，所以 `Greeter` 類別本身找不到它。
+    對 Java 呼叫端來說，差別是 `Greeter.create()` 可以直接呼叫，而 `other()` 必須寫成 `Greeter.Companion.other()`。
+
+- id: kotlin-java-interop-jmm-02
+  type: predict
+  level: 3
+  priority: P1
+  tags: [concurrentmodificationexception, arraylist]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: kotlin
+  code: |
+    import java.util.concurrent.ConcurrentHashMap
+
+    fun main() {
+        val a = mutableListOf(1, 2, 3)
+        for (x in a) { if (x == 2) a.remove(x) }
+        println(a.joinToString(" "))
+
+        val b = mutableListOf(1, 2, 3, 4)
+        val r = runCatching { for (x in b) { if (x == 2) b.remove(x) } }
+        println(r.exceptionOrNull()?.javaClass?.simpleName)
+
+        val m = ConcurrentHashMap(mapOf(1 to "a", 2 to "b", 3 to "c"))
+        for (k in m.keys) { if (k == 2) m.remove(k) }
+        println(m.keys.sorted().joinToString(" "))
+    }
+  answer: |
+    1 3 ConcurrentModificationException 1 3
+  explain: |
+    - 第一個迴圈印出 `1 3`，而且沒有丟例外：迭代器判斷「還有沒有下一個」的方式，是比較目前的位置和目前的大小。移除元素 `2` 的時候，位置剛好是 2、大小變成 2，迭代器就認為走完了，迴圈默默結束，`3` 根本沒被走訪到。
+    - 第二個迴圈會丟 `ConcurrentModificationException`：移除 `2` 之後，大小是 3、位置是 2，迴圈還會繼續，下一次取下一個元素時，迭代器發現集合在迭代途中被修改過，就丟出這個例外。
+    - 第三個印出 `1 3`：`ConcurrentHashMap` 的迭代器不會丟這個例外，移除 `2` 之後，剩下 `1 3`。
+    教訓：不要依賴 `ConcurrentModificationException` 來發現錯誤，它有時候不會出現。迭代時要修改集合，用 `removeIf`、`iterator.remove()` 或先複製一份。
+
+- id: kotlin-java-interop-jmm-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [hashmap, concurrenthashmap, null-handling]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: kotlin
+  code: |
+    import java.util.concurrent.ConcurrentHashMap
+
+    fun main() {
+        val hm = HashMap<String?, Int?>()
+        hm[null] = null
+        println(hm.size)
+
+        val chm = ConcurrentHashMap<String, Int?>()
+        println(runCatching { chm["a"] = null }.exceptionOrNull()?.javaClass?.simpleName)
+        println(chm.containsKey("a"))
+    }
+  answer: |
+    1 NullPointerException false
+  explain: |
+    - `HashMap` 允許一個 null key 和 null value，所以 `size` 是 1。
+    - `ConcurrentHashMap` 不允許 null key 或 null value。原因是多執行緒下，讀到 `null` 沒辦法分辨「沒有這個 key」還是「值本身是 null」。所以 `put` 直接丟 `NullPointerException`，map 也沒有被修改，`containsKey("a")` 是 `false`。
+    - Kotlin 的型別系統不會替你擋下這個問題：宣告成 `ConcurrentHashMap<String, Int?>` 可以編譯，但執行時會丟例外。
+
+- id: kotlin-java-interop-jmm-04
+  type: multi
+  level: 2
+  priority: P0
+  tags: [jmm, volatile, synchronized]
+  prompt: |
+    關於 Java Memory Model，哪些敘述正確？（複選）
+  options:
+    - "`@Volatile var running` 讓一個執行緒的寫入對其他執行緒的後續讀取可見"
+    - "`@Volatile var count` 之後做 `count++`，在多執行緒下是原子的"
+    - "`synchronized` 除了互斥，還建立 happens-before：解鎖前的寫入，對之後取得同一把鎖的執行緒可見"
+    - "沒有任何同步時，一個執行緒對普通欄位的寫入「最終一定」會被其他執行緒看到，只是時間不確定"
+  answer: [0, 2]
+  explain: |
+    - 第 1 項正確。`volatile` 保證可見性與相關的順序，例如停止旗標加了 `@Volatile`，另一個執行緒才一定讀得到最新的值。
+    - 第 2 項錯：`count++` 是「讀出、加一、寫回」三步，不是原子操作。兩個執行緒可能同時讀到 5，都寫回 6，少算一次。要用 `AtomicInteger` 或鎖。
+    - 第 3 項正確。`synchronized` 同時提供互斥與 happens-before（A happens-before B，代表 A 的結果 B 一定看得到）。
+    - 第 4 項錯：JMM 沒有「最終一定看到」這種保證。沒有 happens-before 關係時，另一個執行緒可能永遠讀到舊值，例如沒加 `volatile` 的 `while (!flag)` 迴圈，可能永遠不結束。
+    所以旗標、停止訊號至少要 `volatile`；共享的狀態要用鎖、Atomic，或把不可變的物件安全地交給其他執行緒。
+
+- id: kotlin-java-interop-jmm-05
+  type: single
+  level: 2
+  priority: P0
+  tags: [concurrenthashmap, atomicity]
+  prompt: |
+    多個執行緒共用 `ConcurrentHashMap<String, Session>`，下列哪段程式碼仍然有 race condition（結果取決於執行的時間順序）？
+  options:
+    - "`map.computeIfAbsent(id) { Session(id) }`"
+    - "`if (!map.containsKey(id)) { map[id] = Session(id) }`"
+    - "`map.putIfAbsent(id, Session(id))`"
+    - "`map.merge(id, 1) { a, b -> a + b }`（`map` 為 `ConcurrentHashMap<String, Int>`）"
+  answer: 1
+  explain: |
+    - 第 2 項有問題。`ConcurrentHashMap` 的每個方法單獨呼叫是安全的，但「先檢查、再寫入」是兩次呼叫，中間可能被別的執行緒插進來：兩個執行緒都發現 key 不存在，各自寫入，後寫的覆蓋先寫的。這種寫法叫 check-then-act。
+    - 第 1 項沒有問題：`computeIfAbsent` 把「檢查加建立」合成一個原子操作。
+    - 第 3 項沒有問題：`putIfAbsent` 也是原子操作。
+    - 第 4 項沒有問題：`merge` 對單一 key 是原子的。
+    另外要注意 Kotlin 的 `getOrPut` 擴充函式不是原子的，多執行緒下預設值的函式可能被執行多次；需要「只建立一次」就用 `computeIfAbsent`。
+
+- id: kotlin-java-interop-jmm-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [throws, checked-exception]
+  prompt: |
+    Kotlin 寫的 `fun load(path: String): String` 內部會丟 `IOException`，沒有任何註解。Java 呼叫端寫了 `try { repo.load("a") } catch (IOException e) { … }`，結果如何？
+  options:
+    - "可以編譯，Java 會自動把 Kotlin 的例外視為 checked exception"
+    - "Java 編譯失敗：`IOException` 從未在 try 區塊中被宣告可能丟出；Kotlin 方法需要加上 `@Throws(IOException::class)`"
+    - "可以編譯，但 runtime 永遠不會進入 catch"
+    - "Kotlin 編譯失敗，因為沒有宣告 `throws`"
+  answer: 1
+  explain: |
+    - 第 2 項正確。Kotlin 沒有 checked exception（編譯器強制處理的例外），產生的方法簽名也不帶 `throws`。Java 編譯器會檢查 `catch (IOException e)` 的 try 區塊裡有沒有可能丟出 `IOException`，發現沒有，就直接報錯。
+    - 第 1 項錯：Java 不會自動把 Kotlin 的例外當成 checked exception，它只看方法簽名上的 `throws`。
+    - 第 3 項錯：問題發生在 Java 的編譯階段，根本編譯不過，不會走到執行時。
+    - 第 4 項錯：Kotlin 完全不要求宣告 `throws`。
+    對外給 Java 使用的 API 要標 `@Throws`。在 Kotlin Multiplatform 中，`suspend fun` 匯出給 Swift 時也一樣：沒有標 `@Throws` 的例外，Swift 端無法接住，會讓 App 終止。
+
+- id: kotlin-java-interop-jmm-07
+  type: fill
+  level: 1
+  priority: P1
+  tags: [jvm-annotations]
+  prompt: |
+    讓 Java 呼叫端可以：只傳 `baseUrl` 就建立 `Client`；把 `default()` 當成 `Client` 上的 static 方法呼叫（不用經過 `Companion`）；直接讀 `Client.TAG` 欄位。補上註解名稱（不含 `@`）。
+  codeLang: kotlin
+  code: |
+    class Client @____ constructor(val baseUrl: String, val timeoutMs: Long = 10_000) {
+        companion object {
+            @____ fun default() = Client("https://api.example.com")
+            @____ val TAG = "Client"
+        }
+    }
+  blanks:
+    - [JvmOverloads]
+    - [JvmStatic]
+    - [JvmField]
+  explain: |
+    - 第一格是 `JvmOverloads`：為有預設值的參數產生多載，Java 才能用 `new Client("...")` 只傳一個參數。
+    - 第二格是 `JvmStatic`：讓 `default()` 成為 `Client` 上真正的 static 方法，而不是要寫成 `Client.Companion.default()`。
+    - 第三格是 `JvmField`：讓 `TAG` 變成 `Client` 上的 public static 欄位，而不是要呼叫 `Client.Companion.getTAG()`。如果它是編譯期就確定的常數，直接寫 `const val` 也可以。
+    小提醒：`default` 是 Java 的保留字，Java 程式碼沒辦法直接用這個名字呼叫方法。這一題只是為了練習註解，實際給 Java 用的函式請避開 Java 的保留字。
+
+- id: kotlin-java-interop-jmm-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [java, jmm, field]
+  prompt: |
+    這類職缺常把 Java 和 Kotlin 並列。請說明你的 Java 經驗、Kotlin 與 Java 混用的專案要注意什麼，以及你怎麼向面試官解釋 `volatile`、`synchronized` 與 `ConcurrentHashMap`。
+  promptJa: |
+    この種の求人では Java と Kotlin が並んで記載されることがよくあります。あなたの Java 経験、Kotlin と Java が混在するプロジェクトで注意する点、そして `volatile`、`synchronized`、`ConcurrentHashMap` を面接官にどう説明するかを答えてください。
+  keyPoints:
+    - "Java 經驗：Android 技能包含 Kotlin 與 Java；例如在一個藍牙智慧鎖 SDK 專案裡同時有 Kotlin 與 Java（AES 加密的實作是 Java）"
+    - "混用的邊界：platform type 與 nullability 註解、@Throws、@JvmStatic、@JvmOverloads、@JvmField、SAM 與 fun interface、suspend 對 Java 不友善"
+    - "volatile：可見性與順序，但不是原子；synchronized：互斥加 happens-before；Atomic：用 CAS 做單一變數的讀改寫"
+    - "data race 與 race condition 的差別；check-then-act 是常見的 bug"
+    - "ConcurrentHashMap：不允許 null、迭代不丟 CME、用 computeIfAbsent 或 merge 做原子的複合操作；Kotlin 的 getOrPut 不是原子的"
+    - "實例：一個社交 App 的 SocketManager（AtomicBoolean、ConcurrentLinkedQueue）、TokenManager（synchronized）、RealmManager（單一執行緒封閉）"
+  modelAnswer: |
+    我的 Android 以 Kotlin 為主，也能讀寫 Java。在一個藍牙智慧鎖 SDK 專案裡，同時有 Kotlin 與 Java 檔案，例如 AES 加密的實作是 Java。
+
+    混用時我會注意邊界：Java 回傳的是 platform type，編譯器不檢查是不是 null，所以我會在邊界宣告成明確的可為 null 或非 null；給 Java 或 Swift 用的 API 要標 `@Throws`、`@JvmStatic`、`@JvmOverloads`；Kotlin 的 `suspend` 對 Java 不友善，要另外提供 callback 或 future 的包裝。
+
+    多執行緒的部分，`volatile` 保證可見性和順序，例如停止旗標，但 `count++` 不是原子的。`synchronized` 同時提供互斥和 happens-before，Atomic 用 CAS 處理單一變數的讀改寫。`ConcurrentHashMap` 不允許 null、迭代不會丟 CME，複合操作要用 `computeIfAbsent` 或 `merge`，因為 `containsKey` 加 `put` 是 check-then-act。
+
+    實務上，在一個社交 App 裡，`SocketManager` 用 `AtomicBoolean` 擋同時連線、`ConcurrentLinkedQueue` 放待處理的工作，`TokenManager` 用 `synchronized`，Realm 則用單一執行緒的 dispatcher 做執行緒封閉。
+  modelAnswerJa: |
+    Android は主に Kotlin で開発していますが、Java も読み書きできます。あるスマートロック SDK のプロジェクトでは、Kotlin と Java のファイルが混在しており、たとえば AES 暗号化の実装は Java です。
+
+    混在させるときは境界に注意します。Java から返ってくる型は platform type で、コンパイラは null かどうかを検査しないため、境界で null 許容か非 null かを明示します。Java や Swift から使う API には `@Throws`、`@JvmStatic`、`@JvmOverloads` を付けます。Kotlin の `suspend` は Java から使いにくいので、callback や future のラッパーを別に用意します。
+
+    マルチスレッドでは、`volatile` は可視性と順序を保証します（たとえば停止フラグ）が、`count++` は原子的ではありません。`synchronized` は排他制御と happens-before の両方を提供し、Atomic は CAS で単一変数の読み取り・変更・書き込みを原子的に行います。`ConcurrentHashMap` は null を許さず、イテレーション中に CME を投げません。複合操作は `computeIfAbsent` や `merge` を使います。`containsKey` と `put` の組み合わせは check-then-act になるからです。
+
+    実務では、あるソーシャルアプリの `SocketManager` で `AtomicBoolean` により同時接続を防ぎ、`ConcurrentLinkedQueue` に未処理の仕事を入れていました。`TokenManager` は `synchronized` を使い、Realm は単一スレッドの dispatcher でスレッド封じ込めをしていました。
+  followUps:
+    - double-checked locking 為什麼欄位要加 volatile？Kotlin 的 lazy 怎麼處理？
+    - 為什麼 AtomicBoolean 可以當作連線的互斥旗標？它有什麼限制？
+    - Kotlin 的 suspend fun 要怎麼給 Java 呼叫？
+  timeLimitSec: 150
+
+- id: kotlin-java-interop-jmm-09
+  type: flash
+  level: 2
+  priority: P1
+  tags: [jmm]
+  front: volatile、synchronized、Atomic 各保證什麼？
+  back: |
+    - `volatile`：保證可見性與順序；單次的讀或寫是原子的，但 `count++` 不是。
+    - `synchronized`：互斥，並建立 happens-before（解鎖前的寫入，對之後取得同一把鎖的執行緒可見）。
+    - `Atomic*`：單一變數的讀改寫是原子的（用 CAS 實作），同時具備 volatile 的可見性。
+    - Kotlin 的 `val` 會編成 `final` 欄位，物件建構完成後可以安全地交給其他執行緒，不可變的物件不需要鎖。

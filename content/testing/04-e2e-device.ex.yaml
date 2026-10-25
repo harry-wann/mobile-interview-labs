@@ -1,0 +1,87 @@
+- id: testing-e2e-01
+  type: fill
+  level: 1
+  priority: P1
+  tags: [maestro]
+  prompt: |
+    用 Maestro 寫「登入後看到行情列表」的流程。
+  codeLang: text
+  code: |
+    appId: jp.example.exchange
+    ---
+    - ____
+    - tapOn:
+        id: "login_email"
+    - inputText: "qa+e2e01@example.com"
+    - tapOn:
+        id: "login_submit"
+    - ____:
+        id: "market_list"
+  blanks:
+    - [launchApp]
+    - [assertVisible]
+  explain: |
+    Maestro 的流程用 YAML 寫：`launchApp` 啟動 App，`tapOn`、`inputText` 操作畫面，`assertVisible` 檢查某個元素有出現，而且會自動等待元素出現。
+    用 `id` 找元素（iOS 是 accessibilityIdentifier，Android 是 testTag 或 resource id），換語言也不會壞。
+    Compose 的 `testTag` 預設 Maestro 看不到，要在上層設定 `Modifier.semantics { testTagsAsResourceId = true }`。
+
+- id: testing-e2e-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [environment, exchange]
+  prompt: |
+    建立交易所 App 的端到端（E2E）測試環境，哪些做法正確？（複選）
+  options:
+    - "使用測試環境（staging）與測試帳號，不在正式環境用真錢"
+    - "測試帳號的兩步驟驗證用固定的 TOTP 金鑰，由測試程式算出驗證碼"
+    - "所有測試共用同一個測試帳號，省去建立帳號的時間"
+    - "每個測試前用 API 建立乾淨的狀態"
+    - "時好時壞（flaky）的測試直接刪掉"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 3 項錯：共用帳號會讓測試互相影響，例如 A 測試撤掉了 B 測試的訂單。
+    - 第 5 項錯：時好時壞的測試應該先隔離、找出原因，直接刪掉等於失去這部分的保護。
+
+- id: testing-e2e-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [flaky]
+  prompt: |
+    CI 設定「失敗自動重試一次」之後，紅燈少了很多。下列哪個風險最需要注意？
+  options:
+    - "CI 的執行時間會稍微變長"
+    - "真的偶發 bug（例如 race condition：執行先後不同，結果就不同）會被重試掩蓋；必須記錄『重試後才通過』的次數並追蹤"
+    - "重試會讓測試覆蓋率下降"
+    - "重試會讓 snapshot 參考圖失效"
+  answer: 1
+  explain: |
+    偶爾失敗的測試，有時候反映的正是正式環境也會發生的 race condition。重試可以減少干擾，但一定要留下紀錄、設定門檻，並把經常需要重試的測試放進修復清單。
+    其他選項：執行時間只會稍微變長，不是最大的風險；重試不會影響覆蓋率，也不會讓截圖比對的參考圖失效。
+
+- id: testing-e2e-04
+  type: open
+  level: 2
+  priority: P1
+  tags: [e2e, tool-choice]
+  prompt: |
+    「我們想建立雙平台的 E2E 測試，你會選 Maestro、Appium，還是原生的 XCUITest／Espresso？為什麼？」
+  promptJa: |
+    「両OSの E2E テストを構築したいのですが、Maestro、Appium、ネイティブの XCUITest／Espresso のどれを選びますか？その理由も教えてください。」
+  keyPoints:
+    - 先看條件：團隊規模、有沒有專職 QA、需要多細的控制、雙平台共用一份測試的價值
+    - Maestro：用 YAML 寫、好讀、會自動等待、雙平台共用流程，適合關鍵流程
+    - 原生 UI 測試：最快、可以和單元測試共用 stub 與依賴注入、能細部控制，但兩個平台各寫一份
+    - Appium：生態大但慢、設定複雜，除非已有 Selenium 背景
+    - 建議組合：Maestro 做關鍵流程＋原生 UI 測試做需要細部控制的部分；兩個平台的元件 ID 命名規則要一致
+    - AI 的角度：YAML 也很容易讓 AI agent 產生和修改
+  modelAnswer: |
+    我會先看團隊條件：有沒有專職 QA、要多深的控制，以及雙平台共用流程的價值有多大。
+
+    以交易所 App 來說，我的建議是 Maestro 加原生 UI test 的組合。關鍵路徑像登入、下單、撤單、入出金，用 Maestro 寫：它是 YAML，可讀性高、有自動等待，同一份流程可以在 iOS 和 Android 跑，前提是兩邊的 accessibility identifier 命名一致，這要一開始就訂規範。需要細部控制、或要和單元測試共用 stub 的地方，例如模擬斷線、注入特定的行情資料，就用原生的 XCUITest 和 Compose UI test。
+
+    Appium 的生態很大，但比較慢、設定也複雜，除非團隊已經有 Selenium 的經驗，否則我不會優先選。
+
+    另外一個考量是 AI：Maestro 的 YAML 很容易讓 agent 產生和修改，搭配 MCP 讓 agent 操作模擬器，可以把探索出來的步驟轉成固定的 Maestro 流程。
+  timeLimitSec: 150

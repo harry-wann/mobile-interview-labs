@@ -1,0 +1,201 @@
+- id: platform-background-push-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [silent-push, price-alert]
+  prompt: |
+    PM 提議：價格提醒用 silent push（不顯示通知、只喚醒 App 的推播）每分鐘喚醒 App，App 在背景抓最新價，比對使用者設定的門檻後發本地通知。為什麼這不是好設計？
+  options:
+    - "silent push 不能攜帶任何資料，所以 App 無法知道價格"
+    - "本地通知不能在背景發出"
+    - "Silent push 會被系統節流，在低電量模式或使用者強制關閉 App 之後不會喚醒 App，也不保證送達與時間，無法提供可靠、準時的價格提醒。比較好的做法是伺服器比對門檻，觸發時直接發 alert 推播"
+    - "iOS 的 `apns-priority` 只允許 10，所以 silent push 一定被拒絕"
+  answer: 2
+  explain: |
+    silent push 設計成「盡力而為」的喚醒機制：Apple 沒有保證發送頻率，會依電量、使用模式節流；使用者強制關閉 App 後也不會再喚醒。Android 上對應的機制（WorkManager 週期性工作最短 15 分鐘、Doze、App Standby）同樣不準時。
+
+    價格提醒的正確位置是伺服器：伺服器持續比對行情，觸發時發 alert 推播（APNs／FCM）。這樣即使 App 沒有在執行也能送達，而且可以做去重與折疊。
+
+    - 第 1 項錯：silent push 可以攜帶 payload（自訂欄位），問題不在資料，而在喚醒不可靠。
+    - 第 2 項錯：本地通知可以在背景發出，問題是 App 根本不一定被喚醒。
+    - 第 4 項錯：background 種類的 silent push，`apns-priority` 必須是 5，用 10 才會被拒絕。
+
+- id: platform-background-push-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [ios, bgtask, urlsession]
+  prompt: |
+    關於 iOS 的背景執行，哪些敘述正確？（複選）
+  options:
+    - "`BGAppRefreshTask` 的 `earliestBeginDate` 只是最早時間，實際何時執行由系統依使用習慣與電量決定"
+    - "Background `URLSession` 在使用者強制關閉 App 之後仍然會繼續傳輸，並在完成時喚醒 App"
+    - "Silent push 會被系統節流；低電量模式或使用者強制關閉 App 後，不保證喚醒 App"
+    - "Background `URLSession` 支援 data task，可以用來長時間輪詢 API"
+    - "Notification Service Extension 可以在 alert 推播顯示前修改內容，推播需要帶 `mutable-content: 1`"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：`earliestBeginDate` 只是「最早」，不是「排定的時間」。
+    - 第 2 項錯：使用者強制關閉 App 之後，系統會取消 background `URLSession` 的傳輸，也不會再喚醒 App。
+    - 第 3 項正確：silent push 是盡力而為的機制，會被節流。
+    - 第 4 項錯：Background `URLSession` 只支援 upload 與 download 任務，不支援一般的 data task，所以不能拿來輪詢 API。
+    - 第 5 項正確：Notification Service Extension 的處理時間約 30 秒，超時系統會呼叫 `serviceExtensionTimeWillExpire`，讓你交出目前能用的內容。
+
+- id: platform-background-push-03
+  type: single
+  level: 2
+  priority: P0
+  tags: [android, workmanager]
+  prompt: |
+    Android 工程師用 `PeriodicWorkRequestBuilder<PriceSyncWorker>(1, TimeUnit.MINUTES)` 排定每分鐘同步價格。實際會發生什麼？
+  options:
+    - "每分鐘準時執行，因為 WorkManager 使用 AlarmManager 的 exact alarm"
+    - "週期性工作最短間隔是 15 分鐘，更短的值會被提高成 15 分鐘，而且受 Doze、App Standby 影響，不準時；不適合即時價格"
+    - "會拋出 `IllegalArgumentException`，無法排定"
+    - "App 在前景時每分鐘執行，進背景就停止"
+  answer: 1
+  explain: |
+    `PeriodicWorkRequest` 的最短間隔是 15 分鐘（`MIN_PERIODIC_INTERVAL_MILLIS`），設定更短的值會被提高到 15 分鐘，並在 log 留下警告。WorkManager 是「保證最終會執行、可以延遲」的機制，不是準時的排程器；它底層用系統的任務排程機制（例如 JobScheduler），受 Doze 與 App Standby Bucket 的限制。
+
+    - 第 1 項錯：WorkManager 不是用 exact alarm（精準鬧鐘），不保證準時。
+    - 第 3 項錯：不會拋出例外，而是默默調整成 15 分鐘。
+    - 第 4 項錯：WorkManager 的工作不依賴 App 是否在前景，App 進背景或被結束後仍會執行。
+
+    即時價格應該用前景的串流連線；背景的提醒用伺服器推播。
+
+- id: platform-background-push-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [apns, headers]
+  prompt: |
+    伺服器要發一個 iOS 的 **silent push**（只喚醒 App，不顯示通知）。補上 APNs 請求標頭的值。
+  codeLang: text
+  code: |
+    apns-push-type: ____
+    apns-priority: ____
+    apns-collapse-id: price-sync-btcjpy
+  blanks:
+    - [background]
+    - ["5"]
+  explain: |
+    silent push 的 payload 帶 `"aps": {"content-available": 1}`，`apns-push-type` 要設成 `background`（Apple 要求填寫，watchOS 6 起是必填），`apns-priority` 必須是 `5`，用 10 會被拒絕或被忽略。
+
+    對照：alert 推播（使用者看得到的通知）是 `apns-push-type: alert`，`apns-priority: 10` 代表立即送達、`5` 代表考量省電。`apns-collapse-id`（最長 64 bytes）可以讓新通知取代尚未顯示的同 ID 舊通知。
+
+- id: platform-background-push-05
+  type: multi
+  level: 2
+  priority: P0
+  tags: [price-alert, design]
+  prompt: |
+    設計交易所 App 的價格提醒推播，下列哪些做法合理？（複選）
+  options:
+    - "由伺服器持續比對行情與使用者門檻，觸發時推播（APNs／FCM）"
+    - "App 以 `BGAppRefreshTask`（iOS）與 `WorkManager`（Android）定期輪詢價格並在本機比對"
+    - "同一檔的舊提醒用 `apns-collapse-id`／`collapse_key` 被新的取代，並設定較短的 TTL"
+    - "Android 為價格提醒建立獨立的 notification channel，並使用高優先權訊息"
+    - "用 silent push 喚醒 App 後再決定是否顯示本地通知，以保證 100% 送達"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 1 項正確：伺服器有完整的行情，可以在價格到達的當下直接推播，即使 App 沒有在執行也能送達。
+    - 第 2 項錯：App 端輪詢既不準時又耗電（BGAppRefreshTask 與 WorkManager 都由系統決定何時執行，WorkManager 最短 15 分鐘），延遲可能是數分鐘到數小時。
+    - 第 3 項正確：價格有時效，TTL 要短，過期的通知不如不送；collapse 讓通知不會堆積成一長串過時的價格。
+    - 第 4 項正確：獨立的 channel 讓使用者可以單獨調整價格提醒的聲音與重要性，而不是整個關閉通知；高優先權訊息才能在 Doze 中喚醒手機。
+    - 第 5 項錯：silent push 會被節流，強制關閉後不會喚醒，不可能保證 100% 送達。
+
+- id: platform-background-push-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, fcm, workmanager]
+  prompt: |
+    Android 的 `FirebaseMessagingService.onMessageReceived` 內，同事寫了 `CoroutineScope(Dispatchers.IO).launch { saveToDb(message); syncAccount() }` 後直接 return。可能的問題與修法是？
+  options:
+    - "沒有問題，協程會在背景持續執行直到完成"
+    - "`onMessageReceived` 回傳後，行程可能很快被回收，fire-and-forget（丟出去就不管）的協程會做到一半就消失。處理時間很短的工作要在回傳前完成（約 20 秒內）；需要確實完成的工作交給 WorkManager（expedited）"
+    - "應該改用 `GlobalScope`，它不受行程影響"
+    - "`Dispatchers.IO` 在 service 中無法使用，要改 `Dispatchers.Main`"
+  answer: 1
+  explain: |
+    FCM 給 `onMessageReceived` 約 20 秒的處理時間；方法一回傳，系統就認為處理完成，不保證行程繼續存活。所以丟出去不管的協程可能做到一半就消失。
+
+    - 第 1 項錯：協程跑在行程裡，行程被回收，協程就跟著消失。
+    - 第 3 項錯：`GlobalScope` 只是不綁定生命週期，並不會讓行程存活。
+    - 第 4 項錯：`Dispatchers.IO` 在 service 中可以正常使用；改用 `Main` 反而會佔住主執行緒。
+
+    需要「一定要做完」的工作（寫入、同步）用 WorkManager 的 expedited work（Android 12 起有配額，額度用完時會降級為一般工作）。
+
+- id: platform-background-push-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [android, doze, foreground-service, notification]
+  prompt: |
+    關於 Android 的背景限制，哪些敘述正確？（複選）
+  options:
+    - "Android 14（API 34）起，foreground service 必須宣告 `foregroundServiceType` 以及對應的權限"
+    - "WorkManager 的工作在 App 行程被結束或裝置重新開機後，仍會被重新排程並最終執行"
+    - "Android 13（API 33）起，顯示通知需要 `POST_NOTIFICATIONS` 執行期權限"
+    - "高優先權 FCM 訊息保證在 Doze 中立即送達，不會有任何延遲或降級"
+    - "屬於 `Restricted` bucket 的 App，其 job 與 alarm 的執行不受限制"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：targetSdk 在 34 以上時，每個 foreground service 都要宣告種類（例如定位、媒體播放）與對應權限。
+    - 第 2 項正確：WorkManager 會把工作存起來，行程被結束、手機重開機之後仍會重新排程。
+    - 第 3 項正確：沒有取得這個權限，通知不會顯示。
+    - 第 4 項錯：Doze 下高優先權 FCM 可以喚醒手機，但不是保證立即送達；濫用（發了高優先權卻沒有顯示使用者看得到的通知）會被降級。
+    - 第 5 項錯：App Standby Bucket 會限制任務與鬧鐘的執行，越少用的 App 限制越多；`Restricted`（API 30 才加入）是最嚴格的一級。
+
+- id: platform-background-push-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [price-alert, push, design]
+  prompt: |
+    請設計交易所 App 的「價格提醒」功能（含 iOS 與 Android 的推播），並說明 client 端要做的事、為什麼不能靠 client 輪詢，以及你在推播和背景執行上的相關經驗。
+  promptJa: |
+    取引所アプリの「価格アラート」機能（iOS と Android のプッシュ通知を含む）を設計してください。クライアントで行うこと、クライアントのポーリングに頼れない理由、および プッシュ通知とバックグラウンド実行に関する経験も説明してください。
+  keyPoints:
+    - "伺服器持續比對行情與使用者門檻，觸發時發 alert 推播（APNs／FCM）；client 不能在背景監控價格（BGTask／WorkManager 不準時，silent push 被節流）"
+    - "payload：symbol、alertId、價格、在地化 key；去重、冷卻時間、`apns-collapse-id`／`collapse_key`、短 TTL"
+    - "Android：獨立 channel、高優先權、`POST_NOTIFICATIONS` 權限；iOS：權限詢問時機、視情況使用 time-sensitive（iOS 15 起，需 capability）"
+    - "點擊後以 deep link 開啟行情頁，驗證參數，並重新抓最新價格"
+    - "token 管理：登入註冊、變更更新、登出註銷、無效 token 清除"
+    - "前景時與串流行情去重，用 App 內橫幅"
+    - "隱私：鎖定畫面不顯示持有量；觀測：送達率、點擊率"
+    - "經驗：社交 App 用 FCM／APNs 推播，聊天 socket 進背景就斷線，靠推播與回前景的 HTTP 同步補資料；交易所 App 需要確實完成的工作交給 expedited WorkManager"
+  modelAnswer: |
+    價格提醒由伺服器驅動：伺服器持續比對行情與使用者的門檻，觸發時發 alert 推播。client 不能在背景輪詢價格，因為 BGAppRefreshTask 和 WorkManager 都不準時，WorkManager 最短還要 15 分鐘，silent push 又會被節流。
+
+    推播的內容帶 symbol 與 alertId，文字用在地化 key，因為這類 App 常支援多種語言。同一個提醒只觸發一次或有冷卻時間；用 `apns-collapse-id` 和 `collapse_key` 讓過時的提醒被取代，TTL 設短，價格過了幾分鐘就沒意義。Android 建立獨立的 notification channel 並使用高優先權，Android 13 以上要請求 `POST_NOTIFICATIONS`；iOS 在使用者建立第一個提醒時才詢問權限，視情況使用 time-sensitive。
+
+    使用者點擊後用 deep link 開啟行情頁，驗證參數並重新抓最新價。token 在登入時註冊、變更時更新、登出時註銷。App 在前景且有串流時，用 App 內橫幅並和推播去重。鎖定畫面不顯示持有量。
+
+    經驗上，我做過的社交 App 在 iOS 用 Firebase Messaging，Android 的 FCM service 在 `onMessageReceived` 把通知存進資料庫，依訊息種類分別處理，`onNewToken` 在登入狀態下上傳 token。那個 App 的聊天 socket 進背景就斷線，靠推播通知使用者，回前景用 HTTP 同步補資料。換成交易所 App，需要在 `onMessageReceived` 裡確實完成的工作，我會交給 expedited WorkManager。
+  modelAnswerJa: |
+    価格アラートはサーバー駆動にします。サーバーが相場とユーザーのしきい値を常に比較し、条件を満たしたら alert のプッシュを送ります。クライアントがバックグラウンドで価格をポーリングすることはできません。BGAppRefreshTask と WorkManager は時刻が保証されず、WorkManager の最短間隔は 15 分で、silent push も間引かれるからです。
+
+    ペイロードには symbol と alertId を含め、文言はローカライズ用のキーにします。このようなアプリは複数の言語に対応することが多いためです。同じアラートは一度だけ、またはクールダウン付きで発火させ、`apns-collapse-id` と `collapse_key` で古いアラートを置き換え、TTL は短くします。数分前の価格には意味がないからです。Android は専用の notification channel と高優先度を使い、Android 13 以上では `POST_NOTIFICATIONS` を要求します。iOS ではユーザーが最初のアラートを作る時点で許可を求め、必要に応じて time-sensitive を使います。
+
+    タップ後は deep link で相場画面を開き、パラメータを検証して最新価格を再取得します。トークンはログイン時に登録、変更時に更新、ログアウト時に解除します。アプリがフォアグラウンドでストリーミング中なら、アプリ内バナーで表示してプッシュと重複排除します。ロック画面には保有数量を表示しません。
+
+    経験としては、以前関わったソーシャルアプリの iOS は Firebase Messaging を使い、Android の FCM サービスは `onMessageReceived` で通知をデータベースに保存し、メッセージの種類ごとに処理していました。`onNewToken` ではログイン中にトークンをアップロードしていました。そのアプリのチャット socket はバックグラウンドで切断し、プッシュ通知と、復帰時の HTTP 同期で補っていました。取引所アプリでは、`onMessageReceived` 内で確実に完了させたい処理を expedited WorkManager に任せます。
+  followUps:
+    - "同じ銘柄で 1 秒に何度もしきい値をまたいだら、通知は何回送る？"
+    - "APNs が 410 を返したときの処理は？"
+    - "通知を受け取った時に、価格がすでに戻っていたらどう見せる？"
+  timeLimitSec: 150
+
+- id: platform-background-push-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [background]
+  front: 背景執行機制速記：iOS vs Android，哪些準時？
+  back: |
+    **都不準時**：
+    - iOS：`BGAppRefreshTask`（約 30 秒，系統決定何時執行）、`BGProcessingTask`、silent push（被節流、強制關閉不喚醒）、background URLSession（只有 upload／download）。
+    - Android：WorkManager（週期性工作最短 15 分鐘）、Doze／App Standby Bucket、前景服務（Android 14 起要宣告 type）。
+
+    **準時送達靠推播**：APNs（alert，priority 10）／FCM（HIGH priority）。價格提醒＝伺服器比對門檻＋推播＋collapse＋短 TTL。

@@ -1,0 +1,176 @@
+- id: advanced-rendering-jank-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [ios, hitch, budget]
+  prompt: |
+    在 120Hz 的 ProMotion 裝置上，一格畫面的時間預算大約是多少？Apple 用來衡量捲動流暢度的 hitch time ratio（每秒累積了幾毫秒的延誤），哪個區間屬於「良好」？
+  options:
+    - "16.67 毫秒；hitch time ratio 小於 20 ms/s 算良好"
+    - "8.33 毫秒；hitch time ratio 小於 5 ms/s 算良好（5 到 10 ms/s 是警告，大於 10 ms/s 是嚴重）"
+    - "11.1 毫秒；hitch time ratio 小於 1 ms/s 算良好"
+    - "8.33 毫秒；只要平均 FPS（每秒畫面數）大於 50 就算良好"
+  answer: 1
+  explain: |
+    120Hz 表示螢幕一秒更新 120 次，一格畫面的時間是 1000 ÷ 120 ≈ 8.33 毫秒（60Hz 是 16.67 毫秒，90Hz 是 11.1 毫秒）。hitch time ratio 是「每秒累積的延誤毫秒數」，Apple 的分級是小於 5 ms/s 良好、5 到 10 ms/s 警告、大於 10 ms/s 嚴重。
+
+    其他選項錯在哪裡：
+    - 第 1 項的 16.67 毫秒是 60Hz 的預算，不是 120Hz；良好的門檻也不是 20 ms/s。
+    - 第 3 項的 11.1 毫秒是 90Hz 的預算；良好的門檻不是 1 ms/s。
+    - 第 4 項雖然 8.33 毫秒是對的，但平均 FPS 不是 Apple 的分級方式。使用者感受到的是「偶發的長停頓」，平均 50 FPS 之中仍可能夾著明顯的掉幀，所以要看 hitch time ratio。
+
+- id: advanced-rendering-jank-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [ios, offscreen-rendering, core-animation]
+  prompt: |
+    下列哪些做法**容易造成**離屏渲染（offscreen rendering，GPU 即繪圖處理器，得先把內容畫到另一塊暫時的緩衝區，再合成回畫面）？（複選）
+  options:
+    - "對含有圖片內容的 view，同時設定 `layer.cornerRadius` 與 `layer.masksToBounds = true`"
+    - "設定 `layer.shadowOpacity` 與 `shadowRadius`，但沒有提供 `layer.shadowPath`"
+    - "使用 `layer.mask` 當作遮罩"
+    - "把 view 的背景設成實色（不透明），並設定 `isOpaque = true`"
+  answer: [0, 1, 2]
+  explain: |
+    離屏渲染需要額外的記憶體，還要在不同的繪圖狀態之間來回切換，成本很高。
+
+    - 第 1 項會：圓角加裁切（而且 view 有圖片內容）時，系統得先把內容畫到暫時的緩衝區，再裁成圓角。解法是預先把圓角裁在圖片上。
+    - 第 2 項會：沒有 `shadowPath` 時，系統不知道陰影的形狀，必須逐像素從圖層內容計算。提供 `shadowPath` 後就不用了。
+    - 第 3 項會：`layer.mask` 是典型的離屏渲染來源。可以改用 `CAShapeLayer` 或預先畫好的遮罩圖等較便宜的方式。
+    - 第 4 項不會，反而有幫助：不透明的 view，GPU 不需要和後面的圖層做混合計算，可以減少成本。
+
+    可以用模擬器 Debug 選單的 Color Offscreen-Rendered 檢查哪些圖層有離屏渲染。
+
+- id: advanced-rendering-jank-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, vitals, jank]
+  prompt: |
+    Google Play Console 的 Android vitals（Google Play 提供的 App 品質儀表板），把「slow frame」和「frozen frame」分別定義為什麼？
+  options:
+    - "slow frame 是單格畫面超過 16 毫秒；frozen frame 是單格畫面超過 700 毫秒"
+    - "slow frame 是單格畫面超過 100 毫秒；frozen frame 是單格畫面超過 1000 毫秒"
+    - "兩者都是單格畫面超過 16 毫秒，只是統計的頻率不同"
+    - "slow frame 看 CPU（中央處理器）使用率超過 80%；frozen frame 看是否發生 ANR（App 沒有回應）"
+  answer: 0
+  explain: |
+    Android vitals 的定義是：單格畫面超過 16 毫秒是 slow frame，超過 700 毫秒是 frozen frame。frozen frame 時，使用者幾乎能感覺到畫面「凍住」。
+
+    其他選項錯在哪裡：
+    - 第 2 項的 100 毫秒與 1000 毫秒不是 Android vitals 的門檻。
+    - 第 3 項把兩者混為一談，兩者的門檻差很多，嚴重程度也不同。
+    - 第 4 項不是用 CPU 使用率判斷，也不是看 ANR（ANR 是主執行緒長時間卡住，是另一項獨立的指標）。
+
+    這些是線上的整體資料，只告訴你「有多少畫面慢」，不告訴你是誰造成的。要定位原因，需要用 Perfetto 或 Macrobenchmark，或在實機上用 JankStats 搭配 `PerformanceMetricsState` 標記畫面當時的狀態。
+
+- id: advanced-rendering-jank-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [android, recyclerview, diffutil]
+  prompt: |
+    Android 的行情列表（RecyclerView）每秒會收到數十筆價格更新。下列哪一種更新方式最合適？
+  options:
+    - "每筆更新都呼叫 `notifyDataSetChanged()`，讓 RecyclerView 把所有項目重新綁定"
+    - "在背景先合併更新，再把新的清單交給 `ListAdapter`（`DiffUtil` 在背景執行緒比對差異），用 `getChangePayload` 只重綁價格欄位，並關閉 change animation"
+    - "在 `onBindViewHolder` 裡每次都建立新的 `DecimalFormat` 來格式化價格，確保格式正確"
+    - "每收到一筆更新就重新指定 `recyclerView.adapter = newAdapter`"
+  answer: 1
+  explain: |
+    `ListAdapter` 的差異比對在背景執行緒進行，只有真的有變動的項目會更新；payload 讓 `onBindViewHolder` 只更新價格的 TextView；高頻更新時預設的 change animation 會讓項目一直淡出淡入、閃爍，所以要關掉。
+
+    其他選項錯在哪裡：
+    - 第 1 項：`notifyDataSetChanged()` 會讓所有可見項目重新綁定，而且沒有任何變動資訊，高頻更新時一定卡。
+    - 第 3 項：在綁定資料的函式裡每次都建立 `DecimalFormat`，是常見的效能陷阱，而且 `DecimalFormat` 不是執行緒安全的。格式化應該在 UI model 階段預先做好。
+    - 第 4 項：每次換一個新的 Adapter，等於整個列表從頭重建，比 `notifyDataSetChanged()` 更糟。
+
+- id: advanced-rendering-jank-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [ios, android, partial-update]
+  prompt: |
+    補上兩個平台「只更新內容、不重建」的 API：iOS 的 diffable snapshot（iOS 15 以上），以及 Android 關閉 RecyclerView 的 change animation。
+  codeLang: text
+  code: |
+    // iOS
+    var snapshot = dataSource.snapshot()
+    snapshot.____(changedSymbols)
+    dataSource.apply(snapshot, animatingDifferences: false)
+
+    // Android（Kotlin）
+    (recyclerView.itemAnimator as? SimpleItemAnimator)?.____ = false
+  blanks:
+    - [reconfigureItems]
+    - [supportsChangeAnimations]
+  explain: |
+    `reconfigureItems` 讓既有的 cell 用新資料重新設定內容，不像 `reloadItems` 會丟掉舊的 cell 再重新建立，成本比較低。`animatingDifferences: false` 則是避免列表出現進場或移動的動畫。
+    `SimpleItemAnimator.supportsChangeAnimations = false` 會關掉項目內容變動時的動畫，避免高頻更新時項目一直淡出淡入、閃爍。
+
+- id: advanced-rendering-jank-06
+  type: order
+  level: 2
+  priority: P1
+  tags: [process, diagnosis]
+  prompt: |
+    使用者回報行情列表捲動會卡。把兩個平台通用的診斷流程，依合理的順序排列。
+  items:
+    - 在 release 型態、實機上重現問題（包含 ProMotion 等高更新率的裝置）
+    - 用 Instruments 的 Animation Hitches 或 Perfetto 擷取 trace
+    - 判斷超時發生在主執行緒（commit hitch、UI thread），還是 render、GPU，並找出具體的畫面與函式
+    - 修正（移出主執行緒、預先格式化、局部更新、減少離屏渲染與 overdraw）
+    - 用同一個基準重新量測確認，並在線上用 MetricKit、JankStats、Android vitals 監控
+  explain: |
+    先在真實條件下重現，才有可信的數字；再用工具擷取 trace，才能知道是哪一格畫面、哪個函式超時。
+
+    「判斷卡在哪一段」是關鍵：主執行緒太久，就要減少它的工作量；GPU 太久，就要處理離屏渲染與過度繪製，兩者的修法完全不同。沒有先判斷就動手，很容易改錯地方。
+
+    最後要用同一個基準確認有改善。只在自己的手機上看起來順，不代表所有使用者都沒問題，所以還要有線上指標。
+
+- id: advanced-rendering-jank-07
+  type: open
+  level: 3
+  priority: P0
+  tags: [jank, market-data]
+  prompt: |
+    交易所 App 的行情列表一次顯示上百個交易對、每秒數十次更新，使用者回報捲動時會卡。請說明你在 iOS 與 Android 各會怎麼診斷與修復，並說明你在列表與圖表上做過哪些相關的事。
+  promptJa: |
+    取引所アプリの相場一覧には数百の銘柄が並び、毎秒数十回更新されます。スクロール時にカクつくという報告がありました。iOS と Android それぞれでどう調査・修正しますか。また、リストやチャートで実際に行った関連の取り組みも説明してください。
+  keyPoints:
+    - 先量測：實機、release 型態；iOS 用 Instruments 的 Animation Hitches，Android 用 Perfetto 與 Macrobenchmark 的 FrameTimingMetric
+    - 判斷是主執行緒（commit hitch、UI thread）還是 render、GPU 的問題
+    - 資料層合併更新，每一格畫面或更低頻率提交一次；在背景預先格式化價格字串
+    - 局部更新：iOS 用 diffable 加 reconfigureItems（或 IGListKit），Android 用 ListAdapter 加 DiffUtil 加 payload
+    - 關掉不必要的動畫，處理離屏渲染與 overdraw，圖片依顯示尺寸解碼
+    - 線上監控：MetricKit、Xcode Organizer；JankStats、Android vitals
+    - 實務經驗：iOS 列表用 IGListKit 與 diffable data source，feed 預先載入有上限；先建立基準再改
+  modelAnswer: |
+    我會先量測再動手。iOS 在實機的 release 型態用 Instruments 的 Animation Hitches，Android 用 Perfetto 的 FrameTimeline 加 Macrobenchmark 的 FrameTimingMetric，先判斷是主執行緒超時，還是 GPU 繪製超時。
+
+    行情列表的修法，兩個平台大致相同：資料層在背景依交易對合併，每一格畫面或更低的頻率才提交一次；價格字串預先格式化；更新用局部方式，iOS 是 diffable 加 `reconfigureItems`，Android 是 `ListAdapter` 加 `DiffUtil` 與 payload；關掉 change animation；圓角和陰影要檢查有沒有造成離屏渲染。修完用同一個基準比較，線上用 MetricKit、JankStats 與 Android vitals 監控。
+
+    在一個社交 App 裡，iOS 的列表用 IGListKit 與 diffable data source，都是比對新舊資料、只更新有變的項目，feed 的預先載入也有上限。換成交易所 App，我會先建立卡頓的基準數字，再依 trace 的結果決定先修哪一段。
+  modelAnswerJa: |
+    まず計測してから手を入れます。iOS は実機の release ビルドで Instruments の Animation Hitches、Android は Perfetto の FrameTimeline と Macrobenchmark の FrameTimingMetric を使い、メインスレッドの超過なのか GPU 描画の超過なのかを切り分けます。
+
+    相場一覧の対策は両プラットフォームでほぼ同じです。データ層でバックグラウンドで銘柄ごとに集約し、フレーム単位かそれ以下の頻度で 1 回だけ反映します。価格の文字列は事前に整形し、更新は部分更新にします。iOS は diffable と `reconfigureItems`、Android は `ListAdapter` と `DiffUtil` と payload です。change animation は無効にし、角丸や影でオフスクリーンレンダリングが起きていないかも確認します。修正後は同じベースラインで比較し、本番では MetricKit、JankStats、Android vitals で監視します。
+
+    あるソーシャルアプリの iOS では IGListKit と diffable data source を使い、新旧データを比較して変化のあった項目だけを更新していました。feed のプリフェッチにも上限を設けていました。取引所アプリでは、まずヒッチ（カクつき）のベースラインを作り、トレースの結果に基づいてどこから直すかを決めます。
+  followUps:
+    - 在 ProMotion 的 120Hz 裝置上，也應該每一格畫面都更新嗎？
+    - 圖片很多的列表，記憶體與解碼要怎麼處理？
+    - 這個基準要怎麼放進 CI（每次提交程式碼就自動建置與測試）？
+  timeLimitSec: 150
+
+- id: advanced-rendering-jank-08
+  type: flash
+  level: 2
+  priority: P0
+  tags: [hitch]
+  front: commit hitch 與 render hitch 差在哪？各自怎麼修？
+  back: |
+    commit hitch：App 在主執行緒的 commit 階段（版面計算、繪製、準備資料）花太久。修法：減少主執行緒的工作、預先格式化、在背景解碼圖片、局部更新。
+    render hitch：render server 或 GPU 處理太久（離屏渲染、太多半透明圖層混合、過大的圖層）。修法：預先裁好圖片、提供 `shadowPath`、背景設成不透明、減少 mask 與模糊。
+    Android 的對應：UI thread 超時，對上 RenderThread 或 GPU 超時，用 Perfetto 來區分。

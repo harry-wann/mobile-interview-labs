@@ -1,0 +1,132 @@
+// L02：餘額不足也重試 6 次，伺服器忙碌時又馬上重試（重試沒有分錯誤種類，也沒有退避）
+// 對應複習站：Coding04Async 第 2 題「API 失敗時要怎麼重試？」
+//
+// 情境：呼叫 API 的 retry 函式，最多試 6 次，第一次失敗後等 100 毫秒，之後每次加倍，最多等 1000 毫秒（sleep 由外面傳進來，
+//       演練的假 sleep 只記錄「被要求等多久」，不會真的等）。三種情境：
+//       A 前 3 次逾時、第 4 次成功；B 餘額不足；C 伺服器一直回 503。
+//
+// 你要寫：
+//   ① Bug 版（L02Bug.retry）：repeat(maxAttempts) 最多試 maxAttempts 次，成功就 return operation()；用 catch (e: Exception) 接住所有錯誤記進 lastError，
+//      然後馬上再試（不呼叫 sleep）；全部失敗就丟出 lastError。
+//   ② 修正版（L02Fixed.retry）：delay 從 baseDelayMs 開始。失敗時（只接 C04ApiException）：e.error.isTransient 是 false，或已經是最後一次，就把錯誤丟出去；
+//      否則 sleep(delay)，delay 加倍但不超過 maxDelayMs，再試。
+// 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
+// 解答：solution/coding/coding04-async/L02_Retry.kt
+package tw.harry.labs.practice.coding04async
+
+import tw.harry.labs.kit.Lab
+import tw.harry.labs.kit.LabLog
+import tw.harry.labs.kit.Variant
+
+/** 重試的函式簽名（兩個版本共用）：最多試 maxAttempts 次；sleep 是等待函式；operation 是要做的事 */
+private typealias L02Retry = suspend (
+    maxAttempts: Int, baseDelayMs: Int, maxDelayMs: Int,
+    sleep: suspend (Int) -> Unit, operation: suspend () -> String,
+) -> String
+
+/** 演練流程（兩個版本共用）：三種情境各跑一次，記錄呼叫幾次、等了多久、結果 */
+private suspend fun scenario(log: LabLog, retry: L02Retry) {
+    // 每個情境是「依序發生的失敗」，用完之後就成功
+    val cases = listOf(
+        "A（前 3 次逾時）" to listOf(C04ApiError.TIMEOUT, C04ApiError.TIMEOUT, C04ApiError.TIMEOUT),
+        "B（餘額不足）" to List(10) { C04ApiError.INSUFFICIENT_BALANCE },
+        "C（伺服器一直 503）" to List(10) { C04ApiError.SERVER_BUSY },
+    )
+    for ((title, failures) in cases) {
+        val calls = C04Calls()
+        val sleepLog = C04SleepLog()
+        val outcome = try {
+            retry(6, 100, 1000, { sleepLog.sleep(it) }) {
+                val n = calls.next()
+                if (n <= failures.size) throw C04ApiException(failures[n - 1])
+                "ok"
+            }
+            "成功"
+        } catch (e: C04ApiException) {
+            "失敗（${e.error.text}）"
+        }
+        log("情境 $title：呼叫 ${calls.count} 次，等待 ${sleepLog.waits} 毫秒，$outcome")
+    }
+}
+
+// MARK: - Bug 版
+private object L02Bug {
+    suspend fun retry(
+        maxAttempts: Int,
+        baseDelayMs: Int,
+        maxDelayMs: Int,
+        sleep: suspend (Int) -> Unit,
+        operation: suspend () -> String,
+    ): String {
+        val lastError: Exception = C04ApiException(C04ApiError.TIMEOUT)
+        // TODO ①：repeat(maxAttempts) { try { return operation() } catch (e: Exception) { lastError = e } }（lastError 要改成 var）
+        //         什麼錯都再試一次，而且馬上試（不呼叫 sleep）。全部失敗就丟出 lastError
+        throw lastError
+    }
+
+    suspend fun run(log: LabLog) = scenario(log, ::retry)
+}
+
+// MARK: - 修正版
+private object L02Fixed {
+    suspend fun retry(
+        maxAttempts: Int,
+        baseDelayMs: Int,
+        maxDelayMs: Int,
+        sleep: suspend (Int) -> Unit,
+        operation: suspend () -> String,
+    ): String {
+        val delay = baseDelayMs
+        // TODO ②-1：for (attempt in 1..maxAttempts) { try { return operation() } catch (e: C04ApiException) { … } }（delay 要改成 var）
+        // TODO ②-2：catch 裡：e.error.isTransient 是 false、或 attempt == maxAttempts：直接 throw e
+        // TODO ②-3：否則 sleep(delay)，再 delay = minOf(delay * 2, maxDelayMs)
+        throw C04ApiException(C04ApiError.TIMEOUT)
+    }
+
+    suspend fun run(log: LabLog) = scenario(log, ::retry)
+}
+
+// MARK: - 演練設定
+val l02 = Lab(
+    id = "L02",
+    title = "餘額不足也重試 6 次，而且馬上重試",
+    question = "第 2 題：API 失敗時要怎麼重試？",
+    goal = "只重試暫時性的錯誤；重試之間等待時間加倍（指數退避）並且有上限；重試次數也要有上限。先寫出什麼錯都馬上重試的 Bug 版，再寫修正版。",
+    steps = listOf(
+        "打開 practice/coding/coding04-async/L02_Retry.kt，寫 TODO ①（Bug 版）。",
+        "選「練習」「Bug 版」執行，看情境 B（餘額不足）呼叫了幾次，以及三個情境「等待」的欄位。",
+        "寫 TODO ②（修正版），選「練習」「修正版」執行，確認情境 A 等待 [100, 200, 400]，情境 B 只呼叫 1 次，情境 C 的等待加倍到 1000 就不再變大。",
+        "想一想：下單逾時可以這樣直接重試嗎？（要帶同一個 client order id，見 Platform05 L05）",
+    ),
+    expectBug = "A 呼叫 4 次、B 呼叫 6 次、C 呼叫 6 次，三個情境的等待都是 []（一毫秒也沒等）。",
+    expectFixed = "A 等待 [100, 200, 400]；B 呼叫 1 次就失敗；C 呼叫 6 次，等待 [100, 200, 400, 800, 1000]（封頂）。",
+    file = "coding04-async/L02_Retry.kt",
+    run = { variant, log ->
+        when (variant) {
+            Variant.BUG -> L02Bug.run(log)
+            Variant.FIXED -> L02Fixed.run(log)
+        }
+    },
+    checkBug = { lines ->
+        when {
+            lines.size < 3 -> "演練沒有跑完：要用 scenario(log, retry) 執行"
+            "情境 A（前 3 次逾時）：呼叫 4 次，等待 [] 毫秒，成功" !in lines ->
+                "retry 還沒寫：失敗就再呼叫 operation，直到成功或試滿 maxAttempts 次"
+            "情境 B（餘額不足）：呼叫 6 次，等待 [] 毫秒，失敗（餘額不足）" !in lines ->
+                "Bug 還沒重現：不分錯誤種類全部重試，餘額不足也要試滿 6 次，而且不呼叫 sleep"
+            else -> null
+        }
+    },
+    checkFixed = { lines ->
+        when {
+            lines.size < 3 -> "演練沒有跑完：要用 scenario(log, retry) 執行"
+            "情境 A（前 3 次逾時）：呼叫 4 次，等待 [100, 200, 400] 毫秒，成功" !in lines ->
+                "暫時性的錯誤要等一下再試：sleep(delay)，之後 delay 加倍"
+            "情境 B（餘額不足）：呼叫 1 次，等待 [] 毫秒，失敗（餘額不足）" !in lines ->
+                "餘額不足不是暫時性的錯誤（isTransient 是 false），第一次失敗就要丟出去，不要重試"
+            "情境 C（伺服器一直 503）：呼叫 6 次，等待 [100, 200, 400, 800, 1000] 毫秒，失敗（伺服器忙碌 503）" !in lines ->
+                "等待時間每次加倍但最多 maxDelayMs（1000）；試滿 6 次後把最後一個錯誤丟出去，最後一次失敗不用再等"
+            else -> null
+        }
+    },
+)

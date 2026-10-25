@@ -1,0 +1,421 @@
+- id: platform-networking-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [okhttp, authenticator, interceptor]
+  prompt: |
+    OkHttp 裡的 `Interceptor` 和 `Authenticator` 分工不同，下列哪個敘述正確？
+  options:
+    - "`Authenticator` 在每個請求送出前都會被呼叫，用來加上 `Authorization` 標頭"
+    - "`Interceptor` 只能讀取回應，不能修改請求"
+    - "`Authenticator` 只在收到 **401**（沒有通過驗證）的回應時才被呼叫，它回傳帶新憑證的請求，OkHttp 就會自動重送，回傳 `null` 則代表放棄；`Interceptor` 通常負責每個請求都要加的標頭"
+    - "兩者完全等價，只是名字不同"
+  answer: 2
+  explain: |
+    常見的配置是：`Interceptor` 在每個請求加上 `Authorization: Bearer <token>`；`Authenticator` 專門處理 401，刷新 token 後回傳帶新 token 的請求。重送一次之後如果還是 401，要回傳 `null`（可以檢查 `response.priorResponse` 是不是 `null`），避免無限迴圈。
+
+    其他選項錯在哪裡：
+    - 第 1 項：搞反了。`Authenticator` 只在 401 時才被呼叫，每個請求都要加的標頭是 `Interceptor` 的工作。
+    - 第 2 項：`Interceptor` 可以用 `chain.request().newBuilder()` 修改請求，再呼叫 `chain.proceed(...)` 送出，也可以處理回應。
+    - 第 4 項：兩者被呼叫的時機和用途都不同，不是只有名字不同。
+
+    補充：有人會在自訂的 `Interceptor` 裡收到 401 後，遞迴呼叫 `intercept` 重試，這樣沒有明確的次數上限，也容易在並行請求下各自重複刷新。改用 `Authenticator` 並檢查 `priorResponse` 比較安全。
+
+- id: platform-networking-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [token-refresh, single-flight]
+  prompt: |
+    使用者回到 App，同時有 8 個請求因為 access token 過期而收到 401。如果每個請求都各自去呼叫「刷新 token」，最可能的後果是什麼？
+  options:
+    - "沒有影響，刷新可以重複做，多刷新幾次只是浪費一點流量"
+    - "發出 8 次刷新；如果伺服器採用 refresh token 輪替（每用一次，舊的 refresh token 就作廢），第二次起可能拿到已作廢的 refresh token 而失敗，使用者被登出。解法是 single-flight：同一時間只刷新一次，其他等待的請求共用結果，並且先比較 token 是否已經被更新過"
+    - "OkHttp 與 URLSession 會自動把重複的刷新請求合併成一次"
+    - "只有第一個請求會成功，其餘請求直接被丟棄，不會重試"
+  answer: 1
+  explain: |
+    兩個平台都不會自動合併重複的刷新。8 次同時刷新，輕則浪費請求、觸發伺服器的流量限制，重則因為 refresh token 輪替，讓後面的刷新失敗並清除憑證。
+
+    single-flight 的關鍵有兩點：
+    1. 同一時間只有一個刷新在進行，其他等待的請求共用結果（iOS 用 actor 加進行中的 Task，Android 用 `Mutex`）。
+    2. 輪到自己刷新之前，先檢查「我失敗時用的 token」是不是已經不是目前的 token；如果是，代表別人刷新過了，直接用新 token 重送，不要再刷新。
+
+    其他選項錯在哪裡：
+    - 第 1 項：刷新不能隨便重複做。在 refresh token 輪替的伺服器上，重複刷新會失敗，甚至讓使用者被登出。
+    - 第 3 項：兩個平台的網路 API 都不會自動合併，要自己實作。
+    - 第 4 項：其餘請求不會被丟棄，它們應該等刷新完成後，用新 token 重送一次。
+
+- id: platform-networking-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [certificate-pinning, rotation]
+  prompt: |
+    關於憑證釘選與輪替，哪些做法合理？（複選）
+  options:
+    - "釘公鑰的 SHA-256 雜湊（SPKI，憑證裡存放公鑰的那一段），不要釘整張憑證檔案"
+    - "至少放兩個 pin：目前正在用的金鑰，以及預先產生、還沒上線的備援金鑰"
+    - "新的 pin 要在舊憑證到期之前就隨 App 發布，並確認多數使用者已經更新"
+    - "只放目前這張葉憑證的 pin 最簡單，憑證續期之後再發新版 App 就好"
+    - "Debug 用的 Proxy 信任設定（`debug-overrides`）可以直接留在 release，方便客服除錯"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：憑證每次續期都會換成新的一張，但只要沿用同一組金鑰，公鑰的雜湊就不變。釘整張憑證，續期那天整批使用者都會連不上。
+    - 第 2 項正確：有備援金鑰，伺服器輪替時換上它，舊版 App 仍然通過檢查。
+    - 第 3 項正確：App 要先帶著新 pin 到使用者手上，伺服器才能換憑證。
+    - 第 4 項錯誤：只有一個 pin，又沒有備援，一旦憑證或金鑰更換，所有舊版 App 在新版推出並更新之前都連不上，對交易所來說就是停擺。
+    - 第 5 項錯誤：`debug-overrides` 與 `NSAllowsArbitraryLoads` 這類放寬設定絕對不能帶進 release，否則釘選形同虛設，中間人攻擊又有機會了。
+
+    補充：Android 的 `pin-set` 可以設定 `expiration`，過期後釘選自動失效，降低整批使用者斷線的風險；iOS 沒有相同的機制，要靠發版節奏與強制更新。
+
+- id: platform-networking-04
+  type: multi
+  level: 2
+  priority: P1
+  tags: [ats, network-security-config]
+  prompt: |
+    關於兩個平台的傳輸安全預設規則，哪些敘述正確？（複選）
+  options:
+    - "iOS 的 ATS（App Transport Security）預設要求 HTTPS，如果要放寬，要在 Info.plist 宣告例外，並在上架審查時說明理由"
+    - "Android `targetSdk` 28 以上的 App，預設禁止明文（HTTP）流量"
+    - "Android 7.0（API 24）以上的 App，預設信任使用者安裝的 CA（憑證授權單位，簽發憑證的機構），所以 Charles 的憑證不需要額外設定就能用"
+    - "iOS 14 以上可以在 Info.plist 用 `NSPinnedDomains` 以宣告的方式釘選公鑰雜湊"
+    - "OkHttp 的 `callTimeout` 預設是 10 秒"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：ATS 預設只允許 HTTPS，要放寬就得在 Info.plist 宣告例外，審查時 Apple 可能會要求說明。
+    - 第 2 項正確：`targetSdk` 28 以上，Network Security Config 預設 `cleartextTrafficPermitted` 為 `false`，也就是禁止明文流量。
+    - 第 4 項正確：iOS 14 起，可以在 `NSAppTransportSecurity` 底下用 `NSPinnedDomains` 宣告式釘選，不必自己寫程式比對。
+    - 第 3 項錯誤：從 API 24 起，預設只信任系統內建的 CA，**不信任**使用者自己安裝的 CA。要讓 debug build 信任 Charles 的憑證，要在 Network Security Config 的 `debug-overrides` 裡加上使用者 CA，而且只能放在 debug。
+    - 第 5 項錯誤：OkHttp 的 connect、read、write 逾時預設各 10 秒，但 `callTimeout`（整個呼叫的總時限）預設是 0，也就是不限制。
+
+- id: platform-networking-05
+  type: single
+  level: 2
+  priority: P0
+  tags: [retry, idempotency, orders]
+  prompt: |
+    使用者按下「買入」，POST 下單請求在網路不穩時逾時，沒有收到回應。App 應該怎麼處理？
+  options:
+    - "逾時不代表沒有成功。送出請求時帶 `clientOrderId`（UUID，隨機產生、幾乎不會重複的識別碼）當作冪等鍵；逾時後用這個 ID 查詢訂單狀態，查得到就顯示對應的結果，查不到才讓使用者決定是否重送"
+    - "自動重送一次，反正伺服器會處理重複的請求"
+    - "顯示「下單失敗」並讓使用者重新按一次"
+    - "把逾時時間改成 5 分鐘，永遠等到有回應為止"
+  answer: 0
+  explain: |
+    逾時只代表 App 沒收到回應，伺服器可能已經成交了。所以：
+    - 第 2 項錯誤：伺服器不一定會處理重複的請求，沒有冪等鍵就可能變成兩張單。
+    - 第 3 項錯誤：「下單失敗」可能是假的，使用者重按一次就可能重複下單。
+    - 第 4 項錯誤：把逾時拉長不能解決問題，使用者會一直卡在等待畫面，而且網路真的斷了還是會失敗。
+
+    冪等鍵（`clientOrderId`）加上狀態查詢是標準解法。同時要在畫面上鎖定按鈕、顯示「確認中」，避免連點。指數退避的自動重試只適合冪等的請求（例如 GET 查詢）。
+
+- id: platform-networking-06
+  type: fill
+  level: 2
+  priority: P1
+  tags: [okhttp, pinning]
+  prompt: |
+    設定 OkHttp：收到 401 時用 `TokenAuthenticator` 刷新 token；對 `api.example.com` 釘選公鑰雜湊。
+  codeLang: kotlin
+  code: |
+    val client = OkHttpClient.Builder()
+        .addInterceptor(AuthInterceptor(tokens))
+        .____(TokenAuthenticator(tokens))
+        .____(
+            CertificatePinner.Builder()
+                .add("api.example.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+                .add("api.example.com", "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")
+                .build()
+        )
+        .build()
+  blanks:
+    - [authenticator]
+    - [certificatePinner]
+  explain: |
+    `authenticator(...)` 負責處理 401；`certificatePinner(...)` 負責設定憑證釘選。`addInterceptor(...)` 是每個請求都經過的攔截器，通常用來加標頭，不是用來處理 401 的。
+
+    程式裡放了兩個 `sha256/` 開頭的 pin：一個是目前正在用的金鑰，一個是預先產生的備援金鑰，讓伺服器輪替金鑰時，舊版 App 不會斷線。
+
+- id: platform-networking-07
+  type: code
+  level: 3
+  priority: P0
+  tags: [token-refresh, single-flight, actor, mutex]
+  prompt: |
+    實作 `TokenProvider`：token 刷新的 single-flight（同一時間只刷新一次，其他人共用結果）。
+
+    - `currentToken()` 回傳目前的 token
+    - `refreshIfNeeded(failedToken:)`：呼叫者拿**失敗請求所用的 token** 來要求刷新
+      - 如果目前的 token **已經不是** `failedToken`（代表別人刷新過了），直接回傳目前的 token，不要再呼叫 `refresh`
+      - 否則呼叫 `refresh` 取得新 token，更新並回傳；**多個同時進來的呼叫，只能觸發一次** `refresh`，其他呼叫共用結果
+      - `refresh` 丟出錯誤時，token 維持不變，呼叫者收到錯誤；之後的呼叫可以再試一次
+  hints:
+    - "Swift：在 actor 裡用一個變數保存進行中的 `Task<String, Error>`，已經有的話就直接 `await` 它。"
+    - "Kotlin：用 `Mutex.withLock` 把「比較 token、刷新、更新」包成一個一次只讓一個 coroutine 進入的區塊；進入之後要先重新比較一次 token。"
+  swift:
+    starter: |
+      actor TokenProvider {
+          private var token: String
+          private let refresh: @Sendable () async throws -> String
+
+          init(initial: String, refresh: @escaping @Sendable () async throws -> String) {
+              self.token = initial
+              self.refresh = refresh
+          }
+
+          func currentToken() -> String { token }
+
+          func refreshIfNeeded(failedToken: String) async throws -> String {
+              // TODO: 目前每個呼叫者都各自刷新
+              let fresh = try await refresh()
+              token = fresh
+              return fresh
+          }
+      }
+    solution: |
+      actor TokenProvider {
+          private var token: String
+          private var inFlight: Task<String, Error>?
+          private let refresh: @Sendable () async throws -> String
+
+          init(initial: String, refresh: @escaping @Sendable () async throws -> String) {
+              self.token = initial
+              self.refresh = refresh
+          }
+
+          func currentToken() -> String { token }
+
+          func refreshIfNeeded(failedToken: String) async throws -> String {
+              if token != failedToken { return token }
+              if let running = inFlight { return try await running.value }
+
+              let task = Task { [refresh] in try await refresh() }
+              inFlight = task
+              do {
+                  let fresh = try await task.value
+                  token = fresh
+                  inFlight = nil
+                  return fresh
+              } catch {
+                  inFlight = nil
+                  throw error
+              }
+          }
+      }
+    tests: |
+      actor Counter {
+          private(set) var value = 0
+          func next() -> Int { value += 1; return value }
+      }
+      struct RefreshError: Error {}
+      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+      await checkAsync("並行 10 個呼叫只刷新一次，且都拿到新 token") {
+          let calls = Counter()
+          let provider = TokenProvider(initial: "t1") {
+              let n = await calls.next()
+              try await sleepMs(40)
+              return "t\(n + 1)"
+          }
+          let results = try await withThrowingTaskGroup(of: String.self) { group -> [String] in
+              for _ in 0..<10 { group.addTask { try await provider.refreshIfNeeded(failedToken: "t1") } }
+              var out: [String] = []
+              for try await r in group { out.append(r) }
+              return out
+          }
+          let n = await calls.value
+          return n == 1 && results.count == 10 && results.allSatisfy { $0 == "t2" }
+      }
+      await checkAsync("token 已被更新過就不再刷新") {
+          let calls = Counter()
+          let provider = TokenProvider(initial: "t1") { _ = await calls.next(); return "t2" }
+          _ = try await provider.refreshIfNeeded(failedToken: "t1")
+          let again = try await provider.refreshIfNeeded(failedToken: "t1")
+          let n = await calls.value
+          return again == "t2" && n == 1
+      }
+      await checkAsync("目前 token 與失敗 token 不同時直接回傳目前 token，不刷新") {
+          let calls = Counter()
+          let provider = TokenProvider(initial: "t5") { _ = await calls.next(); return "t6" }
+          let r = try await provider.refreshIfNeeded(failedToken: "t4")
+          let n = await calls.value
+          return r == "t5" && n == 0
+      }
+      await checkAsync("刷新失敗：呼叫者拿到錯誤，token 不變") {
+          let provider = TokenProvider(initial: "t1") { throw RefreshError() }
+          do {
+              _ = try await provider.refreshIfNeeded(failedToken: "t1")
+              return false
+          } catch is RefreshError {
+              return await provider.currentToken() == "t1"
+          }
+      }
+      await checkAsync("失敗之後可以再試並成功") {
+          let calls = Counter()
+          let provider = TokenProvider(initial: "t1") {
+              let n = await calls.next()
+              if n == 1 { throw RefreshError() }
+              return "t2"
+          }
+          do { _ = try await provider.refreshIfNeeded(failedToken: "t1") } catch {}
+          let r = try await provider.refreshIfNeeded(failedToken: "t1")
+          return r == "t2"
+      }
+      await checkAsync("連續過期：t2 失效後可再刷新成 t3") {
+          let calls = Counter()
+          let provider = TokenProvider(initial: "t1") {
+              let n = await calls.next()
+              return "t\(n + 1)"
+          }
+          _ = try await provider.refreshIfNeeded(failedToken: "t1")
+          let r = try await provider.refreshIfNeeded(failedToken: "t2")
+          return r == "t3"
+      }
+  kotlin:
+    starter: |
+      class TokenProvider(initial: String, private val refresh: suspend () -> String) {
+          @Volatile private var token: String = initial
+
+          fun currentToken(): String = token
+
+          suspend fun refreshIfNeeded(failedToken: String): String {
+              // TODO: 目前每個呼叫者都各自刷新
+              val fresh = refresh()
+              token = fresh
+              return fresh
+          }
+      }
+    solution: |
+      import kotlinx.coroutines.sync.Mutex
+      import kotlinx.coroutines.sync.withLock
+
+      class TokenProvider(initial: String, private val refresh: suspend () -> String) {
+          private val mutex = Mutex()
+          @Volatile private var token: String = initial
+
+          fun currentToken(): String = token
+
+          suspend fun refreshIfNeeded(failedToken: String): String = mutex.withLock {
+              if (token != failedToken) return@withLock token
+              val fresh = refresh()
+              token = fresh
+              fresh
+          }
+      }
+    tests: |
+      import kotlinx.coroutines.async
+      import kotlinx.coroutines.awaitAll
+      import kotlinx.coroutines.coroutineScope
+      import kotlinx.coroutines.delay
+      import java.util.concurrent.atomic.AtomicInteger
+
+      class RefreshError : Exception()
+
+      check("並行 10 個呼叫只刷新一次，且都拿到新 token") {
+          val calls = AtomicInteger(0)
+          val provider = TokenProvider("t1") {
+              val n = calls.incrementAndGet()
+              delay(40)
+              "t${n + 1}"
+          }
+          val results = coroutineScope {
+              (1..10).map { async { provider.refreshIfNeeded("t1") } }.awaitAll()
+          }
+          calls.get() == 1 && results.size == 10 && results.all { it == "t2" }
+      }
+      check("token 已被更新過就不再刷新") {
+          val calls = AtomicInteger(0)
+          val provider = TokenProvider("t1") { calls.incrementAndGet(); "t2" }
+          provider.refreshIfNeeded("t1")
+          val again = provider.refreshIfNeeded("t1")
+          again == "t2" && calls.get() == 1
+      }
+      check("目前 token 與失敗 token 不同時直接回傳目前 token，不刷新") {
+          val calls = AtomicInteger(0)
+          val provider = TokenProvider("t5") { calls.incrementAndGet(); "t6" }
+          val r = provider.refreshIfNeeded("t4")
+          r == "t5" && calls.get() == 0
+      }
+      check("刷新失敗：呼叫者拿到錯誤，token 不變") {
+          val provider = TokenProvider("t1") { throw RefreshError() }
+          val failed = try {
+              provider.refreshIfNeeded("t1")
+              false
+          } catch (e: RefreshError) {
+              true
+          }
+          failed && provider.currentToken() == "t1"
+      }
+      check("失敗之後可以再試並成功") {
+          val calls = AtomicInteger(0)
+          val provider = TokenProvider("t1") {
+              if (calls.incrementAndGet() == 1) throw RefreshError()
+              "t2"
+          }
+          try { provider.refreshIfNeeded("t1") } catch (e: RefreshError) { }
+          provider.refreshIfNeeded("t1") == "t2"
+      }
+      check("連續過期：t2 失效後可再刷新成 t3") {
+          val calls = AtomicInteger(0)
+          val provider = TokenProvider("t1") { "t${calls.incrementAndGet() + 1}" }
+          provider.refreshIfNeeded("t1")
+          provider.refreshIfNeeded("t2") == "t3"
+      }
+
+- id: platform-networking-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [networking, security]
+  prompt: |
+    請設計交易所 App 的網路層：token 刷新、憑證釘選與輪替、重試與下單的冪等。並說明你過去做過的相關經驗，以及換成交易所 App 你會怎麼做。
+  promptJa: |
+    取引所アプリのネットワーク層（トークン更新、証明書ピンニングとローテーション、リトライ、注文の冪等性）を設計してください。これまでの関連経験と、取引所アプリではどう進めるかも答えてください。
+  keyPoints:
+    - "token 刷新用 single-flight：同一時間只刷新一次，進入前先比較失敗請求用的 token，只重送一次"
+    - "refresh token 失效就清除憑證並導向登入；刷新成功後 WebSocket／SSE（Server-Sent Events，伺服器單向推送資料的連線）用新 token 重連"
+    - "Android 用 OkHttp `Authenticator`（只在 401 呼叫）加 Mutex；iOS 用 actor 加進行中的 Task，並限制重試次數"
+    - "憑證釘選：釘公鑰雜湊，至少兩個 pin（含備援金鑰），新 pin 提前發布，Android `pin-set` 設 `expiration`，監控釘選失敗率，debug 設定不進 release"
+    - "重試：只重試冪等請求；下單 POST 帶 `clientOrderId`，逾時後查詢狀態；指數退避加 jitter（隨機抖動）；429 遵守 `Retry-After`"
+    - "簽名請求要處理手機時間偏差（交易所公開 API 的簽章含 UTC 時間戳記），用伺服器的 `Date` 標頭校正"
+    - "過去經驗：在社交 App 的 iOS 版做過 token 刷新的 single-flight（序列化、節流、只重送一次）"
+  modelAnswer: |
+    token 刷新我會用 single-flight：很多請求同時收到 401 時，只讓一個去刷新，其他的等著共用結果；進入刷新前，先比較失敗請求用的 token 和目前的 token，如果已經被更新過，就直接用新的重送。這個我在社交 App 的 iOS 版做過：用 AsyncSemaphore（一次只讓一個呼叫進入的非同步版 semaphore）讓刷新一次只進行一個，加上節流，同一個請求只重送一次；refresh token 失效就清除憑證，刷新成功後讓 socket 用新 token 重連。換成交易所 App 的 Android，我會用 OkHttp 的 `Authenticator` 搭配 Mutex，它只在 401 時被呼叫，重送後還是 401 就放棄。
+
+    憑證釘選我會釘公鑰雜湊，至少放兩個 pin，其中一個是預先產生的備援金鑰；新的 pin 在舊憑證到期之前就隨 App 發布，Android 的 `pin-set` 設 `expiration` 當保險，同時監控釘選失敗率，debug 的信任設定不會進 release。
+
+    重試只針對冪等的請求。下單的 POST 帶 `clientOrderId`，逾時後先查詢訂單狀態，不自動重送。退避用指數加 jitter，遇到 429 就遵守 `Retry-After`。簽名請求帶時間戳記的話，我會用伺服器回應的 `Date` 標頭校正手機的時間差。
+  modelAnswerJa: |
+    トークン更新は single-flight にします。複数のリクエストが同時に 401 を受けても、更新は 1 回だけにして、他のリクエストは待って結果を共有します。更新に入る前に、失敗したリクエストが使ったトークンと現在のトークンを比較し、すでに更新済みならそのまま再送します。これは以前のソーシャルアプリの iOS で実装した経験があります。AsyncSemaphore で更新を一度に 1 つだけにし、スロットルを入れ、同じリクエストの再送は 1 回に限定しました。リフレッシュトークンが無効なら認証情報を消去してログイン画面へ遷移し、更新に成功したら socket も新しいトークンで再接続していました。取引所アプリの Android では、OkHttp の `Authenticator`（401 のときだけ呼ばれます）と Mutex を組み合わせ、再送しても 401 なら諦めます。
+
+    証明書ピンニングは公開鍵のハッシュで行い、ピンは最低 2 つ、そのうち 1 つは事前に用意したバックアップ鍵にします。新しいピンは古い証明書の期限前にアプリで配布し、Android の `pin-set` には `expiration` を設定して保険にします。ピン検証の失敗率も監視し、debug 用の信頼設定は release に入れません。
+
+    リトライは冪等なリクエストだけに行います。注文の POST には `clientOrderId` を付け、タイムアウトしたときは自動で再送せず、まず注文の状態を照会します。バックオフは指数バックオフに jitter を加え、429 のときは `Retry-After` に従います。署名付きリクエストにタイムスタンプが含まれる場合は、サーバーの `Date` ヘッダーを使って端末の時計のずれを補正します。
+  followUps:
+    - "証明書の更新でピンが一致しなくなった場合、ユーザーをどう救いますか。"
+    - "リフレッシュトークンのローテーション中にアプリが強制終了したら、どうなりますか。"
+    - "注文の照会 API 自体もタイムアウトしたら、画面には何を表示しますか。"
+  timeLimitSec: 180
+
+- id: platform-networking-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [pinning, single-flight]
+  front: 憑證釘選怎麼輪替才不會讓使用者連不上？token 過期時很多請求同時 401，怎麼只刷新一次？
+  back: |
+    **憑證釘選輪替**
+    - 釘公鑰的雜湊（SPKI SHA-256），不釘整張憑證
+    - 至少 2 個 pin，其中一個是預先產生的備援金鑰
+    - 新 pin 提前隨 App 發布，確認多數使用者更新後才換伺服器憑證
+    - Android 的 `pin-set` 可設 `expiration`，過期後釘選失效；iOS 沒有，靠強制更新
+    - 只釘自己的網域，監控釘選失敗率，debug 設定不進 release
+
+    **token 刷新（single-flight）**
+    - 同一時間只刷新一次，其他等待的請求共用結果
+    - 輪到自己之前，先比較「失敗請求用的 token」和「目前的 token」，不一樣就直接用新的重送
+    - 只重送一次；refresh token 失效就清除憑證、回到登入畫面
+    - OkHttp：`Interceptor` 每個請求加標頭，`Authenticator` 只在 401 時被呼叫
+    - 下單 POST 不自動重送，用 `clientOrderId` 查詢

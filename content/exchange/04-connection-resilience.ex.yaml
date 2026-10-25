@@ -1,0 +1,659 @@
+- id: exchange-connection-resilience-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [jitter, thundering-herd]
+  prompt: |
+    某天交易所的 WebSocket 服務重啟，數萬支手機的 App 同時斷線。所有 App 都用「1 秒、2 秒、4 秒、8 秒」的指數退避（每次等待時間加倍）重連，結果伺服器在每個整數秒都被打爆。最合理的改善是？
+  options:
+    - "把退避改成固定 1 秒，這樣至少可預期"
+    - "加上 jitter：每次延遲在 `0` 到 `min(cap, base × 2^attempt)` 之間隨機（full jitter），讓每支手機的重連時間分散；遇到 `429` 或連線數上限時用更長的 base"
+    - "把 base 改成 10 秒，讓重連慢一點"
+    - "所有 App 在重連前先 `sleep(5)` 再開始指數退避"
+  answer: 1
+  explain: |
+    指數退避本身只拉長間隔，若所有 App 的起點相同，仍然是**同步**的 thundering herd（驚群效應，同一刻大量連線一起湧入）。jitter（隨機誤差）讓每支手機的延遲分散在一段區間內，伺服器看到的是平滑的流量。
+    - 第 1 項錯：固定 1 秒，所有手機還是在同一秒一起連上來，而且每秒都來一次，更糟。
+    - 第 3 項錯：base 改成 10 秒只是讓大家一起晚一點連，所有手機的等待時間仍然相同，還是同步。
+    - 第 4 項錯：所有人都先等同樣的 5 秒，只是把同步的時間點往後移，沒有把時間分散開。
+    這套交易所的私有 WebSocket 還有連線數與請求頻率的限制（API 文件：每個 API key 最多 10 條連線、每個 IP 每秒最多 100 條新連線），同步重連會更容易被拒絕。
+
+- id: exchange-connection-resilience-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [state-machine, backoff]
+  prompt: |
+    設計重連狀態機時，哪些做法合理？（複選）
+  options:
+    - "連線 `opened` 就把退避次數歸零，這樣下次斷線能馬上重連"
+    - "連線**穩定維持**一段時間（例如 10 秒）後再斷線，才把次數歸零；連上後立刻被踢（例如被限流）要繼續累加次數"
+    - "網路消失（offline）時取消重試計時器，等網路恢復的事件再立即連線，並把次數歸零"
+    - "App 進背景時主動斷線並取消計時器，回前景再連線、重新訂閱、抓快照"
+    - "網路恢復時仍然沿用原本的退避等待，避免連線太頻繁"
+  answer: [1, 2, 3]
+  explain: |
+    - 第 1 項錯：一 `opened` 就歸零，遇到「連上又被踢」的情況會變成緊密迴圈（沒有間隔地連、被踢、再連）。
+    - 第 2 項對：穩定一段時間才算真的成功，連上後立刻被踢要繼續累加，等待時間才會越拉越長。
+    - 第 3 項對：沒有網路時計時器重試只會耗電；網路恢復是強烈的「現在可以重試」訊號，應立即重試並重置退避。
+    - 第 4 項對：進背景後 App 的 socket 不受保證，主動斷線比讓它默默死掉好，回前景時要把它當作新的連線處理（重新訂閱與快照）。
+    - 第 5 項錯：網路剛恢復就是最好的重試時機，沿用舊的等待時間只會讓使用者多等。
+
+- id: exchange-connection-resilience-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [backoff, full-jitter]
+  prompt: |
+    base ＝ 500 ms、cap ＝ 8000 ms，注入的亂數固定為 0.5（jitter 的隨機值固定成 0.5，結果才好預測）。下列程式印出什麼？（attempt 0 到 5）
+  codeLang: swift
+  code: |
+    let base: Int64 = 500
+    let cap: Int64 = 8000
+    var out: [String] = []
+    for attempt in 0..<6 {
+        let ceiling = min(cap, base << Int64(attempt))
+        let delay = Int64(Double(ceiling) * 0.5)
+        out.append(String(delay))
+    }
+    print(out.joined(separator: " "))
+  answer: |
+    250 500 1000 2000 4000 4000
+  explain: |
+    上限依序是 500、1000、2000、4000、8000、16000（被 cap 限制成 8000）；亂數 0.5 時，延遲是上限的一半：250、500、1000、2000、4000、4000。到 cap 之後上限不再成長。
+    實作時 `attempt` 很大會讓位移溢位（數字超過型別能表示的範圍），要先封頂再計算，例如用迴圈一次翻一倍、到 cap 就停。
+
+- id: exchange-connection-resilience-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [reachability, captive-portal]
+  prompt: |
+    iOS 的 `NWPathMonitor` 回報 `path.status == .satisfied`，但 App 仍然連不到伺服器（使用者在咖啡店的 Wi-Fi 登入頁後面）。這說明了什麼？
+  options:
+    - "`NWPathMonitor` 有 bug，應該改用 `Reachability` 第三方函式庫"
+    - "`satisfied` 只代表系統有可用的網路路徑，不保證能連到網際網路或你的伺服器（captive portal 等）；網路狀態只是提示，仍要靠實際連線的成功與失敗、心跳與資料新鮮度判斷，Android 對應的是檢查 `NET_CAPABILITY_VALIDATED`"
+    - "應該在每次請求前先用 `NWPathMonitor` 檢查，不通就不送請求，這樣就不會失敗"
+    - "只要關掉 App 重開就會自動修好"
+  answer: 1
+  explain: |
+    網路狀態 API 回答的是「系統認為有沒有路」，不是「你的服務通不通」。
+    - 第 1 項錯：這不是 bug，是設計如此。換成別的函式庫，回答的問題還是一樣。
+    - 第 3 項錯：請求前用它擋住請求，會讓使用者在 captive portal（要先在網頁登入才能上網的 Wi-Fi）之類的情況完全無法操作。
+    - 第 4 項錯：問題出在網路環境，重開 App 不會讓使用者通過登入頁。
+    正確用法：offline 時暫停重試以省電，網路恢復時立即重試，其餘一律以實際的連線與心跳結果為準。
+
+- id: exchange-connection-resilience-05
+  type: order
+  level: 2
+  priority: P1
+  tags: [recovery, resubscribe]
+  prompt: |
+    App 從背景回到前景（連線已經中斷）。依合理順序排列恢復步驟。
+  items:
+    - "把行情標示為過期（顯示「更新中」）"
+    - "建立 WebSocket 連線；私有頻道先重新 auth"
+    - "依目前畫面需要的 topic 清單重新訂閱（帶新的 id）"
+    - "對板、K 線最後一根等狀態型資料：先緩衝增量、取快照、再套用"
+    - "資料恢復後才清除過期標示，並恢復下單按鈕"
+  explain: |
+    - 先標示過期，避免使用者在恢復前以舊價格操作。
+    - 接著建立連線；私有頻道要先 auth 才能訂閱。
+    - 再依訂閱清單重新訂閱。清單來自單一來源（目前需要的 topic），而不是各畫面各自重送。
+    - 狀態型資料必須取快照補洞（先把新收到的更新暫存起來、抓一份完整的最新資料、再套用暫存的更新），否則背景期間漏掉的更新會讓畫面錯誤。
+    - 最後一步才解除保護：價格與下單的可用性要等資料確實恢復。
+
+- id: exchange-connection-resilience-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [half-open, heartbeat, watchdog]
+  prompt: |
+    使用者從 Wi-Fi 走出門換成行動網路，App 的 WebSocket 畫面「看起來」還連著，但價格停止更新，也沒有任何 `onClose`／`didClose` 回呼。最可能的原因與處理方式是？
+  options:
+    - "伺服器當機，App 端沒辦法處理"
+    - "TCP 連線已成為半開（half-open）：舊的網路路徑失效，但 App 的 socket 沒有被通知。應該用應用層的監看：這套交易所的伺服器約每 5 秒送 ping，若超過約 15 秒沒收到任何訊息就主動關閉並重連；同時監聽網路路徑變化，變化時立刻重連"
+    - "iOS 的 `URLSessionWebSocketTask` 會自動偵測並重連，不需要處理"
+    - "把 `pingInterval` 設成 0，讓連線永遠保持"
+  answer: 1
+  explain: |
+    網路切換時，原本的 socket 可能長時間不報錯（半開連線：連線在 App 這端看起來還開著，但對方其實已經收不到了）。只依賴關閉回呼是不夠的，需要「最後收到資料的時間」的監看，以及網路路徑變化的觸發。伺服器的 ping 剛好是很好的訊號：大約 15 秒（三次 ping）沒收到任何訊息，就視為斷線。
+    - 第 1 項錯：就算伺服器真的出問題，App 也應該偵測到沒有資料並顯示過期，而不是一直顯示舊價格。
+    - 第 3 項錯：`URLSessionWebSocketTask` 不會替你處理這種情況，沒有收到關閉通知，它也不會重連。
+    - 第 4 項錯：`pingInterval` 設成 0 是關掉協定層的定時 ping，只會更難發現連線已經失效。
+    記得這個監看用單調時鐘計時（只會往前走、不受使用者改系統時間影響），放在 socket 的背景路徑，不要放在 UI 執行緒。
+
+- id: exchange-connection-resilience-07
+  type: code
+  level: 3
+  priority: P0
+  tags: [reconnect, state-machine, backoff, jitter]
+  prompt: |
+    實作重連的退避與狀態機（純函式／純狀態，**注入亂數**，時間由事件帶入）。（白話：把「連線中、已連上、等待重試、離線、背景暫停」寫成一個狀態機，每收到一個事件，就回傳下一步要做的事。）
+
+    **`Backoff(baseMs, capMs).delayMs(attempt, random)`**（full jitter：在 0 到上限之間隨機）：上限 ＝ `min(capMs, baseMs × 2^attempt)`；回傳 `floor(上限 × random)`，`random` 先限制在 `[0, 0.999999999]`。`attempt` 很大時不可溢位。
+
+    **`ConnMachine(backoff, stableMs = 10_000)`** 的 `handle(event, random) -> [effect]`，狀態：`idle`、`connecting(attempt)`、`connected(attempt, sinceMs)`、`waiting(attempt, retryAtMs)`、`offline`、`suspended`。規則：
+    - `start`：idle → `connecting(0)`，effect `[connect]`
+    - `opened(now)`：`connecting(n)` → `connected(n, now)`，`[]`
+    - `closed(now)`：
+      - 來自 `connected(n, since)`：若 `now - since >= stableMs` 則 `next = 0`，否則 `next = n + 1`
+      - 來自 `connecting(n)`：`next = n + 1`
+      - 然後 `delay = backoff.delayMs(next, random)`；狀態 `waiting(next, now + delay)`，effect `[scheduleRetry(delay)]`
+    - `retryTimerFired`：`waiting(n, _)` → `connecting(n)`，`[connect]`
+    - `networkLost`：來自 connecting／connected／waiting → `offline`，`[cancelRetry, closeSocket]`
+    - `networkAvailable`：`offline` → `connecting(0)`，`[connect]`；`waiting` → `connecting(0)`，`[cancelRetry, connect]`
+    - `enteredBackground`：來自 connecting／connected／waiting／offline → `suspended`，`[cancelRetry, closeSocket]`
+    - `enteredForeground`：`suspended` → `connecting(0)`，`[connect]`
+    - 其他組合一律忽略：狀態不變、回傳 `[]`
+  hints:
+    - "用一個 `scheduleRetry(attempt:now:random:)` 輔助函式處理兩種 closed 的共同部分。"
+    - "`delayMs` 先用迴圈把上限翻倍，直到達到 cap 或翻完 attempt 次。"
+  swift:
+    starter: |
+      struct Backoff {
+          let baseMs: Int64
+          let capMs: Int64
+
+          func delayMs(attempt: Int, random: Double) -> Int64 {
+              // TODO
+              return 0
+          }
+      }
+
+      enum ConnState: Equatable {
+          case idle
+          case connecting(attempt: Int)
+          case connected(attempt: Int, sinceMs: Int64)
+          case waiting(attempt: Int, retryAtMs: Int64)
+          case offline
+          case suspended
+      }
+
+      enum ConnEvent {
+          case start
+          case opened(nowMs: Int64)
+          case closed(nowMs: Int64)
+          case retryTimerFired
+          case networkLost
+          case networkAvailable
+          case enteredBackground
+          case enteredForeground
+      }
+
+      enum ConnEffect: Equatable {
+          case connect
+          case scheduleRetry(delayMs: Int64)
+          case cancelRetry
+          case closeSocket
+      }
+
+      struct ConnMachine {
+          private(set) var state: ConnState = .idle
+          private let backoff: Backoff
+          private let stableMs: Int64
+
+          init(backoff: Backoff, stableMs: Int64 = 10_000) {
+              self.backoff = backoff
+              self.stableMs = stableMs
+          }
+
+          mutating func handle(_ event: ConnEvent, random: Double) -> [ConnEffect] {
+              // TODO
+              return []
+          }
+      }
+    solution: |
+      struct Backoff {
+          let baseMs: Int64
+          let capMs: Int64
+
+          func delayMs(attempt: Int, random: Double) -> Int64 {
+              var ceiling = min(baseMs, capMs)
+              var i = 0
+              while i < attempt && ceiling < capMs {
+                  ceiling = min(ceiling * 2, capMs)
+                  i += 1
+              }
+              let r = min(max(random, 0), 0.999_999_999)
+              return Int64(Double(ceiling) * r)
+          }
+      }
+
+      enum ConnState: Equatable {
+          case idle
+          case connecting(attempt: Int)
+          case connected(attempt: Int, sinceMs: Int64)
+          case waiting(attempt: Int, retryAtMs: Int64)
+          case offline
+          case suspended
+      }
+
+      enum ConnEvent {
+          case start
+          case opened(nowMs: Int64)
+          case closed(nowMs: Int64)
+          case retryTimerFired
+          case networkLost
+          case networkAvailable
+          case enteredBackground
+          case enteredForeground
+      }
+
+      enum ConnEffect: Equatable {
+          case connect
+          case scheduleRetry(delayMs: Int64)
+          case cancelRetry
+          case closeSocket
+      }
+
+      struct ConnMachine {
+          private(set) var state: ConnState = .idle
+          private let backoff: Backoff
+          private let stableMs: Int64
+
+          init(backoff: Backoff, stableMs: Int64 = 10_000) {
+              self.backoff = backoff
+              self.stableMs = stableMs
+          }
+
+          private mutating func scheduleRetry(attempt: Int, now: Int64, random: Double) -> [ConnEffect] {
+              let delay = backoff.delayMs(attempt: attempt, random: random)
+              state = .waiting(attempt: attempt, retryAtMs: now + delay)
+              return [.scheduleRetry(delayMs: delay)]
+          }
+
+          mutating func handle(_ event: ConnEvent, random: Double) -> [ConnEffect] {
+              switch (state, event) {
+              case (.idle, .start):
+                  state = .connecting(attempt: 0)
+                  return [.connect]
+              case (.connecting(let n), .opened(let now)):
+                  state = .connected(attempt: n, sinceMs: now)
+                  return []
+              case (.connected(let n, let since), .closed(let now)):
+                  let next = (now - since >= stableMs) ? 0 : n + 1
+                  return scheduleRetry(attempt: next, now: now, random: random)
+              case (.connecting(let n), .closed(let now)):
+                  return scheduleRetry(attempt: n + 1, now: now, random: random)
+              case (.waiting(let n, _), .retryTimerFired):
+                  state = .connecting(attempt: n)
+                  return [.connect]
+              case (.connecting, .networkLost), (.connected, .networkLost), (.waiting, .networkLost):
+                  state = .offline
+                  return [.cancelRetry, .closeSocket]
+              case (.offline, .networkAvailable):
+                  state = .connecting(attempt: 0)
+                  return [.connect]
+              case (.waiting, .networkAvailable):
+                  state = .connecting(attempt: 0)
+                  return [.cancelRetry, .connect]
+              case (.connecting, .enteredBackground), (.connected, .enteredBackground),
+                   (.waiting, .enteredBackground), (.offline, .enteredBackground):
+                  state = .suspended
+                  return [.cancelRetry, .closeSocket]
+              case (.suspended, .enteredForeground):
+                  state = .connecting(attempt: 0)
+                  return [.connect]
+              default:
+                  return []
+              }
+          }
+      }
+    tests: |
+      func machine() -> ConnMachine { ConnMachine(backoff: Backoff(baseMs: 1000, capMs: 30_000)) }
+
+      check("Backoff：full jitter 的上限、cap 與亂數") {
+          let b = Backoff(baseMs: 1000, capMs: 30_000)
+          return b.delayMs(attempt: 0, random: 0.5) == 500
+              && b.delayMs(attempt: 1, random: 0.5) == 1000
+              && b.delayMs(attempt: 3, random: 0.5) == 4000
+              && b.delayMs(attempt: 5, random: 0.5) == 15_000
+              && b.delayMs(attempt: 2, random: 0) == 0
+              && b.delayMs(attempt: 2, random: 5) == 3999
+      }
+      check("Backoff：attempt 很大時不溢位，維持 cap") {
+          let b = Backoff(baseMs: 1000, capMs: 30_000)
+          return b.delayMs(attempt: 200, random: 0.5) == 15_000 && b.delayMs(attempt: Int.max, random: 0.5) == 15_000
+      }
+      check("start 只在 idle 有效") {
+          var m = machine()
+          let e1 = m.handle(.start, random: 0.5)
+          let s1 = m.state
+          let e2 = m.handle(.start, random: 0.5)
+          return e1 == [.connect] && s1 == .connecting(attempt: 0) && e2 == [] && m.state == s1
+      }
+      check("連上後很快斷線：attempt 累加，進入 waiting 並排程重試") {
+          var m = machine()
+          _ = m.handle(.start, random: 0.5)
+          _ = m.handle(.opened(nowMs: 0), random: 0.5)
+          let e = m.handle(.closed(nowMs: 1000), random: 0.5)
+          return e == [.scheduleRetry(delayMs: 1000)] && m.state == .waiting(attempt: 1, retryAtMs: 2000)
+      }
+      check("計時器到期後重試；連線階段失敗繼續累加") {
+          var m = machine()
+          _ = m.handle(.start, random: 0.5)
+          _ = m.handle(.closed(nowMs: 100), random: 0.5)
+          let t = m.handle(.retryTimerFired, random: 0.5)
+          let afterTimer = m.state
+          let e = m.handle(.closed(nowMs: 2500), random: 0.5)
+          return t == [.connect] && afterTimer == .connecting(attempt: 1)
+              && e == [.scheduleRetry(delayMs: 2000)] && m.state == .waiting(attempt: 2, retryAtMs: 4500)
+      }
+      check("連線穩定超過 stableMs 後才重置次數") {
+          var m = machine()
+          _ = m.handle(.start, random: 0.5)
+          _ = m.handle(.closed(nowMs: 0), random: 0.5)
+          _ = m.handle(.retryTimerFired, random: 0.5)
+          _ = m.handle(.closed(nowMs: 0), random: 0.5)
+          _ = m.handle(.retryTimerFired, random: 0.5)
+          _ = m.handle(.opened(nowMs: 5000), random: 0.5)
+          let e = m.handle(.closed(nowMs: 20_000), random: 0.5)
+          return e == [.scheduleRetry(delayMs: 500)] && m.state == .waiting(attempt: 0, retryAtMs: 20_500)
+      }
+      check("網路消失：取消計時器並關閉 socket；斷線事件被忽略；恢復後立即連線並重置次數") {
+          var m = machine()
+          _ = m.handle(.start, random: 0.5)
+          _ = m.handle(.opened(nowMs: 0), random: 0.5)
+          let lost = m.handle(.networkLost, random: 0.5)
+          let ignored = m.handle(.closed(nowMs: 100), random: 0.5)
+          let stateAfter = m.state
+          let back = m.handle(.networkAvailable, random: 0.5)
+          return lost == [.cancelRetry, .closeSocket] && ignored == [] && stateAfter == .offline
+              && back == [.connect] && m.state == .connecting(attempt: 0)
+      }
+      check("退避等待中網路恢復：取消等待並立即重試") {
+          var m = machine()
+          _ = m.handle(.start, random: 0.5)
+          _ = m.handle(.closed(nowMs: 0), random: 0.5)
+          let e = m.handle(.networkAvailable, random: 0.5)
+          return e == [.cancelRetry, .connect] && m.state == .connecting(attempt: 0)
+      }
+      check("背景與前景：進背景關閉並取消，回前景重新連線；其餘狀態忽略") {
+          var m = machine()
+          let idleBg = m.handle(.enteredBackground, random: 0.5)
+          let idleState = m.state
+          _ = m.handle(.start, random: 0.5)
+          _ = m.handle(.opened(nowMs: 0), random: 0.5)
+          let bg = m.handle(.enteredBackground, random: 0.5)
+          let ignoredNet = m.handle(.networkAvailable, random: 0.5)
+          let fg = m.handle(.enteredForeground, random: 0.5)
+          let fg2 = m.handle(.enteredForeground, random: 0.5)
+          return idleBg == [] && idleState == .idle && bg == [.cancelRetry, .closeSocket]
+              && ignoredNet == [] && fg == [.connect] && m.state == .connecting(attempt: 0) && fg2 == []
+      }
+  kotlin:
+    starter: |
+      class Backoff(val baseMs: Long, val capMs: Long) {
+          fun delayMs(attempt: Int, random: Double): Long {
+              // TODO
+              return 0
+          }
+      }
+
+      sealed class ConnState {
+          object Idle : ConnState()
+          data class Connecting(val attempt: Int) : ConnState()
+          data class Connected(val attempt: Int, val sinceMs: Long) : ConnState()
+          data class Waiting(val attempt: Int, val retryAtMs: Long) : ConnState()
+          object Offline : ConnState()
+          object Suspended : ConnState()
+      }
+
+      sealed class ConnEvent {
+          object Start : ConnEvent()
+          data class Opened(val nowMs: Long) : ConnEvent()
+          data class Closed(val nowMs: Long) : ConnEvent()
+          object RetryTimerFired : ConnEvent()
+          object NetworkLost : ConnEvent()
+          object NetworkAvailable : ConnEvent()
+          object EnteredBackground : ConnEvent()
+          object EnteredForeground : ConnEvent()
+      }
+
+      sealed class ConnEffect {
+          object Connect : ConnEffect()
+          data class ScheduleRetry(val delayMs: Long) : ConnEffect()
+          object CancelRetry : ConnEffect()
+          object CloseSocket : ConnEffect()
+      }
+
+      class ConnMachine(private val backoff: Backoff, private val stableMs: Long = 10_000) {
+          var state: ConnState = ConnState.Idle
+              private set
+
+          fun handle(event: ConnEvent, random: Double): List<ConnEffect> {
+              // TODO
+              return emptyList()
+          }
+      }
+    solution: |
+      class Backoff(val baseMs: Long, val capMs: Long) {
+          fun delayMs(attempt: Int, random: Double): Long {
+              var ceiling = minOf(baseMs, capMs)
+              var i = 0
+              while (i < attempt && ceiling < capMs) {
+                  ceiling = minOf(ceiling * 2, capMs)
+                  i++
+              }
+              val r = minOf(maxOf(random, 0.0), 0.999_999_999)
+              return (ceiling * r).toLong()
+          }
+      }
+
+      sealed class ConnState {
+          object Idle : ConnState()
+          data class Connecting(val attempt: Int) : ConnState()
+          data class Connected(val attempt: Int, val sinceMs: Long) : ConnState()
+          data class Waiting(val attempt: Int, val retryAtMs: Long) : ConnState()
+          object Offline : ConnState()
+          object Suspended : ConnState()
+      }
+
+      sealed class ConnEvent {
+          object Start : ConnEvent()
+          data class Opened(val nowMs: Long) : ConnEvent()
+          data class Closed(val nowMs: Long) : ConnEvent()
+          object RetryTimerFired : ConnEvent()
+          object NetworkLost : ConnEvent()
+          object NetworkAvailable : ConnEvent()
+          object EnteredBackground : ConnEvent()
+          object EnteredForeground : ConnEvent()
+      }
+
+      sealed class ConnEffect {
+          object Connect : ConnEffect()
+          data class ScheduleRetry(val delayMs: Long) : ConnEffect()
+          object CancelRetry : ConnEffect()
+          object CloseSocket : ConnEffect()
+      }
+
+      class ConnMachine(private val backoff: Backoff, private val stableMs: Long = 10_000) {
+          var state: ConnState = ConnState.Idle
+              private set
+
+          private fun scheduleRetry(attempt: Int, now: Long, random: Double): List<ConnEffect> {
+              val delay = backoff.delayMs(attempt, random)
+              state = ConnState.Waiting(attempt, now + delay)
+              return listOf(ConnEffect.ScheduleRetry(delay))
+          }
+
+          fun handle(event: ConnEvent, random: Double): List<ConnEffect> {
+              val s = state
+              return when {
+                  s is ConnState.Idle && event is ConnEvent.Start -> {
+                      state = ConnState.Connecting(0)
+                      listOf(ConnEffect.Connect)
+                  }
+                  s is ConnState.Connecting && event is ConnEvent.Opened -> {
+                      state = ConnState.Connected(s.attempt, event.nowMs)
+                      emptyList()
+                  }
+                  s is ConnState.Connected && event is ConnEvent.Closed -> {
+                      val next = if (event.nowMs - s.sinceMs >= stableMs) 0 else s.attempt + 1
+                      scheduleRetry(next, event.nowMs, random)
+                  }
+                  s is ConnState.Connecting && event is ConnEvent.Closed ->
+                      scheduleRetry(s.attempt + 1, event.nowMs, random)
+                  s is ConnState.Waiting && event is ConnEvent.RetryTimerFired -> {
+                      state = ConnState.Connecting(s.attempt)
+                      listOf(ConnEffect.Connect)
+                  }
+                  (s is ConnState.Connecting || s is ConnState.Connected || s is ConnState.Waiting) &&
+                      event is ConnEvent.NetworkLost -> {
+                      state = ConnState.Offline
+                      listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket)
+                  }
+                  s is ConnState.Offline && event is ConnEvent.NetworkAvailable -> {
+                      state = ConnState.Connecting(0)
+                      listOf(ConnEffect.Connect)
+                  }
+                  s is ConnState.Waiting && event is ConnEvent.NetworkAvailable -> {
+                      state = ConnState.Connecting(0)
+                      listOf(ConnEffect.CancelRetry, ConnEffect.Connect)
+                  }
+                  (s is ConnState.Connecting || s is ConnState.Connected || s is ConnState.Waiting ||
+                      s is ConnState.Offline) && event is ConnEvent.EnteredBackground -> {
+                      state = ConnState.Suspended
+                      listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket)
+                  }
+                  s is ConnState.Suspended && event is ConnEvent.EnteredForeground -> {
+                      state = ConnState.Connecting(0)
+                      listOf(ConnEffect.Connect)
+                  }
+                  else -> emptyList()
+              }
+          }
+      }
+    tests: |
+      fun machine() = ConnMachine(Backoff(1000, 30_000))
+
+      check("Backoff：full jitter 的上限、cap 與亂數") {
+          val b = Backoff(1000, 30_000)
+          b.delayMs(0, 0.5) == 500L && b.delayMs(1, 0.5) == 1000L && b.delayMs(3, 0.5) == 4000L &&
+              b.delayMs(5, 0.5) == 15_000L && b.delayMs(2, 0.0) == 0L && b.delayMs(2, 5.0) == 3999L
+      }
+      check("Backoff：attempt 很大時不溢位，維持 cap") {
+          val b = Backoff(1000, 30_000)
+          b.delayMs(200, 0.5) == 15_000L && b.delayMs(Int.MAX_VALUE, 0.5) == 15_000L
+      }
+      check("start 只在 idle 有效") {
+          val m = machine()
+          val e1 = m.handle(ConnEvent.Start, 0.5)
+          val s1 = m.state
+          val e2 = m.handle(ConnEvent.Start, 0.5)
+          e1 == listOf(ConnEffect.Connect) && s1 == ConnState.Connecting(0) && e2.isEmpty() && m.state == s1
+      }
+      check("連上後很快斷線：attempt 累加，進入 waiting 並排程重試") {
+          val m = machine()
+          m.handle(ConnEvent.Start, 0.5)
+          m.handle(ConnEvent.Opened(0), 0.5)
+          val e = m.handle(ConnEvent.Closed(1000), 0.5)
+          e == listOf(ConnEffect.ScheduleRetry(1000)) && m.state == ConnState.Waiting(1, 2000)
+      }
+      check("計時器到期後重試；連線階段失敗繼續累加") {
+          val m = machine()
+          m.handle(ConnEvent.Start, 0.5)
+          m.handle(ConnEvent.Closed(100), 0.5)
+          val t = m.handle(ConnEvent.RetryTimerFired, 0.5)
+          val afterTimer = m.state
+          val e = m.handle(ConnEvent.Closed(2500), 0.5)
+          t == listOf(ConnEffect.Connect) && afterTimer == ConnState.Connecting(1) &&
+              e == listOf(ConnEffect.ScheduleRetry(2000)) && m.state == ConnState.Waiting(2, 4500)
+      }
+      check("連線穩定超過 stableMs 後才重置次數") {
+          val m = machine()
+          m.handle(ConnEvent.Start, 0.5)
+          m.handle(ConnEvent.Closed(0), 0.5)
+          m.handle(ConnEvent.RetryTimerFired, 0.5)
+          m.handle(ConnEvent.Closed(0), 0.5)
+          m.handle(ConnEvent.RetryTimerFired, 0.5)
+          m.handle(ConnEvent.Opened(5000), 0.5)
+          val e = m.handle(ConnEvent.Closed(20_000), 0.5)
+          e == listOf(ConnEffect.ScheduleRetry(500)) && m.state == ConnState.Waiting(0, 20_500)
+      }
+      check("網路消失：取消計時器並關閉 socket；斷線事件被忽略；恢復後立即連線並重置次數") {
+          val m = machine()
+          m.handle(ConnEvent.Start, 0.5)
+          m.handle(ConnEvent.Opened(0), 0.5)
+          val lost = m.handle(ConnEvent.NetworkLost, 0.5)
+          val ignored = m.handle(ConnEvent.Closed(100), 0.5)
+          val stateAfter = m.state
+          val back = m.handle(ConnEvent.NetworkAvailable, 0.5)
+          lost == listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket) && ignored.isEmpty() &&
+              stateAfter == ConnState.Offline && back == listOf(ConnEffect.Connect) &&
+              m.state == ConnState.Connecting(0)
+      }
+      check("退避等待中網路恢復：取消等待並立即重試") {
+          val m = machine()
+          m.handle(ConnEvent.Start, 0.5)
+          m.handle(ConnEvent.Closed(0), 0.5)
+          val e = m.handle(ConnEvent.NetworkAvailable, 0.5)
+          e == listOf(ConnEffect.CancelRetry, ConnEffect.Connect) && m.state == ConnState.Connecting(0)
+      }
+      check("背景與前景：進背景關閉並取消，回前景重新連線；其餘狀態忽略") {
+          val m = machine()
+          val idleBg = m.handle(ConnEvent.EnteredBackground, 0.5)
+          val idleState = m.state
+          m.handle(ConnEvent.Start, 0.5)
+          m.handle(ConnEvent.Opened(0), 0.5)
+          val bg = m.handle(ConnEvent.EnteredBackground, 0.5)
+          val ignoredNet = m.handle(ConnEvent.NetworkAvailable, 0.5)
+          val fg = m.handle(ConnEvent.EnteredForeground, 0.5)
+          val fg2 = m.handle(ConnEvent.EnteredForeground, 0.5)
+          idleBg.isEmpty() && idleState == ConnState.Idle &&
+              bg == listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket) &&
+              ignoredNet.isEmpty() && fg == listOf(ConnEffect.Connect) &&
+              m.state == ConnState.Connecting(0) && fg2.isEmpty()
+      }
+
+- id: exchange-connection-resilience-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [reconnect, architecture]
+  prompt: |
+    設計交易所 App 的 WebSocket 連線韌性：重連策略、網路狀態、背景處理、資料過期與下單保護。並說明你在重連與回前景處理上的實務做法，以及到交易所的 App 你會怎麼改進。
+  promptJa: |
+    取引所アプリの WebSocket 接続の耐障害性（再接続の戦略、ネットワーク状態、バックグラウンド処理、データの鮮度、発注の保護）を設計してください。これまでの実装経験と、取引所アプリでどう改善するかも説明してください。
+  keyPoints:
+    - "明確的狀態機：idle／connecting／connected／waiting／offline／suspended，轉移用純函式，副作用用 effect（要去做的事，只用資料描述）描述，可用事件序列測試"
+    - "退避：指數加 full jitter（注入亂數；在 0 到上限之間隨機），cap（等待上限）；連線穩定一段時間才重置次數；網路恢復與回前景立即重連並重置"
+    - "限流：遇到 429／too.many.connection 用更長的 base；私有頻道每個 API key 最多 10 條連線，避免同步重連"
+    - "網路狀態是提示：NWPathMonitor／NetworkCallback（VALIDATED）；半開連線（看起來連著、其實收不到資料）靠應用層監看（伺服器約 5 秒 ping，約 15 秒沒資料就重連）"
+    - "恢復順序：標示過期 → 連線與 auth → 重新訂閱 → 緩衝增量、取快照（整份最新資料）→ 清除過期標示"
+    - "UI：最後更新時間（單調時鐘）、寬限時間去抖動、斷線時價格變灰並阻止或二次確認下單"
+    - "經驗：即時行情 App 的 SSE 重連（斷線後 1 秒重連、每次重取 token）、iOS 的沒資料監看、回前景補抓；到交易所的 App 我會改成指數退避加 jitter，兩個平台都加上沒資料的監看，並在畫面上顯示斷線狀態"
+  modelAnswer: |
+    我會把連線建模成明確的狀態機：idle、connecting、connected、waiting、offline、suspended，用事件驅動，轉移寫成純函式，副作用用 effect 描述，這樣可以用事件序列測試。
+
+    重連用指數退避（等待時間逐次加倍）加 full jitter（在 0 到上限之間隨機），亂數注入以便測試。連線要穩定超過一段時間才重置次數，避免連上又被踢變成緊密迴圈（沒有間隔地連、被踢、再連）；網路恢復和回前景則立即重連並重置。遇到 429 或連線數上限，用更長的 base，避免大量 App 同步重連。網路狀態 API 只是提示，不能代表真的能連；半開連線（看起來連著、其實收不到資料）我用應用層監看，這套交易所的伺服器約每 5 秒 ping，超過約 15 秒沒收到任何訊息就主動重連。
+
+    重連後依序是：標示資料過期、連線與 auth、重新訂閱、緩衝增量並取快照（整份最新資料）、最後清除過期標示。UI 上追蹤最後更新時間，斷線超過寬限時間就把價格變灰，並阻止或二次確認以該價格下單。
+
+    經驗上，我在一個即時行情 App 做過 SSE 的重連（斷線後 1 秒重連、每次重新取得短效 token）、回前景補抓資料，iOS 端還有沒資料的監看。到交易所的 App，我會把重連改成指數退避加 jitter，兩個平台都加上沒資料的監看，並在畫面上顯示斷線狀態。
+  modelAnswerJa: |
+    接続は明確な状態機械としてモデル化します。idle、connecting、connected、waiting、offline、suspended の状態をイベントで駆動し、遷移は純粋関数、副作用は effect として表すので、イベント列でテストできます。
+
+    再接続は指数バックオフと full jitter を使い、テストのために乱数は注入します。接続が一定時間安定して初めて試行回数をリセットすることで、接続してすぐ切られる場合に密なループになるのを避けます。ネットワーク復帰とフォアグラウンド復帰のときは、すぐ再接続して回数をリセットします。429 や接続数の上限に当たった場合は base を長くして、大量のアプリが同時に再接続しないようにします。ネットワーク状態の API はあくまでヒントで、実際につながることの保証にはなりません。ハーフオープンの接続はアプリ層で監視します。この取引所のサーバーは約 5 秒ごとに ping を送るため、約 15 秒どのメッセージも届かなければ自分から再接続します。
+
+    再接続後の順序は、データを古いと表示、接続と認証、再購読、差分のバッファとスナップショット取得、最後に古い表示の解除です。UI では最終更新時刻を追跡し、切断が猶予時間を超えたら価格をグレーにして、その価格での発注を止めるか再確認を求めます。
+
+    経験としては、相場アプリで SSE の再接続（切断後 1 秒で再接続し、毎回短期 token を取得し直す）とフォアグラウンド復帰時のデータ再取得を実装し、iOS には無通信の監視も実装していました。取引所アプリでは、再接続を指数バックオフと jitter に変更し、両プラットフォームに無通信の監視を入れ、画面に切断状態を表示します。
+  followUps:
+    - "同一ユーザーが複数画面から同じ topic を購読するとき、再購読の管理はどうする？"
+    - "再接続中に発注ボタンが押されたら、画面と内部の状態はどうなる？"
+    - "リトライの上限を設けるべきか？設けない場合、ユーザーにどう見せる？"
+  timeLimitSec: 180
+
+- id: exchange-connection-resilience-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [backoff]
+  front: 重連策略速記：退避公式、何時重置、網路 API 限制、恢復順序
+  back: |
+    - full jitter（在 0 到上限之間隨機）：`delay = random(0, min(cap, base × 2^attempt))`；注入亂數；attempt 大時先封頂。
+    - **穩定一段時間才重置**次數（不要 `opened` 就重置）；網路恢復／回前景立即重連並重置；offline 時停計時器。
+    - `NWPathMonitor satisfied`／`onAvailable` ≠ 能上網（captive portal：要先在網頁登入的 Wi-Fi）；Android 看 `NET_CAPABILITY_VALIDATED`；半開連線（看起來連著、其實收不到資料）靠應用層監看（約 15 秒沒資料就重連）。
+    - 恢復：標示過期 → 連線＋auth → 重新訂閱 → 緩衝＋快照（整份最新資料）→ 清除過期；斷線超過寬限就灰掉價格、保護下單。

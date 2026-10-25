@@ -1,0 +1,282 @@
+- id: swift-objc-crash-course-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [property, copy]
+  prompt: |
+    ObjC 的 `NSString *symbol` 屬性，為什麼慣例要寫成 `@property (nonatomic, copy)` 而不是 `strong`？
+  options:
+    - "`copy` 讓存取變成執行緒安全"
+    - "`copy` 會讓字串在記憶體中被壓縮，省空間"
+    - "外部可能傳入 `NSMutableString`（它是 `NSString` 的子類別）；用 `strong` 只是持有同一個物件，之後外部修改它，屬性值就跟著變；`copy` 在設值時複製一份，不受影響"
+    - "`strong` 在 ARC 下會造成 retain cycle，所以字串必須用 `copy`"
+  answer: 2
+  explain: |
+    `NSString`、`NSArray`、`NSDictionary` 都有可變的子類別。型別寫 `NSString *` 的變數，實際上可能指向一個之後會被修改的 `NSMutableString`。用 `copy` 在設值當下複製一份，就不會被外部偷偷改掉；如果傳進來的本來就是不可變的物件，`copy` 通常只是多持有一次，幾乎沒有成本。
+
+    - 「`copy` 讓存取變成執行緒安全」錯在：`copy` 和執行緒安全無關，那是 `atomic` 的責任，而且 `atomic` 也只保證單次存取完整。
+    - 「字串會被壓縮、省空間」錯在：`copy` 只是複製（或多持有一次），並不會壓縮。
+    - 「`strong` 會造成 retain cycle」錯在：retain cycle 是兩個物件互相持有才會發生；一個字串屬性持有字串物件，字串不會回頭持有你，所以不會形成循環。
+
+- id: swift-objc-crash-course-02
+  type: predict
+  level: 2
+  priority: P1
+  tags: [property, copy, strong]
+  prompt: |
+    下列 ObjC 程式印出什麼？
+  codeLang: objectivec
+  code: |
+    #import <Foundation/Foundation.h>
+
+    @interface Person : NSObject
+    @property (nonatomic, strong) NSString *strongName;
+    @property (nonatomic, copy) NSString *copiedName;
+    @end
+    @implementation Person
+    @end
+
+    int main(void) {
+        @autoreleasepool {
+            Person *p = [Person new];
+            NSMutableString *m = [@"BTC" mutableCopy];
+            p.strongName = m;
+            p.copiedName = m;
+            [m appendString:@"/JPY"];
+            printf("%s %s\n", p.strongName.UTF8String, p.copiedName.UTF8String);
+        }
+        return 0;
+    }
+  answer: |
+    BTC/JPY BTC
+  explain: |
+    - `strongName` 是 `strong`，持有的就是 `m` 這個物件本身。之後 `appendString:` 修改的是同一個物件，所以讀到 `BTC/JPY`。
+    - `copiedName` 是 `copy`，在指派的當下複製出一份不可變的 `BTC`，之後 `m` 怎麼改都和它無關，所以還是 `BTC`。
+
+    這就是 `copy` 屬性的價值：物件內部的資料不會被外部拿到的可變參考偷偷改掉。
+
+- id: swift-objc-crash-course-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [block, capture, block-variable]
+  prompt: |
+    下列 ObjC 程式印出什麼？
+  codeLang: objectivec
+  code: |
+    #import <Foundation/Foundation.h>
+
+    int main(void) {
+        @autoreleasepool {
+            int x = 1;
+            void (^byValue)(void) = ^{ printf("%d ", x); };
+            __block int y = 1;
+            void (^byRef)(void) = ^{ printf("%d\n", y); };
+            x = 2;
+            y = 2;
+            byValue();
+            byRef();
+        }
+        return 0;
+    }
+  answer: |
+    1 2
+  explain: |
+    - `byValue` 沒有加 `__block`，block 預設在建立的當下**以值捕獲**外部的區域變數，複製的是當時的 `x`＝1。之後 `x` 改成 2，block 裡還是 1。
+    - `y` 加了 `__block`，它會被搬到所有人共用的記憶體，block 與外部讀寫的是同一份，所以 `byRef` 看到後來設成的 2。
+
+    這和 Swift 的 closure 相反：Swift 預設捕獲變數本身（`{ print(x) }` 會看到後來的值），要用 capture list `[x]` 才是捕獲建立當下的值。
+
+- id: swift-objc-crash-course-04
+  type: multi
+  level: 2
+  priority: P1
+  tags: [property, atomic, weak]
+  prompt: |
+    關於 `@property` 的特性，哪些敘述正確？（複選）
+  options:
+    - "`atomic` 保證 `self.count += 1` 這種複合操作是執行緒安全的"
+    - "`weak` 屬性在物件釋放後會自動變成 `nil`"
+    - "block 屬性慣例使用 `copy`"
+    - "`assign` 用在物件屬性上是安全的，因為 ARC 會自動處理計數"
+    - "`NSString` 屬性使用 `copy`，可以避免外部傳入的可變字串之後被修改"
+  answer: [1, 2, 4]
+  explain: |
+    - 第 1 項錯誤：`atomic` 只保證單次的 getter 或 setter 不會讀到寫了一半的值。`count += 1` 是「讀、加、寫」三個步驟，仍然會有競爭問題。多執行緒要另外用鎖或 serial queue。
+    - 第 2 項正確：`weak` 不持有物件，物件釋放時，屬性會自動歸零成 `nil`，所以常用在 delegate。
+    - 第 3 項正確：block 屬性慣例用 `copy`（歷史上要把 stack 上的 block 搬到 heap），看到舊程式碼要看得懂。
+    - 第 4 項錯誤：`assign` 不會讓計數 +1，對物件使用，物件釋放後屬性會變成野指標（指著已經釋放的記憶體），之後使用就隨機 crash。基本型別才用 `assign`，物件要「不持有」請用 `weak`。
+    - 第 5 項正確：用 `copy` 在設值時複製一份，就不怕外部傳入的 `NSMutableString` 之後被修改。
+
+- id: swift-objc-crash-course-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [block, weak-strong-dance]
+  prompt: |
+    下列 block 有什麼潛在問題？最合適的修正是什麼？
+  codeLang: objectivec
+  code: |
+    __weak typeof(self) weakSelf = self;
+    self.handler = ^(double price) {
+        [weakSelf step1];
+        [weakSelf step2];
+    };
+  options:
+    - "沒有問題，`__weak` 已經避免了 retain cycle，ARC 會保證執行期間 self 存活"
+    - "在 block 內先 `__strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;`，之後使用 `strongSelf`，確保兩個步驟之間 self 不會被釋放，不會只執行到一半"
+    - "改成直接使用 `self`，編譯器會自動處理"
+    - "把 `handler` 屬性從 `copy` 改成 `assign`"
+  answer: 1
+  explain: |
+    `weakSelf` 每次使用都是一次獨立的讀取：`step1` 呼叫完之後，`self` 可能剛好被釋放，`weakSelf` 變成 `nil`，`step2` 被靜默略過（對 `nil` 傳訊息不會 crash），邏輯只執行一半。weak／strong 的寫法，是在 block 開頭把 weak 轉成 strong，block 執行期間持有它，要嘛全做、要嘛全不做。
+
+    - 「沒有問題」錯在：`__weak` 只解決了循環參考，並不保證兩次使用之間 self 一直存活。
+    - 「直接使用 `self`」錯在：block 存在 self 的屬性上，block 又持有 self，形成循環參考，物件永遠不會釋放。
+    - 「改成 `assign`」錯在：block 屬性用 `assign` 會變成野指標；它和這個問題無關。
+
+    Swift 的對應寫法是 `[weak self]`，後面接 `guard let self else { return }`。
+
+- id: swift-objc-crash-course-06
+  type: predict
+  level: 3
+  priority: P1
+  tags: [swizzling, runtime]
+  prompt: |
+    `+load` 在 `main` 之前執行，並交換了 `hello` 與 `xo_hello` 的實作。`main` 依序呼叫 `[g hello]` 與 `[g xo_hello]`，印出什麼？
+  codeLang: objectivec
+  code: |
+    #import <Foundation/Foundation.h>
+    #import <objc/runtime.h>
+
+    @interface Greeter : NSObject
+    - (void)hello;
+    @end
+    @implementation Greeter
+    - (void)hello { printf("hello\n"); }
+    @end
+
+    @interface Greeter (Swizzle)
+    - (void)xo_hello;
+    @end
+    @implementation Greeter (Swizzle)
+    + (void)load {
+        Method original = class_getInstanceMethod(self, @selector(hello));
+        Method swizzled = class_getInstanceMethod(self, @selector(xo_hello));
+        method_exchangeImplementations(original, swizzled);
+    }
+    - (void)xo_hello {
+        printf("before\n");
+        [self xo_hello];
+        printf("after\n");
+    }
+    @end
+
+    int main(void) {
+        @autoreleasepool {
+            Greeter *g = [Greeter new];
+            [g hello];
+            [g xo_hello];
+        }
+        return 0;
+    }
+  answer: |
+    before hello after hello
+  explain: |
+    交換之後，`hello` 這個名字指向 `xo_hello` 寫的實作，`xo_hello` 這個名字則指向原本 `hello` 的實作。
+
+    - `[g hello]`：執行的是交換過來的實作，先印 `before`；裡面的 `[self xo_hello]`，因為名字已經對調，實際執行的是原本的 `hello`，印 `hello`；最後印 `after`。
+    - `[g xo_hello]`：這時 `xo_hello` 對應的是原本 `hello` 的實作，只印 `hello`。
+
+    所以輸出是 `before hello after hello`。swizzle 的實作裡「呼叫自己的名字」其實是呼叫原本的實作，這是最容易搞混的地方。
+
+- id: swift-objc-crash-course-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [nullability, bridging, runtime]
+  prompt: |
+    關於 ObjC 的行為與 Swift 互通，哪些敘述正確？（複選）
+  options:
+    - "未標註 nullability 的 ObjC 屬性，匯入 Swift 後是 implicitly unwrapped optional（`T!`），實際為 `nil` 時使用會 crash"
+    - "對 `nil` 傳送訊息會 crash（`EXC_BAD_ACCESS`）"
+    - "帶 completion handler 的 ObjC 方法，Swift 端可以直接用 `try await` 呼叫（自動匯入成 `async throws`）"
+    - "Category 可以為既有類別新增 stored property（ivar）"
+    - "靜態函式庫中的 category，App 要加 `-ObjC` linker flag 才會被載入"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：沒有標註的宣告在 Swift 裡是 `T!`，可以直接當非 Optional 用，但實際是 `nil` 時會 crash。這是我們用 Swift 6.2.4 編譯驗證過的。
+    - 第 2 項錯誤：對 `nil` 傳訊息是安全的，回傳 0 或 `nil`（我們實測印出 `0.000000`），不會 crash。
+    - 第 3 項正確：帶 completion handler 的 ObjC 方法，從 Swift 5.5 起會自動匯入成 `async throws`，我們也用 Swift 6.2.4 編譯驗證過。
+    - 第 4 項錯誤：Category 不能有實例變數，要附加狀態只能用 `objc_setAssociatedObject` 變通；class extension（和主類別同一個編譯單元）才能加。
+    - 第 5 項正確：放在靜態函式庫裡的 category，如果連結時沒有加 `-ObjC`，連結器可能不會把它載入，執行時就會出現 unrecognized selector。
+
+- id: swift-objc-crash-course-08
+  type: fill
+  level: 2
+  priority: P1
+  tags: [nullability]
+  prompt: |
+    為 ObjC header 加上 nullability 標註，讓 Swift 把 `symbol` 匯入成 `String`、`memo` 匯入成 `String?`。
+  codeLang: objectivec
+  code: |
+    ____
+    @interface Order : NSObject
+    @property (nonatomic, copy) NSString *symbol;
+    @property (nonatomic, copy, ____) NSString *memo;
+    @end
+    NS_ASSUME_NONNULL_END
+  blanks:
+    - [NS_ASSUME_NONNULL_BEGIN]
+    - [nullable]
+  explain: |
+    - 第一格填 `NS_ASSUME_NONNULL_BEGIN`：它和最後的 `NS_ASSUME_NONNULL_END` 成對，讓區間內沒有特別標註的指標，預設都是 `nonnull`，所以 `symbol` 在 Swift 是 `String`。
+    - 第二格填 `nullable`：只要替真正可能是空的屬性標 `nullable`，`memo` 在 Swift 就是 `String?`。
+
+    如果整個 header 沒有任何標註，Swift 端會看到 `String!`，把「是否為空」的風險丟給呼叫端。
+
+- id: swift-objc-crash-course-09
+  type: open
+  level: 2
+  priority: P1
+  tags: [objc, interop, field]
+  prompt: |
+    不少 iOS 職缺會把 Objective-C 與 Swift 並列。請說明你和 Objective-C 的關係，以及你如何在以 Swift 為主的專案中處理 ObjC 舊程式與 SDK。
+  promptJa: |
+    iOS の求人では Objective-C と Swift が並んで記載されていることがよくあります。Objective-C との関わりと、Swift 中心のプロジェクトで ObjC の既存コードや SDK をどのように扱うかを説明してください。
+  keyPoints:
+    - "定位：日常以 Swift 為主，Objective-C 是能閱讀、維護，並能和 Swift 互通的程度"
+    - "實際跨過 ObjC 邊界的經驗：藍牙智慧鎖 SDK 專案，Swift 呼叫標頭為 ObjC 的 framework；社交 App 自建多語系系統，用 `Bundle` 的 method swizzling 攔截舊的 `NSLocalizedString`；即時行情 App 的 `WKScriptMessageHandler` 是 `NSObject` 協定"
+    - "核心觀念：`strong`、`weak`、`copy`、`assign` 的理由；block 的 weak／strong 寫法；對 `nil` 傳訊息與 unrecognized selector 的差別"
+    - "互通重點：bridging header、`-Swift.h`、nullability 標註、輕量泛型、completion handler 自動匯入成 `async`"
+    - "處理舊程式的策略：先補 nullability 與泛型標註，讓 Swift 這邊的型別乾淨；再依風險逐步改寫；swizzling 與 KVO 要有測試與註解"
+  modelAnswer: |
+    我日常以 Swift 為主，Objective-C 的定位是看得懂、能維護、能和 Swift 互通。實際跨過 ObjC 邊界的經驗有幾個：在一個 BLE 智慧鎖 SDK 專案裡，我用 Swift 呼叫標頭是 ObjC 寫的 framework；在一個社交 App，自建的多語系系統用 `Bundle` 的 method swizzling 攔截舊的 `NSLocalizedString`，所以我理解 runtime 交換方法實作的做法與風險。
+
+    觀念上，我熟悉 `strong`、`weak`、`copy`、`assign` 的理由：delegate 用 `weak` 避免互相持有，字串用 `copy` 避免被可變字串偷偷修改，基本型別才用 `assign`。block 我也熟悉 weak／strong 的寫法，對應到 Swift 就是 `[weak self]` 加 `guard let self`。
+
+    在以 Swift 為主的專案裡處理 ObjC 舊程式，我的做法是先補上 nullability 和輕量泛型標註，讓 Swift 這邊不要到處都是 `!`。帶 completion handler 的 ObjC 方法，在 Swift 可以直接用 async／await 呼叫。接著依風險逐步改寫，swizzling 和 KVO 這類 runtime 手法，則一定要有測試和註解。
+  modelAnswerJa: |
+    普段は Swift が中心で、Objective-C は「読めて、保守できて、Swift と相互運用できる」という位置づけです。ObjC との境界をまたいだ経験はいくつかあります。BLE スマートロック SDK のプロジェクトでは、ヘッダーが ObjC で書かれた framework を Swift から呼び出しました。あるソーシャルアプリでは、自作した多言語管理の仕組みで `Bundle` のメソッドスウィズリングを使い、既存の `NSLocalizedString` の呼び出しを横取りしているため、ランタイムでメソッドの実装を入れ替える仕組みとそのリスクを理解しています。
+
+    概念としては、`strong`、`weak`、`copy`、`assign` を使い分ける理由を押さえています。delegate は相互保持を避けるために `weak`、文字列は可変文字列に書き換えられないように `copy`、`assign` は基本型だけです。block の weak/strong の書き方も理解していて、Swift では `[weak self]` と `guard let self` に対応します。
+
+    Swift 中心のプロジェクトで ObjC の既存コードを扱う方針は、まず nullability とライトウェイトジェネリクスを付けて、Swift 側が `!` だらけにならないようにすることです。completion handler 付きの ObjC メソッドは、Swift から async/await で直接呼べます。その上でリスクに応じて段階的に書き換え、スウィズリングや KVO のようなランタイムの技法には、必ずテストとコメントを付けます。
+  followUps:
+    - "Swift から呼ぶ ObjC の API が nullable かどうか不明な場合、どのように安全に扱いますか。"
+    - "メソッドスウィズリングで問題が起きるのは、どのような場面ですか。"
+    - "ObjC のコードをテストするとき、モックはどのように作りますか。"
+  timeLimitSec: 120
+
+- id: swift-objc-crash-course-10
+  type: flash
+  level: 1
+  priority: P1
+  tags: [property]
+  front: "`@property` 特性速記：atomic／nonatomic、strong／weak／copy／assign"
+  back: |
+    - `atomic`（預設）：單次存取完整，但不是真的執行緒安全；iOS 慣例寫 `nonatomic`。
+    - `strong`：持有，一般物件的預設。
+    - `weak`：不持有，物件釋放後自動變 `nil`（delegate、指回父層）。
+    - `copy`：設值時複製一份（`NSString`、`NSArray`、`NSDictionary`、block），避免被可變子類別偷偷修改。
+    - `assign`：單純賦值，只用在基本型別；用在物件會變成野指標。

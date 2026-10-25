@@ -1,0 +1,183 @@
+- id: kotlin-compose-performance-01
+  type: multi
+  level: 2
+  priority: P0
+  tags: [defer-reads, phases]
+  prompt: |
+    價格閃色動畫的 `fade` 是一個每個 frame 都在變的 `State<Float>`。下列哪些寫法讓讀取**延後到 Layout 或 Drawing 階段**，因此動畫期間不會觸發重組？（複選）
+  options:
+    - "`Modifier.offset { IntOffset(offsetX.value.roundToInt(), 0) }`"
+    - "`Modifier.alpha(fade.value)`"
+    - "`Modifier.graphicsLayer { alpha = fade.value }`"
+    - "`Modifier.background(color.value)`"
+    - "`Modifier.drawBehind { drawRect(color.value) }`"
+  answer: [0, 2, 4]
+  explain: |
+    Compose 依照 State 是在哪個階段被讀取，決定值變更時要重做哪些部分。
+    - 第 1、3、5 項正確：`offset { }`、`graphicsLayer { }`、`drawBehind { }` 的大括號是在 Layout 或 Drawing 階段才執行的，`value` 在那時才被讀取。值改變時只重做該階段，不會重新執行 Composable。
+    - 第 2、4 項錯誤：`Modifier.alpha(value)`、`Modifier.background(value)` 在建立 Modifier 時就讀取了 State，讀取發生在 Composition 階段，每個動畫 frame 都會重組。
+
+- id: kotlin-compose-performance-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [lazycolumn, key]
+  prompt: |
+    自選清單 `LazyColumn` 沒有提供 `key`。使用者新增一個交易對到清單最前面，會發生什麼事？
+  options:
+    - "Compose 以資料內容比對，自動把既有項目往下移，狀態保持正確"
+    - "項目以「位置」識別：原本在位置 0 的 `remember` 狀態留在位置 0，現在顯示新的交易對；其餘項目因為位置整體位移而全部重組，也沒有移動動畫"
+    - "只有新增的那一列會重組"
+    - "會丟 `IllegalArgumentException`，因為 `LazyColumn` 強制要求 `key`"
+  answer: 1
+  explain: |
+    - 第 2 項正確。沒有 `key` 時，預設的身分就是位置。在最前面插入後，每個位置對應的資料都變了，所有項目的參數都跟上一次不同，因此全部重組；用 `remember` 保存的狀態（展開與否、輸入中的數量）則黏在位置上，出現在錯的交易對。
+    - 第 1 項錯：Compose 不會自己用資料內容去比對，沒有 `key` 就只能用位置。
+    - 第 3 項錯：因為所有位置的資料都位移了，不是只有新增的那一列變。
+    - 第 4 項錯：`key` 是選填的，沒給也能執行，只是有上面這些問題。
+    提供 `key = { it.symbol }` 之後，Compose 知道哪個項目只是移動了，狀態跟著項目走，也才有機會做項目移動的動畫。`contentType` 是另一件事：讓同種類的項目重用已經建好的結構。
+
+- id: kotlin-compose-performance-03
+  type: fill
+  level: 2
+  priority: P1
+  tags: [lazycolumn, graphicslayer]
+  prompt: |
+    補上兩處：讓列表中同一種的項目重用已經建好的結構；讓閃色的 alpha 在 Drawing 階段才讀取 State。
+  codeLang: kotlin
+  code: |
+    LazyColumn {
+        items(items = ticks, key = { it.symbol }, ____ = { "tick" }) { tick ->
+            TickRow(tick)
+        }
+    }
+
+    Box(Modifier.____ { alpha = flash.value })
+  blanks:
+    - [contentType]
+    - [graphicsLayer]
+  explain: |
+    - 第一格是 `contentType`。它告訴 `LazyColumn` 哪些項目的種類相同，Compose 可以把這種項目已經建好的結構拿來重用。列表同時有標題、廣告、一般列等多種項目時，效果明顯。
+    - 第二格是 `graphicsLayer`。`graphicsLayer { }` 的大括號是在 Drawing 階段執行的，所以 `flash.value` 的讀取不屬於 Composition，動畫期間 `Box` 不會重組。
+
+- id: kotlin-compose-performance-04
+  type: single
+  level: 3
+  priority: P0
+  tags: [market-data, architecture]
+  prompt: |
+    列表有 200 個交易對，WebSocket 每秒推送數百筆更新。下列哪個設計最合理？
+  options:
+    - "每收到一筆訊息就 `_state.update { list -> list.map { if (it.symbol == t.symbol) t.toUi() else it } }`，UI 直接 collect"
+    - "對列表 flow 套 `debounce(300)`，等行情安靜下來再更新 UI"
+    - "背景依 symbol 合併（只留最新），以固定週期（例如 100–250ms）輸出一批；新列表中沒變的項目沿用同一個實例，只對變動項目 `copy`；UI 用 `key`、`contentType` 並預先格式化字串"
+    - "每個列的 `TickRow` 各自在 Composable 裡呼叫 `NumberFormat` 格式化，減少 ViewModel 的工作"
+  answer: 2
+  explain: |
+    - 第 3 項正確。把更新頻率控制在資料層（畫面每個 frame 最多處理一次），沒變的項目維持同一個物件，因此會被跳過；格式化放在背景，Composable 只負責顯示。
+    - 第 1 項錯：每收到一筆就產生一個新的 list 交給畫面，列表每秒重組數百次，主執行緒來不及處理。
+    - 第 2 項錯：`debounce` 是等到「安靜一段時間」才送出，行情持續不斷有更新，永遠等不到安靜，列表會長時間凍結。
+    - 第 4 項錯：在 Composable 裡建立格式化工具並格式化，每次重組都重做，是最耗效能的做法。
+
+- id: kotlin-compose-performance-05
+  type: multi
+  level: 2
+  priority: P1
+  tags: [baseline-profile]
+  prompt: |
+    關於 Baseline Profile，哪些敘述正確？（複選）
+  options:
+    - "它讓 ART 在安裝時就對指定的 class／method 做 AOT 編譯，改善冷啟動與首次捲動"
+    - "它透過 Macrobenchmark 的 `BaselineProfileRule`（搭配 `androidx.baselineprofile` Gradle plugin）產生，並隨 release build 打包"
+    - "它只在 debug build 生效"
+    - "Compose 函式庫自己已附帶 profile，但 App 自己的啟動路徑與畫面仍需要自己的 profile"
+    - "有了 Baseline Profile 就不需要開 R8"
+  answer: [0, 1, 3]
+  explain: |
+    Baseline Profile 的重點，是讓 App 在第一次執行時，關鍵程式碼就已經是編譯過的，避免執行時邊跑邊編譯（JIT）造成的卡頓。ART 是 Android 上執行 App 的環境；AOT 是事先編譯好，JIT 是執行時邊跑邊編譯。
+    - 第 1 項正確：這就是它的作用。
+    - 第 2 項正確：用 Macrobenchmark 在裝置上跑關鍵流程產生清單，再隨 release build 一起打包。
+    - 第 3 項錯：它在 release build 才有意義（連同 R8），debug build 不是它的目標。
+    - 第 4 項正確：Compose 與其他 AndroidX 函式庫附帶自己的 profile，但你的 App 程式碼（啟動、首頁、行情列表的捲動）要自己產生。
+    - 第 5 項錯：R8 負責縮小與最佳化程式碼，Baseline Profile 負責讓關鍵程式碼事先編譯好，兩者互補，不是替代。
+
+- id: kotlin-compose-performance-06
+  type: single
+  level: 1
+  priority: P1
+  tags: [tooling]
+  prompt: |
+    你想知道「行情更新時，哪個 Composable 被重組最多次、哪些被跳過」。最直接的工具是？
+  options:
+    - "Logcat 過濾 `Choreographer` 的 skipped frames 訊息"
+    - "Android Studio 的 Layout Inspector（Compose 的重組與跳過計數）"
+    - "Network Profiler"
+    - "`adb shell dumpsys meminfo`"
+  answer: 1
+  explain: |
+    - 第 2 項正確。Layout Inspector 會在 Composable 樹上顯示每個節點的重組次數與跳過次數，再配合 compiler reports（哪些 class 是 unstable、哪些 Composable 不能被跳過），就能把「看到的現象」連到「造成的原因」。
+    - 第 1 項錯：Logcat 的 skipped frames 只能告訴你掉了幀，不知道是哪個 Composable 造成的；要找單一特別長的 frame 卡在哪，要用 Perfetto（System Trace）。
+    - 第 3 項錯：Network Profiler 看的是網路請求，和重組無關。
+    - 第 4 項錯：`dumpsys meminfo` 看的是記憶體使用量，不是重組次數。
+
+- id: kotlin-compose-performance-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [process, measurement]
+  prompt: |
+    使用者回報「行情列表捲動會卡」。把處理流程依合理順序排列。
+  items:
+    - 在 release build（R8 開啟、非 debuggable）重現問題
+    - 用 Macrobenchmark 的 FrameTimingMetric 建立可重現的基準數字
+    - 用 Layout Inspector 與 Perfetto 找出多餘重組或長 frame 的階段
+    - 用 compiler reports 確認 unstable 型別與不可 skip 的 composable，並修正（降低更新頻率、key、延後讀取）
+    - 重跑基準確認改善，並把基準加進 CI 防止退化
+  explain: |
+    順序的重點是「量測先於修改」：沒有基準數字，就無法證明有改善，也容易最佳化到錯的地方。debug build 的 Compose 額外負擔很大，在上面調效能會被誤導，所以第一步一定是在 release build 重現。
+    找原因時，Layout Inspector 看重組次數、Perfetto 看單一長 frame 卡在哪個階段，compiler reports 找出 unstable 的型別。修改之後重跑同一組基準，確認真的變快；最後把基準放進 CI（至少版本發佈前跑一次），才不會下次改動又悄悄退化。
+
+- id: kotlin-compose-performance-08
+  type: open
+  level: 3
+  priority: P0
+  tags: [market-data, compose, performance, field]
+  prompt: |
+    交易所 App 的行情畫面是 Compose：一個清單同時顯示上百個交易對，價格以每秒數十次更新。你怎麼設計才不卡？你做過哪些相關的最佳化？
+  promptJa: |
+    取引所アプリの相場画面を Compose で作るとします。一覧に数百の銘柄が並び、価格が毎秒数十回更新されます。カクつかないようにどう設計しますか？ これまでに行った関連する最適化があれば、あわせて説明してください。
+  keyPoints:
+    - "資料層降低更新頻率：背景依幣種合併、固定週期輸出快照；訂單簿的增量資料不能丟，要先套用再發佈"
+    - "畫面層：LazyColumn 給 key 與 contentType；沒變的項目沿用同一個物件，只 copy 變動的項目；價格字串預先格式化"
+    - "動畫與閃色走 Drawing 階段（graphicsLayer、drawBehind），不觸發重組"
+    - "生命週期：collectAsStateWithLifecycle 搭配 WhileSubscribed(5000)，離開畫面就停止更新"
+    - "驗證：release build、Layout Inspector、compiler reports、Macrobenchmark 與 JankStats，基準放進 CI"
+    - "經驗連結：即時行情 App 的 Watchlist 用 ImmutableList 搭配 remember(displayData)；圖表用 lastDataId 判斷資料有沒有變，自訂 renderer 重用緩衝區並略過視窗外的長條"
+  modelAnswer: |
+    我的設計分資料層與畫面層。資料層在背景依幣種合併，只保留最新一筆，用固定週期，例如 100 到 250 毫秒，輸出一批快照；如果是訂單簿的增量資料，則先依序套用再發佈，不能丟。
+    畫面層是 `LazyColumn`，給 `key` 和 `contentType`。每次新的列表，只對有變動的幣種 `copy`，沒變的沿用同一個物件，所以那些列的參數沒變，會被跳過。價格字串在背景預先格式化，Composable 裡不做格式化。閃色動畫用 `graphicsLayer` 或 `drawBehind` 在 Drawing 階段讀取 State，不觸發重組。畫面用 `collectAsStateWithLifecycle` 搭配 `WhileSubscribed(5000)`，離開畫面訂閱就停止。
+    驗證方面，我會在 release build 用 Layout Inspector 看重組次數，用 compiler reports 看 stability，用 Macrobenchmark 的 frame 時間建立基準，並放進 CI。
+    相關經驗方面，在一個即時行情 App 裡，Watchlist 把資料轉成 `ImmutableList` 並放在 `remember(displayData)` 裡；圖表層用 `lastDataId` 判斷資料有沒有變，沒變就不重設圖表，自訂的 renderer 也重用緩衝區、略過視窗外的長條。接手新的行情列表時，我會先建立量測流程，再依結果最佳化。
+  modelAnswerJa: |
+    設計はデータ層と画面層に分けます。データ層ではバックグラウンドで銘柄ごとに集約し、最新の 1 件だけを保持して、100〜250 ミリ秒などの固定周期でスナップショットとして出力します。板（order book）の差分は落とせないので、先に順番に適用してから公開します。
+    画面層は `LazyColumn` に `key` と `contentType` を指定します。新しいリストでは、変更のあった銘柄だけを `copy` し、変わっていないものは同じオブジェクトを使い回すので、その行は引数が変わらずスキップされます。価格の文字列はバックグラウンドで整形し、Composable 内ではフォーマットしません。点滅アニメーションは `graphicsLayer` や `drawBehind` で Drawing 段階で State を読み、再コンポーズを起こしません。画面側は `collectAsStateWithLifecycle` と `WhileSubscribed(5000)` を組み合わせ、画面を離れたら購読を止めます。
+    検証は release ビルドで行います。Layout Inspector で再コンポーズ回数、compiler reports で stability を確認し、Macrobenchmark のフレーム時間でベースラインを作って CI に組み込みます。
+    関連する経験として、あるリアルタイム相場アプリの Watchlist ではデータを `ImmutableList` に変換して `remember(displayData)` の中で保持していました。チャート層では `lastDataId` でデータの変化を判定し、変わっていなければチャートを再設定しないようにしていました。自作の renderer ではバッファを再利用し、表示範囲外のバーをスキップしていました。新しい相場リストでも、まず計測の仕組みを作ってから、結果に基づいて最適化します。
+  followUps:
+    - 如果 200 列各自以不同的頻率更新，你會讓每一列各自持有 State，還是整個列表一起替換？為什麼？
+    - Baseline Profile 的效果要怎麼確認？
+    - 輸入限價（指値）時，鍵盤輸入有延遲，你的調查步驟是什麼？
+  timeLimitSec: 150
+
+- id: kotlin-compose-performance-09
+  type: flash
+  level: 2
+  priority: P0
+  tags: [defer-reads]
+  front: 延後讀取 State 的原理是什麼？有哪三個常用寫法？
+  back: |
+    State 在哪個階段被讀取，變更時就只重做那個階段。把讀取放進 Layout 或 Drawing 的 lambda 裡，就能跳過 Composition（不重組）。
+    - `Modifier.offset { IntOffset(x.value.roundToInt(), 0) }`
+    - `Modifier.graphicsLayer { alpha = a.value }`
+    - `Modifier.drawBehind { drawRect(c.value) }`
+    子 Composable 可以接 `() -> Float` 而不是 `Float`，讓父層不在 Composition 階段讀取。

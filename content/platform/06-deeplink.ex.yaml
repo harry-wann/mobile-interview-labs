@@ -1,0 +1,371 @@
+- id: platform-deeplink-01
+  type: single
+  level: 2
+  priority: P1
+  tags: [universal-links, aasa]
+  prompt: |
+    iOS 的 Universal Link 一直開不起來 App，而 Associated Domains 與路徑規則看起來都正確。下列哪一個是 AASA（Apple App Site Association，檔名是 apple-app-site-association）檔案常見的錯誤？
+  options:
+    - "檔案放在 `https://<網域>/.well-known/apple-app-site-association`，以 `application/json` 提供，沒有副檔名"
+    - "網域的 AASA 請求被導向（301／302）到另一個網址，或檔名帶了 `.json` 副檔名、`Content-Type` 不正確"
+    - "AASA 的 `appIDs` 寫成 `TeamID.BundleID`"
+    - "Associated Domains 寫了 `applinks:<網域>`"
+  answer: 1
+  explain: |
+    AASA 必須用 HTTPS 提供、**不能被重導向**、不能有副檔名、`Content-Type` 要是 `application/json`。違反其中任何一條，系統都會悄悄地驗證失敗，不會有任何錯誤訊息，只是連結打不開 App。
+
+    其他三項錯在哪裡：其實它們都是正確的寫法。
+    - 第 1 項：路徑、`Content-Type`、沒有副檔名都符合規定。
+    - 第 3 項：`appIDs` 的格式就是 Apple 開發者帳號的 Team ID 加上 Bundle ID。
+    - 第 4 項：App 端要在 Associated Domains 填 `applinks:<網域>`。
+
+    另外 Apple 的 CDN（內容傳遞網路）會快取 AASA，修改後生效有延遲，開發時可以在 Associated Domains 寫 `applinks:<網域>?mode=developer` 繞過。檢查方式是用 `curl -I` 看實際的回應，並比對 `appIDs` 裡的 Team ID 與 Bundle ID。
+
+- id: platform-deeplink-02
+  type: single
+  level: 2
+  priority: P1
+  tags: [app-links, assetlinks, play-app-signing]
+  prompt: |
+    Android App 使用 Play App Signing，上架版本的 App Links 驗證失敗，本機用 debug 版本卻正常。最可能的原因是？
+  options:
+    - "`assetlinks.json` 的 `sha256_cert_fingerprints` 填的是**上傳金鑰**（或 debug 憑證）的指紋，而不是 Play Console 顯示的**應用程式簽署金鑰**的指紋"
+    - "manifest 缺少 `android:exported`"
+    - "`assetlinks.json` 必須放在 App 的 assets 資料夾"
+    - "Android 12 之後，App Links 完全不需要驗證了"
+  answer: 0
+  explain: |
+    使用 Play App Signing 時，安裝到使用者手機上的 APK（Android 的安裝檔）是由 Google 用「應用程式簽署金鑰」重新簽署的，所以 `assetlinks.json` 要放那把金鑰的 SHA-256 指紋（在 Play Console 的 App integrity 頁面可以查到）。debug build 用的是 debug 憑證，要另外把它的指紋也加進去。
+
+    其他選項錯在哪裡：
+    - 第 2 項：`android:exported` 缺少會影響 Activity 能不能被外部呼叫（Android 12 起，有 intent-filter 的 Activity 必須明確宣告），但不是「debug 正常、上架版本驗證失敗」的原因。
+    - 第 3 項：`assetlinks.json` 放在**網域的伺服器**上（`/.well-known/assetlinks.json`），不是放在 App 裡。
+    - 第 4 項：剛好相反。Android 12 起，**只有驗證通過**的 https 連結才會直接開 App，沒通過驗證的連結會在瀏覽器開啟。
+
+    排查時可以用 `adb shell pm get-app-links <package>` 查看驗證狀態，並用 `pm verify-app-links --re-verify` 重新驗證。
+
+- id: platform-deeplink-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [routing-security]
+  prompt: |
+    交易所 App 要實作 deep link 路由（例如價格提醒推播的連結），哪些做法合理？（複選）
+  options:
+    - "用集中式 Router，把網址解析成有型別的 Route，只接受白名單內的 host 與 path，其他一律視為無效"
+    - "對參數做型別、長度與字元的驗證，而且路徑要先解碼，才做驗證"
+    - "為了方便行銷，允許連結帶 `?action=withdraw&amount=…&address=…`，使用者點擊後直接預填並送出"
+    - "需要登入的路由，未登入時先暫存目標，登入後繼續；敏感畫面要重新驗證"
+    - "讓連結的 `redirect=` 參數可以指向任意網址，App 直接在 WebView 開啟"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：集中處理、白名單，不認識的路徑一律無效，規則才不會散落各處而漏掉。
+    - 第 2 項正確：路徑解碼之後才驗證，才擋得住把「/」編碼成 `%2F` 的繞過手法。
+    - 第 3 項錯誤：連結不應該直接觸發有副作用的動作（下單、提領、改設定）。最多開到確認頁，由使用者自己確認並按下送出，因為連結的內容是別人寫的。
+    - 第 4 項正確：暫存目標，登入後繼續，使用者從推播點進來才不會停在首頁；敏感畫面（例如資產）重新驗證，避免手機被別人拿到時被看光。
+    - 第 5 項錯誤：任意的 `redirect=` 就是 open redirect（開放式重新導向），攻擊者可以拿你的網域做出看起來可信、實際導向釣魚網站的連結，在加密貨幣的情境更危險。
+
+- id: platform-deeplink-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [deferred-deeplink]
+  prompt: |
+    行銷活動的連結，要在「使用者還沒安裝 App」的情況下，安裝後第一次開啟仍然導向特定的行情頁。關於 deferred deep link，哪個敘述正確？
+  options:
+    - "Android 有官方的 Play Install Referrer API；iOS 沒有官方的等價機制，歸因 SDK（判斷使用者從哪個廣告來的工具）多半靠剪貼簿或機率式的裝置指紋比對，準確度與隱私都有取捨"
+    - "iOS 和 Android 都有官方 API，可以把連結的參數傳給安裝後的第一次開啟"
+    - "只要用了 Universal Link 或 App Link，沒安裝 App 也能在安裝後自動帶入原本的連結"
+    - "Firebase Dynamic Links 仍然是推薦的標準方案"
+  answer: 0
+  explain: |
+    - 第 1 項正確：Android 用 Play 商店連結的 `referrer` 參數，搭配 Install Referrer API 讀取；iOS 沒有官方方法。
+    - 第 2 項錯誤：只有 Android 有官方 API。
+    - 第 3 項錯誤：Universal Link 和 App Link 只在 App 已安裝時直接開 App；沒安裝時開網頁，連結的參數不會跟著使用者走過安裝流程。
+    - 第 4 項錯誤：Firebase Dynamic Links 已於 2025 年 8 月停止服務，仍在使用 `page.link` 的連結必須遷移。
+
+- id: platform-deeplink-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [swiftui, onopenurl]
+  prompt: |
+    SwiftUI App 要接收 Universal Link 與自訂 scheme。補上對應的 modifier 與 activity type 常數。
+  codeLang: swift
+  code: |
+    ContentView()
+        .____ { url in router.handle(url) }                       // 自訂 scheme 與 Universal Link
+        .onContinueUserActivity(____) { activity in               // 瀏覽器點到的 Universal Link
+            if let url = activity.webpageURL { router.handle(url) }
+        }
+  blanks:
+    - [onOpenURL]
+    - [NSUserActivityTypeBrowsingWeb]
+  explain: |
+    `.onOpenURL`（iOS 14 起）處理 App 被網址開啟的情境，自訂 scheme 和 Universal Link 都會從這裡進來，SwiftUI 直接把網址傳進來。`.onContinueUserActivity(NSUserActivityTypeBrowsingWeb)` 是另一個入口，收到的是 `NSUserActivity`（描述「使用者正在做什麼」的物件），網址放在 `webpageURL`。實務上兩個都註冊，並交給同一個 Router，Router 要能處理短時間內重複收到的同一個網址。
+
+    如果是 UIKit 的 scene 架構，對應的是 `scene(_:continue:)` 與 `scene(_:openURLContexts:)`；App 是被連結啟動（冷啟動）時，連結放在 `willConnectTo` 的 `connectionOptions` 裡。
+
+- id: platform-deeplink-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [walletconnect, security]
+  prompt: |
+    錢包綁定流程：App 請使用者用外部錢包對一段訊息做 `personal_sign`（對訊息簽名），再把簽章與錢包地址傳給伺服器驗證。下列哪種訊息設計最安全？
+  options:
+    - "訊息固定為使用者 ID，簽一次就可以一直使用，實作最簡單"
+    - "SIWE（Sign-In with Ethereum，EIP-4361）格式：包含網域、地址、伺服器發出的一次性 nonce、簽發與到期時間；伺服器驗證這些欄位，並讓 nonce 作廢"
+    - "只要用 HTTPS 傳輸簽章，簽章就不可能被重放"
+    - "`personal_sign` 會洩漏私鑰，應改用 `eth_sendTransaction`"
+  answer: 1
+  explain: |
+    - 第 1 項錯誤：簽章如果是對固定訊息產生的，任何取得這份簽章的人都可以在別處重放（replay），冒充使用者。
+    - 第 2 項正確：SIWE 的訊息包含網域、地址、nonce（伺服器發出、只能用一次的隨機值）、簽發與到期時間，伺服器驗證這些欄位並讓 nonce 作廢，同一份簽章就不能再用第二次。
+    - 第 3 項錯誤：HTTPS 只保護傳輸過程不被偷看。簽章如果在別的地方（例如惡意 App、日誌）被拿到，照樣可以重放，所以訊息本身要有一次性的設計。
+    - 第 4 項錯誤：`personal_sign` 只會用私鑰對訊息簽名，並不會洩漏私鑰。`eth_sendTransaction` 是發送交易，用途不同，而且不是為了登入或綁定而設計的。
+
+    補充：簽章資料是透過 WalletConnect 的中繼伺服器（relay）傳回，不在回跳的連結裡，連結只負責切換 App。
+
+- id: platform-deeplink-07
+  type: code
+  level: 2
+  priority: P1
+  tags: [routing, validation, security]
+  prompt: |
+    實作純函式 `route(for:isLoggedIn:allowedHosts:)`，把網址字串解析成 `Route`，作為 deep link 的安全入口。
+
+    規則：
+    - 只接受 scheme 為 `https`，而且 host（轉成小寫）在 `allowedHosts` 內；否則回傳 `invalid`。無法解析的字串也是 `invalid`
+    - 路徑（解碼後）：空的或 `/` → `home`；`/ticker/{symbol}` → `ticker(symbol)`，`symbol` 必須符合 `[a-z0-9]{3,12}`，否則 `invalid`
+    - `/alert/{id}` → `id` 必須符合 `[A-Za-z0-9]{6,32}`，否則 `invalid`；已登入回傳 `alert(id)`，未登入回傳 `login(resume: 原始網址)`
+    - 其他任何路徑（例如 `/withdraw`、`/order`、多出來的段落）→ `invalid`
+    - **query 參數（`?` 後面那一段）一律忽略**，不影響結果
+  hints:
+    - "把解碼後的路徑用 `/` 切開，並移除空字串，再用段落的數量和第一段來判斷。"
+    - "路徑解碼後，`%2F` 會變成 `/`，多出來的段落自然會落入 `invalid`。"
+  swift:
+    starter: |
+      import Foundation
+
+      enum Route: Equatable {
+          case home
+          case ticker(String)
+          case alert(String)
+          case login(resume: String)
+          case invalid
+      }
+
+      func route(for urlString: String, isLoggedIn: Bool, allowedHosts: Set<String>) -> Route {
+          // TODO
+          return .home
+      }
+    solution: |
+      import Foundation
+
+      enum Route: Equatable {
+          case home
+          case ticker(String)
+          case alert(String)
+          case login(resume: String)
+          case invalid
+      }
+
+      private func matches(_ s: String, _ pattern: String) -> Bool {
+          s.range(of: pattern, options: .regularExpression) != nil
+      }
+
+      func route(for urlString: String, isLoggedIn: Bool, allowedHosts: Set<String>) -> Route {
+          guard let comps = URLComponents(string: urlString),
+                comps.scheme == "https",
+                let host = comps.host?.lowercased(),
+                allowedHosts.contains(host) else { return .invalid }
+
+          let parts = comps.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+          switch parts.count {
+          case 0:
+              return .home
+          case 2 where parts[0] == "ticker":
+              return matches(parts[1], "^[a-z0-9]{3,12}$") ? .ticker(parts[1]) : .invalid
+          case 2 where parts[0] == "alert":
+              guard matches(parts[1], "^[A-Za-z0-9]{6,32}$") else { return .invalid }
+              return isLoggedIn ? .alert(parts[1]) : .login(resume: urlString)
+          default:
+              return .invalid
+          }
+      }
+    tests: |
+      let hosts: Set<String> = ["www.example-exchange.com"]
+      let base = "https://www.example-exchange.com"
+      func r(_ url: String, login: Bool = false) -> Route { route(for: url, isLoggedIn: login, allowedHosts: hosts) }
+
+      check("ticker 路由（host 大小寫不敏感）") {
+          r("\(base)/ticker/btcjpy") == .ticker("btcjpy")
+              && r("https://WWW.Example-Exchange.com/ticker/ethjpy") == .ticker("ethjpy")
+      }
+      check("首頁：根路徑、沒有路徑") {
+          r("\(base)/") == .home && r(base, login: true) == .home
+      }
+      check("host 不在白名單、非 https、自訂 scheme、無法解析的字串都是 invalid") {
+          r("https://evil.example.com/ticker/btcjpy", login: true) == .invalid
+              && r("http://www.example-exchange.com/ticker/btcjpy", login: true) == .invalid
+              && r("myapp://www.example-exchange.com/ticker/btcjpy", login: true) == .invalid
+              && r("not a url", login: true) == .invalid
+      }
+      check("symbol 含不允許的字元或路徑穿越嘗試") {
+          r("\(base)/ticker/BTC%2FJPY", login: true) == .invalid
+              && r("\(base)/ticker/..%2Fwithdraw", login: true) == .invalid
+              && r("\(base)/ticker/ab", login: true) == .invalid
+      }
+      check("提領、下單等其他路徑不能由連結觸發") {
+          r("\(base)/withdraw?amount=1&address=abc", login: true) == .invalid
+              && r("\(base)/order/btcjpy", login: true) == .invalid
+              && r("\(base)/ticker/btcjpy/extra", login: true) == .invalid
+      }
+      checkEqual("query 一律忽略", Route.ticker("btcjpy")) {
+          r("\(base)/ticker/btcjpy?symbol=evil&redirect=http://evil.com")
+      }
+      checkEqual("alert 已登入", Route.alert("abc123")) {
+          r("\(base)/alert/abc123", login: true)
+      }
+      checkEqual("alert 未登入要先登入並保留原網址", Route.login(resume: "\(base)/alert/abc123")) {
+          r("\(base)/alert/abc123")
+      }
+  kotlin:
+    starter: |
+      sealed class Route {
+          object Home : Route()
+          data class Ticker(val symbol: String) : Route()
+          data class Alert(val id: String) : Route()
+          data class Login(val resume: String) : Route()
+          object Invalid : Route()
+      }
+
+      fun route(urlString: String, isLoggedIn: Boolean, allowedHosts: Set<String>): Route {
+          // TODO
+          return Route.Home
+      }
+    solution: |
+      import java.net.URI
+
+      sealed class Route {
+          object Home : Route()
+          data class Ticker(val symbol: String) : Route()
+          data class Alert(val id: String) : Route()
+          data class Login(val resume: String) : Route()
+          object Invalid : Route()
+      }
+
+      private val symbolRegex = Regex("^[a-z0-9]{3,12}$")
+      private val alertIdRegex = Regex("^[A-Za-z0-9]{6,32}$")
+
+      fun route(urlString: String, isLoggedIn: Boolean, allowedHosts: Set<String>): Route {
+          val uri = try { URI(urlString) } catch (e: Exception) { return Route.Invalid }
+          if (uri.scheme != "https") return Route.Invalid
+          val host = uri.host?.lowercase() ?: return Route.Invalid
+          if (host !in allowedHosts) return Route.Invalid
+
+          val parts = (uri.path ?: "").split("/").filter { it.isNotEmpty() }
+          return when {
+              parts.isEmpty() -> Route.Home
+              parts.size == 2 && parts[0] == "ticker" ->
+                  if (symbolRegex.matches(parts[1])) Route.Ticker(parts[1]) else Route.Invalid
+              parts.size == 2 && parts[0] == "alert" -> when {
+                  !alertIdRegex.matches(parts[1]) -> Route.Invalid
+                  isLoggedIn -> Route.Alert(parts[1])
+                  else -> Route.Login(urlString)
+              }
+              else -> Route.Invalid
+          }
+      }
+    tests: |
+      val hosts = setOf("www.example-exchange.com")
+      val base = "https://www.example-exchange.com"
+      fun r(url: String, login: Boolean = false): Route = route(url, login, hosts)
+
+      check("ticker 路由（host 大小寫不敏感）") {
+          r("$base/ticker/btcjpy") == Route.Ticker("btcjpy") &&
+              r("https://WWW.Example-Exchange.com/ticker/ethjpy") == Route.Ticker("ethjpy")
+      }
+      check("首頁：根路徑、沒有路徑") {
+          r("$base/") == Route.Home && r(base, true) == Route.Home
+      }
+      check("host 不在白名單、非 https、自訂 scheme、無法解析的字串都是 invalid") {
+          r("https://evil.example.com/ticker/btcjpy", true) == Route.Invalid &&
+              r("http://www.example-exchange.com/ticker/btcjpy", true) == Route.Invalid &&
+              r("myapp://www.example-exchange.com/ticker/btcjpy", true) == Route.Invalid &&
+              r("not a url", true) == Route.Invalid
+      }
+      check("symbol 含不允許的字元或路徑穿越嘗試") {
+          r("$base/ticker/BTC%2FJPY", true) == Route.Invalid &&
+              r("$base/ticker/..%2Fwithdraw", true) == Route.Invalid &&
+              r("$base/ticker/ab", true) == Route.Invalid
+      }
+      check("提領、下單等其他路徑不能由連結觸發") {
+          r("$base/withdraw?amount=1&address=abc", true) == Route.Invalid &&
+              r("$base/order/btcjpy", true) == Route.Invalid &&
+              r("$base/ticker/btcjpy/extra", true) == Route.Invalid
+      }
+      checkEqual("query 一律忽略", Route.Ticker("btcjpy")) {
+          r("$base/ticker/btcjpy?symbol=evil&redirect=http://evil.com")
+      }
+      checkEqual("alert 已登入", Route.Alert("abc123")) { r("$base/alert/abc123", true) }
+      checkEqual("alert 未登入要先登入並保留原網址", Route.Login("$base/alert/abc123")) {
+          r("$base/alert/abc123")
+      }
+
+- id: platform-deeplink-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [deeplink, security]
+  prompt: |
+    請設計交易所 App 的 deep link 方案（包含價格提醒推播的點擊、行銷連結），並說明安全上的考量。同時說明你過去做過的 deep link 與錢包回跳，以及換成交易所 App 你會怎麼做。
+  promptJa: |
+    取引所アプリのディープリンク方式（価格アラートのプッシュ通知のタップ、マーケティング用リンクを含む）を設計し、セキュリティ上の考慮点を説明してください。これまでに手がけたディープリンクやウォレットからの復帰の経験と、取引所アプリではどう進めるかも答えてください。
+  keyPoints:
+    - "用 Universal Links／App Links（https），不用自訂 scheme 傳遞敏感資訊；AASA 與 assetlinks.json 要正確（Android 填 Play App Signing 的指紋）"
+    - "集中式 Router：有型別的 Route、白名單 host 與 path、參數驗證、路徑解碼後再驗證，其他一律無效"
+    - "連結不能直接觸發下單、提領等有副作用的動作，只能開到確認頁；未登入就暫存目標，登入後繼續；敏感畫面重新驗證"
+    - "推播點擊與行銷連結共用同一個 Router；Router 是純函式，單元測試涵蓋惡意輸入"
+    - "deferred deep link：Android 用 Install Referrer API，iOS 靠歸因 SDK 且準確度有限；Firebase Dynamic Links 已於 2025 年 8 月停止服務"
+    - "錢包回跳：deep link 只負責切換 App，簽章由中繼伺服器傳回；用 SIWE 加 nonce 防止重放"
+    - "過去經驗：在社交 App 做過廣告投放的 Deep Link 行銷導流、第三方登入的回呼，以及 WalletConnect 錢包的回跳"
+  modelAnswer: |
+    我會用 Universal Links 和 App Links，也就是系統驗證過的 https 連結。驗證檔 AASA 和 assetlinks.json 要設定正確，Android 的指紋要用 Play App Signing 的簽署金鑰。自訂 scheme 不用來傳敏感資訊，因為任何 App 都能註冊同名的 scheme。
+
+    進來的網址一律交給集中式的 Router：解析成有型別的 Route，只接受白名單內的 host 和 path，參數驗證型別、長度和字元，並且在路徑解碼後才驗證，其他一律視為無效。連結不能直接觸發下單或提領，最多開到確認頁；未登入就暫存目標，登入後繼續；敏感畫面要重新驗證。價格提醒的推播點擊和行銷連結共用同一個 Router，Router 是純函式，可以用惡意輸入做單元測試。
+
+    經驗上，我在一個社交 App 做過廣告投放的 Deep Link 行銷導流，由歸因 SDK 判斷使用者從哪個廣告來，再導向對應的畫面；也處理過第三方登入的回呼，以及 WalletConnect 錢包的回跳。換成交易所 App，我會把這些整理成通用的 Router，加上白名單與參數驗證，錢包簽署的訊息用 SIWE 格式防止重放。
+  modelAnswerJa: |
+    Universal Links と App Links、つまりシステムが検証する https のリンクを使います。検証ファイルの AASA と assetlinks.json を正しく設定し、Android のフィンガープリントは Play App Signing の署名鍵のものを使います。カスタム URL スキームは、どのアプリでも同名のスキームを登録できるため、機微な情報の受け渡しには使いません。
+
+    受け取った URL はすべて、一元化した Router に渡します。型付きの Route に変換し、許可リストにある host と path だけを受け付けます。パラメータは型、長さ、文字を検証し、パスのデコード後に検証します。それ以外はすべて無効として扱います。リンクから直接、注文や出庫を実行することはなく、開くのは確認画面までです。未ログインなら遷移先を保持し、ログイン後に続行します。機微な画面では再認証を求めます。価格アラートのプッシュ通知のタップもマーケティングリンクも同じ Router を通し、Router は純粋関数にして、悪意のある入力を含めて単体テストします。
+
+    経験としては、以前のソーシャルアプリで広告配信のディープリンクによるマーケティング導線を手がけました。アトリビューション SDK で、どの広告から来たかを判定して該当の画面に遷移させました。サードパーティログインのコールバックや、WalletConnect によるウォレットからの復帰も扱いました。取引所アプリでは、これらを汎用的な Router に整理し、許可リストとパラメータ検証を加え、ウォレット署名のメッセージには SIWE 形式を使ってリプレイ攻撃を防ぎます。
+  followUps:
+    - "同じ URL がプッシュ通知と Universal Link の両方から届いたとき、二重に画面遷移しないようにするには、どうしますか。"
+    - "アプリが起動していない状態（コールドスタート）でのリンク処理は、起動中と何が違いますか。"
+    - "AASA を更新したのに反映されないとき、何を確認しますか。"
+  timeLimitSec: 150
+
+- id: platform-deeplink-09
+  type: flash
+  level: 1
+  priority: P1
+  tags: [aasa, assetlinks]
+  front: Universal Links 和 App Links 的驗證檔怎麼放？常見的失敗原因是什麼？
+  back: |
+    **iOS（Universal Links）**
+    - 驗證檔：`/.well-known/apple-app-site-association`，用 HTTPS 提供、**不能重導向**、沒有副檔名、`application/json`
+    - `appIDs` 是 `TeamID.BundleID`；Apple 的 CDN 會快取；開發時用 `?mode=developer` 繞過
+
+    **Android（App Links）**
+    - 驗證檔：`/.well-known/assetlinks.json`
+    - `sha256_cert_fingerprints` 要填 **Play App Signing 簽署金鑰**的指紋，不是上傳金鑰
+    - manifest 加 `autoVerify="true"`；Android 12 起，沒通過驗證的 https 連結會在瀏覽器開啟
+    - 查詢驗證狀態：`adb shell pm get-app-links`
+
+    **共通**
+    - 自訂 scheme 任何 App 都能註冊，不傳敏感資訊
+    - 連結**不能直接觸發下單或提領**，最多開到確認頁

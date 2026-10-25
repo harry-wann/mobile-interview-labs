@@ -1,0 +1,407 @@
+- id: "swift-concurrency-actors-sendable-01"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [actor, reentrancy]
+  prompt: |
+    關於 actor 的 reentrancy（重入），哪個敘述正確？
+  options:
+    - "actor 的方法從頭到尾是原子的，其他呼叫要等整個方法（包含裡面的 `await`）結束才能進入"
+    - "只有標了 `nonisolated` 的方法才會 reentrant"
+    - "actor 只保證兩個暫停點（suspension point，也就是 `await` 的位置）之間的程式碼是原子的；方法在 `await` 暫停時，其他呼叫可以進入，所以 `await` 之前讀到的狀態，在 `await` 之後不一定仍然成立"
+    - "把 actor 的方法標成 `final` 就可以避免 reentrancy"
+  answer: 2
+  explain: |
+    actor 的目標是避免資料競爭，不是提供「整個方法」的互斥。方法執行到 `await` 時，會把 actor 讓出來，讓其他排隊中的呼叫執行；回來的時候，狀態可能已經不一樣了。
+
+    其他選項錯在哪裡：
+    - 第一項：把 actor 當成 mutex 了。方法裡有 `await` 的話，整個方法不是原子的，其他呼叫可以在暫停時插進來。
+    - 第二項：`nonisolated` 的成員根本不在 actor 的保護範圍內（呼叫它不需要 `await`），和 reentrancy 是兩回事。
+    - 第四項：`final` 只是禁止被子類別覆寫，和「暫停時能不能被插隊」沒有關係。
+
+    所以要把「檢查、await、修改」改寫：在 `await` 之前就先改好狀態（保留額度）、`await` 之後重新檢查，或把進行中的工作存起來合併（in-flight `Task`）。
+
+- id: "swift-concurrency-actors-sendable-02"
+  type: "predict"
+  level: 2
+  priority: "P0"
+  tags: [actor, reentrancy]
+  prompt: |
+    兩個 `withdraw(80)` 同時呼叫同一個帳戶（初始餘額 100）。印出什麼？（兩個結果與最終餘額）
+  codeLang: "swift"
+  code: |
+    import Foundation
+
+    actor Account {
+        var balance = 100
+
+        func withdraw(_ n: Int) async -> Bool {
+            guard balance >= n else { return false }
+            try? await Task.sleep(nanoseconds: 10_000_000)   // 模擬向 server 確認
+            balance -= n
+            return true
+        }
+
+        func current() -> Int { balance }
+    }
+
+    let acc = Account()
+    async let a = acc.withdraw(80)
+    async let b = acc.withdraw(80)
+    let ra = await a
+    let rb = await b
+    print(ra, rb, await acc.current())
+  answer: |
+    true true -60
+  explain: |
+    過程是這樣的：
+    1. 第一個呼叫通過 `balance >= 80` 的檢查，接著在 `Task.sleep` 處暫停，把 actor 讓出來。
+    2. 第二個呼叫趁這個空檔進來，此時餘額還是 100，同樣通過檢查，也在 `Task.sleep` 處暫停。
+    3. 兩個都睡醒之後，各扣 80，餘額變成 -60。本機重複執行 6 次，結果都相同。
+
+    修法是在 `await` 之前就先扣掉（保留額度），確認失敗再補回：`guard balance >= n; balance -= n; do { try await confirm() } catch { balance += n }`。
+
+    交易所的「可用餘額」「掛單凍結」「使用者連點兩次下單」，都是這個模式。
+
+- id: "swift-concurrency-actors-sendable-03"
+  type: "multi"
+  level: 2
+  priority: "P0"
+  tags: [sendable]
+  prompt: |
+    關於 `Sendable`（「可以安全傳到別的 actor 或執行緒」的標記），哪些敘述正確？（複選）
+  options:
+    - "所有存放屬性都是 Sendable 的 internal struct，會隱含符合 Sendable"
+    - "有 `var` 存放屬性的 class，只要加上 `final` 就可以符合 Sendable"
+    - "actor 的實例永遠是 Sendable"
+    - "`@Sendable` closure 可以捕獲並修改外部的區域 `var`"
+    - "`final class` 的所有存放屬性都是 `let` 且型別為 Sendable 時，可以符合 Sendable"
+  answer: [0, 2, 4]
+  explain: |
+    正確的三項：
+    - 所有存放屬性都是 `Sendable` 的 internal struct，編譯器會自動認定它符合 `Sendable`，不用自己寫。
+    - actor 以 isolation 保護自己的狀態，因此可以安全地被傳遞。
+    - `final class` 如果所有存放屬性都是 `let`，而且型別是 `Sendable`，編譯器可以證明它不會被改動，所以可以符合 `Sendable`。
+
+    錯誤的兩項：
+    - 有 `var` 存放屬性的 class，光是加 `final` 不夠：`var` 代表可以被改動，編譯器沒辦法證明安全，除非自己用 `@unchecked Sendable` 保證（而且要真的有同步機制）。
+    - `@Sendable` closure 可能在其他執行緒並行執行，所以不能捕獲並修改外部的區域 `var`，Swift 6 語言模式下是編譯錯誤。
+
+- id: "swift-concurrency-actors-sendable-04"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [unchecked-sendable]
+  prompt: |
+    下列哪一種情況使用 `@unchecked Sendable`（或類似的逃生口）是合理的？
+  options:
+    - "ViewModel 有幾個可變屬性，編譯器警告它不能跨 actor 傳遞，加上 `@unchecked Sendable` 先消除警告"
+    - "全域單例 `static var shared`，加上 `nonisolated(unsafe)`，因為「應該只有主執行緒會用到」"
+    - "第三方 SDK 的 class 還沒標註 `Sendable`，所有用到的地方都加 `@unchecked Sendable`"
+    - "類別內部所有可變狀態都由同一把 `NSLock` 保護，對外只暴露鎖保護後的方法，並在註解寫明同步機制"
+  answer: 3
+  explain: |
+    `@unchecked Sendable` 的意思是「我保證自己做了同步」。唯一站得住腳的用法，是把同步機制封裝在型別內部（鎖、serial queue、用鎖保護的旗標等），而且能說明保護的範圍。所以第四項正確。
+
+    其他三項都是「為了消除警告而消音」：
+    - ViewModel：有畫面狀態的 ViewModel 應該標 `@MainActor`，讓編譯器檢查，而不是消音。
+    - 「只有主執行緒會用到」：既然這麼確定，就該用 `@MainActor` 讓編譯器幫你檢查，而不是用 `nonisolated(unsafe)` 叫編譯器不要管。
+    - 第三方 SDK：應該用 `@preconcurrency import` 放寬對它的檢查，並在自己的邊界做封裝，而不是在每個用到的地方都蓋章保證。
+
+- id: "swift-concurrency-actors-sendable-05"
+  type: "multi"
+  level: 3
+  priority: "P0"
+  tags: [swift-6-2, approachable-concurrency]
+  prompt: |
+    關於 Swift 6.2（Xcode 26）的 Approachable Concurrency（讓並行更好上手的一組新設定），哪些敘述正確？（複選）
+  options:
+    - "`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`（編譯器參數 `-default-isolation=MainActor`）讓 module 內沒有標註的宣告，預設在 `@MainActor` 上"
+    - "啟用 `NonisolatedNonsendingByDefault` 後，普通的 `nonisolated async` 函式預設在呼叫者的 isolation 上執行"
+    - "`@concurrent` 讓函式在呼叫者的 actor 上執行，避免跨 isolation 傳遞"
+    - "`SWIFT_APPROACHABLE_CONCURRENCY` 只負責開啟 default MainActor isolation 這一項"
+    - "升級到新預設後，原本會自動離開主 actor 的 `nonisolated async` 函式可能改成留在主執行緒，需要用 `@concurrent` 補回並行"
+  answer: [0, 1, 4]
+  explain: |
+    正確的三項：
+    - default MainActor isolation：讓單執行緒的 App 不用到處手寫 `@MainActor`。
+    - `NonisolatedNonsendingByDefault`：`nonisolated async` 函式不再自動跳去背景，而是留在呼叫者所在的 actor。
+    - 行為改變是遷移的風險：原本在背景跑的 async 函式，可能留在主執行緒，讓畫面卡住。Xcode 的 `MIGRATE` 模式可以先找出受影響的地方。
+
+    錯誤的兩項：
+    - `@concurrent` 的意思剛好相反：明確要求**離開**呼叫者的 actor，到背景並行執行。留在呼叫者 isolation 上的是 `nonisolated(nonsending)`。
+    - `SWIFT_APPROACHABLE_CONCURRENCY` 是一組設定的開關，會一次打開好幾個新功能（包含 `NonisolatedNonsendingByDefault`），不是只有 default MainActor。default MainActor isolation 是另一個獨立的設定 `SWIFT_DEFAULT_ACTOR_ISOLATION`。
+
+- id: "swift-concurrency-actors-sendable-06"
+  type: "predict"
+  level: 3
+  priority: "P1"
+  tags: [swift-6-2, nonisolated-nonsending, concurrent]
+  prompt: |
+    Swift 6.2 工具鏈，**沒有**啟用 `NonisolatedNonsendingByDefault`。`pthread_main_np()` 在主執行緒回傳 1，否則回傳 0。下列程式印出什麼？
+  codeLang: "swift"
+  code: |
+    import Foundation
+
+    nonisolated func a() async -> Int32 { pthread_main_np() }
+    nonisolated(nonsending) func b() async -> Int32 { pthread_main_np() }
+    @concurrent func c() async -> Int32 { pthread_main_np() }
+
+    @MainActor func run() async {
+        let x = await a()
+        let y = await b()
+        let z = await c()
+        print(x, y, z)
+    }
+
+    await run()
+  answer: |
+    0 1 0
+  explain: |
+    - `a`：普通的 `nonisolated async` 函式，舊的預設是**離開**呼叫者的 actor，到背景共用的執行緒池執行，所以不在主執行緒，回傳 0。
+    - `b`：`nonisolated(nonsending)` 明確要求留在呼叫者的 isolation，也就是主 actor，回傳 1。
+    - `c`：`@concurrent` 一律離開呼叫者的 actor，回傳 0。
+
+    本機實測：加上 `-enable-upcoming-feature NonisolatedNonsendingByDefault` 之後，`a` 變成 1，輸出是 `1 1 0`。這就是升級 Xcode 26、開啟 Approachable Concurrency 時，行為會改變的地方。重點是：6.2 之後 `nonisolated async` 預設會留在呼叫者的 actor，要離開就明確寫 `@concurrent`。
+
+- id: "swift-concurrency-actors-sendable-07"
+  type: "fill"
+  level: 2
+  priority: "P0"
+  tags: [global-actor, nonisolated]
+  prompt: |
+    補上 global actor 的必要成員，以及讓 `label` 不必 `await` 就能讀取的關鍵字（`symbol` 是 `let` 的 `Sendable` 值）。
+  codeLang: "swift"
+  code: |
+    @globalActor
+    actor TradeActor {
+        static let ____ = TradeActor()
+    }
+
+    actor PriceStore {
+        let symbol: String
+        init(symbol: String) { self.symbol = symbol }
+
+        ____ var label: String { "Store(\(symbol))" }
+    }
+  blanks:
+    - [shared]
+    - [nonisolated]
+  explain: |
+    - `@globalActor` 型別必須提供 `static let shared`（`GlobalActor` 協定的要求），所有標了這個 global actor 的程式，都會在這個 `shared` 實例上排隊執行。例如在一個社交 App 的 iOS 版，用自訂的 global actor 序列化聊天資料庫的存取，就是這個形式。
+    - `symbol` 是不可變的 `Sendable` 值，從 actor 外部讀取不會產生資料競爭，所以這個計算屬性可以標 `nonisolated`，呼叫端就不必 `await`。如果讀的是可變的狀態，就不能這樣做。
+
+- id: "swift-concurrency-actors-sendable-08"
+  type: "code"
+  level: 3
+  priority: "P0"
+  tags: [actor, cache, reentrancy]
+  prompt: |
+    用 actor 實作 thread-safe 的 `AsyncCache<Key, Value>`，並解決 reentrancy（actor 的方法在 `await` 暫停時，別的呼叫會插隊進來）造成的重複載入：
+
+    - `value(for:loader:)`：命中快取就直接回傳；沒有快取就呼叫 `loader` 載入並存起來
+    - 同一個 key 的**並行請求只會載入一次**，其他請求等同一個結果
+    - 載入失敗：所有等待者都拿到同一個錯誤，**錯誤不快取**，之後可以重試
+    - `invalidate(_:)` 移除快取；`cachedCount()` 回傳已快取的筆數
+  hints:
+    - "多一個 `inFlight: [Key: Task<Value, Error>]`，載入開始之前先把 Task 放進去。"
+    - "在 `await` 之前就要把 `inFlight` 設好，否則第二個呼叫進來時看不到。"
+    - "成功後寫入 storage 並移除 `inFlight`；失敗只移除 `inFlight`。"
+  swift:
+    starter: |
+      actor AsyncCache<Key: Hashable & Sendable, Value: Sendable> {
+          private var storage: [Key: Value] = [:]
+
+          func value(
+              for key: Key,
+              loader: @escaping @Sendable (Key) async throws -> Value
+          ) async throws -> Value {
+              if let cached = storage[key] { return cached }
+              // TODO: await 期間其他呼叫者也會進來，造成重複載入
+              let loaded = try await loader(key)
+              storage[key] = loaded
+              return loaded
+          }
+
+          func invalidate(_ key: Key) { storage[key] = nil }
+          func cachedCount() -> Int { storage.count }
+      }
+    solution: |
+      actor AsyncCache<Key: Hashable & Sendable, Value: Sendable> {
+          private var storage: [Key: Value] = [:]
+          private var inFlight: [Key: Task<Value, Error>] = [:]
+
+          func value(
+              for key: Key,
+              loader: @escaping @Sendable (Key) async throws -> Value
+          ) async throws -> Value {
+              if let cached = storage[key] { return cached }
+              if let running = inFlight[key] { return try await running.value }
+
+              let task = Task { try await loader(key) }
+              inFlight[key] = task
+              do {
+                  let loaded = try await task.value
+                  storage[key] = loaded
+                  inFlight[key] = nil
+                  return loaded
+              } catch {
+                  inFlight[key] = nil
+                  throw error
+              }
+          }
+
+          func invalidate(_ key: Key) { storage[key] = nil }
+          func cachedCount() -> Int { storage.count }
+      }
+    tests: |
+      actor CallCounter {
+          private(set) var count = 0
+          func hit() { count += 1 }
+      }
+      struct LoadError: Error {}
+
+      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+      await checkAsync("同一個 key 的並行請求只載入一次") {
+          let cache = AsyncCache<String, Int>()
+          let counter = CallCounter()
+          let results = try await withThrowingTaskGroup(of: Int.self) { group -> [Int] in
+              for _ in 0..<10 {
+                  group.addTask {
+                      try await cache.value(for: "BTC") { _ in
+                          await counter.hit()
+                          try await sleepMs(50)
+                          return 7
+                      }
+                  }
+              }
+              var out: [Int] = []
+              for try await v in group { out.append(v) }
+              return out
+          }
+          let loads = await counter.count
+          return results.count == 10 && results.allSatisfy { $0 == 7 } && loads == 1
+      }
+      await checkAsync("載入完成後再次讀取直接命中快取") {
+          let cache = AsyncCache<String, Int>()
+          let counter = CallCounter()
+          for _ in 0..<3 {
+              _ = try await cache.value(for: "ETH") { _ in await counter.hit(); return 1 }
+          }
+          let loads = await counter.count
+          return loads == 1
+      }
+      await checkAsync("不同 key 各自載入") {
+          let cache = AsyncCache<String, Int>()
+          let counter = CallCounter()
+          async let a = cache.value(for: "A") { _ in await counter.hit(); try await sleepMs(20); return 1 }
+          async let b = cache.value(for: "B") { _ in await counter.hit(); try await sleepMs(20); return 2 }
+          let (x, y) = try await (a, b)
+          let loads = await counter.count
+          let size = await cache.cachedCount()
+          return x == 1 && y == 2 && loads == 2 && size == 2
+      }
+      await checkAsync("失敗不會被快取，下次可以重試") {
+          let cache = AsyncCache<String, Int>()
+          do {
+              _ = try await cache.value(for: "X") { _ in throw LoadError() }
+              return false
+          } catch is LoadError {}
+          let v = try await cache.value(for: "X") { _ in 5 }
+          let size = await cache.cachedCount()
+          return v == 5 && size == 1
+      }
+      await checkAsync("並行請求共用同一個失敗，之後仍可重試") {
+          let cache = AsyncCache<String, Int>()
+          let counter = CallCounter()
+          var failures = 0
+          await withTaskGroup(of: Bool.self) { group in
+              for _ in 0..<5 {
+                  group.addTask {
+                      do {
+                          _ = try await cache.value(for: "F") { _ in
+                              await counter.hit()
+                              try await sleepMs(30)
+                              throw LoadError()
+                          }
+                          return false
+                      } catch { return true }
+                  }
+              }
+              for await failed in group { if failed { failures += 1 } }
+          }
+          let loads = await counter.count
+          let retry = try await cache.value(for: "F") { _ in 9 }
+          return failures == 5 && loads == 1 && retry == 9
+      }
+      await checkAsync("invalidate 後重新載入") {
+          let cache = AsyncCache<String, Int>()
+          let counter = CallCounter()
+          _ = try await cache.value(for: "K") { _ in await counter.hit(); return 1 }
+          await cache.invalidate("K")
+          _ = try await cache.value(for: "K") { _ in await counter.hit(); return 2 }
+          let loads = await counter.count
+          return loads == 2
+      }
+
+- id: "swift-concurrency-actors-sendable-09"
+  type: "open"
+  level: 2
+  priority: "P0"
+  tags: [swift-6, migration, field]
+  prompt: |
+    有一個 iOS 專案採逐步遷移的路線：嚴格並行檢查設在 `targeted`，邊界處使用了 `@unchecked Sendable` 與 `nonisolated(unsafe)`。如果要在交易所 App 的專案推進到 Swift 6，你會怎麼做？風險是什麼？
+  promptJa: |
+    ある iOS プロジェクトは段階的に移行する方針で、厳格な並行性チェックは `targeted`、境界部分では `@unchecked Sendable` と `nonisolated(unsafe)` を使っています。取引所アプリのプロジェクトで Swift 6 に移行するなら、どう進めますか。リスクは何ですか。
+  keyPoints:
+    - "現況：專案是 targeted、逐步遷移，邊界處先用 unchecked 讓專案可以邊開發邊遷移"
+    - "盤點：把每個 `@unchecked` 與 `nonisolated(unsafe)` 分類：真的有鎖保護的、單例的可變狀態、為了測試注入的 stub、第三方 SDK"
+    - "策略：由底層 module（資料模型、網路）開始，開到 `complete`，修完警告再切 Swift 6 模式；一次一個 target，小 PR"
+    - "資料模型改成 `Sendable` 的 struct；單例的可變狀態收進 actor 或 `@MainActor`；測試用的 `shared` stub 改成注入"
+    - "保留的 `@unchecked` 要寫明同步機制，並用 Thread Sanitizer 驗證；第三方 SDK 用 `@preconcurrency import`"
+    - "iOS 15 的限制：`Mutex` 需要 iOS 18、`OSAllocatedUnfairLock` 需要 iOS 16，所以用 actor 或 `NSLock`"
+    - "Swift 6.2：App target 可以評估 default MainActor isolation，需要並行的地方用 `@concurrent`，並用 MIGRATE 模式檢查行為改變"
+  modelAnswer: |
+    以這個專案為例，目前是逐步遷移的路線：嚴格並行檢查設在 `targeted`，在邊界處先用 `@unchecked Sendable` 和 `nonisolated(unsafe)`，讓專案可以一邊開發、一邊遷移。
+
+    如果是交易所 App，我會這樣推進：
+    1. **盤點**：把每個 `@unchecked` 分類，包括真的有鎖保護的、單例的可變狀態、為了 UI 測試注入 stub 的 `shared`，以及第三方 SDK 的型別。
+    2. **由底層往上**：資料模型和網路 module 先開到 `complete`，模型改成 `Sendable` 的 struct；單例的可變狀態收進 actor；測試用的 stub 改成注入，不用 `nonisolated(unsafe)`。
+    3. **保留的 unchecked 要有交代**：寫明同步機制，並用 Thread Sanitizer（執行時偵測資料競爭的工具）驗證；第三方 SDK 用 `@preconcurrency import` 先放寬檢查。
+    4. **小步前進**：一次一個 target、小 PR，清完警告再切 Swift 6 模式。如果最低是 iOS 15，就沒有 `Mutex`，要用 actor 或 `NSLock`。
+
+    Swift 6.2 方面，Xcode 26 的工具鏈已經可以使用，App target 可以評估 default MainActor isolation（未標註的宣告預設在主 actor），需要並行的地方明確用 `@concurrent`，並用 MIGRATE 模式確認行為改變。主要的風險有兩個：一是為了消除警告而亂加 unchecked，二是新預設讓原本在背景跑的 async 函式留在主執行緒。
+  modelAnswerJa: |
+    このプロジェクトは段階的に移行する方針で、厳格な並行性チェックは `targeted` にしています。境界部分ではまず `@unchecked Sendable` と `nonisolated(unsafe)` を使い、開発を続けながら移行できる状態にしています。
+
+    取引所アプリでは次のように進めます。
+    1. **棚卸し**：`@unchecked` を分類します。実際にロックで保護されているもの、シングルトンの可変状態、UI テストで差し替える `shared`、サードパーティ SDK の型です。
+    2. **下位層から**：データモデルとネットワークのモジュールから `complete` にし、モデルを `Sendable` な struct にします。シングルトンの可変状態は actor に入れ、テスト用 stub は注入に変えて `nonisolated(unsafe)` をやめます。
+    3. **残す unchecked には根拠を**：同期の仕組みを明記して Thread Sanitizer（実行時にデータ競合を検出するツール）で検証し、サードパーティには `@preconcurrency import` を使います。
+    4. **小さく進める**：1 ターゲットずつ小さな PR で警告を解消してから Swift 6 モードに切り替えます。最低バージョンが iOS 15 なら `Mutex` が使えないため、actor か `NSLock` を使います。
+
+    Swift 6.2 については、Xcode 26 のツールチェーンはすでに使えます。App ターゲットで default MainActor isolation（注釈のない宣言がデフォルトでメインアクターになる設定）を検討し、並行実行が必要な箇所は `@concurrent` を明示して、MIGRATE モードで挙動の変化を確認します。主なリスクは 2 つあります。警告を消すこと自体が目的になって unchecked が乱用されること、そして新しい既定動作で、バックグラウンドで動いていた async 関数がメインスレッドに残ることです。
+  followUps:
+    - "`nonisolated(unsafe)` の `shared` を注入に変えると、アプリ全体の初期化はどう変わる？"
+    - "同期処理を担う actor で reentrancy の問題が起きていないか、どう確認する？"
+    - "Rx と Combine が混在する層の Sendable 対応はどうする？"
+  timeLimitSec: 180
+
+- id: "swift-concurrency-actors-sendable-10"
+  type: "flash"
+  level: 1
+  priority: "P0"
+  tags: [reentrancy, swift-6-2]
+  front: |
+    actor reentrancy 的三種修法，以及 Swift 6.2 的三個關鍵字
+  back: |
+    **reentrancy 的修法**（reentrancy：方法在 `await` 暫停時，別的呼叫會插隊進來）：
+    1. `await` 之前先改好狀態（保留額度）。
+    2. `await` 之後重新檢查前提還成不成立。
+    3. 把進行中的 `Task` 存進字典，合併請求（同一件事只做一次）。
+
+    **Swift 6.2（Xcode 26）**：
+    - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`：沒有標註的宣告，預設在主 actor。
+    - `nonisolated(nonsending)`：留在呼叫者的 isolation，呼叫者在哪個 actor 就在哪個 actor（`NonisolatedNonsendingByDefault` 會讓它成為 `nonisolated async` 的預設）。
+    - `@concurrent`：明確離開 actor，到背景並行執行。

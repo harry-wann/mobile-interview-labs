@@ -1,0 +1,413 @@
+- id: "swift-asyncsequence-combine-01"
+  type: "predict"
+  level: 2
+  priority: "P0"
+  tags: [asyncstream, buffering]
+  prompt: |
+    生產者連續送出 1 到 5，消費者還沒開始讀，之後才開始 `for await`。印出什麼？
+  codeLang: "swift"
+  code: |
+    let (stream, continuation) = AsyncStream.makeStream(
+        of: Int.self,
+        bufferingPolicy: .bufferingNewest(2)
+    )
+    for i in 1...5 { continuation.yield(i) }
+    continuation.finish()
+
+    var out: [Int] = []
+    for await v in stream { out.append(v) }
+    print(out.map(String.init).joined(separator: " "))
+  answer: |
+    4 5
+  explain: |
+    `.bufferingNewest(2)` 的緩衝區只放得下最新的兩筆，新資料進來時就把最舊的擠掉，所以消費到 `4 5`。換成 `.bufferingOldest(2)` 會是 `1 2`，`.unbounded` 則是全部五筆（本機皆實測）。
+
+    行情顯示用 `.bufferingNewest(1)`，就是 conflation（只留最新一筆）：慢的消費者只會看到最新價，記憶體用量固定。成交回報這類不能丟的事件，就不能這樣用。
+
+- id: "swift-asyncsequence-combine-02"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [combine, throttle, debounce]
+  prompt: |
+    行情 WebSocket 每秒推送數十筆價格，畫面想要「每 200 ms 最多更新一次，顯示當下最新價」。哪個 Combine 做法正確？
+  options:
+    - "`.debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)`"
+    - "`.throttle(for: .milliseconds(200), scheduler: DispatchQueue.main, latest: true)`"
+    - "`.throttle(for: .milliseconds(200), scheduler: DispatchQueue.main, latest: false)`，因為 false 代表取最新"
+    - "`.delay(for: .milliseconds(200), scheduler: DispatchQueue.main)`"
+  answer: 1
+  explain: |
+    `throttle` 以固定間隔送出一次，`latest: true` 送出該區間內**最新**的值，正好符合需求。
+
+    其他選項錯在哪裡：
+    - `debounce`：要等資料「安靜 200 ms」才送出，行情持續進來，計時就一直被重置，永遠送不出去（餓死）。
+    - `latest: false`：送出的是區間內**第一個**值，顯示的會是比較舊的價格，不是最新價。
+    - `delay`：只是把每個值整體往後延遲，沒有降低更新頻率。
+
+- id: "swift-asyncsequence-combine-03"
+  type: "predict"
+  level: 2
+  priority: "P1"
+  tags: [combine, share]
+  prompt: |
+    下列程式印出什麼？（兩行輸出）
+  codeLang: "swift"
+  code: |
+    import Combine
+
+    var mapCalls = 0
+    let subject = PassthroughSubject<Int, Never>()
+    let shared = subject
+        .map { v -> Int in mapCalls += 1; return v * 2 }
+        .share()
+
+    var a: [Int] = []
+    var b: [Int] = []
+    var late: [Int] = []
+
+    let c1 = shared.sink { a.append($0) }
+    let c2 = shared.sink { b.append($0) }
+    subject.send(1)
+    subject.send(2)
+    let c3 = shared.sink { late.append($0) }
+    subject.send(3)
+
+    print(mapCalls, a.count, b.count, late.count)
+    print(late[0])
+  answer: |
+    3 3 3 1 6
+  explain: |
+    - `share()` 讓上游的 `map` 對每個值只執行一次（共 3 次）。沒有 `share()` 時，兩個訂閱者會各自觸發一次 `map`，次數會翻倍。
+    - `a`、`b` 都在一開始就訂閱，所以各收到 3 筆。
+    - `late` 是在 `send(2)` 之後才訂閱的，而 **`share()` 不重播**，所以它只收到之後的 `6`（`send(3)` 的結果 3 × 2），第二行印的就是這個 6。
+    - 需要讓晚到的訂閱者也拿到最新值時，用 `multicast` 搭配 `CurrentValueSubject`。
+
+- id: "swift-asyncsequence-combine-04"
+  type: "multi"
+  level: 2
+  priority: "P0"
+  tags: [asyncstream, onTermination]
+  prompt: |
+    關於 `AsyncStream`，哪些敘述正確？（複選）
+  options:
+    - "`.bufferingNewest(1)` 在消費者較慢時丟掉舊值，適合只關心最新價格的顯示"
+    - "兩個 Task 同時對同一個 stream 做 `for await`，每個 Task 都會收到全部的元素"
+    - "`continuation.onTermination` 會在 stream 結束時被呼叫（消費者取消，或結束迭代），適合在這裡退訂 WebSocket topic 或移除 observer"
+    - "`.unbounded` 緩衝有上限，超過時會自動丟棄最舊的元素"
+    - "先對行情做 `bufferingNewest(1)` conflation，再累積每分鐘的高低價，結果與直接累積原始 tick 相同"
+  answer: [0, 2]
+  explain: |
+    正確的兩項：
+    - `.bufferingNewest(1)` 只留最新一筆，慢消費者永遠看到最新價，適合顯示用。
+    - `onTermination` 是消費者取消或結束時，唯一可靠的清理時機，退訂要放在這裡。
+
+    錯誤的三項：
+    - `AsyncStream` 是單一消費者模型：官方不支援多個地方同時迭代同一個 stream，它也不是廣播。新的 runtime 會「分食」元素（本機實測一個收到 1、3、5，另一個收到 2、4、6），舊的 runtime 可能直接 crash，不要依賴這個行為。需要多個訂閱者就要自己做 fan-out。
+    - `.unbounded` 沒有上限，也不會自動丟東西，慢的消費者會讓記憶體持續成長。
+    - conflation 會丟掉中間的值，其中可能有最高點或最低點，結果就不相同了。所以聚合（高低價、成交量）要在 conflate **之前**做，conflate 只用在「顯示最新值」。
+
+- id: "swift-asyncsequence-combine-05"
+  type: "fill"
+  level: 2
+  priority: "P0"
+  tags: [asyncstream, bridging]
+  prompt: |
+    把 callback 風格的 `MarketSocket.subscribe` 包成只保留最新一筆的 `AsyncStream`，並且在 stream 結束時退訂（取消訂閱）。
+  codeLang: "swift"
+  code: |
+    func prices(socket: some MarketSocket) -> AsyncStream<Tick> {
+        AsyncStream(Tick.self, bufferingPolicy: .____(1)) { continuation in
+            let token = socket.subscribe("btcjpy") { tick in
+                continuation.yield(tick)
+            }
+            continuation.____ = { _ in
+                socket.unsubscribe(token)
+            }
+        }
+    }
+  blanks:
+    - [bufferingNewest]
+    - [onTermination]
+  explain: |
+    - `bufferingNewest(1)` 做到 conflation（只留最新一筆）。
+    - `onTermination` 是 stream 結束時（Task 被取消、離開 `for await`）唯一可靠的清理時機，沒有它，WebSocket 的 topic 會一直訂閱下去。
+
+    另外要記得：建立 stream 的 closure 會**同步、立刻**執行，所以訂閱在呼叫 `prices(socket:)` 的時候就已經發生了，不是等到開始迭代才訂閱。
+
+- id: "swift-asyncsequence-combine-06"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [combine, switchToLatest]
+  prompt: |
+    使用者在下單頁快速切換交易對，舊交易對的深度回應有時比新的晚到，把新畫面蓋掉。下列 Combine 管線中，最合適的修正是？
+  codeLang: "swift"
+  code: |
+    $symbol
+        .removeDuplicates()
+        .map { fetchDepth($0).replaceError(with: Book.empty) }
+        // ← 這裡要接什麼，才能讓舊請求被取消、只採用最新交易對的結果？
+        .receive(on: DispatchQueue.main)
+        .assign(to: &$book)
+  options:
+    - ".flatMap { $0 }"
+    - ".merge(with: Empty())"
+    - ".switchToLatest()"
+    - ".zip(Just(1)).map { $0.0 }"
+  answer: 2
+  explain: |
+    `switchToLatest()` 在收到新的內層 publisher（每次 `map` 產生的那個請求）時，會取消前一個，所以舊交易對的請求被取消，晚到的回應不會進來。
+
+    其他選項錯在哪裡：
+    - `.flatMap { $0 }`：所有內層 publisher 會同時存活，晚到的舊回應仍然會輸出，問題沒有解決。
+    - `.merge(with: Empty())`：`merge` 只是把兩個串流合在一起，不會取消任何請求。
+    - `.zip(Just(1)).map { $0.0 }`：`zip` 只是把兩個串流的值配對，同樣沒有取消舊請求的效果。
+
+    async/await 版本是 SwiftUI 的 `.task(id: symbol)`；兩種做法的共同概念是「新的一個來，舊的一個被取消」。
+
+- id: "swift-asyncsequence-combine-07"
+  type: "multi"
+  level: 3
+  priority: "P1"
+  tags: [combine, scheduler, published]
+  prompt: |
+    關於 Combine 的行為，哪些敘述正確？（複選）
+  options:
+    - "`debounce` 用在每 100 ms 就送一次的串流上，時限設 300 ms，在串流停止前不會送出任何值"
+    - "`throttle(for:scheduler:latest: true)` 在每個區間結束時送出該區間內最新的值"
+    - "`share()` 會把最後一個值重播給晚到的訂閱者"
+    - "`receive(on: DispatchQueue.main)` 即使已經在主執行緒，也會把值 async 排到之後才送出"
+    - "`vm.$price.sink { _ in print(vm.price) }` 收到新值時，`vm.price` 已經是新值"
+  answer: [0, 1, 3]
+  explain: |
+    正確的三項：
+    - `debounce`：串流每 100 ms 送一次、時限是 300 ms，計時一直被重置，所以在串流停止前不會送出任何值。
+    - `throttle(latest: true)`：每個區間結束時，送出該區間內最新的值。
+    - `receive(on: DispatchQueue.main)` 永遠是 async 排程，本機實測 `send` 之後的語句會先執行，值才送達。同步的斷言測試要改用 `ImmediateScheduler`，或等候一下。
+
+    錯誤的兩項：
+    - `share()` 不重播，晚到的訂閱者只收到之後的值。
+    - `@Published` 在 `willSet`（值即將存入、還沒存入的時間點）發送，所以 sink 收到新值時，屬性本身仍然是舊值（本機實測 `sink 5 prop 0`）。需要新值時，要用傳進來的參數，不要回頭讀屬性。
+
+- id: "swift-asyncsequence-combine-08"
+  type: "code"
+  level: 2
+  priority: "P0"
+  tags: [asyncstream, bridging, conflation]
+  prompt: |
+    實作 `prices(from:conflate:)`，把 callback 風格的 `PriceTicker` 包成 `AsyncStream<Decimal>`：
+
+    - 每個 `emit` 的價格都要出現在 stream 裡
+    - `conflate == true` 時，消費者慢於生產者就只保留最新一筆；否則保留全部
+    - **消費者 `break` 或 Task 被取消之後，要把 handler 從 ticker 移除**（`ticker.handlerCount` 要歸零）
+    - `PriceTicker` 已經提供，不要修改
+  hints:
+    - "`AsyncStream(Decimal.self, bufferingPolicy: …) { continuation in … }` 的 closure 會同步執行。"
+    - "用 `continuation.onTermination` 呼叫 `ticker.removeHandler`。"
+    - "`conflate ? .bufferingNewest(1) : .unbounded`。"
+  swift:
+    starter: |
+      import Foundation
+
+      final class PriceTicker: @unchecked Sendable {
+          private let lock = NSLock()
+          private var handlers: [UUID: (Decimal) -> Void] = [:]
+
+          func addHandler(_ handler: @escaping (Decimal) -> Void) -> UUID {
+              lock.lock(); defer { lock.unlock() }
+              let id = UUID()
+              handlers[id] = handler
+              return id
+          }
+
+          func removeHandler(_ id: UUID) {
+              lock.lock(); defer { lock.unlock() }
+              handlers[id] = nil
+          }
+
+          func emit(_ price: Decimal) {
+              lock.lock()
+              let current = Array(handlers.values)
+              lock.unlock()
+              for handler in current { handler(price) }
+          }
+
+          var handlerCount: Int {
+              lock.lock(); defer { lock.unlock() }
+              return handlers.count
+          }
+      }
+
+      func prices(from ticker: PriceTicker, conflate: Bool) -> AsyncStream<Decimal> {
+          // TODO: 把 ticker 的 callback 包成 AsyncStream
+          AsyncStream { $0.finish() }
+      }
+    solution: |
+      import Foundation
+
+      final class PriceTicker: @unchecked Sendable {
+          private let lock = NSLock()
+          private var handlers: [UUID: (Decimal) -> Void] = [:]
+
+          func addHandler(_ handler: @escaping (Decimal) -> Void) -> UUID {
+              lock.lock(); defer { lock.unlock() }
+              let id = UUID()
+              handlers[id] = handler
+              return id
+          }
+
+          func removeHandler(_ id: UUID) {
+              lock.lock(); defer { lock.unlock() }
+              handlers[id] = nil
+          }
+
+          func emit(_ price: Decimal) {
+              lock.lock()
+              let current = Array(handlers.values)
+              lock.unlock()
+              for handler in current { handler(price) }
+          }
+
+          var handlerCount: Int {
+              lock.lock(); defer { lock.unlock() }
+              return handlers.count
+          }
+      }
+
+      func prices(from ticker: PriceTicker, conflate: Bool) -> AsyncStream<Decimal> {
+          AsyncStream(Decimal.self, bufferingPolicy: conflate ? .bufferingNewest(1) : .unbounded) { continuation in
+              let id = ticker.addHandler { price in continuation.yield(price) }
+              continuation.onTermination = { _ in ticker.removeHandler(id) }
+          }
+      }
+    tests: |
+      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+
+      func waitUntil(timeoutMs: Int = 1000, _ cond: @escaping @Sendable () -> Bool) async -> Bool {
+          var waited = 0
+          while waited < timeoutMs {
+              if cond() { return true }
+              try? await Task.sleep(nanoseconds: 10_000_000)
+              waited += 10
+          }
+          return cond()
+      }
+
+      await checkAsync("emit 的價格依序從 stream 收到") {
+          let ticker = PriceTicker()
+          let stream = prices(from: ticker, conflate: false)
+          ticker.emit(D("100")); ticker.emit(D("101")); ticker.emit(D("102"))
+          var got: [Decimal] = []
+          for await p in stream {
+              got.append(p)
+              if got.count == 3 { break }
+          }
+          return got == [D("100"), D("101"), D("102")]
+      }
+      await checkAsync("建立 stream 時註冊 handler") {
+          let ticker = PriceTicker()
+          let stream = prices(from: ticker, conflate: false)
+          let count = ticker.handlerCount
+          withExtendedLifetime(stream) {}
+          return count == 1
+      }
+      await checkAsync("consumer break 之後移除 handler") {
+          let ticker = PriceTicker()
+          do {
+              let stream = prices(from: ticker, conflate: false)
+              ticker.emit(D("1"))
+              for await _ in stream { break }
+          }
+          return await waitUntil { ticker.handlerCount == 0 }
+      }
+      await checkAsync("consumer 的 Task 被取消後移除 handler") {
+          let ticker = PriceTicker()
+          let task = Task {
+              for await _ in prices(from: ticker, conflate: false) {}
+          }
+          let registered = await waitUntil { ticker.handlerCount == 1 }
+          task.cancel()
+          await task.value
+          let removed = await waitUntil { ticker.handlerCount == 0 }
+          return registered && removed
+      }
+      await checkAsync("conflate 只保留最新一筆") {
+          let ticker = PriceTicker()
+          let stream = prices(from: ticker, conflate: true)
+          for i in 1...5 { ticker.emit(Decimal(i)) }
+          var got: [Decimal] = []
+          for await p in stream {
+              got.append(p)
+              break
+          }
+          return got == [Decimal(5)]
+      }
+      await checkAsync("不 conflate 時保留全部") {
+          let ticker = PriceTicker()
+          let stream = prices(from: ticker, conflate: false)
+          for i in 1...5 { ticker.emit(Decimal(i)) }
+          var got: [Decimal] = []
+          for await p in stream {
+              got.append(p)
+              if got.count == 5 { break }
+          }
+          return got == (1...5).map { Decimal($0) }
+      }
+
+- id: "swift-asyncsequence-combine-09"
+  type: "open"
+  level: 2
+  priority: "P0"
+  tags: [market-data, architecture, field]
+  prompt: |
+    設計交易所 App 的行情資料管線，從 WebSocket 到畫面。你會用 AsyncStream、Combine 還是 Rx？怎麼做 conflation？哪些資料不能丟？並說明你實際用過什麼。
+  promptJa: |
+    取引所アプリの相場データのパイプライン（WebSocket から画面まで）を設計してください。AsyncStream、Combine、Rx のどれを使いますか。コンフレーション（間引き）はどうしますか。落としてはいけないデータは何ですか。実際に使ったものも説明してください。
+  keyPoints:
+    - "分層：socket 層（gzip 二進位 frame、ping／pong、重連與重新訂閱）、解碼、每個 topic 一個 stream、ViewModel、畫面"
+    - "新的程式用 `AsyncStream`：`bufferingNewest(1)` 做 conflation，`onTermination` 退訂；畫面以固定頻率（約 100–250 ms）取最新資料，只更新看得到的列"
+    - "不能丟的資料：成交回報、訂單狀態用 `.unbounded` 加序號或 ack 補漏；K 線的高低價、成交量要在 conflate 之前聚合"
+    - "多個訂閱者：`AsyncStream` 是單一消費者，需要 fan-out 層，或由 ViewModel 集中分發"
+    - "選型：請求回應用 async/await；iOS 15／16 的畫面綁定仍用 `@Published`；既有的 Rx 保留，橋接點寫清楚"
+    - "重連用指數退避加 jitter；斷線時畫面標示資料過期，並禁止用過期的價格下單"
+    - "實務上的相關經驗：社交 App 以 Rx 與 Combine 處理資料流並橋接 async；即時行情 App 用 `for await` 消費 SSE 事件流、用 Combine 綁定畫面狀態"
+  modelAnswer: |
+    我會把管線分層：socket 層處理 gzip 二進位 frame、ping／pong、重連和重新訂閱；解碼之後，每個 topic 對外是一個 `AsyncStream`；ViewModel 再把它轉成畫面狀態。
+
+    顯示用的資料（ticker、最佳買賣價）我用 `bufferingNewest(1)` 做 conflation（只留最新一筆），`onTermination` 負責退訂，畫面以固定頻率（大約 100 到 250 ms）取最新資料，只更新看得到的列。**不能丟的資料**是成交回報和訂單狀態，用 `.unbounded` 搭配序號或 ack（對方的確認回應）補漏；K 線的高低價與成交量，要在 conflate 之前先聚合。
+
+    選型上，請求回應用 async/await，新的串流用 `AsyncStream`；如果最低支援 iOS 15，畫面綁定仍然是 `@Published`，沒有 Observation 可用。既有的 Rx 不急著重寫，橋接的地方寫清楚。重連要用指數退避加 jitter（隨機抖動），斷線時畫面要標示價格已過期，並禁止用過期的價格下單。
+
+    經驗上，在一個社交 App 裡，資料流以 Rx 和 Combine 為主，並且處理過 Rx 與 async 的橋接；在一個即時行情 App 裡，即時 K 線用 SSE，iOS 端用 `for await` 消費事件流，畫面狀態用 Combine 的 `@Published`。對交易所 App，我會把這些經驗延伸成：用 `AsyncStream` 包 WebSocket 的 topic、固定頻率更新畫面，並把重連改成指數退避加 jitter。
+  modelAnswerJa: |
+    パイプラインは層に分けます。socket 層は gzip のバイナリフレーム、ping/pong、再接続と再購読を担当し、デコード後は topic ごとに `AsyncStream` として公開します。ViewModel がそれを画面の状態に変換します。
+
+    表示用のデータ（ticker、最良気配）は `bufferingNewest(1)` でコンフレーション（最新の 1 件だけを残す処理）し、`onTermination` で購読を解除します。画面は一定間隔（約 100〜250 ms）で最新データを取り、表示中の行だけ更新します。**落としてはいけないデータ**は約定通知と注文状態で、`.unbounded` にシーケンス番号や ack を組み合わせて欠落を補います。ローソク足の高値・安値や出来高は、コンフレーションの前に集計します。
+
+    選定は、リクエスト・レスポンスは async/await、新しいストリームは `AsyncStream` です。最低バージョンが iOS 15 なら、画面のバインディングは `@Published` で、Observation は使えません。既存の Rx はすぐには書き換えず、ブリッジ部分を明確にします。再接続は指数バックオフと jitter を使い、切断時は価格が古いことを画面に表示して、古い価格での発注は禁止します。
+
+    経験としては、あるソーシャルアプリではデータフローを Rx と Combine で扱い、Rx と async のブリッジも実装しました。あるリアルタイム相場アプリのローソク足は SSE で、iOS 側では `for await` でイベントストリームを消費し、画面の状態は Combine の `@Published` で管理しています。取引所アプリでは、この経験を発展させて、`AsyncStream` で WebSocket の topic を包み、一定間隔で画面を更新し、再接続を指数バックオフと jitter にします。
+  followUps:
+    - "conflation で捨てた tick の中に高値があったらどうなる？"
+    - "画面が 3 つの銘柄を同時に表示するとき、socket の購読はどう共有する？"
+    - "再接続後に抜けた約定履歴はどう補う？"
+  timeLimitSec: 150
+
+- id: "swift-asyncsequence-combine-10"
+  type: "flash"
+  level: 1
+  priority: "P0"
+  tags: [asyncstream]
+  front: |
+    AsyncStream 的三種 buffering policy 與行情 conflation 的用法
+  back: |
+    buffering policy 決定「消費者來不及讀時，多出來的資料怎麼存」：
+    - `.unbounded`（預設）：全部存起來，慢的消費者會讓記憶體成長；用於不能丟的事件（成交、訂單）。
+    - `.bufferingNewest(n)`：只留最新 n 筆；`n = 1` 就是 conflation（只留最新一筆），行情顯示用。
+    - `.bufferingOldest(n)`：只留最舊 n 筆。
+
+    注意：
+    - 只支援單一消費者（多個 `for await` 不受支援：新的 runtime 會分食元素，舊的 runtime 可能 crash）。
+    - 聚合（高低價、成交量）要在 conflate 之前做。
+    - 用 `onTermination` 退訂。

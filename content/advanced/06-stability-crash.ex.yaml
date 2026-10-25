@@ -1,0 +1,182 @@
+- id: advanced-stability-crash-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [ios, watchdog]
+  prompt: |
+    iOS 的 crash 報告出現例外碼 `0x8badf00d`（讀作「ate bad food」），代表什麼？
+  options:
+    - "Swift 的強制解包（`!`）遇到 `nil`"
+    - "watchdog 終止：App 在啟動、回到前景或執行背景任務時，主執行緒卡太久沒有完成，被系統終止"
+    - "記憶體不足，被 jetsam（iOS 在記憶體不夠時挑 App 終止的機制）回收"
+    - "dSYM（debug symbols，符號檔）與 App 的 UUID 對不上"
+  answer: 1
+  explain: |
+    `0x8badf00d` 是 watchdog 終止的標記。watchdog 是 iOS 內建的監看機制：App 在啟動、回到前景、背景任務這些時刻必須在時限內完成，否則系統直接終止它。常見原因是啟動時在主執行緒同步等網路、讀寫大檔案、拿鎖等不到。
+    - 強制解包遇到 `nil` 是 Swift 執行時錯誤，例外類型是 `EXC_BREAKPOINT`（訊號 `SIGTRAP`），不是 `0x8badf00d`。
+    - jetsam 是記憶體不夠時的終止，它不會留下 crash 報告，所以也看不到例外碼。
+    - UUID 對不上，是「符號還原失敗」，報告裡看到的只有位址，不是 crash 的種類。
+    Android 上對應的狀況是 ANR（Application Not Responding，應用程式沒有回應）。
+
+- id: advanced-stability-crash-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [symbolication, dsym, mapping]
+  prompt: |
+    關於 symbolication（把 crash 報告裡的位址或亂碼，還原成函式名稱與行號），哪些敘述正確？（複選）
+  options:
+    - "iOS 要用「和該次 build 的 UUID 相符」的 dSYM 才能還原；每個發布出去的版本，dSYM 都要保存並上傳到 Crashlytics"
+    - "Android 的 R8 `mapping.txt` 每次 build 都不一樣，要隨每個 release 保存或上傳；舊版本的 mapping 不能拿來還原新版本的 stack trace"
+    - "要讓還原後的 stack trace 看得到行號，R8 規則需要 `-keepattributes SourceFile,LineNumberTable`"
+    - "只要專案裡存有一份 mapping.txt，所有版本的 crash 都可以共用它還原"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：dSYM 以 UUID 對應到那一次編譯出來的二進位檔，每次編譯的 UUID 都不同。Bitcode（以前由 Apple 重新編譯 App 的機制）在 Xcode 14 移除後，App Store 不會再替你產生另一份 dSYM，所以要自己在打包流程中保存。
+    - 第 2 項正確：R8 每次混淆的結果都不同，用錯版本的 mapping 不會報錯，只會還原出錯誤的名字，反而誤導判斷。
+    - 第 3 項正確：行號資訊要靠 `SourceFile` 與 `LineNumberTable` 這兩個屬性被保留，才能還原出 `File.kt:123` 這樣的位置。
+    - 第 4 項錯誤：mapping 是「這一次 build」的對照表，不能跨版本共用。
+
+- id: advanced-stability-crash-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, anr]
+  prompt: |
+    Android 判定 ANR（Application Not Responding，應用程式沒有回應）的時限，下列哪一組正確？
+  options:
+    - "輸入事件（按鍵、觸控）5 秒內沒有處理完；BroadcastReceiver 在前景 10 秒、背景 60 秒"
+    - "主執行緒任何操作超過 100 毫秒就算 ANR"
+    - "輸入事件 30 秒；BroadcastReceiver 5 秒"
+    - "只要 App 被切到背景超過 1 分鐘就算 ANR"
+  answer: 0
+  explain: |
+    輸入事件 5 秒、前景 BroadcastReceiver 10 秒、背景 60 秒，是常見的判定時限（Service 另有時限）。Play Console 的 ANR 比例也是依這些條件統計。
+    - 100 毫秒是「掉幀」等級的體驗問題（畫面一格沒有及時畫出來），還不到 ANR。
+    - 第三個選項把數字弄反了，輸入事件的時限是 5 秒，不是 30 秒。
+    - App 在背景放多久，和 ANR 無關；ANR 是指「主執行緒卡住，沒有回應使用者的操作或系統的呼叫」。
+    診斷 ANR 要看 trace 裡主執行緒卡在哪裡（讀寫檔案、等鎖、同步呼叫 Binder），而不是只想著多開幾個執行緒。
+
+- id: advanced-stability-crash-04
+  type: single
+  level: 3
+  priority: P0
+  tags: [metrics, crash-free]
+  prompt: |
+    同一個版本在 Crashlytics 顯示：crash-free sessions 是 99.6%，crash-free users 是 97.8%。下列哪個解讀最合理？
+  options:
+    - "數字一定算錯了，兩者應該相同"
+    - "crash-free users 通常比 sessions 嚴格：重度使用者的 session 很多，但只要 crash 過一次，整個人就算受影響，所以 users 比 sessions 低是正常的；比較前後時必須固定用同一個指標"
+    - "代表有 2% 的 session 發生了 crash"
+    - "代表 99.6% 的使用者沒有遇過 crash"
+  answer: 1
+  explain: |
+    crash-free sessions 的分母是所有 session，一次 crash 只影響一個 session；crash-free users 的分母是使用者，期間內只要 crash 過一次，這位使用者就算受影響。一位重度使用者可能貢獻幾十個 session，卻只算一個 user，所以兩個數字常常差一截。
+    - 第一個選項錯誤：兩者的分母不同，本來就不會一樣。
+    - 第三個選項錯誤：有 crash 的 session 只占 100% − 99.6% = 0.4%。2.2%（100% − 97.8%）才是「受影響的使用者比例」，而且它是使用者的比例，不是 session 的比例。
+    - 第四個選項錯誤：99.6% 是 sessions 的數字，不是使用者的數字。使用者沒遇過 crash 的比例是 97.8%。
+    所以講「crash-free 提升了多少」時，要說清楚是 users 還是 sessions，哪個工具、哪段期間。
+
+- id: advanced-stability-crash-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [r8, proguard]
+  prompt: |
+    補上 R8（Android 的程式碼縮減與混淆工具）的規則，讓混淆後的 stack trace 仍然保留行號，並把原始檔名統一改寫為 `SourceFile`。
+  codeLang: text
+  code: |
+    -keepattributes ____,LineNumberTable
+    -____ SourceFile
+  blanks:
+    - [SourceFile]
+    - [renamesourcefileattribute]
+  explain: |
+    `-keepattributes SourceFile,LineNumberTable` 的作用是保留「行號對照」需要的屬性；沒有這兩個，還原後的 stack trace 只能看到類別和方法，看不到第幾行。
+    `-renamesourcefileattribute SourceFile` 把每個檔案名稱換成固定字串 `SourceFile`，避免原始檔名直接出現在 App 裡，用 mapping 仍然可以還原。
+    Crashlytics 的 Gradle plugin 會在 release build 後自動上傳 mapping；沒有 mapping，stack trace 只會顯示 `a.b.c` 這種短名字。
+
+- id: advanced-stability-crash-06
+  type: order
+  level: 2
+  priority: P0
+  tags: [r8, triage]
+  prompt: |
+    線上出現一個只有在 release build（R8 已開啟）才會發生的 `ClassCastException`，debug build 完全正常。請把處理流程依合理的順序排列。
+  items:
+    - 從 Crashlytics 取得 stack trace，用「同一版本」的 mapping.txt 還原出實際的類別與方法
+    - 在本機用 release 設定（R8 開啟）重現，確認只有縮減與混淆後的版本才會出現
+    - 找出被 R8 合併、改名或移除的類別（例如 full mode 把依賴注入函式庫 Hilt 產生的類別合併了）
+    - 補上精準的 keep 規則，或調整會造成問題的 full mode 設定，並逐一檢查各 SDK（第三方開發套件）需要的規則
+    - 在 CI（自動建置與測試的流程）加入 release build 的 smoke test（發布前快速跑一遍關鍵流程），並用分階段發布觀察 crash-free users
+  explain: |
+    先還原 stack trace，才知道出錯的是哪個類別；再用 release 設定在本機重現，確認問題真的來自 R8，而不是別的原因；接著找出是哪個類別被合併或改名，最後才修。
+    修法有兩種取捨：補精準的 keep 規則（保留 full mode 的縮小效果，需要測試把關），或調整 full mode 設定（比較保守）。
+    最重要的是最後一步：補上流程，讓 release build 的問題在發布前就被擋下，下次不必等使用者回報。
+
+- id: advanced-stability-crash-07
+  type: single
+  level: 2
+  priority: P1
+  tags: [ios, oom, metrickit]
+  prompt: |
+    iOS 上 OOM（out of memory，記憶體不足被系統終止）不會留下 crash 報告。下列哪個方式可以得到「有多少使用者因為記憶體問題被終止」的資料？
+  options:
+    - "沒有辦法，只能等使用者回報"
+    - "用 MetricKit（Apple 收集真實裝置效能資料的框架）的 `MXAppExitMetric`（iOS 14 以上）統計各種退出原因的次數；或自己記錄「上次是否正常結束」，排除 crash、更新版本、使用者主動關閉後，推測是記憶體不足"
+    - "Crashlytics 會自動回報所有 OOM，不需要任何設定"
+    - "在 `applicationWillTerminate` 裡寫 log"
+  answer: 1
+  explain: |
+    - 第二個選項正確：`MXAppExitMetric` 會統計前景與背景因為記憶體限制、watchdog 等原因退出的累計次數；自己判斷的做法是：每次進入背景或正常結束時留下標記，下次啟動若沒有標記，又不是 crash、版本更新或裝置重新開機，就很可能是記憶體不足。
+    - 第一個選項錯誤：有系統提供的指標可以用。
+    - 第三個選項錯誤：被 jetsam 終止的 App 沒有機會執行任何程式，Crashlytics 也無法自動知道原因，需要額外的偵測。
+    - 第四個選項錯誤：jetsam 終止 App 時不會呼叫 `applicationWillTerminate`，所以那裡的 log 根本不會執行。
+    Android 上對應的是 `ApplicationExitInfo`（Android 11 以上）的 `REASON_LOW_MEMORY`，以及 `OutOfMemoryError` 這種有 stack trace 的 crash。
+
+- id: advanced-stability-crash-08
+  type: open
+  level: 3
+  priority: P0
+  tags: [r8, crash-free]
+  prompt: |
+    要把雙平台 App 的 crash-free users（沒有發生 crash 的使用者比例）明顯提升並長期維持，你會具體做哪些事？請說明其中 R8（Android 的程式碼縮減與混淆工具）的 full mode 造成的 `ClassCastException` 是怎麼診斷與修復的；如果面試官問「這個數字是怎麼量的」，你怎麼回答？
+  promptJa: |
+    両プラットフォームのアプリで crash-free users を大きく改善し、長期的に維持するために、具体的に何をしますか。とくに R8 の full mode による `ClassCastException` をどのように調査・修正するかを説明してください。また、面接官に「この数字はどうやって計測したのですか」と聞かれたら、どう答えますか。
+  keyPoints:
+    - 先講怎麼量：看 Crashlytics 的 crash-free users，固定版本與期間
+    - 依「受影響的使用者數」排序，而不是依 crash 發生的次數
+    - 從架構根治同一類問題：iOS 全 App 重構，Android 逐頁重構並把 Dagger 遷移到 Hilt
+    - R8 案例：release 啟用縮減與混淆後，full mode 把 Hilt 產生的類別合併，造成只在 release 出現的 ClassCastException；調整 R8 設定、補 keep 規則，並逐一檢查各 SDK 的規則
+    - 降低雜訊：在 Crashlytics 過濾「Job was cancelled」這類正常取消的事件
+    - 發布時先看新版本的指標，沒有變差才擴大
+    - 被問到數字怎麼量的：說明工具、固定版本與期間、指標定義；若沒有正式報告，就誠實說是持續追蹤的數字，然後回到做法
+    - 換成交易所 App，我會把 release build 的 smoke test、分階段發布、crash-free users 沒變差才擴大，做成固定流程
+  modelAnswer: |
+    我先講做法。在一個雙平台的社交 App，我獨立負責 iOS 和 Android，看的是 Crashlytics 的 crash-free users。處理 crash 時，我依「受影響的使用者數」排序，而不是依發生次數，因為少數幾個問題通常就涵蓋了大部分受影響的人。接著我沒有只補單一 stack，而是從架構一次處理同一類問題：iOS 做了全 App 重構，Android 則是逐頁重構，並把 Dagger 遷移到 Hilt。這樣畫面、資料與生命週期的邊界比較清楚，同一類 crash 就不容易再出現。發布時，我會先看新版本的 crash-free users，沒有變差才擴大。
+
+    R8 的案例是這樣：Android release build 啟用了縮減與混淆之後，出現一個只在 release 才有的 `ClassCastException`。診斷後確認是 R8 的 full mode 把 Hilt 產生的類別合併了。我調整了 R8 設定、補上 keep 規則，也逐一檢查各 SDK 需要的規則。另外我在 Crashlytics 過濾了「Job was cancelled」這種正常取消的雜訊，讓真正的問題浮出來。
+
+    如果被問到這個數字怎麼量的：我會說明用的是哪個工具、固定哪些版本與期間、指標怎麼定義；如果當時沒有留下正式報告，就誠實說這是持續追蹤的數字，然後回到做法本身。換成交易所 App，我會把 release build 的 smoke test、分階段發布、以及「crash-free users 沒變差才擴大」做成固定流程，讓每一版的數字都看得到。
+  modelAnswerJa: |
+    まず進め方からお話しします。あるソーシャルアプリでは iOS と Android を一人で担当し、Crashlytics の crash-free users を見ていました。クラッシュは発生回数ではなく「影響を受けたユーザー数」の順に優先度を付けていました。少数の問題で、影響を受けたユーザーの大半をカバーできることが多いからです。そのうえで、単発のスタックを直すのではなく、同じ種類の問題をアーキテクチャから根本的に解消するようにしました。iOS はアプリ全体をリファクタリングし、Android は画面ごとに少しずつリファクタリングして、Dagger から Hilt へ移行しました。画面・データ・ライフサイクルの境界が明確になり、同じ種類のクラッシュが再発しにくくなりました。リリースでは、新バージョンの crash-free users を確認し、悪化していなければ配信を広げていました。
+
+    R8 の事例です。Android のリリースビルドでコード縮小と難読化を有効にしたところ、リリースでのみ `ClassCastException` が発生しました。調査の結果、R8 の full mode が Hilt の生成したクラスを統合していることが原因だと確認しました。R8 の設定を調整して keep ルールを追加し、各 SDK に必要なルールも一つずつ確認しました。また、Crashlytics で「Job was cancelled」のような正常なキャンセルのノイズを除外し、本当に重要な問題が見えるようにしました。
+
+    この数字をどう計測したかと聞かれた場合は、使ったツール、固定したバージョンと期間、指標の定義を説明します。正式なレポートが残っていなければ、継続的に追跡していた数字だと正直に伝え、そのうえでやり方の説明に戻ります。取引所アプリでは、リリースビルドのスモークテスト、段階的ロールアウト、crash-free のゲートを定着させ、バージョンごとに数字が見えるようにします。
+  followUps:
+    - R8 の full mode は、なぜ Hilt の生成したクラスを統合すると問題になるのですか？どうやって根本原因を確認しましたか？
+    - 次に R8 のバージョンを上げたとき、同じ問題を再発させないために何をしますか？
+    - crash-free users と crash-free sessions のどちらをチームの目標にしますか？
+  timeLimitSec: 150
+
+- id: advanced-stability-crash-09
+  type: flash
+  level: 2
+  priority: P1
+  tags: [crash-free]
+  front: 被問到「crash-free 明顯提升了」，要能說出哪幾件事？
+  back: |
+    1. 指標：users 還是 sessions；工具：Crashlytics、Play Console、Xcode Organizer；版本範圍與期間；是否包含 ANR、OOM、watchdog。
+    2. 做法：固定怎麼量 → 依受影響使用者數排序 → 從架構根治同一類問題（iOS 全 App 重構、Android 逐頁重構並遷移到 Hilt）→ 用 lint 與測試預防 → 發布時先看指標再擴大。
+    3. 被問到數字怎麼量的：說明工具、版本與期間、指標定義；沒有正式報告就誠實說是持續追蹤的數字。

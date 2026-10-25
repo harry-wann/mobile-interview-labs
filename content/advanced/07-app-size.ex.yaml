@@ -1,0 +1,162 @@
+- id: advanced-app-size-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [android, aab, abi]
+  prompt: |
+    團隊在 `build.gradle.kts` 設定 `ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }`，移除了 x86、x86_64 的原生函式庫，AAB（Android App Bundle，上架 Google Play 用的格式）因此少了約 30 MB。這對「使用 ARM 手機的一般使用者」的下載大小，最準確的描述是？
+  options:
+    - "使用者的下載大小同樣減少約 30 MB"
+    - "影響很有限：Google Play 本來就依裝置只送對應 ABI 的部分，ARM 手機原本就不會下載 x86 的函式庫；減少的主要是 AAB 與 universal APK（包含所有 ABI 的單一安裝檔）的大小"
+    - "下載大小反而會增加，因為少了 x86 的最佳化"
+    - "完全沒有任何變化，連 AAB 也不會變小"
+  answer: 1
+  explain: |
+    AAB 是開發端上傳的格式，Google Play 會替每台手機組出一個基本 APK，再加上依 ABI、解析度、語系拆出的小安裝檔。ARM 手機本來就只會拿到 ARM 的函式庫，所以 ABI 篩選縮小的是 AAB 與 universal APK。
+    - 第一個選項錯誤：把 AAB 的變化當成使用者的下載大小，是最常見的誤解。
+    - 第三個選項錯誤：移除 x86 不會讓 ARM 手機的下載變大，兩者互不相干。
+    - 第四個選項錯誤：x86 函式庫確實被移出 AAB，AAB 一定會變小。
+    所以「AAB 少了 30 MB」不能直接說成「使用者的安裝容量減少」。真正的下載大小要看 Play Console 的 App size 報告，或用 `bundletool get-size total` 估算。
+
+- id: advanced-app-size-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [ios, size, levers]
+  prompt: |
+    下列哪些做法可以有效降低 iOS App 的體積？（複選）
+  options:
+    - "把散落在 bundle 裡的 GIF 動畫換成 animated WebP，並把圖片放進 asset catalog，讓 App Thinning 可以依裝置只送需要的那一份"
+    - "把 Swift 的 Optimization Level 設為 `-Osize`，並開啟 Dead Code Stripping（連結時移除沒被用到的程式碼），同時量測效能有沒有受影響"
+    - "移除不再使用的 SDK 與資源，並檢查各 SDK（包含廣告的 mediation adapter）各占多少體積"
+    - "把所有圖片都改成 @3x，統一只放一套資源，確保畫質"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：放在 asset catalog 裡的圖片才會被依裝置 slicing，散落的檔案不會；GIF 的壓縮效率差，換成 animated WebP 通常小很多。
+    - 第 2 項正確：`-Osize` 讓編譯器優先縮小程式碼，可能比 `-O` 稍慢，所以要在每秒更新很多次的畫面上量測。
+    - 第 3 項正確：SDK 與沒用到的資源，通常是最大的可縮小項目。
+    - 第 4 項錯誤：asset catalog 裡的 @2x、@3x 本來就是依裝置只下載需要的那一份，統一放 @3x 只會讓 @2x 的裝置多下載、整體體積變大。
+
+- id: advanced-app-size-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, resource-shrinking]
+  prompt: |
+    啟用 `isShrinkResources = true` 後，debug 版一切正常，release 版某個畫面卻缺少圖示。程式碼是用 `resources.getIdentifier("ic_$name", "drawable", packageName)` 動態取得資源。最可能的原因與修法是？
+  options:
+    - "R8 的 bug，應該關掉資源縮減"
+    - "資源縮減工具是靜態分析，找不到程式碼裡對這些資源的引用，就把它們當成沒用到而刪掉；用 `res/raw/keep.xml` 的 `tools:keep` 保留，或改成明確列出的對應"
+    - "`getIdentifier` 在 release 版本被禁用"
+    - "應該把圖示改成 PNG，資源縮減不會處理 PNG"
+  answer: 1
+  explain: |
+    資源縮減是靠「程式碼裡明確寫出的引用」判斷哪些資源有用到。用字串組出名稱再取資源，工具在編譯時看不到引用，就會把它們刪掉。解法是用 `tools:keep="@drawable/ic_*"` 這類規則保留，或改成明確列出的 `when` 對應。
+    - 第一個選項錯誤：這是資源縮減本身的設計限制，不是 bug，關掉會放棄縮小的效果。
+    - 第三個選項錯誤：`getIdentifier` 沒有被禁用，只是它指向的資源已經被刪掉。
+    - 第四個選項錯誤：PNG 一樣會被處理，檔案格式和這個問題無關。
+    這類問題只會在 release 出現，所以要有用 release build 跑的 smoke test（發布前快速跑一遍關鍵流程）。
+
+- id: advanced-app-size-04
+  type: fill
+  level: 1
+  priority: P1
+  tags: [gradle, r8]
+  prompt: |
+    補上 Gradle 設定：啟用 R8（Android 的程式碼縮減與混淆工具）的縮減與混淆，並在這之後，刪除沒被用到的資源。
+  codeLang: kotlin
+  code: |
+    buildTypes {
+        release {
+            ____ = true
+            ____ = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+  blanks:
+    - [isMinifyEnabled]
+    - [isShrinkResources]
+  explain: |
+    `isMinifyEnabled = true` 啟用 R8（縮減、最佳化、混淆）；`isShrinkResources = true` 要先開啟 minify，工具才能知道哪些資源沒有被程式碼引用，所以順序是先 minify、再 shrinkResources。
+    R8 的 full mode（更積極的最佳化）從 Android Gradle Plugin 8.0 起預設開啟；如果因為它造成 release 才出現的問題，可以在 `gradle.properties` 設定 `android.enableR8.fullMode=false` 關閉，或保留它、補上精準的 keep 規則。
+
+- id: advanced-app-size-05
+  type: order
+  level: 2
+  priority: P1
+  tags: [process, measurement]
+  prompt: |
+    主管要求「把 App 變小」。請把你的做法依合理順序排列。
+  items:
+    - 釐清目標：要降低哪一種大小（IPA 或 AAB、下載大小、安裝大小）、哪個平台、目標值是多少
+    - 量測基準：用 App Thinning Size Report、link map，或 APK Analyzer、bundletool get-size，記下版本與數字
+    - 找出前幾大的貢獻者：圖片資源、SDK、原生函式庫、語系、程式碼
+    - 逐項處理（換檔案格式、移除 SDK、開啟 R8 縮減、篩選 ABI 與語系、拆成延後下載的功能），每項單獨提交並記錄前後數字
+    - 用 release build 跑 smoke test 與效能比對，確認沒有行為或效能退化，並把體積檢查加進 CI（自動建置與測試的流程）
+  explain: |
+    先釐清目標，才不會出現「AAB 少了 30 MB，但使用者的下載其實沒變」。接著量基準，才知道「變小了多少」；再找出最大的貢獻者，先處理效果最大的項目。
+    每項改動單獨記錄前後數字，之後才說得清楚各自的貢獻。最後要用 release build 驗證，因為 R8、`-Osize` 這類手段都可能改變行為與效能；加上 CI 的體積檢查，避免之後悄悄變大。
+
+- id: advanced-app-size-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [ios, linking, extensions]
+  prompt: |
+    主 App 與 3 個 App Extension（推播、Widget、分享）都使用同一個自家模組。把這個模組從「動態 framework」改成「靜態庫」之後，App 反而變大了。最可能的原因是？
+  options:
+    - "靜態庫不能被移除沒用到的程式碼（dead code stripping）"
+    - "靜態庫會被每個 target（主 App 與每個 extension，各自是獨立的執行檔）各自連結一份，程式碼被複製多份；動態 framework 則可以放在 bundle 裡共用一份"
+    - "靜態庫在 App Store 上不會被壓縮"
+    - "Xcode 不支援 extension 連結靜態庫"
+  answer: 1
+  explain: |
+    靜態連結的優點是可以移除沒用到的程式碼，也能減少啟動時要載入的檔案；缺點是多個 target 都連結同一個靜態庫時，程式碼會被複製進每一個 target。動態 framework 放在共用的位置，可以被多個 target 共用，但要付執行時載入的成本。
+    - 第一個選項錯誤：靜態庫反而可以被 dead code stripping。
+    - 第三個選項錯誤：壓縮是 App Store 對整個 App 做的，和連結方式無關。
+    - 第四個選項錯誤：extension 可以連結靜態庫，只是會複製一份。
+    Xcode 15 的 mergeable libraries 設計成兼顧兩者：開發時是動態的，release 時合併。決策時要同時看 size report 與啟動時間。
+
+- id: advanced-app-size-07
+  type: open
+  level: 2
+  priority: P1
+  tags: [app-size]
+  prompt: |
+    要精簡第三方依賴，讓 App 的安裝容量明顯縮小，請說明你具體會做哪些事、怎麼找出該精簡哪些依賴，被問到「這個數字怎麼量的」時你怎麼回答？
+  promptJa: |
+    サードパーティ依存を整理して、アプリのインストール容量を大きく削減するには、具体的に何をしますか。どの依存を整理すべきかをどう見つけますか。また、「この数字はどうやって計測したのですか」と聞かれたらどう答えますか。
+  keyPoints:
+    - 先分清楚是哪一種大小：安裝容量，和 AAB／IPA 的上傳大小、下載大小不同
+    - 精簡第三方依賴：列出每個依賴的貢獻，重複功能合併成一套，能用系統 API 取代的就取代
+    - 其他手段：iOS 把 GIF 換成 animated WebP、移除沒用到的程式碼與 import；Android 開啟 R8 縮減與資源縮減，限制 ABI
+    - 精簡 SDK 前先確認合規與商業需求（廣告、分析、同意流程）
+    - 被問到數字怎麼量的：說明量的是哪一種大小、用什麼工具、比較哪兩個版本；若沒有正式報告，就誠實說是持續追蹤的數字
+    - 換成交易所 App：先做 size report 找出前幾大的貢獻者，每一項記錄前後數字，體積檢查加進 CI
+  modelAnswer: |
+    我在一個社交 App 精簡過第三方依賴，安裝容量明顯縮小。做法是先看每個依賴的貢獻：一個 SDK 常常帶進整套資源和它自己的依賴，所以同類功能重複的合併成一套，能用系統 API 或一小段自己寫的程式取代的就取代，再移除沒用到的 SDK。精簡之前，要先確認這些 SDK 沒有牽涉廣告、分析、同意流程這類商務需求。
+    除了依賴，iOS 我也把散落的 GIF 動畫換成 animated WebP，並移除沒用到的程式碼與 import；Android 在 release 啟用 R8 的程式碼縮減與資源縮減，ABI 只保留 `arm64-v8a` 和 `armeabi-v7a`。
+    如果被問到這個數字怎麼量的，我的回答是：說明量的是哪一種大小、用什麼工具、比較哪兩個版本；如果當時沒有留下正式報告，就誠實說這是持續追蹤的數字。
+    換成交易所 App，我會先做一份 size report，找出前幾大的貢獻者，每一項處理都記錄前後數字，也會把體積檢查加進 CI，避免之後悄悄變大。
+  modelAnswerJa: |
+    あるソーシャルアプリでサードパーティ依存を整理し、インストール容量を大きく削減しました。進め方としては、まず依存ごとのサイズへの影響を確認しました。SDK は、リソースやそれ自身の依存ライブラリまで一緒に持ち込むことが多いためです。同じ機能が重複しているものは一つにまとめ、システム API や短い自作コードで置き換えられるものは置き換え、使っていない SDK は削除しました。整理の前には、広告・分析・同意フローなどビジネス上の要件に関わる SDK ではないことを確認しました。
+    依存以外にも、iOS では散在していた GIF アニメーションを animated WebP に置き換え、未使用のコードと import を削除しました。Android では release で R8 のコード縮小とリソース縮小を有効にし、ABI は `arm64-v8a` と `armeabi-v7a` のみに絞りました。
+    この数字をどう計測したかと聞かれた場合は、どの種類のサイズを、どのツールで、どの 2 つのバージョンで比較したかを説明します。正式なレポートが残っていなければ、継続的に追跡していた数字だと正直に伝えます。
+    取引所アプリでは、まず size report で大きな要因を特定し、各項目の前後の数値を記録し、サイズのチェックを CI に加えます。
+  followUps:
+    - 下載大小和安裝大小，你分別用什麼工具量？
+    - 為什麼資源縮減的結果一定要用 release build 驗證？
+    - 如果某個 SDK 是商務需求（例如廣告）無法移除，你怎麼辦？
+  timeLimitSec: 150
+
+- id: advanced-app-size-08
+  type: flash
+  level: 2
+  priority: P1
+  tags: [app-size]
+  front: 說「App 變小了 N MB」之前，要先講清楚哪三件事？
+  back: |
+    1. 哪一種大小：上傳的檔案（IPA 或 AAB）、使用者的下載大小、安裝大小。
+    2. 哪個平台、跟哪個版本比。
+    3. 怎麼量的：App Thinning Size Report、link map、`bundletool get-size`、Play Console 的 App size。
+    例：ABI 篩選縮小的主要是 AAB，不一定縮小使用者的下載大小。

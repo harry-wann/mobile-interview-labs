@@ -1,0 +1,327 @@
+- id: kotlin-coroutines-structured-01
+  type: predict
+  level: 3
+  priority: P0
+  tags: [exception, async, coroutineScope]
+  prompt: |
+    在 `runBlocking` 內執行下列程式，依序印出什麼？（3 行輸出）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+
+    fun main() = runBlocking {
+        try {
+            coroutineScope {
+                val d = async { error("x") }
+                try {
+                    d.await()
+                } catch (e: Exception) {
+                    println("inner caught")
+                }
+                println("inner done")
+            }
+        } catch (e: Exception) {
+            println("outer caught ${e.message}")
+        }
+    }
+  answer: |
+    inner caught inner done outer caught x
+  explain: |
+    在 `coroutineScope` 裡，`async` 是**子** coroutine。它失敗時，除了把例外存進 `Deferred`（`async` 回傳的、`await()` 時才丟出例外的「未來結果」），還會立刻取消父 coroutine（失敗往上）。
+    - 第 1 行 `inner caught`：`await()` 把存在 `Deferred` 裡的例外重新丟出，被內層的 try/catch 接住。
+    - 第 2 行 `inner done`：內層的 try/catch 只接住了「你自己讀結果」這條路，擋不住「失敗往上傳給父」這條路，但 `println` 不是 suspend 點，不會因取消而中斷，所以仍然會印出。
+    - 第 3 行 `outer caught x`：之後 `coroutineScope` 帶著例外結束（`coroutineScope` 會把子的失敗重新丟出），被外層的 try/catch 接住。
+    想讓 `async` 的失敗只由 `await` 處理，要放在 `supervisorScope` 底下（子失敗不牽連父與兄弟）。
+
+- id: kotlin-coroutines-structured-02
+  type: predict
+  level: 3
+  priority: P0
+  tags: [coroutineexceptionhandler, launch, async]
+  prompt: |
+    下列程式依序印出什麼？（`join` 會等到該 job 結束；`CoroutineExceptionHandler` 是沒人處理的例外最後的處理器）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+
+    fun main() = runBlocking {
+        val handler = CoroutineExceptionHandler { _, e -> println("handler ${e.message}") }
+        val scope = CoroutineScope(SupervisorJob() + handler)
+
+        scope.launch { throw RuntimeException("one") }.join()
+        scope.launch { launch { throw RuntimeException("two") } }.join()
+        val d = scope.async { throw RuntimeException("three") }
+        runCatching { d.await() }
+        println("end")
+    }
+  answer: |
+    handler one handler two end
+  explain: |
+    - 第 1 行 `handler one`：根 `launch`（最上層、沒有父的 `launch`）沒人處理的例外交給 `CoroutineExceptionHandler`，所以 `one` 被處理。
+    - 第 2 行 `handler two`：巢狀的子 `launch` 失敗時，例外先往上傳給父，由**根**的 handler 處理，所以 `two` 也被處理。如果你把 handler 掛在子 `launch` 上，它不會被呼叫。
+    - `three` 沒有輸出：**根** `async` 的例外保存在 `Deferred`，`await()` 時才丟出，不會呼叫 handler；這裡被 `runCatching` 接住，所以沒有任何輸出。若 `async` 是某個 `launch` 的子 coroutine，它的失敗則照常往上傳，最後由根的 handler 處理。
+    - 最後印出 `end`。
+    `CoroutineExceptionHandler` 是最後防線（上報、顯示錯誤），不能用來回復流程。
+
+- id: kotlin-coroutines-structured-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [cancellation, runcatching]
+  prompt: |
+    在 `suspend` 函式裡，下列哪些寫法會**吞掉** `CancellationException`，讓取消失效？（複選）
+  options:
+    - "`try { api.fetch() } catch (e: Exception) { log(e) }`"
+    - "`try { api.fetch() } catch (e: IOException) { log(e) }`"
+    - "`runCatching { api.fetch() }.getOrNull()`"
+    - "`try { api.fetch() } catch (e: CancellationException) { throw e } catch (e: Exception) { log(e) }`"
+    - "`withTimeoutOrNull(3_000) { api.fetch() }`"
+  answer: [0, 2]
+  explain: |
+    `CancellationException` 繼承自 `IllegalStateException`，所以 `catch (e: Exception)` 與 `runCatching` 都會接住它。Job 本身仍是取消狀態，下一個可取消的 suspend 點還是會再丟 `CancellationException`；但 catch 之後的**非 suspend 程式碼會照樣執行**（把取消當錯誤上報、寫入錯誤狀態）。
+    - 第 1 項會吞：`catch (e: Exception)` 接住取消，後面的 `log(e)` 照常執行，取消被當成一般錯誤。
+    - 第 2 項不會吞：`IOException` 是具體的例外型別，`CancellationException` 不是它的子類別，取消會往外傳。
+    - 第 3 項會吞：`runCatching { }.getOrNull()` 接住取消並回傳 `null`，呼叫端會把「被取消」當成「沒有資料」繼續往下走。
+    - 第 4 項不會吞：先 rethrow（重新丟出）`CancellationException`，再處理其他例外，這是正確寫法。
+    - 第 5 項不會吞：`withTimeoutOrNull` 只把**自己的**逾時（`TimeoutCancellationException`）轉成 `null`，外部的取消仍會往外傳。
+
+- id: kotlin-coroutines-structured-04
+  type: fill
+  level: 2
+  priority: P0
+  tags: [cancellation, noncancellable]
+  prompt: |
+    補上關鍵呼叫：第一處讓純計算的迴圈（沒有 suspend 點）能響應取消；第二處讓 `finally` 裡的 suspend 清理動作在取消後仍能執行。
+  codeLang: kotlin
+  code: |
+    suspend fun CoroutineScope.parseAll(raw: List<String>): List<Tick> {
+        val out = ArrayList<Tick>()
+        for (line in raw) {
+            ____()
+            out += parse(line)
+        }
+        return out
+    }
+
+    suspend fun stream(api: Api) {
+        try {
+            api.subscribe().collect { handle(it) }
+        } finally {
+            withContext(____) { api.unsubscribe() }
+        }
+    }
+  blanks:
+    - [ensureActive, yield]
+    - [NonCancellable]
+  explain: |
+    - 第一格 `ensureActive`（`yield` 也可以）：取消是 cooperative cancellation（協作式取消），純計算的迴圈沒有 suspend 點，不會自動檢查取消，要自己檢查。`ensureActive()` 在已取消時丟出 `CancellationException`；`yield()` 也會檢查取消，順便讓出執行緒給別人。
+    - 第二格 `NonCancellable`：已取消的 coroutine 到了下一個 suspend 點就會再丟 `CancellationException`，`finally` 裡的 `unsubscribe()` 會在第一個 suspend 點被跳過。`withContext(NonCancellable)` 讓這一小段清理不受取消影響。只用在短小、必要的清理，不要把長時間工作放進去。
+
+- id: kotlin-coroutines-structured-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [viewmodelscope, supervisorjob]
+  prompt: |
+    `viewModelScope` 的 `CoroutineContext` 組成是什麼？
+  options:
+    - "`Job() + Dispatchers.Main`"
+    - "`SupervisorJob() + Dispatchers.Main.immediate`"
+    - "`SupervisorJob() + Dispatchers.Default`"
+    - "`Job() + Dispatchers.IO`"
+  answer: 1
+  explain: |
+    `viewModelScope` 與 `lifecycleScope` 都是 `SupervisorJob() + Dispatchers.Main.immediate`。
+    `SupervisorJob` 讓其中一個 `launch` 失敗不會取消其他 `launch`，但**例外沒人處理時仍會 crash**；`Main.immediate` 在已經在主執行緒時直接執行，不多排一次訊息。
+    - 第 1 項錯：用的是 `SupervisorJob`，不是一般的 `Job`，一個子失敗不會牽連兄弟；而且是 `Main.immediate`，不是 `Main`。
+    - 第 3 項錯：預設的執行緒是主執行緒（`Main.immediate`），不是運算用的 `Default`。
+    - 第 4 項錯：不是 `IO`，也不是一般的 `Job`。在 ViewModel 裡做 IO 工作（網路、檔案）要自己 `withContext(ioDispatcher)`，否則會卡住主執行緒。
+    dispatcher 要用注入的，測試才能換掉。
+
+- id: kotlin-coroutines-structured-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [structured-concurrency, job]
+  prompt: |
+    下列函式在執行中被呼叫端取消。(A) 和 (B) 各會怎樣？
+  codeLang: kotlin
+  code: |
+    suspend fun refreshAll() = coroutineScope {
+        launch(Job()) { uploadLog() }       // (A)
+        launch { syncPositions() }          // (B)
+    }
+  options:
+    - "(A)、(B) 都會被取消，`coroutineScope` 等兩者結束"
+    - "(B) 被取消；(A) 因為有自己的 `Job()`，父子關係被切斷，不會被取消，`coroutineScope` 也不會等它"
+    - "(A) 被取消；(B) 因為沒有指定 Job，不受影響"
+    - "(A)、(B) 都不會被取消，因為 `coroutineScope` 內的 coroutine 是 supervisor"
+  answer: 1
+  explain: |
+    `launch(Job())` 把一個全新的 `Job` 當成父，而 context 裡原本的父 Job 被覆蓋。結果是：取消傳不下來、父也不會等它，`refreshAll` 可能已經回傳，(A) 還在背景跑，這是 structured concurrency（結構化並行，父子互相管理生命週期）最常見的「洩漏」。
+    - 第 1 項錯：(A) 的父子關係已經被切斷，取消傳不到它。
+    - 第 3 項錯：剛好相反。(B) 沒有指定 Job，仍是 `coroutineScope` 的子，會被取消；(A) 才是不受影響的那個。
+    - 第 4 項錯：`coroutineScope` 內的 coroutine 不是 supervisor，而且 supervisor 也只影響「失敗往上」，不影響取消往下。
+    如果真的需要「活得比呼叫端久」的工作，應該明確注入一個有生命週期管理的 application scope（App 層級的 scope，用 `SupervisorJob` 加 handler），或交給 WorkManager，而不是隨手 `launch(Job())`。
+
+- id: kotlin-coroutines-structured-07
+  type: code
+  level: 2
+  priority: P0
+  tags: [cancellation, retry, kotlin]
+  prompt: |
+    實作兩個網路層會用到的 suspend 工具，並且**不能破壞取消**：
+
+    1. `safeCall(block)`：成功回傳 `ApiResult.Ok(值)`；一般例外回傳 `ApiResult.Err(例外)`；`CancellationException` 要原樣往外丟。
+    2. `retry(times, block)`：最多嘗試 `times` 次（`block` 會收到從 1 開始的 `attempt`），成功就回傳；用盡次數後丟出**最後一次**的例外；遇到 `CancellationException` 不重試、直接丟出；`times < 1` 丟 `IllegalArgumentException`。
+  hints:
+    - "先 `catch (e: CancellationException) { throw e }`，再 `catch (e: Exception)`。"
+    - "retry 用 `for (attempt in 1..times)`，把最後一次例外存起來。"
+  kotlin:
+    starter: |
+      import kotlinx.coroutines.*
+
+      sealed interface ApiResult<out T> {
+          data class Ok<T>(val value: T) : ApiResult<T>
+          data class Err(val cause: Throwable) : ApiResult<Nothing>
+      }
+
+      suspend fun <T> safeCall(block: suspend () -> T): ApiResult<T> =
+          try {
+              ApiResult.Ok(block())
+          } catch (e: Exception) {
+              ApiResult.Err(e)
+          }
+
+      suspend fun <T> retry(times: Int, block: suspend (attempt: Int) -> T): T {
+          // TODO: 最多嘗試 times 次，取消不重試
+          return block(1)
+      }
+    solution: |
+      import kotlinx.coroutines.*
+
+      sealed interface ApiResult<out T> {
+          data class Ok<T>(val value: T) : ApiResult<T>
+          data class Err(val cause: Throwable) : ApiResult<Nothing>
+      }
+
+      suspend fun <T> safeCall(block: suspend () -> T): ApiResult<T> =
+          try {
+              ApiResult.Ok(block())
+          } catch (e: CancellationException) {
+              throw e
+          } catch (e: Exception) {
+              ApiResult.Err(e)
+          }
+
+      suspend fun <T> retry(times: Int, block: suspend (attempt: Int) -> T): T {
+          require(times >= 1) { "times must be >= 1" }
+          var last: Exception? = null
+          for (attempt in 1..times) {
+              try {
+                  return block(attempt)
+              } catch (e: CancellationException) {
+                  throw e
+              } catch (e: Exception) {
+                  last = e
+              }
+          }
+          throw last!!
+      }
+    tests: |
+      checkEqual("成功回傳 Ok", ApiResult.Ok(5)) { safeCall { 5 } }
+      checkEqual("一般例外包成 Err", "boom") {
+          val r = safeCall<Int> { throw IllegalStateException("boom") }
+          (r as ApiResult.Err).cause.message
+      }
+      check("手動丟出 CancellationException 要原樣往外丟") {
+          try {
+              safeCall<Int> { throw CancellationException("stop") }
+              false
+          } catch (e: CancellationException) {
+              true
+          }
+      }
+      check("外部取消不能被轉成 Err") {
+          var result: ApiResult<Int>? = null
+          val job = launch(start = CoroutineStart.UNDISPATCHED) {
+              result = safeCall { delay(10_000); 1 }
+          }
+          job.cancelAndJoin()
+          job.isCancelled && result == null
+      }
+      checkEqual("第三次成功", "ok@3") {
+          retry(5) { attempt -> if (attempt < 3) throw IllegalStateException("fail$attempt") else "ok@$attempt" }
+      }
+      checkEqual("用盡次數後丟出最後一次例外", "fail3") {
+          try {
+              retry<Unit>(3) { attempt -> throw IllegalStateException("fail$attempt") }
+              "no exception"
+          } catch (e: IllegalStateException) {
+              e.message ?: ""
+          }
+      }
+      checkEqual("CancellationException 不重試", 1) {
+          var calls = 0
+          try {
+              retry<Unit>(5) { calls++; throw CancellationException("stop") }
+          } catch (e: CancellationException) {
+          }
+          calls
+      }
+      checkEqual("times 小於 1 丟 IllegalArgumentException", true) {
+          try {
+              retry<Int>(0) { 1 }
+              false
+          } catch (e: IllegalArgumentException) {
+              true
+          }
+      }
+
+- id: kotlin-coroutines-structured-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [cancellation, architecture, field]
+  prompt: |
+    使用者離開下單頁面、或在行情頁登出時，進行中的 API 請求與 WebSocket 訂閱要怎麼收尾？請說明你會怎麼設計 coroutine 的 scope、例外處理與取消。
+  promptJa: |
+    ユーザーが注文画面を離れたり、相場画面でログアウトしたりしたとき、進行中の API リクエストや WebSocket 購読をどう片付けますか？ coroutine のスコープ設計・例外処理・キャンセルの考え方を説明してください。
+  keyPoints:
+    - 每個 coroutine 都要有明確的 scope owner：畫面用 viewModelScope／lifecycleScope，必須活得比畫面久的工作用注入的 application scope 或 WorkManager
+    - 取消靠結構：離開畫面 → ViewModel 清除 → 子 coroutine 全部取消，不手動追蹤 Job
+    - catch 時先 rethrow CancellationException，只處理具體例外；runCatching 與 catch Exception 會吞取消
+    - 登出或取消訂閱這類清理用 finally ＋ withContext(NonCancellable)，並保持短小
+    - 未處理例外的最後防線：CoroutineExceptionHandler 只對根 launch 有效，用於上報而非回復
+    - 實務上的原則：不要讓取消被當成錯誤上報，避免出現大量「Job was cancelled」雜訊；不要用 fire-and-forget，行程被殺時工作會遺失
+    - dispatcher 注入，讓測試可替換（例如用 Hilt 注入 dispatcher）
+  modelAnswer: |
+    我先講原則：每個 coroutine 都要有明確的 scope owner（誰負責它的生命週期）。畫面相關的請求放在 `viewModelScope`，離開畫面、ViewModel 被清除時，結構化並行（父子關係：取消會往下傳）會把所有子 coroutine 取消，我不手動追蹤 Job。真的要活得比畫面久的工作，例如登出後要上傳的事件，用注入的 application scope（App 層級、不跟著畫面走，用 `SupervisorJob` 加 handler），需要保證執行就交給 WorkManager。
+
+    例外處理有兩個重點。第一，catch 時先 rethrow（重新丟出）`CancellationException`，只處理具體例外，避免 `runCatching` 和 `catch (e: Exception)` 把取消吞掉，否則取消會被當成錯誤上報，Crashlytics 裡會出現一堆「Job was cancelled」的雜訊。第二，`CoroutineExceptionHandler` 只對最上層的 `launch`（根 `launch`）有效，所以我把它當最後防線去上報，而不是回復流程。
+
+    清理動作，例如取消訂閱或登出 API，放在 `finally` 裡，用 `withContext(NonCancellable)`，並保持短小。
+
+    最後是 dispatcher 要用注入的，這樣測試時可以換成測試用的版本。在一個社交 App 的 Android 版裡，我用 Hilt 注入 `@IoDispatcher`、`@MainDispatcher`、`@DefaultDispatcher`；交易所的 App 也適合用同樣的方式，並且避免用 fire-and-forget 的方式丟工作，因為行程被系統殺掉時，那些工作會直接消失。
+  modelAnswerJa: |
+    まず原則として、すべての coroutine に明確なスコープの所有者を持たせます。画面に紐づくリクエストは `viewModelScope` に置き、画面を離れて ViewModel が破棄されると、構造化並行性により子 coroutine がすべてキャンセルされます。Job を手動で追跡することはしません。画面より長く生きる必要がある処理（ログアウト後のイベント送信など）は、注入した application scope（`SupervisorJob` とハンドラ）に置き、確実な実行が必要なら WorkManager に任せます。
+
+    例外処理のポイントは二つです。一つ目は、catch ではまず `CancellationException` を再スローし、具体的な例外だけを処理することです。`runCatching` や `catch (e: Exception)` はキャンセルを握りつぶしてしまい、キャンセルがエラーとして報告されて Crashlytics に「Job was cancelled」のノイズが大量に出てしまいます。二つ目は、`CoroutineExceptionHandler` はルートの `launch` にしか効かないため、復旧ではなく最後の砦として報告に使うことです。
+
+    購読解除やログアウト API のような後始末は `finally` の中で `withContext(NonCancellable)` を使い、短く保ちます。
+
+    最後に、dispatcher は注入にして、テストで差し替えられるようにします。以前関わったソーシャルアプリの Android 版では Hilt で `@IoDispatcher`、`@MainDispatcher`、`@DefaultDispatcher` を注入していました。取引所アプリでも同じ方法を取り、fire-and-forget で処理を投げっぱなしにしないようにします。プロセスがシステムに終了されると、その処理は消えてしまうからです。
+  followUps:
+    - 登出後還要上傳的事件，放在哪個 scope？怎麼避免洩漏？
+    - viewModelScope 裡的 launch 丟出未處理例外，會發生什麼？
+    - WebSocket 重連的 coroutine 應該掛在哪裡？
+
+- id: kotlin-coroutines-structured-09
+  type: flash
+  level: 2
+  priority: P0
+  tags: [coroutineexceptionhandler]
+  front: "`CoroutineExceptionHandler` 什麼時候有效？"
+  back: |
+    只對**根 coroutine**（最上層、沒有父的那個）的 `launch` 有效（含 `supervisorScope` 的直接子）。掛在子 `launch` 無效；**根** `async` 不會呼叫它（例外在 `await()` 丟出），子 `async` 的失敗則照常往上傳、由根的 handler 處理。
+    它是最後防線（上報、顯示錯誤），不能用來回復流程。沒有 handler 時，沒人處理的例外交給執行緒的 uncaught handler，Android 上就是 crash。

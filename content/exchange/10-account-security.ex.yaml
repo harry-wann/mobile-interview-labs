@@ -1,0 +1,503 @@
+- id: exchange-account-security-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [totp, rfc6238]
+  prompt: |
+    TOTP（兩步驟驗證用的 6 位數驗證碼，規格是 RFC 6238）預設每 30 秒換一次碼（這個 30 秒稱為 period），起算點是 Unix 時間 0（1970-01-01 00:00:00 UTC）。在 Unix 時間 `T = 59` 秒時，用來算 HMAC 的 counter 是多少？
+  options:
+    - "0"
+    - "1"
+    - "59"
+    - "2"
+  answer: 1
+  explain: |
+    counter ＝ `floor(59 ÷ 30)` ＝ 1（`floor` 是無條件捨去到整數）。所以 T = 59 秒和 T = 30 秒算出的驗證碼相同，到 T = 60 秒才換成 counter 2。RFC 6238 附錄 B 的測試資料中，T = 59 對應的 counter 就是 1：8 位數是 `94287082`，6 位數是 `287082`。
+
+    其他選項錯在哪裡：
+    - `0`：只有 T 在 0 到 29 秒之間，counter 才是 0。
+    - `59`：這是「時間」，不是 counter。忘了除以 period（30 秒）才會得到這個數字。
+    - `2`：要到 T 在 60 到 89 秒之間，counter 才是 2。
+
+    伺服器驗證時，通常會容許前後各 1 個 counter 的誤差，並記住最後成功的 counter，避免同一個碼被重複使用。
+
+- id: exchange-account-security-02
+  type: predict
+  level: 2
+  priority: P1
+  tags: [hotp, dynamic-truncation]
+  prompt: |
+    HOTP（TOTP 的基礎，規格是 RFC 4226）有一個「動態截斷」步驟：HMAC-SHA-1 算出 20 個位元組之後，要從中取一段，變成 6 位數驗證碼。下面是 RFC 4226 範例中的 20 個位元組，程式依序印出什麼？（offset、截斷後的整數、6 位數驗證碼）
+  codeLang: swift
+  code: |
+    let hmac: [UInt8] = [0x1f, 0x86, 0x98, 0x69, 0x0e, 0x02, 0xca, 0x16, 0x61, 0x85,
+                         0x50, 0xef, 0x7f, 0x19, 0xda, 0x8e, 0x94, 0x5b, 0x55, 0x5a]
+    let offset = Int(hmac[hmac.count - 1] & 0x0f)
+    let binary = (UInt32(hmac[offset] & 0x7f) << 24) | (UInt32(hmac[offset + 1]) << 16)
+               | (UInt32(hmac[offset + 2]) << 8) | UInt32(hmac[offset + 3])
+    print(offset, binary, binary % 1_000_000)
+  answer: |
+    10 1357872921 872921
+  explain: |
+    - **offset**：最後一個位元組是 `0x5a`，它的低 4 個位元是 `0xa`，也就是 10。所以從第 10 個位元組（從 0 開始算）開始取。
+    - **截斷後的整數**：從第 10 個位元組開始取 4 個位元組，是 `50 ef 7f 19`；最高位元用 `& 0x7f` 清成 0 之後，是 `0x50ef7f19`，十進位是 1357872921。
+    - **6 位數驗證碼**：對 1,000,000 取餘數，得到 872921。這就是 RFC 4226 範例的結果（本機實際執行確認過）。
+
+    為什麼要清掉最高位元？這樣整數一定是正數。Java、Kotlin 的 `Int` 有正負號，最高位元如果是 1 就會變成負數，各平台算出來的結果會不一樣；先清成 0，各平台就一致。
+
+- id: exchange-account-security-03
+  type: multi
+  level: 2
+  priority: P1
+  tags: [totp, server]
+  prompt: |
+    關於 TOTP（6 位數驗證碼）的伺服器端驗證設計，哪些做法合理？（複選）
+  options:
+    - "容許前後各 1 個 time step（30 秒）的偏差（視窗 ±1），以容納手機和伺服器的時鐘誤差"
+    - "記住最後成功驗證的 counter，同一個 counter 的驗證碼不能再使用，防止重放（把攔截到的合法請求原封不動再送一次）"
+    - "為了減少客訴，把視窗放寬到 ±10 個 time step"
+    - "對錯誤嘗試做次數限制與鎖定，並通知使用者"
+    - "TOTP 驗證碼可以由同一個 App 在使用者登入的裝置上產生，這樣最方便"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：手機和伺服器的時鐘不會完全一致，使用者輸入也要幾秒，所以前後各多接受 1 個 counter。
+    - 第 2 項正確：不記住最後成功的 counter，攔截到驗證碼的人在有效期內可以再用一次。
+    - 第 3 項錯：視窗越大，亂猜越容易猜中（±10 等於同時有 21 個碼有效）。時鐘誤差大的使用者應該先校正手機時間，而不是放寬視窗。
+    - 第 4 項正確：6 位數只有 100 萬種可能，不限制嘗試次數就能暴力試完。
+    - 第 5 項錯：密碼和驗證碼如果都在同一個 App、同一台裝置上，裝置被入侵時兩個因素會一起失守，等於只有一個因素。TOTP 通常交給獨立的驗證器 App。
+
+    另外，伺服器比較驗證碼時，應該用固定時間比較（constant-time comparison：不管哪裡不同，花的時間都一樣），避免靠回應時間猜出前幾位正確。
+
+- id: exchange-account-security-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [biometric, keychain, keystore]
+  prompt: |
+    某 App 在出金前呼叫 iOS 的 `LAContext.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, …)`（要求使用者做生物辨識），回傳 `success == true` 就直接送出出金請求。資安審查認為這個設計不安全，主要原因與改善方式是？
+  options:
+    - "`evaluatePolicy` 太慢，應該改成自己實作指紋比對"
+    - "回傳的布林值（true 或 false）只是 App 畫面層的檢查，在被攻破或被 hook 的手機上可以被改成永遠成功，並沒有保護任何東西。應該把生物辨識綁在金鑰上（`SecAccessControl`；Android 是 Keystore 的 `setUserAuthenticationRequired` 加 `CryptoObject`）：註冊時把公鑰交給伺服器，出金時伺服器送 challenge，App 在生物辨識通過後用私鑰簽名，伺服器驗證簽章"
+    - "生物辨識不能用在金融 App，應該改成只用密碼"
+    - "應該改用臉部辨識取代指紋，因為臉部比較安全"
+  answer: 1
+  explain: |
+    安全性來自「沒有通過生物辨識，就無法使用私鑰」這個由系統（Secure Enclave 或 Android 的 TEE）強制的條件，而不是 App 裡的 `if success`。簽章再加上一次性的 challenge，請求也不能被拿去重放。
+
+    其他選項錯在哪裡：
+    - 第 1 項：慢不是問題所在。自己實作指紋比對更不安全，生物特徵資料應該交給系統處理，App 拿不到也不該拿。
+    - 第 3 項：生物辨識可以用在金融 App，銀行和交易所很常見。問題在於「怎麼用」，不是「能不能用」。
+    - 第 4 項：指紋或臉部誰比較安全不是重點，不管哪一種，只看布林值都會被繞過。
+
+    補充：金鑰綁定 `.biometryCurrentSet`（iOS），或使用 Android 的預設行為時，使用者新增生物特徵後金鑰會失效，所以要有重新註冊的流程。生物辨識只代表「現在是手機主人在操作」，使用者的身分是註冊時建立的。
+
+- id: exchange-account-security-05
+  type: multi
+  level: 3
+  priority: P1
+  tags: [auto-lock, session, step-up]
+  prompt: |
+    關於自動鎖定、登入狀態（session）與高風險操作的設計，哪些敘述正確？（複選）
+  options:
+    - "計算「進背景多久」要用單調時鐘（只會往前走、不受使用者修改系統時間影響，例如 Android 的 `SystemClock.elapsedRealtime()`、iOS 的 `mach_continuous_time()`），否則使用者改系統時間就能繞過鎖定"
+    - "鎖定時只要蓋一層畫面即可，記憶體裡的 token 與餘額可以保留"
+    - "出金、新增出金地址、修改密碼、關閉 2FA 都應該 step-up（當下再驗證一次），並且由伺服器強制，不能只靠 client 檢查"
+    - "改密碼之後，舊的 refresh token 與其他裝置的登入狀態應該由伺服器端失效"
+    - "refresh token 可以放在 `UserDefaults`，因為它不是密碼"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 1 項正確：如果用 `Date()` 這類系統時間計算，使用者把系統時間往回調就能繞過鎖定。單調時鐘不受影響。
+    - 第 2 項錯：只蓋一層畫面的話，token 和餘額仍然在記憶體裡，用記憶體傾印或除錯器還是拿得到。鎖定時要一起清掉。
+    - 第 3 項正確：client（App）的檢查可以被繞過，真正的判斷要在伺服器。
+    - 第 4 項正確：refresh token 是用來換新登入憑證的，改密碼後如果舊的還能用，偷到 token 的人就可以繼續使用。
+    - 第 5 項錯：refresh token 的價值等同於登入狀態，要放在 Keychain 或 Keystore 的加密空間。`UserDefaults` 沒有加密，備份時也可能被讀到。
+
+    新增出金地址後設定一段冷卻時間、限制出金額度，是常見的設計建議，各家交易所不一定有這個規則。
+
+- id: exchange-account-security-06
+  type: fill
+  level: 2
+  priority: P1
+  tags: [android, biometricprompt, keystore]
+  prompt: |
+    Android：建立一把「使用前必須通過生物辨識」的簽章金鑰（橢圓曲線 secp256r1），並在 `BiometricPrompt` 中用 `Signature` 簽伺服器傳來的 challenge。補上缺的程式碼。
+  codeLang: kotlin
+  code: |
+    val spec = KeyGenParameterSpec.Builder("auth_key", KeyProperties.PURPOSE_SIGN)
+        .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+        .setDigests(KeyProperties.DIGEST_SHA256)
+        .____(true)
+        .build()
+
+    // 使用時
+    val signature = Signature.getInstance("SHA256withECDSA").apply { initSign(privateKey) }
+    prompt.authenticate(promptInfo, BiometricPrompt.____(signature))
+  blanks:
+    - [setUserAuthenticationRequired]
+    - [CryptoObject]
+  explain: |
+    - `setUserAuthenticationRequired(true)`：這把金鑰必須在使用者通過驗證之後才能使用。沒有它，金鑰任何時候都能用，生物辨識就沒有綁在金鑰上。
+    - `BiometricPrompt.CryptoObject(signature)`：把 `Signature`（也可以是 `Cipher`、`Mac`）交給系統。只有生物辨識成功後，這個物件才能執行簽章。
+
+    `promptInfo` 的 allowedAuthenticators 建議使用 `BIOMETRIC_STRONG`（強度最高的一級）。金鑰預設在使用者新增生物特徵後失效（會丟出 `KeyPermanentlyInvalidatedException`）。iOS 的對應寫法是 `SecAccessControlCreateWithFlags(..., .biometryCurrentSet, ...)`。
+
+- id: exchange-account-security-07
+  type: single
+  level: 2
+  priority: P1
+  tags: [device-binding, integrity]
+  prompt: |
+    交易所想在使用者從「新裝置」登入時提高保護。下列設計哪個最合理？
+  options:
+    - "用廣告識別碼（IDFA／Advertising ID）當裝置識別碼，並在 client 判斷是否為新裝置"
+    - "伺服器維護已授權裝置清單；新裝置登入要通知使用者並額外驗證（email 或已授權裝置確認）；裝置識別碼存在 Keychain（`ThisDeviceOnly`）或由 Keystore 金鑰衍生；完整性用 App Attest／Play Integrity 由**伺服器端**驗證，越獄／root 偵測只是輔助"
+    - "只在 client 偵測越獄或 root，偵測到就彈出警告，使用者按確定可以繼續使用"
+    - "每次登入都要求使用者輸入 10 位數的裝置序號"
+  answer: 1
+  explain: |
+    其他選項錯在哪裡：
+    - 第 1 項：廣告識別碼可以被使用者重設或關閉，不適合當作安全用途。而且「是不是新裝置」的判斷必須在伺服器，client 端的判斷可以被繞過。
+    - 第 3 項：只在 client 偵測越獄或 root，偵測程式本身可以被繞過，而且警告後仍可繼續使用，等於沒有防護。它只能提高門檻，不能取代伺服器的判斷。
+    - 第 4 項：要使用者輸入序號，體驗很差，使用者也不容易取得，而且序號一旦洩漏就失效。裝置識別碼應該由 App 自動產生並保存。
+
+    第 2 項的幾個重點：App Attest（iOS）與 Play Integrity（Android）的結果要送到伺服器驗證，才能當作「這是未被修改的 App、在真實裝置上」的訊號，但也不是絕對保證。iOS 的 Keychain 項目在重新安裝後通常還在（目前的行為，Apple 沒有保證），所以裝置識別碼可以跨重新安裝保留；Android 的 Keystore 金鑰在解除安裝時會被刪除。
+
+- id: exchange-account-security-08
+  type: code
+  level: 2
+  priority: P1
+  tags: [totp, hmac, base32, rfc6238]
+  prompt: |
+    實作 TOTP（兩步驟驗證的 6 位數驗證碼，RFC 6238）。測試使用 RFC 附錄 B 的測試資料。
+
+    - `totp(secret:unixSeconds:digits:period:algorithm:)`：算出驗證碼。
+      - counter ＝ `unixSeconds / period`，轉成 8 個位元組（big-endian：最高位的位元組放最前面）
+      - HMAC 依 `algorithm` 選擇 SHA-1、SHA-256 或 SHA-512
+      - 動態截斷：取最後一個位元組的低 4 位元當 offset，從 offset 取 4 個位元組，最高位元清成 0（`& 0x7fffffff`）
+      - 對 `10^digits` 取餘數，**左邊補零**成 `digits` 位的字串
+      - `digits` 預設 6、`period` 預設 30、`algorithm` 預設 SHA-1
+    - `base32Decode(_ s)`：把 Base32（RFC 4648，只用 `A-Z` 與 `2-7` 的編碼）轉回位元組。不分大小寫，忽略空白與結尾的 `=`；遇到不在字母表（`A-Z2-7`）裡的字元回傳 nil
+    - `verifyTOTP(code:secret:unixSeconds:window:)`：伺服器端驗證。檢查 counter 從 `now - window` 到 `now + window`，有符合就回傳**符合的 counter**，否則回傳 nil。`code` 的長度不是 6、或含有非數字字元時直接回傳 nil（一律用 6 位數、30 秒、SHA-1）
+  hints:
+    - "counter 轉 8 個位元組：用迴圈從陣列最後一格（index 7）往前填，每次放入 `counter & 0xff`，再把 counter 右移 8 位元。"
+    - "Swift 用 CryptoKit：`Insecure.SHA1`、`SHA256`、`SHA512` 的 `HMAC`；Kotlin 用 `Mac.getInstance(\"HmacSHA1\" | \"HmacSHA256\" | \"HmacSHA512\")`。"
+    - "Base32 解碼：每個字元代表 5 個位元，累積到 8 個位元就輸出一個位元組。"
+  swift:
+    starter: |
+      import Foundation
+      import CryptoKit
+
+      enum TOTPAlgorithm { case sha1, sha256, sha512 }
+
+      func totp(secret: [UInt8], unixSeconds: Int64, digits: Int = 6, period: Int64 = 30,
+                algorithm: TOTPAlgorithm = .sha1) -> String {
+          // TODO
+          return ""
+      }
+
+      func base32Decode(_ s: String) -> [UInt8]? {
+          // TODO
+          return nil
+      }
+
+      func verifyTOTP(code: String, secret: [UInt8], unixSeconds: Int64, window: Int) -> Int64? {
+          // TODO
+          return nil
+      }
+    solution: |
+      import Foundation
+      import CryptoKit
+
+      enum TOTPAlgorithm { case sha1, sha256, sha512 }
+
+      private func hmac(_ alg: TOTPAlgorithm, key: [UInt8], message: [UInt8]) -> [UInt8] {
+          let k = SymmetricKey(data: key)
+          switch alg {
+          case .sha1: return Array(HMAC<Insecure.SHA1>.authenticationCode(for: message, using: k))
+          case .sha256: return Array(HMAC<SHA256>.authenticationCode(for: message, using: k))
+          case .sha512: return Array(HMAC<SHA512>.authenticationCode(for: message, using: k))
+          }
+      }
+
+      private func hotp(secret: [UInt8], counter: Int64, digits: Int, algorithm: TOTPAlgorithm) -> String {
+          var message = [UInt8](repeating: 0, count: 8)
+          var c = UInt64(bitPattern: counter)
+          for i in stride(from: 7, through: 0, by: -1) {
+              message[i] = UInt8(c & 0xff)
+              c >>= 8
+          }
+          let h = hmac(algorithm, key: secret, message: message)
+          let offset = Int(h[h.count - 1] & 0x0f)
+          let binary = (UInt32(h[offset] & 0x7f) << 24) | (UInt32(h[offset + 1]) << 16)
+                     | (UInt32(h[offset + 2]) << 8) | UInt32(h[offset + 3])
+          var mod: UInt32 = 1
+          for _ in 0..<digits { mod *= 10 }
+          let value = String(binary % mod)
+          return String(repeating: "0", count: max(0, digits - value.count)) + value
+      }
+
+      func totp(secret: [UInt8], unixSeconds: Int64, digits: Int = 6, period: Int64 = 30,
+                algorithm: TOTPAlgorithm = .sha1) -> String {
+          hotp(secret: secret, counter: unixSeconds / period, digits: digits, algorithm: algorithm)
+      }
+
+      func base32Decode(_ s: String) -> [UInt8]? {
+          let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+          var buffer: UInt32 = 0
+          var bits = 0
+          var out: [UInt8] = []
+          for ch in s.uppercased() where ch != " " && ch != "=" {
+              guard let idx = alphabet.firstIndex(of: ch) else { return nil }
+              buffer = (buffer << 5) | UInt32(idx)
+              bits += 5
+              if bits >= 8 {
+                  bits -= 8
+                  out.append(UInt8((buffer >> UInt32(bits)) & 0xff))
+              }
+          }
+          return out
+      }
+
+      func verifyTOTP(code: String, secret: [UInt8], unixSeconds: Int64, window: Int) -> Int64? {
+          guard code.count == 6, code.allSatisfy({ $0 >= "0" && $0 <= "9" }) else { return nil }
+          let now = unixSeconds / 30
+          for delta in -window...window {
+              let counter = now + Int64(delta)
+              if counter < 0 { continue }
+              if hotp(secret: secret, counter: counter, digits: 6, algorithm: .sha1) == code { return counter }
+          }
+          return nil
+      }
+    tests: |
+      let k1 = Array("12345678901234567890".utf8)
+      let k256 = Array("12345678901234567890123456789012".utf8)
+      let k512 = Array("1234567890123456789012345678901234567890123456789012345678901234".utf8)
+
+      check("RFC 6238 SHA-1（8 位數）") {
+          totp(secret: k1, unixSeconds: 59, digits: 8) == "94287082"
+              && totp(secret: k1, unixSeconds: 1111111109, digits: 8) == "07081804"
+              && totp(secret: k1, unixSeconds: 1111111111, digits: 8) == "14050471"
+              && totp(secret: k1, unixSeconds: 1234567890, digits: 8) == "89005924"
+              && totp(secret: k1, unixSeconds: 2000000000, digits: 8) == "69279037"
+              && totp(secret: k1, unixSeconds: 20000000000, digits: 8) == "65353130"
+      }
+      check("6 位數：同一個整數取後 6 位，且要補零") {
+          totp(secret: k1, unixSeconds: 59) == "287082"
+              && totp(secret: k1, unixSeconds: 1111111109) == "081804"
+      }
+      check("SHA-256、SHA-512 的向量") {
+          totp(secret: k256, unixSeconds: 59, digits: 8, algorithm: .sha256) == "46119246"
+              && totp(secret: k512, unixSeconds: 59, digits: 8, algorithm: .sha512) == "90693936"
+      }
+      check("period 邊界：counter 在 29→30 秒時換") {
+          totp(secret: k1, unixSeconds: 0) == "755224"
+              && totp(secret: k1, unixSeconds: 29) == "755224"
+              && totp(secret: k1, unixSeconds: 30) == "287082"
+              && totp(secret: k1, unixSeconds: 60) == "359152"
+      }
+      check("base32Decode：RFC 範例、大小寫、空白與補齊") {
+          base32Decode("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ") == k1
+              && base32Decode("gezd gnbv gy3t qojq gezd gnbv gy3t qojq") == k1
+              && base32Decode("JBSWY3DPEHPK3PXP") == [0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x21, 0xde, 0xad, 0xbe, 0xef]
+              && base32Decode("MFRGG===") == [0x61, 0x62, 0x63]
+      }
+      check("base32Decode：不合法的字元回傳 nil") {
+          base32Decode("GEZD0NBV") == nil && base32Decode("GEZD-NBV") == nil
+      }
+      check("verifyTOTP：視窗內回傳符合的 counter，視窗外回傳 nil") {
+          // T=59 的 counter 是 1，驗證碼 287082
+          verifyTOTP(code: "287082", secret: k1, unixSeconds: 59, window: 0) == 1
+              && verifyTOTP(code: "287082", secret: k1, unixSeconds: 89, window: 1) == 1
+              && verifyTOTP(code: "287082", secret: k1, unixSeconds: 29, window: 1) == 1
+              && verifyTOTP(code: "287082", secret: k1, unixSeconds: 119, window: 1) == nil
+              && verifyTOTP(code: "287082", secret: k1, unixSeconds: 119, window: 2) == 1
+      }
+      check("verifyTOTP：格式不對直接 nil") {
+          verifyTOTP(code: "28708", secret: k1, unixSeconds: 59, window: 1) == nil
+              && verifyTOTP(code: "28708a", secret: k1, unixSeconds: 59, window: 1) == nil
+              && verifyTOTP(code: "", secret: k1, unixSeconds: 59, window: 1) == nil
+      }
+  kotlin:
+    starter: |
+      enum class TotpAlgorithm { SHA1, SHA256, SHA512 }
+
+      fun totp(
+          secret: ByteArray, unixSeconds: Long, digits: Int = 6, period: Long = 30,
+          algorithm: TotpAlgorithm = TotpAlgorithm.SHA1
+      ): String {
+          // TODO
+          return ""
+      }
+
+      fun base32Decode(s: String): ByteArray? {
+          // TODO
+          return null
+      }
+
+      fun verifyTotp(code: String, secret: ByteArray, unixSeconds: Long, window: Int): Long? {
+          // TODO
+          return null
+      }
+    solution: |
+      import javax.crypto.Mac
+      import javax.crypto.spec.SecretKeySpec
+
+      enum class TotpAlgorithm(val macName: String) {
+          SHA1("HmacSHA1"), SHA256("HmacSHA256"), SHA512("HmacSHA512")
+      }
+
+      private fun hotp(secret: ByteArray, counter: Long, digits: Int, algorithm: TotpAlgorithm): String {
+          val message = ByteArray(8)
+          var c = counter
+          for (i in 7 downTo 0) {
+              message[i] = (c and 0xff).toByte()
+              c = c ushr 8
+          }
+          val mac = Mac.getInstance(algorithm.macName)
+          mac.init(SecretKeySpec(secret, algorithm.macName))
+          val h = mac.doFinal(message)
+          val offset = h[h.size - 1].toInt() and 0x0f
+          val binary = ((h[offset].toInt() and 0x7f) shl 24) or
+              ((h[offset + 1].toInt() and 0xff) shl 16) or
+              ((h[offset + 2].toInt() and 0xff) shl 8) or
+              (h[offset + 3].toInt() and 0xff)
+          var mod = 1L
+          repeat(digits) { mod *= 10 }
+          return (binary.toLong() % mod).toString().padStart(digits, '0')
+      }
+
+      fun totp(
+          secret: ByteArray, unixSeconds: Long, digits: Int = 6, period: Long = 30,
+          algorithm: TotpAlgorithm = TotpAlgorithm.SHA1
+      ): String = hotp(secret, unixSeconds / period, digits, algorithm)
+
+      fun base32Decode(s: String): ByteArray? {
+          val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+          var buffer = 0
+          var bits = 0
+          val out = ArrayList<Byte>()
+          for (ch in s.uppercase()) {
+              if (ch == ' ' || ch == '=') continue
+              val idx = alphabet.indexOf(ch)
+              if (idx < 0) return null
+              buffer = (buffer shl 5) or idx
+              bits += 5
+              if (bits >= 8) {
+                  bits -= 8
+                  out.add(((buffer shr bits) and 0xff).toByte())
+              }
+          }
+          return out.toByteArray()
+      }
+
+      fun verifyTotp(code: String, secret: ByteArray, unixSeconds: Long, window: Int): Long? {
+          if (code.length != 6 || !code.all { it in '0'..'9' }) return null
+          val now = unixSeconds / 30
+          for (delta in -window..window) {
+              val counter = now + delta
+              if (counter < 0) continue
+              if (hotp(secret, counter, 6, TotpAlgorithm.SHA1) == code) return counter
+          }
+          return null
+      }
+    tests: |
+      val k1 = "12345678901234567890".toByteArray()
+      val k256 = "12345678901234567890123456789012".toByteArray()
+      val k512 = "1234567890123456789012345678901234567890123456789012345678901234".toByteArray()
+
+      check("RFC 6238 SHA-1（8 位數）") {
+          totp(k1, 59, digits = 8) == "94287082" &&
+              totp(k1, 1111111109, digits = 8) == "07081804" &&
+              totp(k1, 1111111111, digits = 8) == "14050471" &&
+              totp(k1, 1234567890, digits = 8) == "89005924" &&
+              totp(k1, 2000000000, digits = 8) == "69279037" &&
+              totp(k1, 20000000000, digits = 8) == "65353130"
+      }
+      check("6 位數：同一個整數取後 6 位，且要補零") {
+          totp(k1, 59) == "287082" && totp(k1, 1111111109) == "081804"
+      }
+      check("SHA-256、SHA-512 的向量") {
+          totp(k256, 59, digits = 8, algorithm = TotpAlgorithm.SHA256) == "46119246" &&
+              totp(k512, 59, digits = 8, algorithm = TotpAlgorithm.SHA512) == "90693936"
+      }
+      check("period 邊界：counter 在 29→30 秒時換") {
+          totp(k1, 0) == "755224" && totp(k1, 29) == "755224" &&
+              totp(k1, 30) == "287082" && totp(k1, 60) == "359152"
+      }
+      check("base32Decode：RFC 範例、大小寫、空白與補齊") {
+          base32Decode("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")?.contentEquals(k1) == true &&
+              base32Decode("gezd gnbv gy3t qojq gezd gnbv gy3t qojq")?.contentEquals(k1) == true &&
+              base32Decode("JBSWY3DPEHPK3PXP")?.toList() == listOf(0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x21, 0xde, 0xad, 0xbe, 0xef).map { it.toByte() } &&
+              base32Decode("MFRGG===")?.toList() == listOf(0x61, 0x62, 0x63).map { it.toByte() }
+      }
+      check("base32Decode：不合法的字元回傳 null") {
+          base32Decode("GEZD0NBV") == null && base32Decode("GEZD-NBV") == null
+      }
+      check("verifyTotp：視窗內回傳符合的 counter，視窗外回傳 null") {
+          verifyTotp("287082", k1, 59, 0) == 1L &&
+              verifyTotp("287082", k1, 89, 1) == 1L &&
+              verifyTotp("287082", k1, 29, 1) == 1L &&
+              verifyTotp("287082", k1, 119, 1) == null &&
+              verifyTotp("287082", k1, 119, 2) == 1L
+      }
+      check("verifyTotp：格式不對直接 null") {
+          verifyTotp("28708", k1, 59, 1) == null &&
+              verifyTotp("28708a", k1, 59, 1) == null &&
+              verifyTotp("", k1, 59, 1) == null
+      }
+
+- id: exchange-account-security-09
+  type: open
+  level: 2
+  priority: P1
+  tags: [security, auth]
+  prompt: |
+    請設計交易所 App 的帳戶安全：登入、兩步驟驗證（TOTP）、生物辨識、自動鎖定、新裝置登入，以及出金等高風險操作的再驗證（step-up）。說明 App 與伺服器各自負責什麼，以及你過去的相關經驗可以怎麼對應。
+  promptJa: |
+    取引所アプリのアカウントセキュリティ（ログイン、二段階認証（TOTP）、生体認証、オートロック、新しい端末でのログイン、出金などの重要な操作での再認証（step-up））を設計してください。アプリとサーバーの役割分担と、これまでの経験をどう活かせるかも説明してください。
+  keyPoints:
+    - "TOTP：RFC 6238（SHA-1、30 秒、6 位數）；伺服器容許前後各 1 個 time step、記住最後成功的 counter 防止重放、限制嘗試次數；不要在同一個 App 內產生 TOTP"
+    - "生物辨識綁金鑰：註冊公鑰、伺服器送 challenge、用私鑰簽名（iOS `SecAccessControl`、Android Keystore 加 `CryptoObject`），而不是只看 `evaluatePolicy` 的布林值；新增生物特徵會讓金鑰失效，要有重新註冊流程"
+    - "自動鎖定：用單調時鐘計時、切到多工畫面時遮罩、鎖定時清除記憶體裡的 token 與餘額、剪貼簿設定過期"
+    - "裝置綁定：伺服器維護授權裝置清單、新裝置通知並額外驗證、裝置識別碼放 Keychain（ThisDeviceOnly）、App Attest 與 Play Integrity 由伺服器驗證"
+    - "登入狀態：短效 access token 搭配輪替的 refresh token，改密碼和移除裝置時由伺服器讓它們失效，閒置逾時與絕對逾時並用"
+    - "step-up：出金、新增地址、改密碼或 email、關閉 2FA 由伺服器強制；challenge 綁定金額和地址；新增地址後可設冷卻時間（各家規則不同）"
+    - "對應經驗：社交 App 的越獄、root 與 Play Integrity 裝置檢查；行情分析 App 用 Keychain，以及 Tink 搭配 Keystore 保存登入狀態"
+  modelAnswer: |
+    我會把安全的判斷放在伺服器，App 負責取得證明。
+
+    兩步驟驗證用 TOTP（RFC 6238，也就是驗證器 App 那種 6 位數驗證碼）。伺服器容許前後各一個 30 秒的 time step，記住這位使用者最後成功的 counter，避免同一個碼被重放，並限制嘗試次數。TOTP 不會由同一個 App 產生，否則密碼和驗證碼落在同一個地方，兩個因素就變成一個。
+
+    生物辨識我會綁在金鑰上，而不是只看 `evaluatePolicy` 的布林值，因為那在被攻破的手機上可以被 hook。註冊時在手機上產生金鑰對，私鑰放在 Secure Enclave 或 Keystore，公鑰登錄到伺服器；敏感操作時伺服器送一次性的 challenge，通過生物辨識後用私鑰簽名，伺服器驗證簽章。iOS 用 `SecAccessControl`，Android 用 Keystore 加 `BiometricPrompt` 的 `CryptoObject`。新增生物特徵會讓金鑰失效，所以要有重新註冊的流程。
+
+    自動鎖定用單調時鐘計時，切到多工畫面時遮罩，鎖定時清掉記憶體裡的 token 和餘額。新裝置登入時，伺服器通知使用者並要求額外驗證，同時用 App Attest 與 Play Integrity 在伺服器端驗證裝置。登入狀態用短效的 access token 搭配輪替的 refresh token，改密碼和移除裝置時由伺服器讓它們失效。出金、新增地址、改密碼和關閉 2FA 都要 step-up，由伺服器強制，challenge 綁定金額和地址。
+
+    相關經驗方面，我在一個社交 App 做過越獄偵測，以及 root 和 Play Integrity 的裝置檢查；在一個行情分析 App，iOS 用 Keychain，Android 用 Tink 搭配 Keystore 保存登入狀態。到交易所的 App，我會用上面的架構來做 2FA 和生物辨識綁金鑰。
+  modelAnswerJa: |
+    セキュリティの判断はサーバーに置き、アプリは証明を取得する役割にします。
+
+    二段階認証には TOTP（RFC 6238、認証アプリでおなじみの 6 桁のコード）を使います。サーバーは前後 1 つずつの 30 秒単位の time step を許容し、そのユーザーが最後に成功した counter を記録して同じコードの再利用（リプレイ）を防ぎ、試行回数も制限します。TOTP は同じアプリ内で生成しません。パスワードとコードが同じ場所に置かれ、2 つの要素が 1 つになってしまうためです。
+
+    生体認証は、`evaluatePolicy` の真偽値だけを見るのではなく、鍵に結び付けます。侵害された端末では、その真偽値が hook によって書き換えられてしまうからです。登録時に端末で鍵ペアを生成し、秘密鍵は Secure Enclave または Keystore に置き、公開鍵をサーバーに登録します。重要な操作では、サーバーが一度限りの challenge を送り、アプリは生体認証に成功した後に秘密鍵で署名し、サーバーが署名を検証します。iOS は `SecAccessControl`、Android は Keystore と `BiometricPrompt` の `CryptoObject` を使います。生体情報が追加されると鍵が無効になるため、再登録の流れも用意します。
+
+    オートロックは単調な時計で時間を測り、マルチタスク画面では画面を隠し、ロック時にはメモリ上の token と残高を消去します。新しい端末でのログインでは、サーバーがユーザーに通知して追加の認証を求め、App Attest と Play Integrity をサーバー側で検証します。ログイン状態は、有効期限の短い access token と、更新のたびに入れ替わる refresh token で管理し、パスワード変更や端末削除の際はサーバーが無効にします。出金、アドレス追加、パスワード変更、2FA の無効化は step-up とし、サーバーが強制します。challenge には金額とアドレスを含めます。
+
+    経験としては、ソーシャルアプリでジェイルブレイク検知と、root・Play Integrity の端末チェックを扱いました。相場分析アプリでは、iOS は Keychain、Android は Tink と Keystore でログイン状態を保存していました。取引所アプリでは、この構成で 2FA と鍵に結び付けた生体認証を実装します。
+  followUps:
+    - "使用者換手機時，如何安全地轉移 TOTP 與生物辨識金鑰？"
+    - "生物辨識金鑰失效（新增指紋）後的重新註冊流程，如何避免變成繞過 2FA 的後門？"
+    - "如何偵測並處理使用者用 root／越獄的裝置？"
+  timeLimitSec: 180
+
+- id: exchange-account-security-10
+  type: flash
+  level: 1
+  priority: P1
+  tags: [totp]
+  front: TOTP 的算法與測試資料、生物辨識綁金鑰的原則
+  back: |
+    - **算法**：counter ＝ `floor(T ÷ 30)`（轉成 8 個位元組）→ 用秘密算 HMAC-SHA-1 → 取最後一個位元組的低 4 位元當 offset → 從 offset 取 4 個位元組、最高位元清成 0 → 對 `10^digits` 取餘數，不足位數左邊補零。
+    - **RFC 測試資料**（秘密 `12345678901234567890`）：T=59 → 8 位數 `94287082`（6 位數 `287082`）；T=1111111109 → `07081804`。
+    - **伺服器**：視窗 ±1、記住最後成功的 counter 防止重放、限制嘗試次數、固定時間比較。
+    - **生物辨識**要綁金鑰（註冊公鑰，之後用 challenge 簽章），不是只看 `evaluatePolicy` 的布林值；新增生物特徵會讓金鑰失效。
+    - **step-up**（高風險操作再驗證一次）由伺服器強制：出金、新增地址、改密碼、關閉 2FA。

@@ -1,0 +1,122 @@
+- id: sysdesign-market-01
+  type: open
+  level: 3
+  priority: P0
+  tags: [system-design, market-data]
+  prompt: |
+    「請設計我們 App 的即時行情與訂單簿模組：首頁有約 40 個交易對的行情列表，點進去有訂單簿、最新成交與 K 線。請說明你的架構、資料流、斷線與背景處理，以及怎麼確保畫面流暢。」
+  promptJa: |
+    「当社アプリのリアルタイム相場と板情報のモジュールを設計してください。トップには約40銘柄の相場一覧があり、銘柄詳細では板、約定履歴、ローソク足を表示します。アーキテクチャ、データフロー、切断時やバックグラウンド時の扱い、画面を滑らかに保つ方法を説明してください。」
+  keyPoints:
+    - 先釐清需求與規模，寫下假設（交易對數、更新頻率、延遲目標）
+    - 一條 WebSocket；gzip 解壓、JSON 解析、ping/pong 都在背景
+    - 依主題分派到各個 Store；訂閱管理者記錄每個主題有幾個畫面在用，最後一個畫面離開後延遲幾秒才取消訂閱
+    - 背景合併：收到訊息的頻率和畫面更新的頻率分開（每 100 毫秒，或配合螢幕更新的節奏）
+    - 連線狀態機：等待時間逐次加倍加上隨機誤差（指數退避＋jitter）、網路恢復立刻重試、重連後重新訂閱並先拿完整資料
+    - 背景：停止更新畫面、一段時間後關閉連線；回前景重連並拿完整資料；用伺服器的時間判斷新舊
+    - 訂單簿：在背景合併價格、算累計數量、比較差異；畫面固定列數、用等寬數字字型、不在主執行緒建立 NumberFormatter
+    - 測試（用錄下來的訊息測解碼、用假伺服器高頻推送做壓力測試）與監控（重連次數、延遲、掉幀）
+  modelAnswer: |
+    先確認需求，我假設首頁 40 個交易對、每個每秒推 2 次，訂單簿買賣各 20 檔，延遲目標 500ms 以內，列表每秒最多重繪 10 次。
+
+    架構上整個 App 只開一條 WebSocket。收到的訊息在背景解壓 gzip、解析 JSON，如果是 server 的 ping 就直接在背景回 pong，不經過主執行緒，避免畫面卡住時被斷線。解析後依 topic 分派到各個 Store：ticker、訂單簿、成交、K 線。訂閱由一個訂閱管理者負責，記錄每個主題有幾個畫面在用，兩個畫面要同一個主題時只訂閱一次；最後一個訂閱者離開後延遲幾秒再取消，避免切換畫面時反覆訂閱。
+
+    流暢度的關鍵是把「收到訊息的頻率」和「更新畫面的頻率」分開。Store 收到多少訊息都只更新最新狀態，對外每 100 毫秒發一次。訂單簿在背景先聚合、取前 20 檔、算累計量和與上一版的差異，主執行緒只負責套用。
+
+    連線用狀態機管理：斷線後指數退避加 jitter 重連，網路恢復時立刻重試；重連成功後重新送出所有訂閱，並先拿一次完整資料，避免畫面停在舊的數字。斷線超過幾秒就把數字變灰並提示。進背景時先停 UI 更新，30 秒後取消訂閱並關閉連線；回前景再重連。新舊判斷一律用 server 的時間戳。
+
+    測試方面，我會用錄下來的訊息測解碼器，用假的 server 以高頻率推送做壓測，量掉幀與記憶體；上線後監控重連次數、斷線時長和訊息延遲。
+  modelAnswerJa: |
+    まず前提として、トップ画面は40銘柄で各銘柄が毎秒2回更新、板は買い・売り各20件、遅延は500ミリ秒以内、一覧の再描画は毎秒最大10回と置きます。
+
+    アプリ全体で WebSocket は1本だけにします。受信したフレームはバックグラウンドで gzip を展開して JSON をパースし、サーバーからの ping にはその場で pong を返します。メインスレッドを経由しないので、画面が重くても切断されません。パースしたデータはトピックごとにティッカー、板、約定、ローソク足のストアに振り分けます。購読は参照カウントで管理し、同じトピックを複数画面で使っても購読は1回だけにします。
+
+    滑らかさのポイントは、メッセージの頻度と画面更新の頻度を切り離すことです。ストアは最新状態だけを持ち、100ミリ秒ごとに外へ流します。板はバックグラウンドで価格の集約、上位20本の抽出、累計数量、前回との差分まで計算し、メインスレッドは反映だけを行います。
+
+    接続はステートマシンで管理し、切断時は指数バックオフとジッターで再接続、ネットワーク復帰時は即座に再試行します。再接続後はすべての購読を送り直し、先にスナップショットを取得します。バックグラウンドでは UI 更新を止め、一定時間後に購読を解除して切断します。新旧の判定はサーバーのタイムスタンプで行います。
+
+    テストは録画したフレームでデコーダーを検証し、疑似サーバーで高頻度に配信して負荷試験を行います。リリース後は再接続回数、切断時間、メッセージ遅延を監視します。
+  followUps:
+    - 如果伺服器只推送變化的部分（每則帶序號），你的 OrderBookStore 要怎麼改？
+    - 40 個交易對變成 400 個，設計哪裡會先撐不住？
+    - 怎麼量測「伺服器推送到畫面顯示」的延遲？
+  timeLimitSec: 600
+
+- id: sysdesign-market-02
+  type: single
+  level: 3
+  priority: P1
+  tags: [gzip, ios]
+  prompt: |
+    iOS 端要解壓縮 Huobi 相容交易所的 WebSocket 送來的 gzip 訊息。下列敘述何者正確？
+  options:
+    - "`URLSessionWebSocketTask` 會自動解壓應用層的 gzip 內容"
+    - "`NSData.decompressed(using: .zlib)` 只處理不含 gzip 標頭和結尾的資料；要用 zlib 的 `inflateInit2`（windowBits 設成 16+15），或自己先去掉 gzip 的標頭和結尾"
+    - "gzip 只能在 server 端解壓"
+    - "JSONDecoder 可以直接解析 gzip 資料"
+  answer: 1
+  explain: |
+    - 第 1 項錯：Huobi 系交易所的 gzip 是伺服器自己把訊息內容壓縮過，不是 WebSocket 協定層的壓縮，`URLSessionWebSocketTask` 不會幫你解。
+    - 第 2 項對：Apple 的 `.zlib` 只處理壓縮後的資料本體；gzip 格式在前後多了標頭和結尾（裡面有檢查碼和長度），直接丟進去會失敗。Android 的 `GZIPInputStream` 則可以直接處理 gzip。
+    - 第 3 項錯：任何一端都可以解壓縮。
+    - 第 4 項錯：`JSONDecoder` 只能解析未壓縮的 JSON 文字。
+
+- id: sysdesign-market-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [subscription]
+  prompt: |
+    關於訂閱管理者（SubscriptionManager）的設計，哪些做法正確？（複選）
+  options:
+    - "同一個主題記錄有幾個畫面在用（reference count），多個畫面共用同一次訂閱"
+    - "最後一個畫面離開後延遲幾秒才取消訂閱，避免使用者來回切換時反覆訂閱"
+    - "每個畫面開自己的 WebSocket 連線，彼此隔離比較安全"
+    - "重連成功後，重新送出所有計數還大於 0 的訂閱"
+    - "取消訂閱後，仍可能收到那個主題的訊息，要能安全地丟掉"
+  answer: [0, 1, 3, 4]
+  explain: |
+    - 第 3 項錯：每個畫面各開一條連線，會增加手機和伺服器的負擔，也更容易超過連線數的限制。
+    - 第 5 項對：送出取消訂閱到伺服器真的停止推送之間有時間差，App 要能安全地丟掉這些訊息。
+
+- id: sysdesign-market-04
+  type: order
+  level: 2
+  priority: P0
+  tags: [reconnect]
+  prompt: |
+    WebSocket 斷線後的恢復流程，依序排列。
+  items:
+    - UI 標示資料可能過期（數字變灰或顯示「重新連線中」）
+    - 等待時間逐次加倍並加上隨機誤差；如果先收到網路恢復的通知，就立刻嘗試
+    - 連線成功，重新送出所有仍需要的訂閱
+    - 透過 REST 或 `req` 取得一次完整資料，更新各個 Store
+    - 開始接收推送，移除過期標示
+  explain: |
+    先標示資料可能過時，避免使用者用舊價格做決定；重連後先拿一次完整資料，再開始接收推送，畫面才不會短暫顯示斷線前的數字。
+
+- id: sysdesign-market-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [kotlin, gzip]
+  prompt: |
+    Android（OkHttp）收到 交易所的二進位訊息，解壓縮並回應 ping。
+  codeLang: kotlin
+  code: |
+    override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+        val json = ____(bytes.toByteArray().inputStream())
+            .bufferedReader().use { it.readText() }
+        val obj = Json.parseToJsonElement(json).jsonObject
+        obj["ping"]?.let { ts ->
+            webSocket.____("""{"pong":$ts}""")
+            return
+        }
+        router.dispatch(obj)
+    }
+  blanks:
+    - [GZIPInputStream, java.util.zip.GZIPInputStream]
+    - [send]
+  explain: |
+    OkHttp 的 `onMessage` 本來就在 OkHttp 的背景執行緒執行，可以直接在這裡解壓縮並回 pong，不要切到主執行緒。
+    之後再把解析好的訊息交給分派器，由對應的 Store 在背景合併資料。

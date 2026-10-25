@@ -1,0 +1,130 @@
+// L02：價格一跳，被選取的那一列就取消選取了（列表用「包含價格的整個 data class」當識別）
+// 對應複習站：Exchange06RealtimeUI 第 4 題「列表怎麼只更新有變動的列？」
+//
+// 情境：行情列表有三列（BTC_JPY、ETH_JPY、XRP_JPY）。使用者點了 ETH_JPY，那一列變成選取狀態（狀態存在「列」這個物件上）。
+//        接著價格更新三次：第 1 次 BTC 和 ETH 變、第 2 次三檔都變、第 3 次只有 ETH 變。
+//        列表用「識別」（identity）決定新的一份資料對應到哪一個既有的列：對得上就沿用那一列（只換內容），對不上就新建一列。
+//        （Compose 的 key、DiffUtil 的 areItemsTheSame、iOS 的 diffable data source，都是這個意思；列表沒給 key 的問題，Kotlin06 L07、Kotlin08 L03 練過。）
+// Bug 版：識別 = 整個 Row（交易對代號加價格）。價格一變，識別就變了，對不上既有的列，等於「刪掉舊的一列、新建一列」，選取狀態跟著舊的一列消失。
+// 修正版：識別 = 交易對代號。價格變了還是同一列，沿用既有的列，只換內容，選取狀態保留。
+package tw.harry.labs.solution.exchange06realtimeui
+
+import java.math.BigDecimal
+import tw.harry.labs.kit.Lab
+import tw.harry.labs.kit.LabLog
+import tw.harry.labs.kit.Variant
+
+private data class L02Row(val symbol: String, val price: BigDecimal)
+
+/** 列表上的一列（物件）：選取狀態存在這裡，換內容時沿用，新建時從沒有選取開始 */
+private class L02Cell(var row: L02Row) {
+    var selected = false
+}
+
+/** 模擬列表如何用識別對應新舊資料（DiffUtil、diffable data source 的行為） */
+private class L02ListView {
+    private var cells = mapOf<String, L02Cell>()
+    var created = 0
+        private set
+    var reused = 0
+        private set
+    var duplicates = 0
+        private set
+
+    fun apply(rows: List<L02Row>, identity: (L02Row) -> String) {
+        val next = LinkedHashMap<String, L02Cell>()
+        for (row in rows) {
+            val id = identity(row)
+            if (id in next) {
+                duplicates++                    // 兩列的識別一樣：這不是正常的寫法
+                continue
+            }
+            val cell = cells[id]
+            if (cell != null) {
+                cell.row = row                  // 識別對得上：沿用既有的列，只換內容
+                reused++
+                next[id] = cell
+            } else {
+                next[id] = L02Cell(row)         // 對不上：新建一列（沒有選取狀態）
+                created++
+            }
+        }
+        cells = next
+    }
+
+    fun select(symbol: String) {
+        cells.values.firstOrNull { it.row.symbol == symbol }?.selected = true
+    }
+
+    val selectedSymbol: String? get() = cells.values.firstOrNull { it.selected }?.row?.symbol
+}
+
+private fun rows(btc: String, eth: String, xrp: String) = listOf(
+    L02Row("BTC_JPY", e06(btc)), L02Row("ETH_JPY", e06(eth)), L02Row("XRP_JPY", e06(xrp)),
+)
+
+/** 演練流程（兩個版本共用）：`identity` 決定新的一份資料對應到哪一個既有的列 */
+private fun scenario(log: LabLog, identity: (L02Row) -> String) {
+    val list = L02ListView()
+    list.apply(rows("10000000", "400000", "80"), identity)
+    list.select("ETH_JPY")
+    log("開始：選取 ${list.selectedSymbol ?: "沒有"}")
+    val updates = listOf(rows("10000100", "400100", "80"), rows("10000200", "400200", "80.3"), rows("10000200", "400300", "80.3"))
+    val before = list.created
+    updates.forEachIndexed { index, update ->
+        val createdBefore = list.created
+        val reusedBefore = list.reused
+        list.apply(update, identity)
+        log("第 ${index + 1} 次更新：新建 ${list.created - createdBefore} 列，沿用 ${list.reused - reusedBefore} 列，選取 ${list.selectedSymbol ?: "沒有"}")
+    }
+    log("最後：選取 ${list.selectedSymbol ?: "沒有"}，更新期間共新建 ${list.created - before} 列，沿用 ${list.reused} 列，識別重複 ${list.duplicates} 次")
+}
+
+// MARK: - Bug 版
+private object L02Bug {
+    suspend fun run(log: LabLog) = scenario(log) { row -> row.toString() }       // 整個 Row 當識別：價格一變，識別就變了
+}
+
+// MARK: - 修正版
+private object L02Fixed {
+    suspend fun run(log: LabLog) = scenario(log) { row -> row.symbol }           // 交易對代號當識別：價格變了還是同一列
+}
+
+// MARK: - 演練設定
+val l02 = Lab(
+    id = "L02",
+    title = "價格一跳，選取的那一列就取消選取了",
+    question = "第 4 題：列表怎麼只更新有變動的列？",
+    goal = "列表的識別要用穩定的交易對代號，不能把價格放進識別：價格一變就變成「刪一列、新建一列」，列上的選取、展開狀態都會消失。",
+    steps = listOf(
+        "選「Bug 版」執行，看每次更新「新建幾列、沿用幾列」，以及選取的那一列還在不在。",
+        "想一想：第 1 次更新只有 BTC 和 ETH 的價格變了，為什麼被選取的 ETH_JPY 就不見了？",
+        "選「修正版」執行，三次更新都要沿用三列、不新建，選取一直是 ETH_JPY。",
+        "進階：Android 的 DiffUtil 用哪個方法判斷「同一列」？（`areItemsTheSame`）Compose 的 `LazyColumn` 用哪個參數？（`key`）各自要放什麼？",
+    ),
+    expectBug = "每次更新價格有變的列都被新建：第 1 次新建 2 列，選取變成「沒有」，「最後：選取 沒有，更新期間共新建 6 列，沿用 3 列」。",
+    expectFixed = "三次更新都沿用 3 列、不新建，選取一直是 ETH_JPY，「最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列」。",
+    file = "exchange06-realtime-ui/L02_RowIdentity.kt",
+    run = { variant, log ->
+        when (variant) {
+            Variant.BUG -> L02Bug.run(log)
+            Variant.FIXED -> L02Fixed.run(log)
+        }
+    },
+    checkBug = { lines ->
+        when {
+            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, identity) 執行"
+            "最後：選取 沒有，更新期間共新建 6 列，沿用 3 列，識別重複 0 次" !in lines ->
+                "Bug 還沒重現：識別要把整個 Row 都放進去（例如 row.toString()，包含交易對代號和價格），價格有變的列才會被新建"
+            else -> null
+        }
+    },
+    checkFixed = { lines ->
+        when {
+            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, identity) 執行"
+            "最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列，識別重複 0 次" !in lines ->
+                "識別要用 row.symbol（交易對代號）：每一列的識別不同，價格變了還是對得上既有的列"
+            else -> null
+        }
+    },
+)

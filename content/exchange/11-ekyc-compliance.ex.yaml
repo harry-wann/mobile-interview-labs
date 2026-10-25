@@ -1,0 +1,229 @@
+- id: exchange-ekyc-compliance-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [ekyc, hanzaihou]
+  prompt: |
+    日本犯収法（犯罪收益移轉防止法）規定的非面對面本人確認，常被提到ホ、ヘ、ワ三種方式（施行規則裡條列項目的編號）。下列哪個對應正確？（以官方規則為準）
+  options:
+    - "ホ：臉部影像＋證件影像；ヘ：證件的 IC 晶片資訊＋臉部影像；ワ：電子證明書（JPKI，マイナンバーカード的署名用電子證明書）"
+    - "ホ：IC 晶片＋電子證明書；ヘ：郵寄轉送不要郵便；ワ：臉部影像＋證件影像"
+    - "三種都是用相機拍攝證件，差別只在拍攝的角度數量"
+    - "ホ、ヘ、ワ 是三種不同國家的規定，日本只採用其中一種"
+  answer: 0
+  explain: |
+    - ホ：影像方式。用相機拍攝證件（正面、背面、厚度）和臉部（要做活體偵測）。
+    - ヘ：用 NFC 讀取證件的 IC 晶片，再搭配臉部影像。
+    - ワ：使用者輸入卡片密碼，卡片用署名用電子證明書簽署，後端驗證證明書。
+
+    其他選項錯在哪裡：
+    - 第 2 項：把三種方式的內容全部搞混了，而且「郵寄轉送不要郵便」是另一類（寄送到住址的）確認方式，不是ヘ。
+    - 第 3 項：只有ホ是靠拍攝證件影像，ヘ和ワ要讀 IC 晶片，需要 NFC。
+    - 第 4 項：ホ、ヘ、ワ 都是日本犯収法施行規則裡的項目編號，不是不同國家的規定。
+
+    其他確認方式（例如郵寄）這裡不展開，以官方規則為準，細節以法務確認為準。對 App 的實際影響是：ホ要相機和影像處理；ヘ與ワ要 NFC 和 APDU 通訊，兩個平台的限制差異很大。
+
+- id: exchange-ekyc-compliance-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [ekyc, regulation, architecture]
+  prompt: |
+    假設日本法規之後調整，不再接受以證件影像為主的ホ方式（這是假設的情境，實際是否調整未證實，以官方公告為準）。你是交易所 App 的工程師，現在的 eKYC 同時支援ホ、ヘ、ワ。最合理的準備是什麼？
+  options:
+    - "立刻把ホ從 App 移除並發版，避免日後出問題"
+    - "可用的驗證方式由伺服器下發（功能旗標），不寫死在 App；提高 NFC 方式（ヘ、ワ）的成功率並追蹤裝置支援矩陣與失敗原因；設計沒有 NFC 時的替代路徑；持續關注官方公告"
+    - "不用準備，等法規正式生效再處理"
+    - "要求所有已完成ホ的使用者重新做一次 eKYC"
+  answer: 1
+  explain: |
+    法規何時生效、細節如何都是未證實的，所以正確的做法是「讓 App 能在不發版的情況下改變可用方式」，而不是賭某個日期。功能旗標的意思是：伺服器用一個設定值控制某個功能開或關。如果ホ真的被廢止，NFC 讀卡就會變成主要路徑，成功率、引導畫面、不支援裝置的替代路徑，都會直接影響開戶的完成率。
+
+    其他選項錯在哪裡：
+    - 第 1 項：在法規還不確定時就移除，風險很大；而且就算要移除，也應該由伺服器關閉，不需要發版。
+    - 第 3 項：等到生效才處理，會來不及：發版和使用者更新都需要時間。
+    - 第 4 項：既有使用者是否需要重新確認，由法務與合規決定，不是 App 工程師的決定。
+
+- id: exchange-ekyc-compliance-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [nfc, core-nfc, isodep]
+  prompt: |
+    要在 App 內讀取マイナンバーカード（ISO/IEC 14443 Type B 的非接觸式 IC 卡），下列哪些敘述正確？（複選）
+  options:
+    - "iOS 需要啟用 NFC Tag Reading 能力，並在 Info.plist 的 `com.apple.developer.nfc.readersession.iso7816.select-identifiers` 列出要 SELECT 的 AID，否則 SELECT 會被擋下"
+    - "Android 用 `IsoDep` 通訊；`transceive` 是阻塞呼叫，要在背景執行緒執行，並自行設定 `timeout`"
+    - "iOS 可以在 App 背景或未啟動時自動偵測並讀取卡片"
+    - "iOS 的讀取 session 有時間上限（約 60 秒，以官方文件為準），要處理逾時並讓使用者重試"
+    - "Android 的 manifest 應宣告 `android.hardware.nfc` 為 `required=\"true\"`，沒有 NFC 的裝置本來就不該安裝"
+    - "沒有 NFC 的裝置，或使用者不願意讀卡時，要有替代路徑與清楚的說明（依法規允許的其他方式，以官方為準）"
+  answer: [0, 1, 3, 5]
+  explain: |
+    - 第 1 項正確：Core NFC 要求事先在 Info.plist 宣告可以 SELECT 的 AID（卡片裡應用程式的識別碼），不在清單裡的 AID 不能使用。
+    - 第 2 項正確：`transceive` 會一直等到卡片回應，在主執行緒執行會讓畫面卡住。Android 沒有固定的時間上限，所以要自己設 `IsoDep.timeout`。
+    - 第 3 項錯：iOS 讀卡只能在前景、由使用者主動觸發，不能在背景或 App 未啟動時自動讀取。而且只有部分機型支援，要先檢查 `NFCTagReaderSession.readingAvailable`。
+    - 第 4 項正確：session 逾時後會結束，要顯示訊息並讓使用者重新開始。
+    - 第 5 項錯：`required="true"` 會讓沒有 NFC 的裝置在 Google Play 上看不到這個 App，連交易都不能用。正確做法是 `required="false"`，再用程式判斷要不要顯示讀卡功能。
+    - 第 6 項正確：沒有 NFC 或使用者不想讀卡時，不能讓他們卡在這一步。
+
+    另外，不要在日誌記錄 APDU 的內容和卡片密碼。
+
+- id: exchange-ekyc-compliance-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [core-nfc, ios]
+  prompt: |
+    iOS：開始讀卡前先確認裝置支援，並建立一個輪詢 ISO 14443 卡片（Type A 與 B）的讀取 session。補上缺的程式碼。
+  codeLang: swift
+  code: |
+    guard NFCTagReaderSession.____ else { return }
+    let session = NFCTagReaderSession(pollingOption: .____, delegate: self)
+    session?.alertMessage = "請將卡片靠近 iPhone 上方"
+    session?.begin()
+  blanks:
+    - [readingAvailable]
+    - [iso14443]
+  explain: |
+    - `NFCTagReaderSession.readingAvailable`：在不支援 NFC 讀取的機型會回傳 `false`，所以要先檢查，不支援就直接走替代方式。
+    - `.iso14443`：輪詢（反覆偵測）ISO 14443 的卡片，包含 Type A 和 Type B；マイナンバーカード屬於 Type B。要和 `NFCISO7816Tag` 通訊，還必須先在 Info.plist 宣告可以 SELECT 的 AID。
+
+    Android 的對應寫法：`NfcAdapter.enableReaderMode(activity, callback, FLAG_READER_NFC_B or FLAG_READER_SKIP_NDEF_CHECK, null)`，在 `onTagDiscovered` 取得 `Tag` 之後，用 `IsoDep.get(tag)` 通訊。
+
+- id: exchange-ekyc-compliance-05
+  type: order
+  level: 2
+  priority: P1
+  tags: [ekyc, flow]
+  prompt: |
+    把 App 內 eKYC 開戶流程，依合理的順序排列。
+  items:
+    - "說明頁（需要的文件、所需時間、權限用途）與條款同意，記錄同意的版本與時間"
+    - "檢查相機與 NFC 能力、權限，依伺服器下發的可用方式選擇驗證方式"
+    - "依所選方式擷取：拍攝證件與臉部（含活體偵測），或讀取 IC 晶片（NFC）並搭配臉部影像"
+    - "上傳（可續傳、冪等），成功後刪除本機暫存"
+    - "審查中：伺服器管理狀態，推播通知結果"
+    - "結果頁：通過則依帳號狀態解鎖功能；退回則提供下一步"
+  explain: |
+    - 條款同意放在最前面，而且要記錄版本。能力與權限檢查在選方式之前，才不會讓使用者做到一半才發現不能用；同意與能力檢查的先後可以依產品調整，這裡只要求兩者都在擷取之前。
+    - 上傳要能續傳，而且具備冪等性（重送不會建立兩份申請）；成功後立刻刪除本機暫存的影像。
+    - 證件與臉部的拍攝順序、基本資料表單的位置，依公司與驗證方式而不同，所以這裡把「擷取」合併成一步，只排出有明確先後關係的步驟：選方式 → 擷取 → 上傳 → 審查 → 結果。
+
+- id: exchange-ekyc-compliance-06
+  type: single
+  level: 3
+  priority: P0
+  tags: [privacy, pii, images]
+  prompt: |
+    使用者拍好證件與臉部影像，準備上傳到後端審查。下列哪個做法最合理？
+  options:
+    - "先存到系統相簿，再從相簿選取上傳，方便使用者之後自己備份"
+    - "存在 App 沙盒（iOS 使用檔案保護、Android 使用私有的內部儲存），以 TLS 上傳（支援續傳），上傳成功就立即刪除；日誌、分析與崩潰回報不含任何個人可識別資訊（PII）；拍攝畫面在 Android 設 `FLAG_SECURE`"
+    - "轉成 Base64 放進分析事件，方便之後在儀表板上檢查拍攝品質"
+    - "上傳後仍在本機保留一份，使用者失敗重試時就不必重拍"
+  answer: 1
+  explain: |
+    證件與臉部影像是高敏感的個人資料，所以其他選項都有問題：
+    - 第 1 項：存到相簿會被其他 App 讀取，也可能進入雲端備份。
+    - 第 3 項：放進分析事件，等於把個資送給第三方的分析服務。
+    - 第 4 項：長期保留會增加外洩的機會。重試的需求，可以用「可續傳的上傳」來滿足，而不是長期保留原始影像；如果確實需要暫存，要設有效期限並加密。
+
+    第 2 項還有一個補充：iOS 無法阻止截圖，但可以偵測螢幕錄影（iOS 17 起用 `UITraitCollection.sceneCaptureState`，舊版用 `UIScreen.isCaptured`），並在 App 切換器（多工畫面）隱藏內容。
+
+- id: exchange-ekyc-compliance-07
+  type: single
+  level: 2
+  priority: P1
+  tags: [state-machine, review, push]
+  prompt: |
+    使用者完成上傳後關閉 App，審查需要數小時到數日。下列哪個設計最合理？
+  options:
+    - "在本機（UserDefaults／SharedPreferences）存一個「已提交」旗標，下次啟動就顯示審查中"
+    - "狀態由伺服器管理；App 啟動與回前景時抓取，審查結果用推播通知並以 deep link 開啟結果頁；每個狀態都有明確畫面與下一步，功能開放依伺服器的帳號狀態"
+    - "App 每秒輪詢一次，直到審查完成"
+    - "顯示不可關閉的載入畫面，直到審查完成"
+  answer: 1
+  explain: |
+    其他選項錯在哪裡：
+    - 第 1 項：本機旗標在重新安裝、換手機、審查結果改變時，都會和事實不一致，也不能拿來決定功能是否開放。
+    - 第 3 項：輪詢（反覆詢問）浪費電量和流量，而且使用者關閉 App 之後，App 在背景本來就不會執行。
+    - 第 4 項：審查要數小時到數日，不可能讓使用者一直停在載入畫面。
+
+    審查被退回時，顯示使用者能採取的下一步（重新拍攝、補件），但不要顯示內部審查細節，例如反洗錢篩查的命中原因。
+
+- id: exchange-ekyc-compliance-08
+  type: multi
+  level: 2
+  priority: P1
+  tags: [compliance, consent, disclosure]
+  prompt: |
+    關於交易所 App 的合規相關畫面與流程，哪些做法正確？（複選）
+  options:
+    - "規約與重要事項說明的同意要記錄版本、時間、語系；啟動時檢查是否有新版本需要重新同意，未同意前阻擋相關功能"
+    - "風險揭露（價格變動、非存款保險對象、槓桿的損失可能超過保證金）要在開戶與開始交易前明確呈現，宣傳文字不得有誤導性的獲利宣稱"
+    - "槓桿倍率上限（個人客戶為 2 倍，細節以法務確認為準）在畫面與伺服器端都要擋"
+    - "eKYC 是否通過用本機旗標判斷，通過後 App 自行開放出金功能"
+    - "審查被退回時，完整顯示內部審查細節（包含反洗錢篩查的命中原因），讓使用者知道哪裡出了問題"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：記錄版本與時間，之後才能證明使用者同意了哪一版。
+    - 第 2 項正確：風險要在使用者操作之前呈現，宣傳不能誤導。
+    - 第 3 項正確：只在畫面擋的話可以被繞過，伺服器端也要擋。
+    - 第 4 項錯：App 端的旗標可以被竄改。功能開放由伺服器的帳號狀態決定。
+    - 第 5 項錯：向被篩查的客戶透露篩查的細節（tipping-off）本身就是合規問題；退回理由只呈現使用者能採取行動的部分。
+
+    另外，日文版規約通常是正本，其他語言版本的法律地位依各公司的規約。
+
+- id: exchange-ekyc-compliance-09
+  type: open
+  level: 3
+  priority: P0
+  tags: [ekyc, nfc, design]
+  prompt: |
+    設計交易所 App 的 eKYC 開戶流程（支援マイナンバーカード的 NFC 讀取）：驗證方式的選擇、NFC 在 iOS 與 Android 的差異、失敗與替代路徑、個資處理、審查狀態。並說明你過去的相關經驗可以怎麼延伸。
+  promptJa: |
+    取引所アプリの eKYC 口座開設フロー（マイナンバーカードの NFC 読み取り対応）を設計してください。認証方式の選択、iOS と Android の NFC の違い、失敗時と代替経路、個人情報の扱い、審査ステータスを説明してください。これまでの関連経験をどう活かせるかも説明してください。
+  keyPoints:
+    - "犯収法的方式：ホ（影像）、ヘ（IC 晶片＋臉部）、ワ（JPKI）；可用方式由伺服器下發，不寫死在 App；法規細節以法務確認為準"
+    - "iOS：NFC Tag Reading 能力、Info.plist 的 AID 清單、`NFCTagReaderSession` 約 60 秒上限、只能在前景；Android：`IsoDep`、`transceive` 在背景執行緒、manifest 設 `required=false`"
+    - "失敗處理：卡片移開、逾時、密碼鎖定、NFC 關閉；畫面引導與重試；沒有 NFC 或不願讀卡的人有替代路徑"
+    - "個資：不存相簿、沙盒內處理、TLS 可續傳上傳、成功後刪除、日誌與分析不含 PII、畫面保護"
+    - "審查是非同步的，狀態由伺服器管理；推播加 deep link；退回時只給可採取的下一步，不洩漏篩查細節"
+    - "合規：同意版本紀錄、風險揭露、槓桿上限；功能開放依伺服器的帳號狀態"
+    - "對應經驗：藍牙智慧鎖專案的 Android NFC 與 BLE 請求回應協定；マイナンバーカード（ISO 14443 Type B、IsoDep）的協定不同，經驗可以延伸"
+  modelAnswer: |
+    方式選擇上，犯収法有ホ、ヘ、ワ三種，分別是影像、IC 晶片加臉部、JPKI 電子證明書。可用的方式我會讓伺服器下發，不寫死在 App 裡，這樣法規或公司政策有變動時，不用發版就能調整。法規細節我會以法務確認為準。這也代表 NFC 的成功率會變成關鍵指標。
+
+    NFC 的平台差異：iOS 要啟用 NFC Tag Reading，在 Info.plist 列出要 SELECT 的 AID，session 約 60 秒上限，只能在前景；Android 用 IsoDep，transceive 是阻塞呼叫，要放背景執行緒，manifest 設 required false，沒有 NFC 的裝置也能安裝。失敗要處理卡片移開、逾時、密碼鎖定、NFC 關閉，提供引導畫面和重試，並給沒有 NFC 或不願讀卡的使用者替代路徑。
+
+    個資方面，影像不進相簿，只在沙盒內處理，用 TLS 可續傳地上傳，成功就刪除，日誌與分析不放 PII，Android 的拍攝畫面設 FLAG_SECURE。審查是非同步的，由伺服器管理狀態，用推播加 deep link 回到結果頁；退回時只告訴使用者能採取的下一步，不洩漏篩查細節。同意要記錄版本與時間，功能開放依伺服器的帳號狀態。
+
+    經驗上，我在一個智慧鎖專案做過 Android 的 NFC，也做過藍牙智慧鎖的請求回應協定。マイナンバーカード是 ISO 14443 Type B，用 IsoDep 和 APDU，協定不同，但偵測卡片、連線、收發資料、處理錯誤的流程相通，經驗可以延伸。到交易所的 App，我會替每個指令加上逐命令的逾時與重試。
+  modelAnswerJa: |
+    方式の選択については、犯収法にはホ、ヘ、ワがあり、それぞれ画像方式、IC チップと顔画像、JPKI の電子証明書です。利用可能な方式はサーバーから配信し、アプリに固定しません。そうすれば、法令や会社の方針が変わったときも、リリースなしで対応できます。法令の詳細は法務に確認する前提です。また NFC の成功率が重要な指標になります。
+
+    NFC のプラットフォーム差については、iOS では NFC Tag Reading の有効化と、Info.plist への SELECT する AID の宣言が必要で、セッションは約 60 秒が上限、フォアグラウンドのみです。Android では IsoDep を使い、transceive はブロッキング呼び出しなのでバックグラウンドスレッドで実行し、manifest は required を false にして、NFC のない端末にもインストールできるようにします。失敗は、カードを離した場合、タイムアウト、パスワードロック、NFC オフを扱い、案内画面と再試行を用意し、NFC がない人や読み取りたくない人には代替経路を示します。
+
+    個人情報は、画像をアルバムに保存せずサンドボックス内だけで処理し、TLS で再開可能なアップロードを行い、成功したら削除します。ログと分析に個人情報を含めず、Android の撮影画面には FLAG_SECURE を設定します。審査は非同期で、状態はサーバーが管理し、プッシュと deep link で結果画面に戻します。差し戻しの場合は、ユーザーが取れる次の行動だけを示し、審査の詳細は出しません。同意は版数と日時を記録し、機能の開放はサーバー側のアカウント状態で判断します。
+
+    経験としては、スマートロックの案件で Android の NFC と、Bluetooth スマートロックのリクエスト・レスポンスのプロトコルを実装しました。マイナンバーカードは ISO 14443 Type B で、IsoDep と APDU を使うため、プロトコルは異なりますが、カードの検出、接続、データの送受信、エラー処理の流れは共通で、経験を活かせます。取引所アプリでは、コマンドごとのタイムアウトとリトライも入れます。
+  followUps:
+    - "NFC 読み取り中にユーザーがカードを離したとき、アプリはどう復帰させる？"
+    - "eKYC の成功率が低い端末機種をどう特定して改善する？"
+    - "第三者の eKYC SDK を使う場合と自社実装する場合の判断基準は？"
+  timeLimitSec: 180
+
+- id: exchange-ekyc-compliance-10
+  type: flash
+  level: 1
+  priority: P1
+  tags: [ekyc]
+  front: eKYC 速記：方式、NFC、個資、審查狀態
+  back: |
+    - **方式**：ホ＝臉部＋證件影像；ヘ＝IC 晶片＋臉部；ワ＝JPKI 電子證明書。可用方式由**伺服器下發**，不寫死；法規細節以法務確認為準。
+    - **NFC**：マイナンバーカード＝ISO 14443 **Type B**。iOS：Tag Reading 能力＋Info.plist 的 **AID 清單**＋約 60 秒 session＋只能在前景；Android：`IsoDep`、`transceive` 放背景執行緒、`required="false"`。
+    - **失敗**：卡片移開、逾時、密碼鎖定、NFC 關閉；要有替代路徑。
+    - **個資**：不進相簿、不進日誌與分析、沙盒內處理、上傳後刪除、Android 用 `FLAG_SECURE`。
+    - **審查**：非同步、**伺服器管理狀態**、推播加 deep link、退回只給下一步（不洩漏篩查細節）。
+    - **合規**：同意記錄**版本**、風險揭露、槓桿上限（個人客戶 2 倍）、功能開放看伺服器的帳號狀態。

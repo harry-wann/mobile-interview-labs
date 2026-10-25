@@ -1,0 +1,207 @@
+- id: platform-threading-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [frame-budget, promotion]
+  prompt: |
+    在 120 Hz 的裝置（例如 ProMotion iPhone 或 120 Hz 的 Android 手機）上，要維持滿幀率，主執行緒每一幀（包含版面計算與送出繪製指令）大約有多少時間？
+  options:
+    - "16.7 ms"
+    - "約 8.3 ms"
+    - "約 4.2 ms"
+    - "33.3 ms"
+  answer: 1
+  explain: |
+    每一幀的時間預算＝1000 ms ÷ 螢幕每秒更新的次數：60 Hz 約 16.7 ms，90 Hz 約 11.1 ms，120 Hz 約 8.3 ms。你的程式只佔其中一部分，系統還要在同一段時間裡做版面計算和送出繪製指令。
+
+    - 16.7 ms 錯：那是 60 Hz 的預算，不是 120 Hz。
+    - 4.2 ms 錯：那大約是 240 Hz 的預算，一般手機沒有這麼高。
+    - 33.3 ms 錯：那是 30 Hz 的預算。
+
+    這就是為什麼高頻行情要在背景解碼、合併之後，再以固定頻率更新畫面，而不是每一筆報價都碰主執行緒。
+
+- id: platform-threading-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [anr, android]
+  prompt: |
+    Android 版交易所 App 在 Play Console 的 Android vitals 出現 ANR（Application Not Responding，應用程式沒有回應）。下列哪一種情況最可能造成「輸入事件逾時」這一種 ANR？
+  options:
+    - "在 `Dispatchers.IO` 上執行 5 秒的資料庫查詢"
+    - "WebSocket 解碼在 `Dispatchers.Default` 花了 200 ms"
+    - "主執行緒呼叫 `runBlocking { api.refreshToken() }`，網路慢時等了很久"
+    - "背景的 `WorkManager` 任務執行了 10 分鐘"
+  answer: 2
+  explain: |
+    ANR 的前提是**主執行緒**被卡住：輸入事件（觸控、按鍵）5 秒內沒有被處理完，就會觸發 ANR；前景 BroadcastReceiver 則是 10 秒。在主執行緒用 `runBlocking` 加網路請求，網路一慢主執行緒就停在那裡等，是典型的 ANR 案例。
+
+    - 第 1 項錯：`Dispatchers.IO` 是背景執行緒，不會擋住觸控事件。（5 秒的資料庫查詢本身仍是效能問題，但不是 ANR。）
+    - 第 2 項錯：`Dispatchers.Default` 也是背景執行緒，200 ms 不會影響主執行緒。
+    - 第 4 項錯：`WorkManager` 的任務在背景執行，與輸入事件無關。
+
+    診斷時看 Android vitals 和 ANR 的 trace 檔，找出主執行緒當時卡在哪個呼叫。
+
+- id: platform-threading-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [gcd, deadlock]
+  prompt: |
+    關於 iOS 的 GCD，哪些敘述正確？（複選）
+  options:
+    - "在主執行緒呼叫 `DispatchQueue.main.sync { }` 會死鎖"
+    - "往 concurrent queue 丟大量會阻塞的任務，可能造成 thread explosion（執行緒暴增），最後資源耗盡"
+    - "concurrent queue 的 `.barrier` 區塊可以讓寫入獨佔、讀取並行，常用來實作讀寫鎖（reader-writer lock）"
+    - "serial queue 保證同一時間只有一個任務，所以在 serial queue 的任務裡對同一個 queue 呼叫 `sync` 是安全的"
+    - "QoS 設成 `.userInteractive` 的任務可以放心在主執行緒外長時間運算，系統不會影響 UI"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：主佇列是 serial queue，在它上面對自己呼叫 `sync`，等於自己等自己做完，死鎖。
+    - 第 2 項正確：阻塞的任務不會釋放執行緒，系統為了讓其他任務有機會執行，只好一直開新的執行緒，最終資源耗盡。解法是限流（`OperationQueue.maxConcurrentOperationCount`、semaphore）或改用 async/await。
+    - 第 3 項正確：barrier 會等前面的任務做完才執行，之後的任務要等它做完才開始，所以適合拿來保護寫入。
+    - 第 4 項錯：在 serial queue 的任務裡對同一個 queue 呼叫 `sync`，會等待自己完成，死鎖。「同一時間只有一個任務」正是它會卡死的原因。
+    - 第 5 項錯：`.userInteractive` 是最高優先權，給「直接影響畫面動畫」的短任務。長時間運算佔住它，會和主執行緒搶 CPU，反而拖慢 UI；長時間運算應該用 `.utility` 或 `.userInitiated`。
+
+- id: platform-threading-04
+  type: predict
+  level: 2
+  priority: P1
+  tags: [gcd, barrier, serial]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    import Foundation
+
+    let q = DispatchQueue(label: "q", attributes: .concurrent)
+    q.async { print("1") }
+    q.async(flags: .barrier) { print("2") }
+    q.async { print("3") }
+    q.sync(flags: .barrier) {}
+
+    let s = DispatchQueue(label: "s")
+    s.async { print("A") }
+    s.sync { print("B") }
+    print("C")
+  answer: |
+    1 2 3 A B C
+  explain: |
+    - concurrent queue `q`：`.barrier` 區塊要等之前提交的任務都做完才執行，而且之後提交的任務要等它做完才開始。所以 `1` 先於 `2`，`3` 在 `2` 之後。最後的 `q.sync(flags: .barrier) {}` 會等 `3` 做完才返回，所以三行都在 `A` 之前印出。
+    - serial queue `s`：`A` 先排進佇列，之後的 `sync { B }` 必須排在 `A` 後面，而且 `sync` 會讓目前的執行緒停下來，直到 `B` 做完，所以順序是 `A`、`B`，`C` 最後。
+
+    本機重複執行 5 次，結果相同。
+
+- id: platform-threading-05
+  type: fill
+  level: 2
+  priority: P0
+  tags: [android, dispatchers]
+  prompt: |
+    補上適合的 Dispatcher：解碼大量行情 JSON 是 CPU 運算；寫入本機資料庫是會阻塞等待的 I/O。
+  codeLang: kotlin
+  code: |
+    suspend fun parse(raw: ByteArray): Depth =
+        withContext(Dispatchers.____) { decode(raw) }
+
+    suspend fun save(order: Order) =
+        withContext(Dispatchers.____) { dao.insert(order) }
+  blanks:
+    - [Default]
+    - [IO]
+  explain: |
+    `Dispatchers.Default` 的執行緒數量約等於 CPU 核心數（至少 2 條），適合 CPU 密集的運算，例如解碼、排序。`Dispatchers.IO` 是為「會阻塞等待」的工作設計的，可以擴充到更多執行緒（預設上限 64 條），適合資料庫、檔案、網路。兩者共用同一個底層執行緒池。
+
+    為什麼不能都用 `Default`？在 `Default` 上做阻塞 I/O，那條執行緒就被佔住，什麼都不能做，其他運算只能排隊。
+
+    補充：Room 的 suspend DAO 本身會切到自己的 executor，不需要你再包一層；但你自己寫的檔案存取、Realm 這類資料庫，仍然應該主動指定 `IO`。
+
+- id: platform-threading-06
+  type: single
+  level: 2
+  priority: P0
+  tags: [runblocking, android, okhttp]
+  prompt: |
+    在非 suspend 的地方想呼叫 suspend 函式時，常會用 `runBlocking` 當橋梁，例如在 OkHttp 的 interceptor 中刷新 token。下列哪個位置使用 `runBlocking` 最危險？
+  options:
+    - "OkHttp 的 interceptor（非同步請求時跑在 OkHttp 的 dispatcher 執行緒）"
+    - "JVM 單元測試的測試函式"
+    - "`main()` 函式（命令列程式）"
+    - "`Activity.onCreate` 或 Compose 的 composable（主執行緒）"
+  answer: 3
+  explain: |
+    `runBlocking` 會讓「呼叫它的那條執行緒」停下來，一直等到裡面的協程跑完。所以危險與否，看被停下來的是哪條執行緒。
+
+    - 第 4 項最危險：主執行緒停下來，畫面和觸控全部卡住，網路一慢超過 5 秒就 ANR。
+    - 第 1 項較不危險：OkHttp 的 interceptor 本來就跑在背景執行緒，也被設計成可以阻塞，所以不會 ANR。（但仍是壞味道：它佔住一條 OkHttp 的執行緒，和 `synchronized` 合用還可能死鎖。）
+    - 第 2、3 項沒有畫面要更新，單元測試和命令列程式用 `runBlocking` 是標準做法。
+
+    另外，在 `Dispatchers.Default` 的協程內呼叫 `runBlocking`，也會佔住池子裡有限的執行緒。
+
+- id: platform-threading-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [dispatchers, cooperative-pool, anr]
+  prompt: |
+    關於兩個平台的執行緒模型，哪些敘述正確？（複選）
+  options:
+    - "`Dispatchers.IO` 與 `Dispatchers.Default` 共用同一個底層執行緒池，IO 的上限預設為 64"
+    - "在 serial queue 的任務中對同一個 queue 呼叫 `sync` 會死鎖"
+    - "在 Swift async 函式裡用 `DispatchSemaphore.wait()` 等待非同步結果是安全的，cooperative thread pool 會自動補執行緒"
+    - "Android 的輸入事件在 5 秒內沒有被處理完會觸發 ANR"
+    - "`Dispatchers.Main.immediate` 一律把工作排到主執行緒的下一個 message 才執行"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：兩者共用底層執行緒池，`IO` 最多可以開到 64 條（預設值）。
+    - 第 2 項正確：自己等自己，永遠等不到。
+    - 第 3 項錯：Swift concurrency 的 cooperative thread pool 寬度約等於 CPU 核心數，**不會**因為有執行緒被阻塞就補新的。阻塞太多會造成死鎖或餓死（其他任務沒有執行緒可用）。
+    - 第 4 項正確：輸入事件 5 秒沒處理完就是 ANR（前景 BroadcastReceiver 是 10 秒）。
+    - 第 5 項錯：`Main.immediate` 在「已經位於主執行緒」時直接執行，不排隊，否則才排進主執行緒的佇列；一般的 `Dispatchers.Main` 才是一律排進佇列。
+
+- id: platform-threading-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [performance, anr, hang]
+  prompt: |
+    使用者回報行情頁偶爾卡頓，Crashlytics／Android vitals 也出現 ANR。請說明你會怎麼診斷與修復，以及行情資料的執行緒設計，並說明你在本機資料庫、串流行情上做過的相關經驗。
+  promptJa: |
+    相場画面が時々カクつくというユーザー報告があり、Crashlytics や Android vitals でも ANR が出ています。調査と修正の進め方、および相場データのスレッド設計を説明してください。ローカルデータベースやストリーミング相場で行った関連する経験も教えてください。
+  keyPoints:
+    - "先分類：卡頓（掉格）、hang／ANR（主執行緒被卡住）、還是啟動慢；iOS 看 Instruments 的 Hangs／Hitches，Android 看 ANR trace、Perfetto、JankStats"
+    - "找主執行緒當時的 stack：同步 I/O、鎖、`runBlocking`／semaphore、過重的 body／bind"
+    - "修復：I/O 與解碼移到背景；背景合併、固定頻率更新畫面；Android 開 StrictMode，iOS 開 Main Thread Checker"
+    - "設計：WebSocket 解碼與合併在背景執行緒（或 actor／單一 dispatcher），畫面以約 100–250 ms 的快照更新"
+    - "預防：把畫面的時間預算（60 Hz 16.7 ms、120 Hz 8.3 ms）列入 code review；Macrobenchmark 或 XCTest metrics 做回歸"
+    - "經驗：社交 App 的 Realm 存取在 iOS 包在 actor、在 Android 用單一執行緒 dispatcher 並透過 Hilt 注入 Dispatcher；即時行情 App 的 iOS SSE 用 `@MainActor` 加 `Task`，Android 在 IO 解碼後切回 Main"
+    - "交易所 App 的行情頁：加上背景合併與固定頻率更新，並先建立量測流程，再依量測結果最佳化"
+  modelAnswer: |
+    我會先分類：是掉格的卡頓、主執行緒被卡住的 hang／ANR，還是啟動慢。iOS 看 Instruments 的 Hangs 與 Hitches，Android 看 ANR trace、Perfetto 和 JankStats。接著找主執行緒當時的 stack，通常是同步 I/O、鎖、`runBlocking` 或 semaphore，或是 body／bind 做了重工作。
+
+    修復上，I/O、解碼、排序都移到背景；行情在背景合併，每一檔只保留最新值，再以約 100 到 250 ms 的固定頻率更新畫面，因為 120 Hz 的主執行緒每幀只有約 8.3 ms。預防上，Android 在 debug 開 StrictMode，iOS 開 Main Thread Checker，並用 Macrobenchmark 或 XCTest metrics 做回歸。
+
+    經驗上，在一個社交 App 裡，Realm 的物件只能在建立它的執行緒使用，所以 iOS 用 actor、Android 用單一執行緒的 dispatcher 包住資料庫存取，Android 的 Dispatcher 也透過 Hilt 注入，方便測試。在一個即時行情 App 裡，iOS 的 SSE client 是 `@MainActor`，串流在 `Task` 裡讀取；Android 在 IO 解碼，再切回 Main 更新畫面。換成交易所 App，我會在行情頁加上背景合併與固定頻率更新，並先建立量測流程，再依量測結果最佳化。
+  modelAnswerJa: |
+    まず症状を分類します。フレーム落ちによるカクつきか、メインスレッドが止まる hang／ANR か、起動の遅さかです。iOS は Instruments の Hangs と Hitches、Android は ANR トレース、Perfetto、JankStats を見ます。次に、その時点のメインスレッドのスタックを確認します。多いのは同期 I/O、ロック、`runBlocking` や semaphore、あるいは body／bind での重い処理です。
+
+    修正では、I/O、デコード、ソートをバックグラウンドへ移します。相場データはバックグラウンドで銘柄ごとに最新値だけを保持し、約 100〜250 ms の一定間隔で画面を更新します。120 Hz の端末ではメインスレッドの 1 フレームが約 8.3 ms しかないためです。予防として、Android は debug で StrictMode、iOS は Main Thread Checker を有効にし、Macrobenchmark や XCTest の metrics で回帰を防ぎます。
+
+    経験としては、あるソーシャルアプリでは Realm のオブジェクトを作成したスレッドでしか使えないため、iOS は actor、Android は単一スレッドの dispatcher でデータベースアクセスを包みました。Android の Dispatcher は Hilt で注入し、テストで差し替えられるようにしていました。あるリアルタイム相場アプリでは、iOS の SSE クライアントを `@MainActor` にして `Task` 内でストリームを読み、Android では IO でデコードしてから Main に切り替えて画面を更新していました。取引所アプリでは、相場画面にバックグラウンドでの集約と一定間隔の更新を加え、まず計測の流れを作ってから、データに基づいて最適化します。
+  followUps:
+    - "120 Hz 端末で、ListView／LazyColumn のスクロールが落ちる場合に最初に見るのは？"
+    - "ANR トレースの `Blocked`／`Waiting` は何を意味する？"
+    - "アプリ起動時のウォッチドッグ（0x8badf00d）を避けるには？"
+  timeLimitSec: 150
+
+- id: platform-threading-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [dispatchers, gcd]
+  front: 主執行緒預算與兩平台的執行緒工具速記
+  back: |
+    - 畫面的時間預算：60 Hz 16.7 ms、90 Hz 11.1 ms、120 Hz 8.3 ms。
+    - iOS：GCD（serial／concurrent、barrier）、OperationQueue、QoS；hang＝主執行緒無回應超過 250 ms；不要 `main.sync`，也不要在 async 函式裡阻塞執行緒。
+    - Android：Looper／Handler／Choreographer；ANR＝輸入事件 5 秒、前景 BroadcastReceiver 10 秒；`Default`（約等於核心數）、`IO`（上限預設 64、與 Default 共用執行緒池）。
+    - 行情：背景解碼＋每檔保留最新值，約 100–250 ms 更新一次畫面。

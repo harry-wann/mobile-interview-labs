@@ -1,0 +1,67 @@
+- id: sysdesign-alerts-01
+  type: open
+  level: 2
+  priority: P1
+  tags: [system-design, push]
+  prompt: |
+    「我們的 App 有價格提醒功能。請設計它：使用者設定『BTC 高於 1,500 萬円時通知我』，即使 App 被關掉也要收到。App 端和伺服器端各負責什麼？」
+  promptJa: |
+    「当社アプリには価格アラート機能があります。『BTC が1,500万円を超えたら通知』という設定を、アプリが終了していても通知できるように設計してください。クライアントとサーバーの役割分担も含めて説明してください。」
+  keyPoints:
+    - App 在背景沒辦法可靠地一直看價格，所以由伺服器判斷並發推播
+    - 伺服器：依交易對分開處理，「高於」「低於」的提醒各自依門檻排序；用「跨過」判斷；同一個提醒只觸發一次；限制推播頻率
+    - App：建立提醒的表單與檢查；使用者第一次建立提醒時才詢問通知權限
+    - 推播 token：登入後上傳、token 更新時（onNewToken）重新上傳、登出時解除綁定、無效的 token 由伺服器刪除
+    - 點擊通知：推播內容帶交易對代號，打開那個交易對的頁面（deep link）
+    - 多語系：推播只帶字串的 key（loc-key／loc-args、title_loc_key），由手機組出文字；鎖定畫面不顯示敏感資訊
+    - Android：notification channel、POST_NOTIFICATIONS 權限；iOS：time-sensitive 等級（要開啟對應的 capability）
+    - 測試與監控：價格跳過門檻、多台裝置；從觸發到點開每一步的延遲和比例
+  modelAnswer: |
+    App 在背景沒辦法可靠地一直看價格，iOS 的背景任務由系統決定何時執行，Android 也有 Doze，所以判斷一定要放在伺服器。
+
+    App 端的工作是：讓使用者設定提醒，依交易對的精度驗證價格；在使用者第一次建立提醒時才請求通知權限，Android 13 以上也要請求通知權限；把推播 token 在登入後上傳，token 更新時重新上傳，登出時一定要解除綁定，不然換帳號後還會收到前一個人的提醒。收到通知點擊時，從推播內容取出交易對，deep link 到交易對頁。Android 會建一個價格提醒專用的 notification channel。
+
+    伺服器端依交易對分開處理，每個交易對有「高於」和「低於」兩組依門檻排序的結構，每次價格更新只取出已經被跨過的提醒，用「跨過」判斷而不是等於，因為價格可能跳過門檻。觸發後標記為已觸發，確保不重送，再丟進推播佇列。
+
+    通知文字用 APNs 的 loc-key 和 FCM 的 title_loc_key，讓裝置依使用者的語言顯示；鎖定畫面不放資產金額這類敏感資訊。
+
+    上線後我會監控從價格觸發、推播送出、送達到被點開，每一步的比例和延遲，還有 token 失效的比例。
+  followUps:
+    - 如果使用者設定 500 個提醒，你的伺服器結構還適用嗎？
+    - 使用者關閉了系統通知，你怎麼讓他知道提醒不會送達？
+  timeLimitSec: 420
+
+- id: sysdesign-alerts-02
+  type: single
+  level: 2
+  priority: P1
+  tags: [push, privacy]
+  prompt: |
+    使用者 A 在手機上登出，換成使用者 B 登入。如果 App 沒有在登出時解除推播 token 的綁定，會發生什麼事？
+  options:
+    - "不會有任何問題，token 會自動更新"
+    - "B 可能收到 A 的價格提醒與帳戶通知，造成隱私外洩"
+    - "A 與 B 都收不到任何通知"
+    - "App 會被 App Store 下架"
+  answer: 1
+  explain: |
+    推播 token 代表的是「這台裝置上的這個 App」，不是某個使用者。伺服器如果還把這個 token 記在 A 的帳號下，A 的價格提醒和帳戶通知就會推到 B 正在用的手機上，這是隱私外洩。
+    登出流程一定要通知伺服器解除綁定（必要時也刪除手機上的 token，讓它重新產生）。其他選項：token 不會自動換綁使用者；A、B 不會都收不到；這也不是 App Store 下架的理由。
+
+- id: sysdesign-alerts-03
+  type: multi
+  level: 2
+  priority: P1
+  tags: [push, platform]
+  prompt: |
+    關於價格提醒的 App 端實作，哪些敘述正確？（複選）
+  options:
+    - "Android 13 起需要在執行時詢問 POST_NOTIFICATIONS 權限"
+    - "最好在 App 第一次啟動時就請求通知權限，越早越好"
+    - "APNs 的 loc-key／loc-args 可以讓手機用 App 內的翻譯字串，顯示使用者語言的通知內容"
+    - "Android 可以為價格提醒建立獨立的 notification channel（通知類別），讓使用者單獨調整"
+    - "App 可以用背景任務每 10 秒抓一次價格，所以不需要伺服器"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 2 項錯：權限要在使用者知道為什麼需要時才問（例如建立第一個提醒時）。一開始就問很容易被拒絕；iOS 被拒絕後就不能再跳出系統的詢問視窗，Android 被拒絕兩次後也一樣，只能引導使用者去設定。
+    - 第 5 項錯：背景任務什麼時候執行由系統決定，不可能保證每 10 秒一次，所以價格判斷要放在伺服器。

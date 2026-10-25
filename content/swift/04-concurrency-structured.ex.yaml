@@ -1,0 +1,448 @@
+- id: "swift-concurrency-structured-01"
+  type: "single"
+  level: 1
+  priority: "P0"
+  tags: [async-let, taskgroup]
+  prompt: |
+    進入資產頁時，需要同時取得「ticker 清單（`[Ticker]`）」、「帳戶餘額（`Balance`）」、「未成交委託（`[Order]`）」三個互相獨立的結果。哪一種寫法最適合？
+  options:
+    - "三個 `Task {}`，各自把結果寫進屬性，不等待"
+    - "`async let` 各取一個，最後 `await` 一起取得（型別可以不同、數量固定）"
+    - "`withTaskGroup(of: Any.self)`，結果用 `as?` 轉型"
+    - "依序 `await` 三次，簡單且一定正確"
+  answer: 1
+  explain: |
+    三個結果數量固定、型別不同，是 `async let` 的典型情境。它是結構化並行：三個請求同時進行；離開區塊時還沒完成的會被取消並等它們結束；其中一個失敗時，錯誤沿著 `try await` 往外傳。
+
+    其他選項錯在哪裡：
+    - 三個 `Task {}`：是非結構化的任務，沒有自動的取消與錯誤傳遞，也沒有辦法知道「三個什麼時候都完成了」。
+    - `withTaskGroup(of: Any.self)`：TaskGroup 適合數量在執行時才知道、而且每個任務回傳型別相同的情況。用 `Any` 加 `as?` 轉型，等於放棄了型別安全。
+    - 依序 `await` 三次：結果是正確的，但三個請求變成一個接一個，總延遲是三者相加，沒有發揮並行的好處。
+
+- id: "swift-concurrency-structured-02"
+  type: "predict"
+  level: 2
+  priority: "P0"
+  tags: [taskgroup]
+  prompt: |
+    下列程式印出什麼？
+  codeLang: "swift"
+  code: |
+    import Foundation
+
+    let order = await withTaskGroup(of: String.self) { group -> [String] in
+        for (name, ms) in [("A", 300), ("B", 100), ("C", 200)] as [(String, UInt64)] {
+            group.addTask {
+                try? await Task.sleep(nanoseconds: ms * 1_000_000)
+                return name
+            }
+        }
+        var out: [String] = []
+        for await r in group { out.append(r) }
+        return out
+    }
+    print(order.joined(separator: " "))
+  answer: |
+    B C A
+  explain: |
+    TaskGroup 的 `for await` 依**完成的順序**產出結果，不是 `addTask` 的順序。B 睡 100 ms 最先完成，其次是 C（200 ms），最後是 A（300 ms），所以印出 `B C A`。
+
+    如果需要依輸入順序輸出，要在回傳值裡一起帶上 index，最後再排序，或寫回事先配好位置的陣列（見 code 題 `mapConcurrent`）。
+
+- id: "swift-concurrency-structured-03"
+  type: "predict"
+  level: 2
+  priority: "P0"
+  tags: [cancellation]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: "swift"
+  code: |
+    let task = Task {
+        do {
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+            print("done")
+        } catch {
+            print("cancelled:", error is CancellationError)
+        }
+        print("isCancelled:", Task.isCancelled)
+    }
+    task.cancel()
+    await task.value
+  answer: |
+    cancelled: true isCancelled: true
+  explain: |
+    `Task.sleep` 是會檢查取消的暫停點（suspension point，`await` 的位置）：Task 已經被標記為取消，所以立刻丟出 `CancellationError`，不會真的睡一秒，也不會印 `done`。所以第一行是 `cancelled: true`。
+
+    `catch` 處理完錯誤之後，Task 的取消旗標**仍然是 true**，所以第二行是 `isCancelled: true`。取消的狀態不會因為你處理了錯誤就被清除，之後再呼叫 `Task.sleep` 一樣會立刻丟錯。
+
+- id: "swift-concurrency-structured-04"
+  type: "predict"
+  level: 3
+  priority: "P0"
+  tags: [taskgroup, cancellation, error]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: "swift"
+  code: |
+    import Foundation
+
+    struct Boom: Error {}
+    func sleepMs(_ ms: UInt64) async throws {
+        try await Task.sleep(nanoseconds: ms * 1_000_000)
+    }
+
+    do {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                do {
+                    try await sleepMs(2000)
+                    print("sibling finished")
+                } catch {
+                    print("sibling cancelled:", error is CancellationError)
+                }
+            }
+            group.addTask {
+                try await sleepMs(50)
+                throw Boom()
+            }
+            try await group.next()
+            try await group.next()
+        }
+        print("group done")
+    } catch {
+        print("caught")
+    }
+    print("end")
+  answer: |
+    sibling cancelled: true caught end
+  explain: |
+    第二個子任務 50 ms 後丟出 `Boom`，第一次 `try await group.next()` 把錯誤拋出區塊。區塊因為錯誤而離開時，TaskGroup 會**取消其餘的子任務，並等它們結束**，所以先看到 `sibling cancelled: true`（睡眠被取消，不會等滿 2 秒），然後外層的 `catch` 才印出 `caught`，最後印 `end`。
+
+    這是結構化並行的保證：`withThrowingTaskGroup` 回傳（或拋出錯誤）的時候，所有子任務都已經結束。`group done` 不會印出，因為錯誤跳過了那一行。
+
+- id: "swift-concurrency-structured-05"
+  type: "multi"
+  level: 2
+  priority: "P0"
+  tags: [task, detached, isolation]
+  prompt: |
+    關於 `Task {}` 與 `Task.detached {}`，哪些敘述正確？（複選）
+  options:
+    - "在 `@MainActor` 的方法內建立 `Task {}`，closure 預設仍然在 main actor 上執行"
+    - "`Task.detached` 會繼承呼叫者的 actor isolation（程式屬於哪個 actor）"
+    - "取消外層 Task 會自動取消它內部用 `Task {}` 建立的 Task"
+    - "`Task {}` 會繼承目前的 priority（優先順序）與 task-local 值（綁在 Task 上、會自動傳給底下任務的變數）"
+    - "`Task.detached` 是 Swift 6.2 以前，把大量 CPU 運算移出 main actor 的常見做法"
+  answer: [0, 3, 4]
+  explain: |
+    正確的三項：
+    - `Task {}` 是非結構化的任務，但會「繼承環境」：actor isolation、priority、task-local 值都會帶過去，所以在 `@MainActor` 裡開的 `Task {}` 仍然在主執行緒。
+    - 因為 `Task.detached` 完全不繼承環境，也不在 actor 上，所以可以離開 main actor。Swift 6.2（Xcode 26）之前，把耗時運算移出主執行緒時常用它；6.2 之後有 `@concurrent`（下一個單元說明）。
+    - 本機實測：在 `@MainActor` 裡的 `Task {}` 是在主執行緒執行，`Task.detached` 不是。
+
+    錯誤的兩項：
+    - `Task.detached` 不會繼承 actor isolation，這正是它的特點。
+    - 兩者都**不會**繼承取消。取消外層 Task，不會傳給它裡面用 `Task {}` 開出來的 Task；只有結構化的子任務（`async let`、TaskGroup）才會跟著被取消。
+
+- id: "swift-concurrency-structured-06"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [continuation, asyncstream]
+  prompt: |
+    某個舊的 SDK 每次價格更新，都會呼叫 `delegate.didUpdate(price)`。同事用 `withCheckedContinuation` 把它包成 `func nextPrice() async -> Decimal`，並在 delegate 方法裡呼叫 `continuation.resume(returning: price)`。連線期間價格會持續更新。會發生什麼事？
+  options:
+    - "第一次 `resume` 有效，之後的呼叫被安靜地忽略"
+    - "Task 永遠不會結束，因為 continuation 需要 resume 兩次"
+    - "第二次 `resume` 時，Checked continuation 會 crash（`tried to resume its continuation more than once`）。會多次回呼的資料來源應該包成 `AsyncStream`"
+    - "continuation 會自動轉換成 `AsyncSequence`，每次 `resume` 產生一個元素"
+  answer: 2
+  explain: |
+    continuation 只能 resume **剛好一次**。會多次回呼的 delegate、位置更新、WebSocket 訊息，都是「持續送來的資料」，要用 `AsyncStream`（會失敗的來源用 `AsyncThrowingStream`）。Checked 版本會偵測到第二次 resume 並讓程式 crash（本機實測的訊息是 `SWIFT TASK CONTINUATION MISUSE: … tried to resume its continuation more than once`）；不檢查的 Unsafe 版本，結果則是不可預期。
+
+    其他選項錯在哪裡：
+    - 第一項：不會被「安靜地忽略」，Checked 版本會 crash。
+    - 第二項：continuation 要求的是剛好 resume 一次，不是兩次。
+    - 第四項：continuation 不會自動變成 `AsyncSequence`，要自己用 `AsyncStream` 才行。
+
+    反過來，如果完全沒有 resume，呼叫端會永遠等下去，Task 洩漏。
+
+- id: "swift-concurrency-structured-07"
+  type: "multi"
+  level: 3
+  priority: "P1"
+  tags: [cancellation, withTaskCancellationHandler]
+  prompt: |
+    關於取消，哪些敘述正確？（複選）
+  options:
+    - "`task.cancel()` 只是設定旗標，沒有檢查點的 CPU 迴圈不會因此停止"
+    - "`withTaskCancellationHandler` 的 `onCancel` 在取消發生時立即呼叫，與 `operation` 同時執行，所以只能做 thread-safe（多個執行緒同時呼叫也不會出錯）的事"
+    - "Task 被取消之後，再呼叫 `Task.sleep`，會立刻丟出 `CancellationError`"
+    - "`group.cancelAll()` 也會取消子任務裡用 `Task {}` 建立的非結構化 Task"
+    - "收到 `CancellationError` 時，應該彈出錯誤對話框，提醒使用者操作被取消"
+  answer: [0, 1, 2]
+  explain: |
+    正確的三項：
+    - 取消是協作式的：`cancel()` 只是舉旗子。`Task.isCancelled`、`try Task.checkCancellation()` 要自己放在迴圈裡，沒放的話，耗時迴圈會一直跑到結束。
+    - `onCancel` 在取消者的執行緒、取消發生的那一刻就被呼叫，而且是同步的 closure、不能 `await`；常見用途是呼叫 `URLSessionTask.cancel()` 或設定用鎖保護的旗標。本機實測：operation 完全忽略取消時，`onCancel` 仍然會被立刻呼叫。
+    - 取消旗標是 Task 的狀態，不會被清除，所以取消後再 `Task.sleep` 一樣立刻丟錯。
+
+    錯誤的兩項：
+    - `cancelAll()` 只會取消這個 group 的子任務，不會取消子任務裡用 `Task {}` 開出來的非結構化 Task。
+    - `CancellationError` 通常是使用者自己切換頁面或交易對造成的，不是真正的錯誤，應該靜默處理，彈錯誤對話框反而會困擾使用者。
+
+- id: "swift-concurrency-structured-08"
+  type: "code"
+  level: 2
+  priority: "P0"
+  tags: [taskgroup, rate-limit]
+  prompt: |
+    交易所的公開 REST 通常有 rate limit（流量限制），你要一次抓幾十個交易對的資料，但不能同時發出太多請求。實作 `mapConcurrent`：
+
+    - 對 `items` 的每個元素執行 `transform`，**同時進行的數量不超過 `limit`**
+    - 回傳結果的順序與輸入順序相同
+    - 任何一個 `transform` 拋錯就往外拋，之後不再啟動後面的項目
+    - 空輸入回傳 `[]`
+  hints:
+    - "先加入 `limit` 個任務，之後每 `await group.next()` 取得一個結果，就再 `addTask` 下一個（滑動視窗：視窗內最多 `limit` 個）。"
+    - "回傳 `(index, result)` 的 tuple，寫進事先配好位置的 `[R?]`，最後 `map { $0! }`。"
+  swift:
+    starter: |
+      func mapConcurrent<T: Sendable, R: Sendable>(
+          _ items: [T],
+          limit: Int,
+          _ transform: @escaping @Sendable (T) async throws -> R
+      ) async throws -> [R] {
+          // TODO: 目前一次全部啟動，而且依完成順序收集結果
+          try await withThrowingTaskGroup(of: R.self) { group in
+              for item in items {
+                  group.addTask { try await transform(item) }
+              }
+              var out: [R] = []
+              for try await r in group { out.append(r) }
+              return out
+          }
+      }
+    solution: |
+      func mapConcurrent<T: Sendable, R: Sendable>(
+          _ items: [T],
+          limit: Int,
+          _ transform: @escaping @Sendable (T) async throws -> R
+      ) async throws -> [R] {
+          precondition(limit > 0, "limit must be positive")
+          return try await withThrowingTaskGroup(of: (Int, R).self) { group in
+              var results = [R?](repeating: nil, count: items.count)
+              for index in items.indices {
+                  if index >= limit, let (i, r) = try await group.next() {
+                      results[i] = r
+                  }
+                  let item = items[index]
+                  group.addTask { (index, try await transform(item)) }
+              }
+              while let (i, r) = try await group.next() {
+                  results[i] = r
+              }
+              return results.map { $0! }
+          }
+      }
+    tests: |
+      actor Tracker {
+          private(set) var current = 0
+          private(set) var peak = 0
+          private(set) var started: [Int] = []
+          func begin(_ n: Int) { current += 1; peak = max(peak, current); started.append(n) }
+          func end() { current -= 1 }
+      }
+      struct Boom: Error { let n: Int }
+
+      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+      await checkEqualAsync("保持輸入順序", [2, 4, 6, 8, 10, 12]) {
+          try await mapConcurrent([1, 2, 3, 4, 5, 6], limit: 3) { n in
+              try await sleepMs(UInt64(7 - n) * 10)
+              return n * 2
+          }
+      }
+      await checkAsync("同時進行的數量不超過 limit，且有用滿") {
+          let tracker = Tracker()
+          _ = try await mapConcurrent(Array(1...9), limit: 3) { n in
+              await tracker.begin(n)
+              try await sleepMs(30)
+              await tracker.end()
+              return n
+          }
+          let peak = await tracker.peak
+          return peak == 3
+      }
+      await checkEqualAsync("limit 大於筆數", [1, 2]) {
+          try await mapConcurrent([1, 2], limit: 10) { $0 }
+      }
+      await checkEqualAsync("空輸入", 0) {
+          try await mapConcurrent([Int](), limit: 2) { $0 }.count
+      }
+      await checkAsync("錯誤向外拋出") {
+          do {
+              _ = try await mapConcurrent([1, 2, 3], limit: 2) { n -> Int in
+                  if n == 2 { throw Boom(n: n) }
+                  return n
+              }
+              return false
+          } catch let e as Boom {
+              return e.n == 2
+          }
+      }
+      await checkAsync("失敗後不再啟動後面的項目") {
+          let tracker = Tracker()
+          do {
+              _ = try await mapConcurrent(Array(1...6), limit: 1) { n -> Int in
+                  await tracker.begin(n)
+                  if n == 2 { throw Boom(n: n) }
+                  return n
+              }
+          } catch {}
+          let started = await tracker.started
+          return started == [1, 2]
+      }
+
+- id: "swift-concurrency-structured-09"
+  type: "code"
+  level: 2
+  priority: "P1"
+  tags: [timeout, taskgroup, cancellation]
+  prompt: |
+    實作 `withTimeout(nanoseconds:operation:)`：
+
+    - `operation` 在時限內完成，就回傳它的結果；它自己丟的錯誤原樣往外拋
+    - 超過時限丟 `TimeoutError`，而且 **`operation` 要被取消**，函式也要及時返回，不能等 `operation` 跑完
+    - 完成後不能有殘留的計時任務
+  hints:
+    - "在 `withThrowingTaskGroup` 裡放兩個任務：一個跑 `operation`，一個 `Task.sleep` 之後丟 `TimeoutError`。"
+    - "取第一個完成的結果後，呼叫 `group.cancelAll()`。"
+    - "注意：group 離開之前會等所有子任務結束，所以 `operation` 必須對取消有反應（例如 `Task.sleep`、`checkCancellation`）。"
+  swift:
+    starter: |
+      import Foundation
+
+      struct TimeoutError: Error, Equatable {}
+
+      func withTimeout<T: Sendable>(
+          nanoseconds: UInt64,
+          operation: @escaping @Sendable () async throws -> T
+      ) async throws -> T {
+          // TODO: 目前沒有任何時限
+          try await operation()
+      }
+    solution: |
+      import Foundation
+
+      struct TimeoutError: Error, Equatable {}
+
+      func withTimeout<T: Sendable>(
+          nanoseconds: UInt64,
+          operation: @escaping @Sendable () async throws -> T
+      ) async throws -> T {
+          try await withThrowingTaskGroup(of: T.self) { group in
+              group.addTask { try await operation() }
+              group.addTask {
+                  try await Task.sleep(nanoseconds: nanoseconds)
+                  throw TimeoutError()
+              }
+              defer { group.cancelAll() }
+              return try await group.next()!
+          }
+      }
+    tests: |
+      actor Marker {
+          private(set) var marked = false
+          func mark() { marked = true }
+      }
+      struct OpError: Error {}
+      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+      await checkEqualAsync("時限內完成就回傳結果", 42) {
+          try await withTimeout(nanoseconds: 500_000_000) {
+              try await sleepMs(20)
+              return 42
+          }
+      }
+      await checkAsync("超時丟 TimeoutError") {
+          do {
+              _ = try await withTimeout(nanoseconds: 30_000_000) {
+                  try await sleepMs(1000)
+                  return 1
+              }
+              return false
+          } catch is TimeoutError {
+              return true
+          } catch {
+              return false
+          }
+      }
+      await checkAsync("超時後 operation 被取消，而且很快返回") {
+          let marker = Marker()
+          let start = Date()
+          do {
+              _ = try await withTimeout(nanoseconds: 30_000_000) {
+                  do { try await sleepMs(1500) }
+                  catch { await marker.mark(); throw error }
+                  return 1
+              }
+          } catch {}
+          let elapsed = Date().timeIntervalSince(start)
+          return await marker.marked && elapsed < 0.9
+      }
+      await checkAsync("operation 自己的錯誤原樣拋出") {
+          do {
+              _ = try await withTimeout(nanoseconds: 500_000_000) { () async throws -> Int in throw OpError() }
+              return false
+          } catch is OpError {
+              return true
+          } catch {
+              return false
+          }
+      }
+      await checkAsync("完成後不會有計時任務干擾") {
+          let r = try await withTimeout(nanoseconds: 100_000_000) { 7 }
+          try await sleepMs(150)
+          return r == 7
+      }
+
+- id: "swift-concurrency-structured-10"
+  type: "open"
+  level: 2
+  priority: "P0"
+  tags: [cancellation, architecture, field]
+  prompt: |
+    交易所 App 的下單頁上，使用者快速切換交易對。舊交易對的 REST 請求、行情訂閱、衍生出來的 Task 要怎麼處理？請從結構化並行與取消的角度說明，並說明你實際做過哪些相關的處理。
+  promptJa: |
+    取引所アプリの注文画面でユーザーが銘柄を素早く切り替えます。前の銘柄の REST リクエスト、相場の購読、派生した Task をどう扱いますか。構造化された並行処理とキャンセルの観点で説明し、実際に行った関連の対応も説明してください。
+  keyPoints:
+    - "切換時舊的請求、訂閱、Task 都要收掉：SwiftUI 用 `.task(id: symbol)` 讓框架取消並重啟；UIKit 保存 Task handle，symbol 改變時先 cancel 再建新的"
+    - "取消是協作式：URLSession 的 async API 內建檢查；自己的迴圈加 `checkCancellation`；包 callback 時用 `withTaskCancellationHandler` 取消底層請求"
+    - "取消不保證沒有還在路上的回應，收到回應時再確認 symbol 或 request id 沒變，避免舊資料蓋掉新畫面"
+    - "同時抓多種資料用 `async let`；批次抓取又有流量限制時，用限制並行數的 TaskGroup（例如公開 REST 每個 IP 每秒 10 次）"
+    - "`CancellationError`（以及 `URLError.cancelled`）靜默處理，不彈錯誤"
+    - "行情訂閱（WebSocket）的取消不只是 Task：要送 unsub，並確保舊的 stream 結束"
+    - "實務上的相關做法：Rx 與 async 橋接時讓取消傳給 Task、錢包建立流程保存 Task 並在 sleep 後檢查 `Task.isCancelled`、SSE client 檢查 `Task.isCancelled`"
+  modelAnswer: |
+    我會把畫面上的 symbol 當成唯一的依據，所有衍生的請求都綁在它上面。SwiftUI 用 `.task(id: symbol)`：symbol 改變時，框架會取消舊的 Task 再重新開始；UIKit 則保存 Task 的 handle，切換前先 `cancel()`。
+
+    取消是協作式的，也就是舉旗子請對方自己停，所以有三件事要做：URLSession 的 async API 本來就會檢查取消；自己寫的耗時迴圈要加 `checkCancellation`；把 callback 包成 async 的地方，用 `withTaskCancellationHandler` 取消底層請求。行情的 WebSocket 還要另外送 unsub（取消訂閱），並讓舊的 AsyncStream 結束。因為取消不保證沒有還在路上的回應，收到資料時我會再確認 symbol，避免舊資料蓋掉新畫面。
+
+    同時抓 ticker、訂單簿和資產用 `async let`；批次抓很多交易對時，用限制並行數的 TaskGroup，因為公開 REST 常有流量上限（例如每個 IP 每秒 10 次）。`CancellationError` 要靜默處理，不彈錯誤。
+
+    取消的處理我在兩個專案都做過：在一個社交 App 裡，Rx 與 async 橋接時，會讓 Rx 這邊被取消時也取消 Task；建立錢包的流程會保存 Task，在 sleep 之後檢查 `Task.isCancelled`；在一個即時行情 App 裡，SSE client 也會在 Task 裡檢查 `Task.isCancelled`。到交易所 App，我會從下單頁和行情頁開始，用上面的方式處理切換交易對。
+  modelAnswerJa: |
+    画面上の銘柄を唯一の基準にして、派生するリクエストはすべてそれに紐付けます。SwiftUI では `.task(id: symbol)` を使い、銘柄が変わるとフレームワークが古い Task をキャンセルして再起動します。UIKit では Task のハンドルを保持し、切り替え前に `cancel()` します。
+
+    キャンセルは協調的、つまり「旗を立てて相手に止まってもらう」方式なので、次の 3 点が必要です。URLSession の async API は標準でキャンセルを検査します。自前の重いループには `checkCancellation` を入れます。コールバックを async に包む箇所では、`withTaskCancellationHandler` で下位のリクエストを止めます。相場の WebSocket では unsub（購読解除）の送信も必要で、古い AsyncStream も終了させます。キャンセルしても処理中の応答が届く可能性があるため、受信時に銘柄を再確認し、古いデータが新しい画面を上書きしないようにします。
+
+    ticker、板情報、資産を同時に取得するときは `async let`、多数の銘柄をまとめて取得するときは並行数を制限した TaskGroup を使います。公開 REST には IP あたりのレート制限（たとえば毎秒 10 回）があることが多いためです。`CancellationError` はエラー表示せず静かに扱います。
+
+    キャンセルの扱いは、二つのプロジェクトで実装しました。あるソーシャルアプリでは Rx と async のブリッジで、Rx 側が破棄されたときに Task もキャンセルされるようにしています。ウォレット作成フローでは Task を保持し、sleep の後に `Task.isCancelled` を確認しています。あるリアルタイム相場アプリの SSE クライアントでも Task の中で `Task.isCancelled` を確認しています。取引所アプリでは、注文画面と相場画面から、上記の方法で銘柄切り替えを処理します。
+  followUps:
+    - "`.task(id:)` の id が変わった直後、古い Task がまだ動いている間に新しい Task が始まりますか？"
+    - "取消された Task が書き込もうとした状態をどう保護する？"
+    - "WebSocket の購読解除（unsub）が失敗した場合はどうする？"
+  timeLimitSec: 150

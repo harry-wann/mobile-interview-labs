@@ -1,0 +1,184 @@
+- id: advanced-startup-01
+  type: single
+  level: 3
+  priority: P1
+  tags: [ios, prewarm, measurement]
+  prompt: |
+    團隊用「行程建立的時間 → 首幀（第一個畫面畫出來）」來量 iOS 的啟動時間。iOS 15 之後，這個數字有時會突然變得很大、很不穩定。最可能的原因是什麼？
+  options:
+    - "dyld（iOS 的動態連結器，負責載入函式庫）在 iOS 15 變慢了"
+    - "系統可能對 App 做了預熱（prewarm）：行程在使用者點擊之前就已經建立，並先執行到 `UIApplicationMain` 之前。所以「行程建立」不等於使用者開始等待的時間，從行程建立算起，會把使用者還沒點擊的時間也算進去"
+    - "Swift 5.5 的 runtime 初始化多了固定的 1 秒"
+    - "App 安裝之後，第一次啟動時系統一定會多花時間驗證簽章"
+  answer: 1
+  explain: |
+    iOS 15 起，系統會依使用者的習慣，在使用者還沒點擊之前就先把 App 預熱：先建立行程，並把啟動流程跑到呼叫 `UIApplicationMain` 之前。預熱的行程可能早在幾分鐘前就建立了，使用者真正點擊時才接著往下跑。所以以「行程建立」當起點，量到的時間就會把使用者沒有在等的時間也算進去，數字又大又不穩定。
+
+    其他選項錯在哪裡：
+    - dyld 沒有因為 iOS 15 變慢，這個現象的原因是「量測起點」不對，而不是系統元件變慢。
+    - Swift 5.5 的 runtime 沒有固定多出 1 秒，這是不存在的行為。
+    - 簽章驗證不是這種「有時突然變很大」的原因；這個現象和有沒有被預熱有關，而不是只出現在安裝後的第一次啟動。
+
+    比較可靠的做法：用 MetricKit 的 `MXAppLaunchMetric` 或 Xcode Organizer 的 Launch Time（系統端的量測），或在 App 內從使用者看得到的時間點到首幀打 signpost（在程式碼裡打的時間標記）。Instruments 的 App Launch 範本則用來分析 pre-main 之後各階段的時間分佈。
+
+- id: advanced-startup-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [ios, pre-main, dyld]
+  prompt: |
+    下列哪些做法**會拉長** iOS 冷啟動到首幀的時間？（複選）
+  options:
+    - "App 自己的程式碼拆成 15 個動態 framework，啟動時由 dyld 全部載入，並做 rebase 與 bind"
+    - "在 Objective-C 類別裡實作 `+load`，並在裡面做 method swizzling（在執行時把方法換成另一個實作）與各種設定"
+    - "在 `didFinishLaunching` 裡同步初始化 Firebase、廣告 SDK（software development kit，第三方提供的函式庫）、分析 SDK，並同步讀取磁碟上的設定檔"
+    - "等第一個畫面顯示之後，才在背景佇列初始化分析與廣告 SDK"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項會變慢：每個動態 framework 都要由 dyld 載入，並做 rebase 與 bind，個數越多，`main()` 之前花的時間越久。可以改成靜態連結，或用 Xcode 15 的 mergeable libraries 合併成較少的 framework。
+    - 第 2 項會變慢：`+load` 會在 `main()` 之前由 runtime 同步呼叫，每個實作它的類別都會執行一次，工作全部算在啟動時間裡。
+    - 第 3 項會變慢：`didFinishLaunching` 在主執行緒執行，系統要等它回傳才會畫出第一個畫面，同步初始化 SDK 和讀檔案，都直接加進使用者等待的時間。
+    - 第 4 項不會變慢，反而是正確做法：首畫面不需要的工作，延到第一個畫面出現之後再做，還放在背景佇列，不會擋住主執行緒。
+
+- id: advanced-startup-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, ttid, ttfd]
+  prompt: |
+    Android 上，`reportFullyDrawn()` 的用途是什麼？
+  options:
+    - "標示 `Application.onCreate` 已經結束"
+    - "回報 TTFD（time to full display）：App 自己宣告「首畫面所需的內容已經準備好、使用者可以操作了」的時間點。至於 TTID（time to initial display），則是系統自動記錄的第一個 frame 畫出來的時間"
+    - "通知系統可以關閉啟動畫面（splash screen）"
+    - "強制系統重新繪製整個視窗的畫面"
+  answer: 1
+  explain: |
+    TTID 由系統在第一個 frame 畫出來時自動記錄，logcat 會印出 `Displayed ...` 那一行。TTFD 則要 App 自己呼叫 `reportFullyDrawn()`（Jetpack Compose 可以用 `ReportDrawnWhen` 這類輔助函式），告訴系統「內容真的準備好了」。只讓 TTID 變好看、畫面卻只有空殼，使用者感受不到改善。
+
+    其他選項錯在哪裡：
+    - `reportFullyDrawn()` 和 `Application.onCreate` 結束無關，它只用來標示畫面內容就緒。
+    - 啟動畫面是由 SplashScreen API 的停留條件控制的（`setKeepOnScreenCondition`），不是靠 `reportFullyDrawn()` 關閉。
+    - 它不會要求系統重繪，只是記錄一個時間點。
+
+- id: advanced-startup-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, splashscreen]
+  prompt: |
+    團隊使用 SplashScreen API，並寫了下面的程式。這個設計的問題是什麼？
+  codeLang: kotlin
+  code: |
+    val splash = installSplashScreen()
+    splash.setKeepOnScreenCondition { !viewModel.loginAndConfigLoaded.value }
+  options:
+    - "`setKeepOnScreenCondition` 只能在 Android 12 以上使用"
+    - "把「登入與設定的網路請求」當成啟動畫面的停留條件，網路慢時啟動畫面會一直停著，使用者感受到的啟動時間被網路拉長。條件應該只涵蓋首畫面必須的最小本機資料，其餘的內容先用骨架畫面顯示，再非同步補上"
+    - "啟動畫面不能和 ViewModel 一起使用"
+    - "沒有問題，這就是 SplashScreen API 的標準用法"
+  answer: 1
+  explain: |
+    `setKeepOnScreenCondition` 是為了「首畫面需要的最少資料還沒準備好」而設計的，例如讀取本機設定。把網路請求放進去，等於把啟動時間綁在網路速度上，網路慢或斷線時，使用者會一直停在啟動畫面。
+
+    其他選項錯在哪裡：
+    - `androidx.core:core-splashscreen` 支援舊版 Android，並不是只能在 Android 12 以上使用。
+    - 啟動畫面可以搭配 ViewModel，用 ViewModel 的狀態決定要不要繼續停留是常見的寫法，問題在於「條件的內容」。
+    - 它不是標準用法，標準的用法是條件只放首畫面必須的本機資料。
+
+    交易所 App 更好的做法是先用本機保存的資產與行情顯示畫面（標示時間），再補即時資料；登入狀態先用本機保存的 token 判斷，必要的檢查改成非同步進行。
+
+- id: advanced-startup-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [macrobenchmark]
+  prompt: |
+    用 Macrobenchmark 量測 Android 的冷啟動。補上量測指標與啟動模式。
+  codeLang: kotlin
+  code: |
+    rule.measureRepeated(
+        packageName = "jp.example.app",
+        metrics = listOf(____()),
+        iterations = 10,
+        startupMode = StartupMode.____,
+    ) {
+        pressHome()
+        startActivityAndWait()
+    }
+  blanks:
+    - [StartupTimingMetric]
+    - [COLD]
+  explain: |
+    `StartupTimingMetric` 是專門量啟動時間的指標，會回報 `timeToInitialDisplayMs`（TTID），以及在 App 有呼叫 `reportFullyDrawn()` 時的 `timeToFullDisplayMs`（TTFD）。
+    `StartupMode.COLD` 會在每一次重複之前先殺掉 App 的行程，確保每次量到的都是冷啟動；另外兩個模式是 `WARM` 與 `HOT`。
+    再搭配 `compilationMode` 參數（`None()` 對照 `Partial()`），就能量出 Baseline Profile 實際帶來多少改善。Macrobenchmark 要在實機上、用接近正式版（不可除錯）的建置類型執行。
+
+- id: advanced-startup-06
+  type: order
+  level: 2
+  priority: P1
+  tags: [android, cold-start]
+  prompt: |
+    把 Android 冷啟動時，下列事件發生的順序排列出來。
+  items:
+    - 系統建立行程
+    - ContentProvider 的 onCreate（包含 androidx.startup 的 InitializationProvider）
+    - Application.onCreate
+    - Activity 的 onCreate、onStart、onResume，並畫出第一個 frame（TTID）
+    - 呼叫 reportFullyDrawn()（TTFD）
+  explain: |
+    系統建立行程之後，會先建立 App 宣告的 ContentProvider，再執行 `Application.onCreate`。所以許多函式庫透過 ContentProvider 自動初始化，花的時間會排在你自己的程式碼之前，而且程式碼裡看不出來。App Startup 的做法是把多個 ContentProvider 合併成一個 `InitializationProvider`，並讓你控制順序，以及是否改成需要時才初始化。
+    接著才建立 Activity，第一個 frame 畫出來時，系統記下 TTID（time to initial display）。最後 App 在內容準備好時自己呼叫 `reportFullyDrawn()`，記下 TTFD（time to full display）。
+
+- id: advanced-startup-07
+  type: open
+  level: 2
+  priority: P1
+  tags: [startup, plan]
+  prompt: |
+    一個 App 整合了 Firebase、AdMob 廣告、分析等許多 SDK（第三方提供的函式庫）。你會怎麼處理它的啟動時間？如果要改善交易所 App 的啟動時間，你會怎麼進行？
+  promptJa: |
+    Firebase、AdMob 広告、分析など多くの SDK（サードパーティ製ライブラリ）が入っているアプリがあります。起動時間はどのように扱いますか。取引所アプリの起動時間を改善するなら、どう進めますか。
+  keyPoints:
+    - 實際做過的具體修正：iOS 的 Remote Config 下載加上 8 秒逾時，避免啟動被網路卡住
+    - 先建立基準：iOS 用 Instruments 的 App Launch 範本、Xcode Organizer、MetricKit；Android 用 Macrobenchmark、Perfetto、Android vitals
+    - 用 trace 找出最大的一段（pre-main、Application.onCreate、首畫面），不憑感覺猜
+    - 對策依序：延後 SDK 初始化到首畫面之後、App Startup 管理順序、Hilt 的 Lazy、減少動態 framework、Baseline Profile
+    - 首畫面策略：先顯示上次保存的價格並標示時間，再補即時資料；越獄與 root 這類風控檢查改成非同步
+    - 驗證：每次改動都和同一個基準比對，並放進發版前的檢查，避免啟動時間退步
+  modelAnswer: |
+    整合了 Firebase、AdMob、分析等很多 SDK 的 App，檢查啟動路徑時最先看的就是這些 SDK。我在一個社交 App 的 iOS 版做過一個具體的修正：Remote Config 的下載加上 8 秒逾時，避免網路很慢的時候，啟動被它卡住。
+
+    如果是交易所 App，我會先建立基準再改。iOS 用 Instruments 的 App Launch 範本，搭配 Xcode Organizer 看真實使用者的啟動時間；Android 用 Macrobenchmark 量冷啟動，再用 Perfetto 看主執行緒卡在哪裡。先看 trace 找出最大的一段，不憑感覺猜。
+
+    最可能的原因是同步初始化。我會把廣告與分析 SDK 延到首畫面出現之後；Android 用 App Startup 管理順序，Hilt 的重物件改用 Lazy；iOS 則檢查動態 framework 的數量和 `+load`。Android 另外加上 Baseline Profile。
+
+    首畫面的部分，交易所 App 我會先顯示上次保存的價格並標示時間，連線後再換成即時價格；越獄與 root 這類風控檢查改成非同步，結果出來之前先限制下單。每次改動都和同一個基準比對，並放進發版前的檢查，避免退步。
+  modelAnswerJa: |
+    Firebase、AdMob、分析など多くの SDK を組み込んだアプリでは、起動経路を確認するときまずそれらを見ます。以前関わったソーシャルアプリの iOS では具体的な修正として、Remote Config のダウンロードに 8 秒のタイムアウトを付け、ネットワークが遅いときに起動が止まらないようにしました。
+
+    取引所アプリでは、まずベースラインを作ってから改善します。iOS は Instruments の App Launch テンプレートと Xcode Organizer で実際のユーザーの起動時間を確認し、Android は Macrobenchmark でコールドスタートを計測して、Perfetto でメインスレッドの停滞箇所を調べます。トレースで最も大きい区間を特定し、推測で手を入れることはしません。
+
+    最も可能性が高い原因は同期的な初期化です。広告と分析の SDK は最初の画面が表示された後に遅らせ、Android は App Startup で順序を管理し、Hilt の重いオブジェクトは Lazy にします。iOS は動的フレームワークの数と `+load` を確認します。Android には Baseline Profile も追加します。
+
+    最初の画面では、前回保存した価格を時刻付きで表示し、接続後にリアルタイムの価格へ切り替えます。脱獄や root の検出などのリスク系チェックは非同期にし、結果が出るまでは注文を制限します。変更のたびに同じベースラインで比較し、リリース前のチェックにも組み込んで、劣化を防ぎます。
+  followUps:
+    - 越獄與 root 偵測這類風控檢查，要在首幀之前完成嗎？你怎麼取捨？
+    - 你怎麼確認某個 SDK 是不是在啟動路徑上同步初始化？
+    - Baseline Profile 的效果，你怎麼用數字證明？
+  timeLimitSec: 150
+
+- id: advanced-startup-08
+  type: flash
+  level: 1
+  priority: P1
+  tags: [startup]
+  front: iOS 首幀的建議時間是多少？Android 的冷／溫／熱啟動，以及 TTID／TTFD 各是什麼？
+  back: |
+    iOS：Apple 建議首幀（第一個畫面畫出來）在大約 400 毫秒內（WWDC19，Apple 2019 年的開發者大會）。
+    Android 冷啟動：行程不存在，要建立行程、執行 `Application.onCreate`、建立 Activity，最慢。
+    Android 溫啟動：行程可能還在，但 Activity 要重新建立。
+    Android 熱啟動：Activity 還在記憶體，只是回到前景，最快。
+    TTID（time to initial display）：第一個 frame 畫出來的時間，系統自動記錄。
+    TTFD（time to full display）：內容完整、可以操作的時間，要自己呼叫 `reportFullyDrawn()`。

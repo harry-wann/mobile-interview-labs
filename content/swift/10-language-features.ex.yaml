@@ -1,0 +1,285 @@
+- id: swift-language-features-01
+  type: single
+  level: 1
+  priority: P2
+  tags: [property-wrapper]
+  prompt: |
+    對 `struct Slider { @Clamped(0...100) var level = 150 }`（`Clamped` 是自訂的 property wrapper，定義了 `wrappedValue` 與 `projectedValue`），下列哪個敘述正確？
+  options:
+    - "`$level` 存取的是 `wrappedValue`，`level` 存取的是 `projectedValue`"
+    - "`level` 存取 `wrappedValue`，`$level` 存取 `projectedValue`，編譯器另外產生底層儲存 `_level`"
+    - "`@Clamped` 只能用在 class 的屬性上"
+    - "預設值 `= 150` 會繞過 wrapper，所以 `level` 一開始是 150"
+  answer: 1
+  explain: |
+    property wrapper 的 `wrappedValue` 是屬性本身的值，讀寫 `level` 時走這裡；`projectedValue` 對應 `$` 前綴（例如 `@Published` 的 `$price` 是 Publisher）。編譯器另外產生一個叫 `_level` 的底層屬性，用來存放 wrapper 本身。
+
+    - 第一個選項錯在：`level` 和 `$level` 搞反了，`level` 才是 `wrappedValue`，`$level` 才是 `projectedValue`。
+    - 第三個選項錯在：struct 和 class 的屬性都能使用 property wrapper。
+    - 第四個選項錯在：預設值 `= 150` 會透過 wrapper 的 `init(wrappedValue:)` 傳進去，所以會被夾到上限 100，`level` 一開始是 100。
+
+- id: swift-language-features-02
+  type: predict
+  level: 2
+  priority: P2
+  tags: [result-builder]
+  prompt: |
+    下列程式印出什麼？
+  codeLang: swift
+  code: |
+    import Foundation
+
+    @resultBuilder
+    enum QueryBuilder {
+        static func buildExpression(_ item: URLQueryItem) -> [URLQueryItem] { [item] }
+        static func buildBlock(_ parts: [URLQueryItem]...) -> [URLQueryItem] { parts.flatMap { $0 } }
+        static func buildOptional(_ part: [URLQueryItem]?) -> [URLQueryItem] { part ?? [] }
+        static func buildEither(first: [URLQueryItem]) -> [URLQueryItem] { first }
+        static func buildEither(second: [URLQueryItem]) -> [URLQueryItem] { second }
+    }
+
+    func query(@QueryBuilder _ content: () -> [URLQueryItem]) -> [URLQueryItem] { content() }
+
+    let precise = false
+    let items = query {
+        URLQueryItem(name: "symbol", value: "btcjpy")
+        if precise {
+            URLQueryItem(name: "depth", value: "step0")
+        } else {
+            URLQueryItem(name: "depth", value: "step5")
+        }
+        URLQueryItem(name: "limit", value: "50")
+    }
+    print(items.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: " "))
+  answer: |
+    symbol=btcjpy depth=step5 limit=50
+  explain: |
+    result builder 會把 closure 裡的每個敘述，轉成對 builder 方法的呼叫：每個 `URLQueryItem` 先經過 `buildExpression` 包成陣列，`if / else` 轉成 `buildEither(first:)` 或 `buildEither(second:)`，最後由 `buildBlock` 把全部合併。
+
+    `precise` 是 `false`，所以走 `else` 分支，得到 `depth=step5`，三個項目依序是 `symbol=btcjpy`、`depth=step5`、`limit=50`。
+
+    如果 builder 沒實作 `buildEither`，`if / else` 在 builder 裡就無法編譯；只有 `if`、沒有 else 時，需要 `buildOptional`。
+
+- id: swift-language-features-03
+  type: predict
+  level: 3
+  priority: P2
+  tags: [noncopyable, consuming]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    struct Ticket: ~Copyable {
+        let id: Int
+        consuming func submit() -> Int { id }
+        borrowing func peek() -> Int { id }
+        deinit { print("deinit", id) }
+    }
+
+    func useTicket() {
+        let t = Ticket(id: 7)
+        print("peek", t.peek())
+        let r = t.submit()
+        print("submitted", r)
+    }
+
+    useTicket()
+  answer: |
+    peek 7 deinit 7 submitted 7
+  explain: |
+    - `peek()` 是 `borrowing`，只是借來看一下，不影響 `t` 的壽命，所以先印出 `peek 7`。
+    - `submit()` 是 `consuming`：所有權轉移進這個方法，方法結束時，被消耗的值就被銷毀，`deinit` 在這個時間點執行（我們實測過），所以 `deinit 7` 出現在 `submitted 7` **之前**。之後 `t` 就不能再使用了。
+
+    noncopyable 型別可以有 `deinit`，用來保證資源（連線、檔案、一次性的操作）一定會在確定的時間點被釋放。
+
+- id: swift-language-features-04
+  type: multi
+  level: 3
+  priority: P2
+  tags: [noncopyable, ownership]
+  prompt: |
+    給定 `struct Ticket: ~Copyable { let id: Int; consuming func submit() -> Int { id } }`，哪些寫法會編譯失敗？（複選）
+  options:
+    - "`let t = Ticket(id: 1); _ = t.submit(); _ = t.submit()`"
+    - "`let t = Ticket(id: 1); let u = t; _ = u.id; _ = t.id`"
+    - "`func h(_ t: Ticket) { _ = t.id }`（沒有標所有權）"
+    - "`func h(_ t: borrowing Ticket) -> Int { t.id }`"
+    - "`func h(_ t: consuming Ticket) -> Int { t.submit() }`"
+  answer: [0, 1, 2]
+  explain: |
+    我們用 Swift 6.2.4 實際編譯：
+    - 第 1 項會失敗：`submit()` 是 `consuming`，呼叫一次就把 `t` 消耗掉了，再呼叫第二次，編譯器報 `'t' consumed more than once`。
+    - 第 2 項會失敗：noncopyable 型別的 `let u = t` 是**移動**，不是複製，之後再用 `t` 會得到 `'t' used after consume`。
+    - 第 3 項會失敗：noncopyable 型別的函式參數必須標註 `borrowing` 或 `consuming`，否則報 `parameter of noncopyable type 'Ticket' must specify ownership`。
+    - 第 4 項合法：`borrowing` 只借用，讀取 `t.id` 沒問題。
+    - 第 5 項合法：`consuming` 拿到所有權後，可以呼叫 `consuming` 方法把它消耗掉。
+
+- id: swift-language-features-05
+  type: single
+  level: 2
+  priority: P2
+  tags: [typed-throws]
+  prompt: |
+    關於 Swift 6 的 typed throws，哪個敘述正確？
+  options:
+    - "`func f() throws(NetworkError)` 讓呼叫端的 `catch` 區塊內的 `error` 得到 `NetworkError` 型別，`switch` 可以窮舉；官方建議預設仍使用一般的 `throws`，只在錯誤型別穩定的邊界使用"
+    - "typed throws 會取代 `Error` 協定，所有函式都應該改寫"
+    - "加上 `throws(NetworkError)` 之後，函式內仍然可以 `throw` 任何遵守 `Error` 的型別"
+    - "typed throws 只能用在 `async` 函式"
+  answer: 0
+  explain: |
+    我們用 Swift 6.2.4 實測：`do { try fetch(...) } catch { switch error { case .offline: …; case .badStatus: … } }` 不需要 `default`；對一個 `throws(NetworkError)` 的函式做 `try ["x"].map(parse)`，`catch` 裡的 `error` 型別也是 `NetworkError`。
+
+    - 第二個選項錯在：typed throws 只是在簽名中指定錯誤型別，錯誤型別本身仍然要遵守 `Error` 協定，沒有取代它。而且官方建議預設仍用一般的 `throws`，不是全部改寫。
+    - 第三個選項錯在：函式內只能丟出宣告的那個型別，丟別的型別會編譯失敗。
+    - 第四個選項錯在：同步函式也可以使用，和 `async` 無關。
+
+    取捨：公開 API 如果暴露了具體的錯誤型別，之後新增 case 就是破壞性變更（呼叫端的 `switch` 會編譯失敗），所以通常只在內部、錯誤集合穩定的邊界使用。
+
+- id: swift-language-features-06
+  type: code
+  level: 2
+  priority: P2
+  tags: [keypath, sorting, generics]
+  prompt: |
+    實作多欄位排序工具 `KeyOrder<T>` 與 `sorted(_:using:)`，用於行情列表「成交量由大到小，同量再依代號排序」。這題會用到 KeyPath：用 `a[keyPath: keyPath]` 取出欄位的值來比較。
+
+    - `KeyOrder.init(_ keyPath: KeyPath<T, V>, descending: Bool = false)`，`V: Comparable`
+    - `sorted(_:using:)` 依序套用 `orders`：前一個欄位相等，才看下一個
+    - 所有欄位都相等時，維持**原本的順序**（這叫穩定排序：相等的項目不會被打亂先後）
+    - `orders` 為空時，維持原本的順序
+  hints:
+    - "用 `a[keyPath: keyPath]` 取值，回傳 `ComparisonResult`。"
+    - "Swift 的 `sorted(by:)` 不保證穩定，可以先 `enumerated()`，全部相等時再比較原本的位置（offset）。"
+  swift:
+    starter: |
+      import Foundation
+
+      struct KeyOrder<T> {
+          let compare: (T, T) -> ComparisonResult
+
+          init<V: Comparable>(_ keyPath: KeyPath<T, V>, descending: Bool = false) {
+              // TODO: 依 keyPath 取值比較，descending 時反向
+              compare = { _, _ in .orderedSame }
+          }
+      }
+
+      func sorted<T>(_ items: [T], using orders: [KeyOrder<T>]) -> [T] {
+          // TODO: 依序套用 orders，前一個相等才看下一個，全部相等時維持原順序
+          return items
+      }
+    solution: |
+      import Foundation
+
+      struct KeyOrder<T> {
+          let compare: (T, T) -> ComparisonResult
+
+          init<V: Comparable>(_ keyPath: KeyPath<T, V>, descending: Bool = false) {
+              compare = { a, b in
+                  let x = a[keyPath: keyPath]
+                  let y = b[keyPath: keyPath]
+                  if x == y { return .orderedSame }
+                  return ((x < y) != descending) ? .orderedAscending : .orderedDescending
+              }
+          }
+      }
+
+      func sorted<T>(_ items: [T], using orders: [KeyOrder<T>]) -> [T] {
+          items.enumerated().sorted { l, r in
+              for order in orders {
+                  switch order.compare(l.element, r.element) {
+                  case .orderedAscending: return true
+                  case .orderedDescending: return false
+                  case .orderedSame: continue
+                  }
+              }
+              return l.offset < r.offset
+          }.map { $0.element }
+      }
+    tests: |
+      struct Ticker: Equatable {
+          let symbol: String
+          let volume: Int
+          let change: Double
+      }
+      let data = [
+          Ticker(symbol: "ETH", volume: 50, change: -1.5),
+          Ticker(symbol: "BTC", volume: 90, change: 0.5),
+          Ticker(symbol: "XRP", volume: 50, change: 3.0),
+          Ticker(symbol: "ADA", volume: 50, change: 0.0),
+      ]
+      func symbols(_ xs: [Ticker]) -> [String] { xs.map { $0.symbol } }
+
+      checkEqual("單一 key 升序", ["ADA", "BTC", "ETH", "XRP"]) {
+          symbols(sorted(data, using: [KeyOrder(\Ticker.symbol)]))
+      }
+      checkEqual("單一 key 降序", ["BTC", "ETH", "XRP", "ADA"]) {
+          symbols(sorted(data, using: [KeyOrder(\Ticker.volume, descending: true)]))
+      }
+      checkEqual("多個 key：成交量降序，同量再依代號升序", ["BTC", "ADA", "ETH", "XRP"]) {
+          symbols(sorted(data, using: [KeyOrder(\Ticker.volume, descending: true), KeyOrder(\Ticker.symbol)]))
+      }
+      checkEqual("全部相等時維持原本順序（穩定）", ["ETH", "XRP", "ADA"]) {
+          let subset = data.filter { $0.volume == 50 }
+          return symbols(sorted(subset, using: [KeyOrder(\Ticker.volume)]))
+      }
+      checkEqual("沒有排序條件時維持原順序", ["ETH", "BTC", "XRP", "ADA"]) {
+          symbols(sorted(data, using: []))
+      }
+      checkEqual("Double 欄位降序", ["XRP", "BTC", "ADA", "ETH"]) {
+          symbols(sorted(data, using: [KeyOrder(\Ticker.change, descending: true)]))
+      }
+      checkEqual("空陣列", 0) {
+          sorted([Ticker](), using: [KeyOrder(\Ticker.symbol)]).count
+      }
+
+- id: swift-language-features-07
+  type: open
+  level: 2
+  priority: P2
+  tags: [type-safety, language, field]
+  prompt: |
+    在交易所 App 裡，你會怎麼運用 Swift 的型別系統與新的語言特性，降低「下錯單」「金額算錯」這類錯誤？請舉具體的例子。
+  promptJa: |
+    取引所アプリで、Swift の型システムや新しい言語機能をどのように活用して、「誤発注」や「金額計算ミス」を減らしますか。具体例を挙げて説明してください。
+  keyPoints:
+    - "用型別區分：`Money`、`Quantity`、`Price` 各自包住 `Decimal`，避免數量與價格傳反"
+    - "狀態用 enum 加關聯值表達，`switch` 窮舉，新增狀態時編譯器會提醒所有要處理的地方"
+    - "一次性的操作用 noncopyable 型別加 `consuming` 方法表達「已簽名的下單請求只能送出一次」（Swift 5.9 起），並確認團隊的 Swift 版本與接受度"
+    - "錯誤用 enum 表達；typed throws（Swift 6）用在錯誤集合穩定的邊界，公開 API 要考慮新增 case 的相容性"
+    - "property wrapper 集中做輸入的範圍與刻度驗證"
+    - "result builder 或 DSL 組裝簽名請求的參數，並用測試固定輸出"
+  modelAnswer: |
+    我會先從成本最低的做起：用型別區分 `Price`、`Quantity`、`Money`，內部都是 `Decimal`，避免數量和價格傳反；訂單狀態和錯誤用 enum 加關聯值，`switch` 窮舉，新增一個狀態時，編譯器會提醒所有要處理的地方。
+
+    再來是「只能做一次」的操作，例如已簽名的下單請求。Swift 5.9 的 noncopyable 型別加上 `consuming` 方法，可以讓編譯器擋住第二次送出。這要先和團隊討論 Swift 版本和接受度，所以我會先在小範圍嘗試。
+
+    typed throws 我會用在錯誤集合穩定的內部邊界，因為公開 API 之後新增 case 會是破壞性變更。輸入驗證用 property wrapper，把範圍和刻度的規則集中在一個地方；請求參數的組裝用 result builder，再搭配測試把輸出固定下來。
+
+    在日常的 SwiftUI 開發中，我天天都在用 property wrapper（`@State`、`@Published`）和 SwiftUI 的 result builder，所以這些特性我能用實際例子說明原理。
+  modelAnswerJa: |
+    まず最もコストの低いところから始めます。`Price`、`Quantity`、`Money` を型で区別し、内部はどれも `Decimal` にして、数量と価格の取り違えを防ぎます。注文状態やエラーは関連値付きの enum で表し、`switch` を網羅的にして、状態が増えたときにコンパイラが対応すべき箇所を教えてくれるようにします。
+
+    次に、「一度しかできない操作」、たとえば署名済みの注文リクエストです。Swift 5.9 の noncopyable 型と `consuming` メソッドを使うと、2 回目の送信をコンパイラが防いでくれます。チームの Swift バージョンや受け入れ度合いを確認する必要があるので、まず小さな範囲で試します。
+
+    typed throws は、エラーの集合が安定している内部の境界に使います。公開 API では、case を追加すると破壊的変更になるためです。入力検証は property wrapper で範囲や刻み値のルールを一か所にまとめ、リクエストパラメータの組み立ては result builder とテストで出力を固定します。
+
+    日常の SwiftUI 開発では property wrapper（`@State`、`@Published`）と SwiftUI の result builder を日常的に使っていたので、これらの機能は実際の例を挙げて仕組みを説明できます。
+  followUps:
+    - "noncopyable な型を protocol に準拠させるときに、どんな制約がありますか。"
+    - "typed throws を使った API を、後から変更したくなったらどうしますか。"
+    - "`Decimal` を包んだ `Price` 型で、通貨が違う値の加算をどう防ぎますか。"
+  timeLimitSec: 120
+
+- id: swift-language-features-08
+  type: flash
+  level: 1
+  priority: P2
+  tags: [versions]
+  front: Swift 5.9／6.0 的新語言特性，各自從哪個版本開始、解決什麼問題？
+  back: |
+    - **macro**（5.9）：編譯時替你產生程式碼，解決重複樣板；只能新增程式碼，需要 swift-syntax 外掛，從套件引入要先信任。
+    - **noncopyable `~Copyable`**（5.9；泛型支援在 6.0）：值不能被複製，只能移動，可以有 `deinit`；用 `consuming`／`borrowing` 標註所有權；可以保證「只能用一次」。
+    - **typed throws**（6.0）：`throws(E)`，`catch` 拿到具體的錯誤型別，`switch` 可以窮舉；預設仍用一般的 `throws`。
+    - **primary associated types**（5.7）：`any Collection<Int>`、`some Sequence<Int>`。
+    - **result builder**（5.4）、**KeyPath 當函式用**（5.2）、**property wrapper**（5.1）。

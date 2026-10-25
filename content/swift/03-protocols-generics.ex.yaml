@@ -1,0 +1,325 @@
+- id: "swift-protocols-generics-01"
+  type: "single"
+  level: 1
+  priority: "P1"
+  tags: [some, any]
+  prompt: |
+    關於 `some P` 與 `any P`，哪個敘述正確？
+  options:
+    - "`some P` 要到執行時才決定具體型別，所以可以放進同一個陣列；`any P` 在編譯時就決定型別"
+    - "`some P` 的具體型別在編譯時就已知（只是對呼叫端隱藏），編譯器可以直接呼叫並做最佳化；`any P` 要到執行時才知道具體型別，呼叫方法要先查表，但同一個陣列可以放不同型別"
+    - "兩者只是寫法不同，編譯後完全相同"
+    - "`any P` 一定比 `some P` 快，因為少了泛型參數"
+  answer: 1
+  explain: |
+    判斷方式只有一個：編譯器在編譯時知不知道具體型別。
+
+    - `some P`（opaque type）：型別對呼叫端隱藏，但編譯器自己知道，所以可以直接呼叫那個型別的方法，也可以做最佳化，例如 inlining（把函式內容貼進呼叫處）。代價是一個函式只能固定回傳同一種具體型別。
+    - `any P`（existential type）：編譯器只知道「它遵守 P」，實際型別到執行時才知道，所以呼叫方法時要先查表，才知道該執行哪個型別的版本。換來的是同一個陣列可以放不同型別，例如 `[any Shape]` 同時放圓形和方形。
+
+    其他選項錯在哪裡：
+    - 第一個選項把兩者說反了：`some` 才是編譯時就知道型別；放不同型別的是 `any`。
+    - 第三個選項錯：兩者的限制和成本都不同（`some` 只能回傳一種型別，`any` 要查表）。
+    - 第四個選項錯：`any` 因為要查表，通常比 `some` 慢，不是比較快。
+
+- id: "swift-protocols-generics-02"
+  type: "predict"
+  level: 2
+  priority: "P1"
+  tags: [dispatch, protocol-extension]
+  prompt: |
+    下列程式依序印出什麼？（`bye` 沒有宣告在協定裡，只寫在 extension）
+  codeLang: "swift"
+  code: |
+    protocol Greeter { func hello() }
+
+    extension Greeter {
+        func hello() { print("default hello") }
+        func bye() { print("default bye") }
+    }
+
+    struct English: Greeter {
+        func hello() { print("hello") }
+        func bye() { print("bye") }
+    }
+
+    let e = English()
+    let g: any Greeter = e
+    e.hello()
+    e.bye()
+    g.hello()
+    g.bye()
+  answer: |
+    hello bye hello default bye
+  explain: |
+    - 直接用 `English` 呼叫，永遠是 `English` 自己的實作：印 `hello`、`bye`。
+    - `g.hello()`：`hello` 寫在協定宣告裡（是 requirement），所以執行時會查表，找到 `English.hello`，印 `hello`。
+    - `g.bye()`：`bye` **只存在於 extension，沒有宣告在協定裡**，編譯器只看變數宣告的型別（`any Greeter`），直接呼叫 extension 的版本，印 `default bye`，`English.bye` 被忽略。
+
+    想讓 `bye` 也能被覆寫，就把它加進協定宣告，變成 requirement。
+
+- id: "swift-protocols-generics-03"
+  type: "multi"
+  level: 2
+  priority: "P1"
+  tags: [dispatch, static-dispatch]
+  prompt: |
+    下列哪些呼叫是（或可能被編譯器最佳化成）靜態派發？（複選）
+
+    靜態派發的意思是：編譯時就決定好要執行哪個函式，不用在執行時查表。
+  options:
+    - "`final class` 的方法"
+    - "透過 `any P` 呼叫 `P` 的 requirement 方法（寫在協定宣告裡的方法）"
+    - "protocol extension 中**不是 requirement** 的方法（只寫在 extension 裡，沒有宣告在協定裡）"
+    - "非 `final` class 的 `internal` 方法，開啟 WMO（whole module optimization，讓編譯器一次看完整個 module 再最佳化），且整個 module 沒有任何 override"
+    - "標了 `@objc dynamic` 的方法"
+  answer: [0, 2, 3]
+  explain: |
+    - `final class` 的方法：`final` 保證不會被子類別覆寫，所以直接呼叫。
+    - protocol extension 中不是 requirement 的方法：本來就是靜態派發，依變數宣告的型別決定。
+    - 非 `final` class 的方法：預設要查表（子類別可能覆寫）。但開啟 WMO 之後，編譯器看得到整個 module，確定沒有任何 override，就會自己改成直接呼叫。這是最佳化，不是語言保證。
+
+    錯誤的兩項：
+    - 透過 `any P` 呼叫 requirement：編譯器不知道實際型別，執行時要查表才知道該執行哪個版本，是動態派發。
+    - `@objc dynamic`：走 Objective-C runtime 的訊息傳遞，執行時才決定，所以才能被 KVO、swizzle（執行時把方法換成另一個實作）改寫。
+
+- id: "swift-protocols-generics-04"
+  type: "fill"
+  level: 2
+  priority: "P1"
+  tags: [primary-associated-types, swift-5-7]
+  prompt: |
+    Swift 5.7 以上：補上 `some` 或 `any`。`average` 的參數想寫成泛型的簡寫；`firstPrice` 需要在同一個陣列放不同型別的來源。
+  codeLang: "swift"
+  code: |
+    protocol PriceFeed<Price> {
+        associatedtype Price
+        func latest() -> Price?
+    }
+
+    func average(_ xs: ____ Sequence<Double>) -> Double {
+        let a = Array(xs)
+        return a.reduce(0, +) / Double(a.count)
+    }
+
+    func firstPrice(_ feeds: [____ PriceFeed<Decimal>]) -> Decimal? {
+        feeds.compactMap { $0.latest() }.first
+    }
+  blanks:
+    - [some]
+    - [any]
+  explain: |
+    - `some Sequence<Double>` 等同 `func average<S: Sequence>(_ xs: S) where S.Element == Double`：這是 Swift 5.7 起可以把 `some` 寫在參數位置，搭配 primary associated type 的角括號語法（`<Double>` 指定 `Element`）。
+    - `[any PriceFeed<Decimal>]` 是可以放不同型別的陣列：不同的具體型別，只要 `Price` 是 `Decimal` 就能放進去。指定 `<Decimal>` 之後，`latest()` 才會保持 `Decimal?`；沒有指定的話，associated type 會被當成 `Any`，失去型別資訊。
+
+    為什麼第二個不能用 `some`：`some` 代表「同一個具體型別」，陣列裡的每個元素會被限制成同一種，就達不到放不同型別的目的。
+
+- id: "swift-protocols-generics-05"
+  type: "single"
+  level: 2
+  priority: "P1"
+  tags: [opaque-type]
+  prompt: |
+    下列程式為什麼無法編譯？最合適的修法是？
+  codeLang: "swift"
+  code: |
+    protocol Badge { var title: String { get } }
+    struct Warning: Badge { let title = "Warning" }
+    struct Info: Badge { let title = "Info" }
+
+    func makeBadge(isWarning: Bool) -> some Badge {
+        if isWarning { return Warning() } else { return Info() }
+    }
+  options:
+    - "`some` 後面要加 `where` 子句限制型別"
+    - "`Warning` 與 `Info` 必須是 class 才能共用 `some`"
+    - "`some` 的回傳型別只能對應一個具體型別，但兩個分支回傳的型別不同。若真的需要不同型別，改回傳 `any Badge`，或把差異放進同一個型別（例如 enum 或帶欄位的 struct）"
+    - "改成 `-> some Badge & Sendable` 就能通過"
+  answer: 2
+  explain: |
+    編譯器的錯誤訊息是 `return statements in its body do not have matching underlying types`。`some` 的意思是「由函式決定、呼叫端不知道，但**固定只有一個**的具體型別」，所以兩個分支各回傳不同型別就不行。
+
+    - 第一個選項錯：`where` 子句是用來限制 associated type 的，和分支型別不一致無關。
+    - 第二個選項錯：`some` 對 struct 和 class 都適用，問題不在是不是 class。
+    - 第三個選項正確：需要不同型別就回傳 `any Badge`（付出查表的成本）；如果差異只是資料，就用同一個 struct 加欄位，或用 enum。
+    - 第四個選項錯：加上 `& Sendable` 只是多了一個條件，兩個分支型別不同的問題依然存在。
+
+    SwiftUI 的 `some View` 遇到 if／else 要回傳不同 view 時，靠的是 `@ViewBuilder`（讓 body 裡可以寫 if／else 的機制），比把每個分支包成 `AnyView` 好。
+
+- id: "swift-protocols-generics-06"
+  type: "multi"
+  level: 3
+  priority: "P1"
+  tags: [specialization, existential, type-erasure]
+  prompt: |
+    關於泛型的 specialization（編譯器為具體型別產生專用版本）與 `any`，哪些敘述正確？（複選）
+  options:
+    - "同 module、`-O`（release 的最佳化設定）、型別已知時，泛型函式可以被 specialize（產生專用版本），也可以 inline（把函式內容貼進呼叫處）"
+    - "跨 module 的泛型函式即使在 release 也一定會被 specialize，因為編譯器會讀取對方 module 的實作"
+    - "`Set<any Hashable>` 可以編譯，因為 `any Hashable` 符合 `Hashable`"
+    - "`AnyHashable` 存在的原因之一，是 `any Hashable` 本身無法符合 `Hashable`"
+    - "`any Collection` 的 `map` 回傳 `[Any]`，`any Collection<Int>` 的 `map` 回傳 `[Int]`"
+  answer: [0, 3, 4]
+  explain: |
+    - 第一項正確：編譯器看得到函式內容、又知道具體型別，就會產生專用版本，泛型的額外成本趨近於零。
+    - 第二項錯：跨 module 時編譯器看不到函式內容。要 specialize，函式必須標 `@inlinable`（把實作公開給呼叫端的編譯器看，也就變成對外的契約），或使用 cross-module optimization；否則以通用版本執行，要多傳型別資訊、用查表的方式操作值。
+    - 第三項錯：`Set<any Hashable>` 會得到 `type 'any Hashable' cannot conform to 'Hashable'`。`any Hashable` 不會自動符合 `Hashable`，所以第四項正確：標準函式庫才需要另外提供 `AnyHashable`。
+    - 第五項正確：指定 primary associated type（`<Int>`）讓 `any` 保留元素型別，沒指定就是 `Any`（本機 Swift 6.2.4 實測）。
+
+- id: "swift-protocols-generics-07"
+  type: "code"
+  level: 2
+  priority: "P1"
+  tags: [type-erasure, generics]
+  prompt: |
+    實作 type erasure 的 `AnyPriceFeed<Price>`（把不同型別的來源包成同一個型別），讓不同的 `PriceFeed` 實作可以放進同一個陣列，並實作 `lowest`。
+
+    - `AnyPriceFeed.init` 接受任何 `Price` 相同的 `PriceFeed`，`symbol` 與 `latest()` 要**轉發**到原本的來源（來源之後更新，包裝之後的結果也要跟著變）
+    - `lowest(_:)`：回傳最新價最低的來源 `(symbol, price)`，忽略 `latest()` 為 `nil` 的來源；全部都沒有報價或空陣列回傳 `nil`；同價時取先出現的
+  hints:
+    - "用兩個 closure 儲存 `symbol` 與 `latest`，在 init 裡從傳入的 feed 取得（closure 會抓住原本的 feed，之後呼叫就是轉發）。"
+    - "starter 把 `latest()` 當成快照存起來，來源更新後就過期了。"
+  swift:
+    starter: |
+      protocol PriceFeed {
+          associatedtype Price
+          var symbol: String { get }
+          func latest() -> Price?
+      }
+
+      struct AnyPriceFeed<Price>: PriceFeed {
+          let symbol: String
+          private let snapshot: Price?
+
+          init<F: PriceFeed>(_ feed: F) where F.Price == Price {
+              symbol = feed.symbol
+              snapshot = feed.latest()   // TODO: 這是快照，改成轉發
+          }
+
+          func latest() -> Price? { snapshot }
+      }
+
+      func lowest<Price: Comparable>(_ feeds: [AnyPriceFeed<Price>]) -> (symbol: String, price: Price)? {
+          // TODO
+          return nil
+      }
+    solution: |
+      protocol PriceFeed {
+          associatedtype Price
+          var symbol: String { get }
+          func latest() -> Price?
+      }
+
+      struct AnyPriceFeed<Price>: PriceFeed {
+          private let _symbol: () -> String
+          private let _latest: () -> Price?
+
+          init<F: PriceFeed>(_ feed: F) where F.Price == Price {
+              _symbol = { feed.symbol }
+              _latest = { feed.latest() }
+          }
+
+          var symbol: String { _symbol() }
+          func latest() -> Price? { _latest() }
+      }
+
+      func lowest<Price: Comparable>(_ feeds: [AnyPriceFeed<Price>]) -> (symbol: String, price: Price)? {
+          var best: (symbol: String, price: Price)?
+          for feed in feeds {
+              guard let p = feed.latest() else { continue }
+              if let current = best {
+                  if p < current.price { best = (feed.symbol, p) }
+              } else {
+                  best = (feed.symbol, p)
+              }
+          }
+          return best
+      }
+    tests: |
+      struct StaticFeed: PriceFeed {
+          let symbol: String
+          let value: Int?
+          func latest() -> Int? { value }
+      }
+      final class LiveFeed: PriceFeed {
+          let symbol: String
+          var value: Int?
+          init(_ symbol: String, _ value: Int?) { self.symbol = symbol; self.value = value }
+          func latest() -> Int? { value }
+      }
+
+      check("不同型別的來源可放進同一個陣列") {
+          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: 10)), AnyPriceFeed(LiveFeed("B", 20))]
+          return feeds.map { $0.symbol } == ["A", "B"]
+      }
+      check("抹除後仍反映 class 來源之後的更新") {
+          let live = LiveFeed("L", 50)
+          let erased = AnyPriceFeed(live)
+          live.value = 42
+          return erased.latest() == 42
+      }
+      checkEqual("lowest 找最低價的來源", "B") {
+          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: 10)), AnyPriceFeed(StaticFeed(symbol: "B", value: 7))]
+          return lowest(feeds)?.symbol ?? "nil"
+      }
+      checkEqual("lowest 的價格", 7) {
+          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: 10)), AnyPriceFeed(StaticFeed(symbol: "B", value: 7))]
+          return lowest(feeds)?.price ?? -1
+      }
+      checkEqual("忽略沒有報價的來源", "C") {
+          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: nil)), AnyPriceFeed(StaticFeed(symbol: "C", value: 99))]
+          return lowest(feeds)?.symbol ?? "nil"
+      }
+      check("全部沒有報價回傳 nil") {
+          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: nil))]
+          return lowest(feeds) == nil
+      }
+      check("空陣列回傳 nil") { lowest([AnyPriceFeed<Int>]()) == nil }
+      checkEqual("同價取先出現的", "first") {
+          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "first", value: 5)), AnyPriceFeed(StaticFeed(symbol: "second", value: 5))]
+          return lowest(feeds)?.symbol ?? "nil"
+      }
+
+- id: "swift-protocols-generics-08"
+  type: "open"
+  level: 2
+  priority: "P1"
+  tags: [architecture, di, field]
+  prompt: |
+    有些專案的 ViewModel 用 `any MeRepositoryProtocol = MeRepository.shared` 這種預設引數的方式注入依賴。這個設計的優缺點是什麼？如果在交易所 App 重做，Repository 要用 `any`、泛型，還是別的方式？
+  promptJa: |
+    あるプロジェクトの ViewModel では `any MeRepositoryProtocol = MeRepository.shared` のようなデフォルト引数で依存を注入しています。この設計の長所と短所は何ですか。取引所アプリで作り直すなら、Repository は `any`、ジェネリクス、それとも別の方法にしますか。
+  keyPoints:
+    - "優點：協定把依賴隔開，測試時可以傳假的實作；邊界層用 `any` 的查表成本相對網路與資料庫 I/O 可以忽略"
+    - "要留意：預設引數加 `.shared` 屬於 service locator（到固定的地方去拿依賴）的接縫，依賴不夠明顯，測試之間也可能共用單例的狀態"
+    - "泛型方案（`ViewModel<R: Repo>`）會讓泛型參數一路擴散到 View、FlowController，換到的 specialization 只在熱點才有價值"
+    - "替代做法：在 composition root（App 啟動時集中建立依賴的地方）統一建立並用 constructor 注入；或用 closure 組成的依賴 struct"
+    - "Swift 6 嚴格並行檢查下，`any Protocol` 要考慮 `Sendable` 與 actor isolation"
+    - "在交易所 App 的做法：依賴一眼可見，Repository 用 `any`，熱點（行情解析、訂單簿 diff）才考慮泛型"
+  modelAnswer: |
+    這種 ViewModel 是在 init 帶預設引數，例如 `meRepository: any MeRepositoryProtocol = MeRepository.shared`，測試時傳入假的實作。優點是改動小、依賴被協定隔開所以好測試；而且這裡是 I/O 邊界，`any` 呼叫要查表的成本相對網路和資料庫可以忽略。
+
+    要留意的是，預設引數加 `.shared` 本質上是 service locator，依賴藏在預設值裡，不容易一眼看出一個類別需要什麼，測試之間也可能共用單例的狀態。
+
+    如果在交易所 App 重做，我會在 composition root（App 啟動時集中建立所有依賴的地方）統一建立依賴，用 constructor 注入，讓依賴一眼可見。Repository 仍然用 `any`，並加上 `Sendable` 約束來配合 Swift 6。泛型我只會用在行情解析或訂單簿 diff 這種熱點，因為泛型會一路擴散到 View 和 Flow，換來的 specialization 在 I/O 邊界沒有價值。
+  modelAnswerJa: |
+    この ViewModel は init にデフォルト引数を持たせていて、たとえば `meRepository: any MeRepositoryProtocol = MeRepository.shared` のようにし、テストではモックを渡しています。変更が小さくて済み、依存がプロトコルで分離されているのでテストしやすい点が長所です。また、ここは I/O の境界なので、`any` のメソッド呼び出しで表を引くコストは、ネットワークやデータベースに比べれば無視できます。
+
+    注意点は、デフォルト引数と `.shared` の組み合わせは本質的に service locator であることです。依存がデフォルト値の中に隠れるため、クラスが何を必要としているかが一目では分かりにくく、テスト間でシングルトンの状態が共有される可能性もあります。
+
+    取引所アプリで作り直すなら、composition root（アプリ起動時に依存をまとめて作る場所）で依存を生成し、コンストラクタ注入にして依存が一目で分かるようにします。Repository は引き続き `any` を使い、Swift 6 に備えて `Sendable` 制約を付けます。ジェネリクスは、相場データのパースや板情報の diff のようなホットパスに限定します。ジェネリクスは View や Flow まで広がってしまううえ、I/O の境界では specialization の効果が得られないからです。
+
+- id: "swift-protocols-generics-09"
+  type: "flash"
+  level: 1
+  priority: "P1"
+  tags: [dispatch]
+  front: |
+    Swift 五種派發方式與各自適用的呼叫
+  back: |
+    派發（dispatch）就是「呼叫方法時，決定要執行哪一份程式碼」的方式。
+    1. **直接呼叫**：struct／enum 的方法、`final`、`private`、`static`，編譯時就決定，還可以 inline（把函式內容貼進呼叫處）。
+    2. **查表（class）**：class 的一般方法，因為子類別可能覆寫；開啟 WMO 後，若確定沒有人覆寫，編譯器會改成直接呼叫。
+    3. **查表（協定）**：經由 `any P`，或沒有做 specialization 的泛型，呼叫協定的 requirement。
+    4. **編譯時依變數型別決定**：protocol extension 裡不是 requirement 的方法，不會被 conformer 的同名方法取代。
+    5. **Objective-C 訊息傳遞**：`@objc dynamic`、KVO，執行時才決定，可以被 swizzle（執行時把方法換掉）。

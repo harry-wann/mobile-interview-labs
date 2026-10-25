@@ -1,0 +1,290 @@
+- id: livecoding-streams-01
+  type: code
+  level: 2
+  priority: P0
+  tags: [debounce, pure-function]
+  timeLimitSec: 1200
+  prompt: |
+    把 debounce 寫成純函式（同樣的輸入永遠得到同樣的輸出，不讀現在時間）。輸入是依時間排序的事件，輸出是實際會被送出的事件。
+
+    - 事件在時間 `t` 發生後，如果在 `t + wait` **之前**（嚴格小於）有下一個事件，它就被取消
+    - 否則它會在 `t + wait` 送出，輸出事件的 `time` 是送出時間 `t + wait`
+    - 最後一個事件一定會送出
+  hints:
+    - 逐一比較「目前事件」與「下一個事件」的時間差。
+  swift:
+    starter: |
+      struct Event: Equatable {
+          let time: Int
+          let value: String
+      }
+
+      func debounce(_ events: [Event], wait: Int) -> [Event] {
+          // TODO
+          return events
+      }
+    solution: |
+      struct Event: Equatable {
+          let time: Int
+          let value: String
+      }
+
+      func debounce(_ events: [Event], wait: Int) -> [Event] {
+          var result: [Event] = []
+          for (index, event) in events.enumerated() {
+              let isLast = index == events.count - 1
+              if isLast || events[index + 1].time - event.time >= wait {
+                  result.append(Event(time: event.time + wait, value: event.value))
+              }
+          }
+          return result
+      }
+    tests: |
+      let typing = [Event(time: 0, value: "b"), Event(time: 100, value: "bt"), Event(time: 250, value: "btc")]
+      checkEqual("一次連續輸入只送最後一個", [Event(time: 550, value: "btc")]) { debounce(typing, wait: 300) }
+      let twoBursts = [Event(time: 0, value: "a"), Event(time: 100, value: "ab"), Event(time: 1000, value: "x")]
+      checkEqual("兩段輸入", [Event(time: 400, value: "ab"), Event(time: 1300, value: "x")]) { debounce(twoBursts, wait: 300) }
+      let boundary = [Event(time: 0, value: "a"), Event(time: 300, value: "b")]
+      checkEqual("剛好等於 wait 不取消", 2) { debounce(boundary, wait: 300).count }
+      checkEqual("空輸入", [Event]()) { debounce([], wait: 300) }
+  kotlin:
+    starter: |
+      data class Event(val time: Long, val value: String)
+
+      fun debounce(events: List<Event>, wait: Long): List<Event> {
+          return events
+      }
+    solution: |
+      data class Event(val time: Long, val value: String)
+
+      fun debounce(events: List<Event>, wait: Long): List<Event> =
+          events.filterIndexed { i, e ->
+              i == events.lastIndex || events[i + 1].time - e.time >= wait
+          }.map { Event(it.time + wait, it.value) }
+    tests: |
+      val typing = listOf(Event(0, "b"), Event(100, "bt"), Event(250, "btc"))
+      checkEqual("一次連續輸入只送最後一個", listOf(Event(550, "btc"))) { debounce(typing, 300) }
+      val twoBursts = listOf(Event(0, "a"), Event(100, "ab"), Event(1000, "x"))
+      checkEqual("兩段輸入", listOf(Event(400, "ab"), Event(1300, "x"))) { debounce(twoBursts, 300) }
+      val boundary = listOf(Event(0, "a"), Event(300, "b"))
+      checkEqual("剛好等於 wait 不取消", 2) { debounce(boundary, 300).size }
+      checkEqual("空輸入", emptyList<Event>()) { debounce(emptyList(), 300) }
+
+- id: livecoding-streams-02
+  type: code
+  level: 3
+  priority: P0
+  tags: [sliding-window, deque]
+  timeLimitSec: 1500
+  prompt: |
+    「最近 `window` 毫秒內的最高價」。輸入是依時間排序的成交（時間、價格），對**每一筆**成交回傳：時間在 `(t - window, t]` 之內的成交中的最高價。
+
+    要求 **O(n)**（單調佇列），不要用 O(n·w) 的暴力法。
+  hints:
+    - 佇列存成交的索引（第幾筆），讓佇列裡的價格保持由大到小。
+    - 新成交進來：先把尾端價格 `<=` 新價格的移除，再放入；接著把頭端時間 `<= t - window` 的移除。
+  swift:
+    starter: |
+      struct Trade {
+          let time: Int
+          let price: Int
+      }
+
+      func rollingHigh(_ trades: [Trade], window: Int) -> [Int] {
+          // TODO
+          return trades.map(\.price)
+      }
+    solution: |
+      struct Trade {
+          let time: Int
+          let price: Int
+      }
+
+      func rollingHigh(_ trades: [Trade], window: Int) -> [Int] {
+          var deque: [Int] = []   // 存索引，價格遞減
+          var head = 0            // 用 head 指標代替 removeFirst，避免 O(n)
+          var result: [Int] = []
+          result.reserveCapacity(trades.count)
+          for (i, trade) in trades.enumerated() {
+              while deque.count > head, trades[deque[deque.count - 1]].price <= trade.price {
+                  deque.removeLast()
+              }
+              deque.append(i)
+              while trades[deque[head]].time <= trade.time - window {
+                  head += 1
+              }
+              result.append(trades[deque[head]].price)
+          }
+          return result
+      }
+    tests: |
+      let t = [Trade(time: 0, price: 100), Trade(time: 500, price: 105), Trade(time: 900, price: 102),
+               Trade(time: 1200, price: 101), Trade(time: 1600, price: 99)]
+      checkEqual("視窗 1000ms", [100, 105, 105, 105, 102]) { rollingHigh(t, window: 1000) }
+      checkEqual("視窗很小只看自己", [100, 105, 102, 101, 99]) { rollingHigh(t, window: 1) }
+      checkEqual("視窗很大就是累計最高", [100, 105, 105, 105, 105]) { rollingHigh(t, window: 100_000) }
+      checkEqual("空輸入", [Int]()) { rollingHigh([], window: 1000) }
+      let flat = (0..<5).map { Trade(time: $0 * 100, price: 50) }
+      checkEqual("價格相同", [50, 50, 50, 50, 50]) { rollingHigh(flat, window: 250) }
+      let big = (0..<200_000).map { Trade(time: $0, price: ($0 * 7919) % 1000) }
+      check("20 萬筆要在線性時間內完成") { rollingHigh(big, window: 5000).count == 200_000 }
+  kotlin:
+    starter: |
+      data class Trade(val time: Long, val price: Int)
+
+      fun rollingHigh(trades: List<Trade>, window: Long): List<Int> {
+          return trades.map { it.price }
+      }
+    solution: |
+      data class Trade(val time: Long, val price: Int)
+
+      fun rollingHigh(trades: List<Trade>, window: Long): List<Int> {
+          val deque = ArrayDeque<Int>()   // 存索引，價格遞減
+          val result = ArrayList<Int>(trades.size)
+          for ((i, trade) in trades.withIndex()) {
+              while (deque.isNotEmpty() && trades[deque.last()].price <= trade.price) deque.removeLast()
+              deque.addLast(i)
+              while (trades[deque.first()].time <= trade.time - window) deque.removeFirst()
+              result.add(trades[deque.first()].price)
+          }
+          return result
+      }
+    tests: |
+      val t = listOf(Trade(0, 100), Trade(500, 105), Trade(900, 102), Trade(1200, 101), Trade(1600, 99))
+      checkEqual("視窗 1000ms", listOf(100, 105, 105, 105, 102)) { rollingHigh(t, 1000) }
+      checkEqual("視窗很小只看自己", listOf(100, 105, 102, 101, 99)) { rollingHigh(t, 1) }
+      checkEqual("視窗很大就是累計最高", listOf(100, 105, 105, 105, 105)) { rollingHigh(t, 100_000) }
+      checkEqual("空輸入", emptyList<Int>()) { rollingHigh(emptyList(), 1000) }
+      val flat = (0 until 5).map { Trade(it * 100L, 50) }
+      checkEqual("價格相同", listOf(50, 50, 50, 50, 50)) { rollingHigh(flat, 250) }
+      val big = (0 until 200_000).map { Trade(it.toLong(), (it * 7919) % 1000) }
+      check("20 萬筆要在線性時間內完成") { rollingHigh(big, 5000).size == 200_000 }
+
+- id: livecoding-streams-03
+  type: code
+  level: 1
+  priority: P1
+  tags: [sma, ring-buffer]
+  timeLimitSec: 900
+  prompt: |
+    實作簡單移動平均 `SMA(period)`：每次 `add(price)` 回傳**最近 `period` 筆**的平均；資料不足 `period` 筆時回傳 nil／null。`add` 要 **O(1)**。
+  hints:
+    - 用固定大小的陣列加一個索引當環狀緩衝區，記住最近 period 筆；另外維持一個總和，新值加上、最舊的值減掉。
+  swift:
+    starter: |
+      final class SMA {
+          let period: Int
+          init(period: Int) { self.period = period }
+
+          func add(_ price: Double) -> Double? {
+              // TODO
+              return price
+          }
+      }
+    solution: |
+      final class SMA {
+          let period: Int
+          private var buffer: [Double]
+          private var index = 0
+          private var count = 0
+          private var sum = 0.0
+
+          init(period: Int) {
+              self.period = period
+              self.buffer = Array(repeating: 0, count: period)
+          }
+
+          func add(_ price: Double) -> Double? {
+              if count == period {
+                  sum -= buffer[index]
+              } else {
+                  count += 1
+              }
+              buffer[index] = price
+              sum += price
+              index = (index + 1) % period
+              return count == period ? sum / Double(period) : nil
+          }
+      }
+    tests: |
+      let sma = SMA(period: 3)
+      check("第 1 筆不足") { sma.add(10) == nil }
+      check("第 2 筆不足") { sma.add(20) == nil }
+      checkClose("第 3 筆", 20, 1e-9) { sma.add(30) ?? .nan }
+      checkClose("第 4 筆滑動", 30, 1e-9) { sma.add(40) ?? .nan }
+      checkClose("第 5 筆滑動", 40, 1e-9) { sma.add(50) ?? .nan }
+      let one = SMA(period: 1)
+      checkClose("period 1", 7, 1e-9) { one.add(7) ?? .nan }
+  kotlin:
+    starter: |
+      class SMA(val period: Int) {
+          fun add(price: Double): Double? {
+              return price
+          }
+      }
+    solution: |
+      class SMA(val period: Int) {
+          private val buffer = DoubleArray(period)
+          private var index = 0
+          private var count = 0
+          private var sum = 0.0
+
+          fun add(price: Double): Double? {
+              if (count == period) sum -= buffer[index] else count++
+              buffer[index] = price
+              sum += price
+              index = (index + 1) % period
+              return if (count == period) sum / period else null
+          }
+      }
+    tests: |
+      val sma = SMA(3)
+      check("第 1 筆不足") { sma.add(10.0) == null }
+      check("第 2 筆不足") { sma.add(20.0) == null }
+      checkClose("第 3 筆", 20.0, 1e-9) { sma.add(30.0) ?: Double.NaN }
+      checkClose("第 4 筆滑動", 30.0, 1e-9) { sma.add(40.0) ?: Double.NaN }
+      checkClose("第 5 筆滑動", 40.0, 1e-9) { sma.add(50.0) ?: Double.NaN }
+      val one = SMA(1)
+      checkClose("period 1", 7.0, 1e-9) { one.add(7.0) ?: Double.NaN }
+
+- id: livecoding-streams-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [debounce, throttle]
+  prompt: |
+    行情 WebSocket 每秒推 50 次 BTC 價格，你想讓 UI 最多每 200ms 更新一次，而且**永遠顯示最新價**。該用哪一種？
+  options:
+    - "debounce(200ms)"
+    - "throttle leading（第一個值立刻送出，200ms 內忽略其他值）"
+    - "sample／throttle latest：每 200ms 送出這段期間的最新值"
+    - "buffer(200ms)：把 200ms 內的所有值打包送出"
+  answer: 2
+  explain: |
+    - debounce：要等價格「停下來」才送出，價格一直變動時會一直延後，畫面可能完全不更新。
+    - throttle leading：送出第一個值後，200ms 內後來的值都丟掉，畫面顯示的不是最新價。
+    - buffer：把 200ms 內的所有值一起送出，畫面還是要處理每一筆，沒有減少工作量。
+    - sample／throttle latest：每 200ms 送出這段時間內最新的值，剛好符合需求。對應的寫法是 Combine 的 `throttle(for:scheduler:latest: true)`、Flow 的 `sample(200)`，或 AsyncStream 用 `bufferingNewest(1)` 搭配固定間隔讀取。
+
+- id: livecoding-streams-05
+  type: open
+  level: 2
+  priority: P1
+  tags: [testability]
+  prompt: |
+    「你的 debounce 為什麼把時間當成輸入，而不是在函式裡呼叫 `Date()`？在 production 的 Swift／Kotlin 程式碼裡，你怎麼讓時間相關的邏輯可以測試？」
+  promptJa: |
+    「debounce の実装で、関数の中で Date() を呼ばずに時刻を引数で受け取ったのはなぜですか？本番の Swift／Kotlin のコードで、時間に依存するロジックをどうテストしますか？」
+  keyPoints:
+    - 純函式：同樣的輸入一定得到同樣的輸出，測試不需要真的等待，也不會因為機器忙碌而時好時壞（flaky）
+    - "Swift：注入 `Clock`（`ContinuousClock`／測試用的 clock）或 `now: () -> Date`"
+    - Kotlin：`runTest` 的虛擬時間、`TestCoroutineScheduler`，或注入 `TimeSource`／`Clock`
+    - 架構：把「決定要不要送出」的邏輯和「計時器」分開
+    - 例子：即時行情 App 的 KlineLive.apply 也是純邏輯，所以能寫單元測試
+  modelAnswer: |
+    把時間當成輸入，函式就變成純函式：同樣的輸入一定得到同樣的輸出，測試不用真的等 300 毫秒，也不會因為機器慢而時好時壞（flaky）。
+
+    在 production 程式碼裡，我會把「判斷邏輯」和「計時器」分開。Swift 這邊注入 Clock，或至少注入一個 now 函式，測試時換成可以手動前進的時鐘；Kotlin 用 coroutines 的話，runTest 本身就有虛擬時間，delay 不會真的等，也可以注入 TimeSource。
+
+    我在一個即時行情 App 也是這樣做的：K 線合併的 KlineLive.apply 是純邏輯，和 SSE 的連線分開，所以能直接寫單元測試。
+  timeLimitSec: 120

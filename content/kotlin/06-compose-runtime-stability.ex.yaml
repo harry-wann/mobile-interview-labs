@@ -1,0 +1,186 @@
+- id: kotlin-compose-runtime-stability-01
+  type: multi
+  level: 2
+  priority: P0
+  tags: [recomposition, scope]
+  prompt: |
+    關於 Compose 重組的範圍，哪些敘述正確？（重組是指 State 變了之後，Compose 重新執行 Composable 來更新畫面。）（複選）
+  options:
+    - "重組的最小單位是「讀取了該 State 的 recompose scope」，而不是整個畫面"
+    - "`Column`、`Row`、`Box` 是 `inline`（編譯時把內容直接貼進外層函式），它們的大括號沒有自己的重組範圍；在裡面讀 State 會讓外層的 Composable 重組"
+    - "在 `Button(onClick = { println(count) })` 的 `onClick` 裡讀取 `count`，也會讓該 Composable 在 `count` 變更時重組"
+    - "Composable 函式一定依程式碼順序、只執行一次，所以可以放心在函式內容裡累加外部變數"
+  answer: [0, 1]
+  explain: |
+    - 第 1 項正確。Compose 在讀取 State 的當下，會把「正在執行的那一塊」記為讀取者；State 變更時，只有這些讀取者被標記為需要重做。
+    - 第 2 項正確。`inline` 的容器等於直接把內容寫在外層函式裡，所以讀取發生在外層函式的重組範圍。解法是把讀取 State 的地方往下推，拆成獨立的小 Composable，縮小重組範圍。
+    - 第 3 項錯誤。`onClick` 是使用者點擊時才執行的 callback，不在「組合畫面」的過程中，Compose 不會把它記為讀取者，所以不會因此重組。
+    - 第 4 項錯誤。Composable 可能被重複執行、被跳過、順序不固定，將來甚至可能平行執行。函式內容不能有副作用（例如累加外部變數、送網路請求），否則結果不可預期。
+
+- id: kotlin-compose-runtime-stability-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [stability, compiler]
+  prompt: |
+    在**不依賴** strong skipping 的前提下，Compose compiler 會把下列哪些型別判定為 unstable？（unstable 是指編譯器無法保證它「沒變」，所以不敢跳過重組。）（複選）
+  options:
+    - "`data class Tick(val symbol: String, val price: Long)`"
+    - "`data class Board(val name: String, val ticks: List<Tick>)`"
+    - "`class Config(var depth: Int)`"
+    - "`data class Row(val id: Long, val label: String)`"
+    - "定義在沒有套用 Compose compiler 的純 Kotlin domain module 裡的 `data class Order(val id: String)`"
+  answer: [1, 2, 4]
+  explain: |
+    - `Tick` 和 `Row` 是 stable：只有 `val`，而且屬性型別（`String`、`Long`）本來就是 stable。
+    - `Board` 是 unstable：`List` 是介面，執行時可能是可以被改動的 `ArrayList`，編譯器無法保證它不會變，所以含有 `List` 的 class 是 unstable。
+    - `Config` 是 unstable：有 `var`，值可以被改，而 Compose 不會被通知。
+    - 定義在沒有套用 Compose compiler 的 module 裡的類別是 unstable：那個 module 沒有經過 Compose compiler 分析，編譯器沒有它的穩定性資訊，即使欄位全是 `val` 也一樣當成 unstable。解法：在該 module 套用 Compose compiler、用 stability configuration file（一個文字檔，列出要視為 stable 的型別）宣告，或在 UI 層另外做一份 stable 的 UI model。
+
+- id: kotlin-compose-runtime-stability-03
+  type: single
+  level: 3
+  priority: P0
+  tags: [strong-skipping, list]
+  prompt: |
+    專案使用 Kotlin 2.3，strong skipping 預設開啟。ViewModel 每次上游發射都執行 `.map { it.toUi() }`，產生一個**新的** `List<TickUi>`（內容多半與上一次相同），傳給 `TickList(ticks: List<TickUi>)`。預期結果是什麼？
+  options:
+    - "strong skipping 會用 `equals` 比較 `List`，內容相同就跳過 `TickList`"
+    - "`List` 是 unstable，strong skipping 下 `TickList` 永遠不會重組"
+    - "unstable 參數改以實例相等（`===`，要求是同一個物件）比較，每次都是新物件，所以 `TickList` 仍會重組；要讓資料層在內容沒改變時不產生新物件，或改用 `ImmutableList` 並讓 compiler 判定為 stable"
+    - "strong skipping 會自動把 `List` 轉成 `ImmutableList`"
+  answer: 2
+  explain: |
+    strong skipping 的比較規則是：stable 的參數用 `equals`（內容相同就算沒變），unstable 的參數用 `===`（必須是同一個物件才算沒變）。新建的 `List` 即使內容相同，也是不同的物件，所以跳過失敗。
+    - 第 1 項錯：`List` 在 Compose 眼中是 unstable，所以用 `===`，不是 `equals`。
+    - 第 2 項錯：unstable 參數「可以參與跳過的判斷」，不是「永遠不重組」。只要每次都是新物件，比較就會失敗。
+    - 第 4 項錯：strong skipping 只改變比較的方式，不會改變你傳進去的資料型別，也沒有自動轉換成 `ImmutableList` 這回事。
+    strong skipping 解決的是「unstable 參數讓整個 Composable 完全不能跳過」的問題，不能取代資料層的「內容沒變就別產生新物件」。實務上先用 Layout Inspector 的重組次數與 compiler reports 確認有問題，再決定用 `distinctUntilChanged`、`remember`、穩定的 UI model 或 `ImmutableList`。
+
+- id: kotlin-compose-runtime-stability-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [remember, key]
+  prompt: |
+    補上兩處：輸入中的下單數量，要在旋轉螢幕與 App 行程被系統殺掉後再開時保留；列表項目要以 `symbol` 識別，列表重排後每一列的 `remember` 狀態才不會黏到錯的項目。
+  codeLang: kotlin
+  code: |
+    var qty by ____ { mutableStateOf("") }
+
+    LazyColumn {
+        items(ticks, ____ = { it.symbol }) { tick ->
+            TickRow(tick)
+        }
+    }
+  blanks:
+    - [rememberSaveable]
+    - [key]
+  explain: |
+    - 第一格是 `rememberSaveable`。`remember` 只活過重組，旋轉螢幕或行程被殺之後就消失；`rememberSaveable` 把值存進 saved instance state（系統幫 App 保存、重建畫面時還原的資料），旋轉與行程重建後仍在，適合小量的輸入。大型資料放 ViewModel。
+    - 第二格是 `key`。沒有 `key` 時，每一列的 `remember` 狀態跟著「位置」走，列表重排或插入新項目後，狀態會黏在錯的項目上；給了 `key = { it.symbol }`，Compose 用幣種代號辨認每一列，狀態就跟著資料走。`key` 必須唯一而且穩定；在 Android 上，`key` 的型別還要能放進 Bundle（`String`、`Int`、`Long` 等），這樣狀態才能跨重建還原。
+
+- id: kotlin-compose-runtime-stability-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [remember, bug]
+  prompt: |
+    使用者切換交易對後，價格的小數位數仍是上一個交易對的。原因與修正是什麼？
+  codeLang: kotlin
+  code: |
+    @Composable
+    fun PriceText(price: BigDecimal, tickSize: BigDecimal) {
+        val formatter = remember { PriceFormatter(tickSize) }
+        Text(formatter.format(price))
+    }
+  options:
+    - "`PriceText` 沒有重組；要把 `price` 包成 `derivedStateOf`"
+    - "要改用 `rememberSaveable`，讓切換交易對時狀態保存下來"
+    - "`remember` 沒有把 `tickSize` 當 key，`formatter` 只在第一次組合時建立；應寫成 `remember(tickSize) { PriceFormatter(tickSize) }`"
+    - "`PriceFormatter` 必須標 `@Stable` 才會跟著參數更新"
+  answer: 2
+  explain: |
+    `remember { }` 裡的計算只在第一次進入畫面時執行，之後即使 `tickSize` 變了，也還是用舊的 `formatter`。凡是會影響計算結果的輸入，都要當成 key 傳進去：`remember(tickSize) { … }`，`tickSize` 一變就重新建立。
+    - 第 1 項錯：`PriceText` 有重組（`price` 有更新），問題出在 `formatter` 沒重建。`derivedStateOf` 是用來從別的 State 推導出新值，不是用在這裡。
+    - 第 2 項錯：`rememberSaveable` 處理的是「畫面重建後還原」，不是「輸入改變時重算」，反而會讓舊值保存得更久。
+    - 第 4 項錯：`@Stable` 是對編譯器說明型別的穩定性，和 `formatter` 要不要重建無關。
+
+- id: kotlin-compose-runtime-stability-06
+  type: multi
+  level: 3
+  priority: P1
+  tags: [stable, immutable, annotation]
+  prompt: |
+    關於 `@Stable` 與 `@Immutable`，哪些敘述正確？（複選）
+  options:
+    - "它們是對編譯器的承諾，編譯器不會驗證；說謊會造成畫面該更新卻沒更新"
+    - "標上 `@Immutable` 後，編譯器會自動檢查所有欄位是否真的不可變，不通過會編譯失敗"
+    - "`@Stable` 的意思是：`equals` 結果一致，且公開屬性改變時會通知 Compose（例如屬性本身是 `State`）"
+    - "在含有 `var` 欄位的 class 上加 `@Immutable` 是安全的效能最佳化"
+  answer: [0, 2]
+  explain: |
+    - 第 1 項正確。這兩個註解的作用是覆寫編譯器的推斷，等於對編譯器說「相信我，它是穩定的」。因為不驗證，所以不要靠註解來消除警告。
+    - 第 3 項正確。這就是 `@Stable` 承諾的內容。
+    - 第 2 項錯：編譯器不會檢查，標了就照單全收。
+    - 第 4 項錯：含 `var` 的 class 加 `@Immutable`，欄位改了，但物件還是同一個、`equals` 也相同，Compose 又不會被通知，畫面就不會更新。
+    正確的順序：先用 compiler reports 確認哪個型別是 unstable、確實造成多餘的重組，再優先改設計（用 `val`、不可變的集合、獨立的 UI model），最後才用註解或 stability configuration file。
+
+- id: kotlin-compose-runtime-stability-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [snapshot, frame]
+  prompt: |
+    把「State 變更到畫面更新」的過程依正確順序排列。
+  items:
+    - 在主執行緒寫入 MutableState（新值與舊值 equals 不同）
+    - Compose 發現值變了，讀過該 State 的 recompose scope 被標記為需要重做
+    - 下一個 frame，Compose 排程重組（由 Recomposer 負責），重新執行被標記的 scope，參數沒變的子 Composable 被跳過
+    - Layout 階段重新測量與擺放受影響的元素
+    - Drawing 階段繪製更新後的內容
+  explain: |
+    - 第一步的前提是新值和舊值 `equals` 不同；如果相同，第一步就不會觸發後面的任何流程。
+    - 重組發生在**下一個 frame**，不是寫入當下同步執行，所以在同一個事件裡連續寫入多次，只會重組一次。
+    - 重組完才輪到 Layout 與 Drawing。如果 State 只在 Layout 或 Drawing 的 lambda 裡讀取（例如 `Modifier.offset { }`、`drawBehind { }`），變更時會跳過 Composition 階段，這是每秒更新很多次的畫面（例如行情）常用的最佳化方式，叫做延後讀取，第 8 單元會詳細說明。
+
+- id: kotlin-compose-runtime-stability-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [stability, diagnosis, field]
+  prompt: |
+    面試官問：「你在 Android 專案裡用過 Compose。你怎麼確認 Compose 畫面沒有多餘的重組？有沒有處理過 stability 相關的問題？」請回答，並說明交易所 App 的行情列表你會怎麼做。
+  promptJa: |
+    面接官から「Android のプロジェクトで Compose を使われていますね。不要な再コンポーズが起きていないことをどう確認しますか？ stability に関する対応はしましたか？」と聞かれました。回答したうえで、取引所アプリの相場リストではどう進めるか説明してください。
+  keyPoints:
+    - "說明自己的 Compose 經驗：在既有專案逐頁重構並陸續導入 Compose，或在新專案全面使用 Compose"
+    - "知道 Kotlin 2.0.20 起 strong skipping 預設開啟，stable 參數用 equals、unstable 參數用 === 比較"
+    - "實例：在一個即時行情 App 的 Watchlist 把資料轉成 ImmutableList，並放在 remember(displayData) 裡，避免每次重組都產生新的 list"
+    - "診斷流程：Layout Inspector 看重組次數，再用 compiler reports 找 unstable 的型別，最後才改設計"
+    - "修法的順序：資料層不為相同內容產生新物件、UI model 用 val 與不可變集合、LazyColumn 給 key 與 contentType，最後才是註解或 stability configuration file"
+    - "行情列表：把 State 的讀取往下推到小的 Composable、每秒更新很多次的欄位用 lambda 版 modifier 延後讀取，並用 Macrobenchmark 與 JankStats 驗證"
+  modelAnswer: |
+    我在兩個 Android 專案都使用過 Jetpack Compose：一個社交 App 是逐頁重構、陸續導入 Compose；一個即時行情 App 則是全面使用 Compose。社交 App 的 Kotlin 版本在 2.0.20 之後，strong skipping 預設開啟，含有 `List` 的參數也能被跳過，只是改用 `===`（是不是同一個物件）比較。所以我會注意不要每次重組都產生內容相同的新 list。例如即時行情 App 的 Watchlist，我把資料轉成 `ImmutableList`，並放在 `remember(displayData)` 裡，避免每次重組都建立新的 list。
+
+    如果是交易所 App 的行情列表，我會先量測，不憑感覺最佳化。先用 Layout Inspector 看每一列的重組次數，再用 Compose compiler reports 找出 unstable 的型別。修的順序是：資料層不要為相同內容產生新物件，UI model 用 `val` 加不可變集合，`LazyColumn` 給 `key` 和 `contentType`，最後才考慮 `@Stable` 註解或 stability configuration file。每秒更新很多次的欄位，我會用 lambda 版的 modifier，把讀取 State 的時間延後到 Layout 或 Drawing 階段。最後用 Macrobenchmark 和 JankStats（Jetpack 提供的量測流暢度的函式庫）驗證有沒有改善。
+  modelAnswerJa: |
+    二つの Android プロジェクトで Jetpack Compose を使いました。ソーシャルアプリは画面ごとにリファクタリングしながら Compose を導入し、リアルタイム相場アプリは全面的に Compose で開発しました。ソーシャルアプリの Kotlin は 2.0.20 以降だったので strong skipping が標準で有効になっており、`List` を含む引数もスキップできます。ただし比較は `===`（同一オブジェクトかどうか）になるので、内容が同じ新しい list を毎回作らないように注意していました。たとえばリアルタイム相場アプリの Watchlist では、データを `ImmutableList` に変換し、`remember(displayData)` の中で保持して、再コンポーズのたびに新しい list を作らないようにしました。
+
+    取引所アプリの相場リストでは、まず計測してから最適化します。Layout Inspector で各行の再コンポーズ回数を確認し、Compose compiler reports で unstable な型を探します。直す順番は、データ層で同じ内容の新しいオブジェクトを作らない、UI モデルは `val` と不変コレクションにする、`LazyColumn` に `key` と `contentType` を付ける、最後に `@Stable` アノテーションや stability configuration file を検討する、という流れです。毎秒何度も更新される項目は、lambda 版の modifier で State の読み取りを Layout や Drawing の段階まで遅らせます。最後に Macrobenchmark と JankStats（Jetpack が提供する滑らかさの計測ライブラリ）で改善を確認します。
+  followUps:
+    - 有了 strong skipping 之後，什麼情況下還是需要 ImmutableList？
+    - 怎麼在 CI 避免 stability 退化？
+    - Layout Inspector 的重組次數，在 release 版本也能用嗎？
+  timeLimitSec: 150
+
+- id: kotlin-compose-runtime-stability-09
+  type: flash
+  level: 2
+  priority: P0
+  tags: [strong-skipping]
+  front: strong skipping mode 從哪個版本開始預設開啟？參數怎麼比較？
+  back: |
+    Kotlin 2.0.20 起，Compose compiler 預設開啟。Kotlin 2.0.0 才開始把 Compose compiler 併入 Kotlin 一起發佈，2.0.20 之前要自己手動開。
+    開啟後，帶有 unstable 參數的 Composable 也能被跳過：stable 的參數用 `equals`（內容相同就算沒變），unstable 的參數用 `===`（必須是同一個物件）；Composable 裡的 lambda 會自動被 `remember`。不想被跳過的，可以加 `@NonSkippableComposable`。
+    仍要避免「每次重組都產生內容相同的新 List」：`===` 不相等，照樣重組。

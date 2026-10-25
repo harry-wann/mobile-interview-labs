@@ -1,0 +1,464 @@
+- id: exchange-api-signing-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [signature-v2, post]
+  prompt: |
+    依這套交易所 API 文件的 Signature V2，對 `POST /v1/order/orders/place` 簽名時，**簽名字串**要包含哪些參數？
+  options:
+    - "JSON body 的全部欄位（`symbol`、`amount`、`price`、`type`…）加上 4 個認證參數"
+    - "只簽 4 個認證參數（`AccessKeyId`、`SignatureMethod`、`SignatureVersion`、`Timestamp`）；其他資料放在 JSON body，**不參與簽名**"
+    - "什麼都不簽，POST 請求靠 HTTPS（加密的網路連線）保護就夠了"
+    - "只簽 `Timestamp` 與 `Signature`"
+  answer: 1
+  explain: |
+    文件明說：GET 請求的 URL 參數也要放進簽名字串；POST 請求只簽 4 個認證參數，其餘的參數放在 Request Body 的 JSON 裡。簽名字串的格式是 `POST\n<小寫 host>\n<path>\n<排序且 URL 編碼的 4 個參數>`。
+    - 第 1 項錯：那是 GET 的做法（GET 的 query 要一起簽）；POST 的 body 欄位不進簽名字串。
+    - 第 3 項錯：需要簽名的 API 都要簽，HTTPS 只負責加密傳輸，不能取代簽名。
+    - 第 4 項錯：`Signature` 是簽名的結果，不能放進簽名字串裡；而且 4 個認證參數缺一不可。
+    這代表 body 的內容不受簽名保護（仍受 HTTPS 保護），這是這套簽名的設計特性，面試時可以點出來。
+
+- id: exchange-api-signing-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [url-encode, rfc3986]
+  prompt: |
+    關於簽名時的 URL 編碼，哪些敘述正確？（複選）
+  options:
+    - "空白要編成 `%20`，不是 `+`；`+` 是表單編碼的慣例"
+    - "十六進位要用大寫（`%3A`），`%3a` 會讓簽名字串不同"
+    - "Java 的 `URLEncoder.encode` 可以直接使用，因為它就是標準的 URL 編碼"
+    - "`Signature`（Base64）含有 `+`、`/`、`=`，放進 query 時必須編成 `%2B`、`%2F`、`%3D`"
+    - "Swift 的 `addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)` 會編碼 `&`、`=`、`+`，可以直接用"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：RFC 3986（定義網址格式的標準）規定空白是 `%20`；`+` 是表單編碼（`application/x-www-form-urlencoded`）的慣例，兩邊不一致，簽名就會不同。
+    - 第 2 項正確：簽名字串是逐字元比對的，`%3A` 和 `%3a` 是不同的字串。
+    - 第 3 項錯：`URLEncoder` 是表單編碼，空白變 `+`、`~` 變成 `%7E`、`*` 不編碼，與 RFC 3986 不同，不能直接用。
+    - 第 4 項正確：Base64 的結果含有 `+`、`/`、`=`，不編碼的話，伺服器會把 `+` 當成空白，解出不同的簽名。
+    - 第 5 項錯：`.urlQueryAllowed` 是為「整個 query 字串」設計的，保留了 `&`、`=`、`+`、`/`、`:` 等字元不編碼；簽名需要的是只保留 unreserved 字元（`A-Z a-z 0-9 - . _ ~`）的自建集合。
+    - 本機實測：`"a b+c/d=e:f~g"` 用 `.urlQueryAllowed` 得到 `a%20b+c/d=e:f~g`，用 unreserved 集合得到 `a%20b%2Bc%2Fd%3De%3Af~g`。
+
+- id: exchange-api-signing-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [url-encode, swift]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    import Foundation
+
+    let s = "a b+c/d=e:f~g"
+    print(s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)
+
+    let unreserved = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+    )
+    print(s.addingPercentEncoding(withAllowedCharacters: unreserved)!)
+    print("日".addingPercentEncoding(withAllowedCharacters: unreserved)!)
+  answer: |
+    a%20b+c/d=e:f~g a%20b%2Bc%2Fd%3De%3Af~g %E6%97%A5
+  explain: |
+    - 第一行：`.urlQueryAllowed` 只編碼空白（變成 `%20`），`+`、`/`、`=`、`:`、`~` 都保留不編碼。用在簽名會得到錯誤的簽名字串。
+    - 第二行：只允許 unreserved 字元的集合，其他字元都編碼成大寫的十六進位。`~` 屬於 unreserved，所以不編碼；`+`、`/`、`=`、`:` 都被編碼。
+    - 第三行：非 ASCII 字元先轉成 UTF-8 的 3 個 byte（`E6 97 A5`），再逐個 byte 編碼，變成 `%E6%97%A5`。
+
+- id: exchange-api-signing-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [hmac, cryptokit]
+  prompt: |
+    補上 Swift（CryptoKit）計算 HMAC-SHA256 簽名並轉成 Base64 的程式。
+  codeLang: swift
+  code: |
+    import CryptoKit
+    import Foundation
+
+    func hmacBase64(_ stringToSign: String, secret: String) -> String {
+        let key = SymmetricKey(data: Data(secret.utf8))
+        let mac = HMAC<____>.authenticationCode(for: Data(stringToSign.utf8), using: key)
+        return Data(mac).____()
+    }
+  blanks:
+    - [SHA256]
+    - [base64EncodedString]
+  explain: |
+    `HMAC<SHA256>.authenticationCode(for:using:)` 會回傳一個 `HashedAuthenticationCode`，把它轉成 `Data` 之後，用 `base64EncodedString()` 編成 Base64 文字。
+    Kotlin 對應的寫法是：`Mac.getInstance("HmacSHA256")` 搭配 `SecretKeySpec` 初始化，再用 `java.util.Base64` 編碼。
+    進入 HMAC 之前的原始輸入都是 UTF-8 的 byte；金鑰和字串不要 `trim`（去掉前後空白）或重新編碼，否則算出的簽名會不同。
+
+- id: exchange-api-signing-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [clock-skew, server-time]
+  prompt: |
+    客服回報：部分使用者所有需要簽名的請求都失敗（回傳 `api-signature-not-valid` 之類的錯誤），重新登入也沒用。這些人的手機時間比實際時間快了 10 分鐘。下列哪個處理最合理？
+  options:
+    - "在 App 的說明頁，請使用者自己把手機時間改對"
+    - "放寬簽名的時間格式，不要帶 `Timestamp`"
+    - "App 啟動與回前景時，請求 `GET /v1/common/timestamp` 取得伺服器的毫秒時間，計算 `offset`，簽名用「本機時間 + offset」；經過的時間用單調時鐘量，簽名失敗時重新校時並重試一次"
+    - "改用本機時間的前一個整點當作 Timestamp"
+  answer: 2
+  explain: |
+    API 文件提供 `GET /v1/common/timestamp`（回傳毫秒的 Unix timestamp）。以伺服器時間為準算出 offset，簽名就不受使用者手機時間影響。經過的時間要用單調時鐘（單調時鐘是只會往前走、不受使用者調整系統時間影響的時鐘；iOS 的 `systemUptime`、Android 的 `elapsedRealtime`），否則使用者在校時之後又調整了系統時間，offset 就失效了。iOS 的 `systemUptime` 不含裝置睡眠的時間，所以回到前景時也要重新校時。
+    - 第 1 項不理想：只靠使用者自己改時間，很多人不知道問題在哪裡，客服成本高；App 自己校正才是根本的解法。
+    - 第 2 項錯：`Timestamp` 是簽名必要的欄位，不能省略。
+    - 第 4 項錯：把時間改成前一個整點，和伺服器的時間一樣差很多，而且還可能被判定為過期的請求。
+    伺服器容許的時間差有多大，文件沒有寫（未證實），所以不要自己猜一個數字。
+
+- id: exchange-api-signing-06
+  type: multi
+  level: 3
+  priority: P1
+  tags: [private-ws, signature-2-1]
+  prompt: |
+    關於私有 WebSocket（`/ws/v2`）的簽名（依 API 文件），哪些敘述正確？（複選）
+  options:
+    - "認證訊息裡的參數名稱是小寫開頭的駝峰：`accessKey`、`signatureMethod`、`signatureVersion`、`timestamp`"
+    - "`signatureVersion` 是 `2.1`，簽名字串的 path 固定為 `/ws/v2`"
+    - "認證訊息 JSON 裡的值（例如 `timestamp`）也必須先做 URL 編碼"
+    - "簽名字串的 method 是 `POST`"
+    - "簽名字串的 query 部分，仍然是排序後、URL 編碼的參數組合"
+  answer: [0, 1, 4]
+  explain: |
+    文件的 golang 範例：用 `url.Values`（會排序並編碼）組出 `accessKey`、`signatureMethod`、`signatureVersion=2.1`、`timestamp`，簽名字串是 `GET\n<host>\n/ws/v2\n<query>`，再做 HMAC-SHA256 與 Base64。
+    - 第 1、2、5 項正確：參數名稱、版本號、固定的 path 和排序編碼的 query，都和上面的範例一致。
+    - 第 3 項錯：文件註明「JSON 裡不需要 URL 編碼」。意思是送出的 JSON，值用原始字串；只有簽名字串內部的 query 才要編碼。
+    - 第 4 項錯：簽名字串的 method 是 `GET`（WebSocket 的連線是從 GET 請求升級而來）。
+    另外，`authType: "api"` 是訊息本身的欄位，不在簽名的參數之中。
+
+- id: exchange-api-signing-07
+  type: code
+  level: 3
+  priority: P1
+  tags: [signing, hmac, url-encode, timestamp]
+  prompt: |
+    實作這套交易所 REST 簽名的核心函式。測試使用經過 Swift、Kotlin 和 openssl 交叉確認的 test vector（固定的測試答案；金鑰是測試用的，不是真實金鑰）。
+
+    - `percentEncode(s)`：RFC 3986 的規則。unreserved 字元（`A-Z a-z 0-9 - . _ ~`）不編碼，其餘的 UTF-8 byte 一律編成 `%XX`，**十六進位大寫**
+    - `formatTimestamp(epochMs)`：UTC 的 `yyyy-MM-ddTHH:mm:ss`（毫秒忽略、24 小時制），不得受裝置的語言、時區、曆法設定影響
+    - `signRequest(method:host:path:accessKeyId:secretKey:timestamp:params:)`：
+      - 認證參數是 `AccessKeyId`、`SignatureMethod=HmacSHA256`、`SignatureVersion=2`、`Timestamp`
+      - 如果 method（不分大小寫）是 `GET`，`params` 也加入簽名；否則（POST）**忽略 `params`**
+      - 依參數名稱的 ASCII 順序排序（參數名稱都是 ASCII），名稱與值都做 `percentEncode`，用 `&` 連接
+      - `stringToSign = METHOD大寫 + "\n" + host小寫 + "\n" + path + "\n" + 排序後的 query`
+      - `signature = Base64(HMAC-SHA256(secret, stringToSign))`
+      - 回傳 `query = 排序後的 query + "&Signature=" + percentEncode(signature)`
+  hints:
+    - "不要用 `URLEncoder`（Kotlin／Java）或 `.urlQueryAllowed`（Swift）。"
+    - "Swift 用 CryptoKit 的 `HMAC<SHA256>`；Kotlin 用 `javax.crypto.Mac`。"
+  swift:
+    starter: |
+      import Foundation
+      import CryptoKit
+
+      struct SignedRequest: Equatable {
+          let stringToSign: String
+          let signature: String   // Base64，尚未 URL encode
+          let query: String       // 排序後的 query，結尾是 &Signature=<編碼後的簽名>
+      }
+
+      func percentEncode(_ s: String) -> String {
+          // TODO
+          return s
+      }
+
+      func formatTimestamp(epochMs: Int64) -> String {
+          // TODO
+          return ""
+      }
+
+      func signRequest(method: String, host: String, path: String,
+                       accessKeyId: String, secretKey: String,
+                       timestamp: String, params: [String: String]) -> SignedRequest {
+          // TODO
+          return SignedRequest(stringToSign: "", signature: "", query: "")
+      }
+    solution: |
+      import Foundation
+      import CryptoKit
+
+      struct SignedRequest: Equatable {
+          let stringToSign: String
+          let signature: String
+          let query: String
+      }
+
+      func percentEncode(_ s: String) -> String {
+          let hex = Array("0123456789ABCDEF")
+          var out = ""
+          for b in s.utf8 {
+              switch b {
+              case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D, 0x2E, 0x5F, 0x7E:
+                  out.unicodeScalars.append(UnicodeScalar(b))
+              default:
+                  out.append("%")
+                  out.append(hex[Int(b >> 4)])
+                  out.append(hex[Int(b & 0x0F)])
+              }
+          }
+          return out
+      }
+
+      func formatTimestamp(epochMs: Int64) -> String {
+          var calendar = Calendar(identifier: .gregorian)
+          calendar.timeZone = TimeZone(identifier: "UTC")!
+          let date = Date(timeIntervalSince1970: TimeInterval(epochMs / 1000))
+          let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+          return String(format: "%04d-%02d-%02dT%02d:%02d:%02d",
+                        c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!)
+      }
+
+      func signRequest(method: String, host: String, path: String,
+                       accessKeyId: String, secretKey: String,
+                       timestamp: String, params: [String: String]) -> SignedRequest {
+          var pairs: [(String, String)] = [
+              ("AccessKeyId", accessKeyId),
+              ("SignatureMethod", "HmacSHA256"),
+              ("SignatureVersion", "2"),
+              ("Timestamp", timestamp),
+          ]
+          let m = method.uppercased()
+          if m == "GET" {
+              for (k, v) in params { pairs.append((k, v)) }
+          }
+          pairs.sort { Array($0.0.utf8).lexicographicallyPrecedes(Array($1.0.utf8)) }
+          let canonical = pairs.map { "\(percentEncode($0.0))=\(percentEncode($0.1))" }.joined(separator: "&")
+          let stringToSign = "\(m)\n\(host.lowercased())\n\(path)\n\(canonical)"
+          let key = SymmetricKey(data: Data(secretKey.utf8))
+          let mac = HMAC<SHA256>.authenticationCode(for: Data(stringToSign.utf8), using: key)
+          let signature = Data(mac).base64EncodedString()
+          return SignedRequest(stringToSign: stringToSign,
+                               signature: signature,
+                               query: canonical + "&Signature=" + percentEncode(signature))
+      }
+    tests: |
+      let host = "api.example-exchange.com"
+      let ak = "test-access-key-0001"
+      let sk = "test-secret-key-0001"
+      let ts = "2017-05-11T15:19:30"
+      let base4 = "AccessKeyId=test-access-key-0001&SignatureMethod=HmacSHA256&SignatureVersion=2&Timestamp=2017-05-11T15%3A19%3A30"
+
+      check("percentEncode：unreserved 不編碼、空白 %20、保留字元大寫 hex") {
+          percentEncode("") == "" && percentEncode("A-z_0.9~") == "A-z_0.9~"
+              && percentEncode("a b") == "a%20b" && percentEncode("+/=:*") == "%2B%2F%3D%3A%2A"
+      }
+      check("percentEncode：非 ASCII 先轉 UTF-8 再逐 byte 編碼") {
+          percentEncode("日") == "%E6%97%A5" && percentEncode("é") == "%C3%A9"
+      }
+      check("formatTimestamp：UTC、24 小時制、忽略毫秒") {
+          formatTimestamp(epochMs: 1494516006000) == "2017-05-11T15:20:06"
+              && formatTimestamp(epochMs: 1494516006999) == "2017-05-11T15:20:06"
+              && formatTimestamp(epochMs: 0) == "1970-01-01T00:00:00"
+              && formatTimestamp(epochMs: 4102444799000) == "2099-12-31T23:59:59"
+      }
+      check("GET：query 一起簽，Timestamp 的冒號編成 %3A，order-id 排在大寫開頭的參數之後") {
+          let r = signRequest(method: "GET", host: host, path: "/v1/order/orders",
+                              accessKeyId: ak, secretKey: sk, timestamp: ts, params: ["order-id": "1234567890"])
+          return r.stringToSign == "GET\napi.example-exchange.com\n/v1/order/orders\n\(base4)&order-id=1234567890"
+              && r.signature == "KLn4U/Au9BfxNEAqNebkXqZGpgjxOmyhMwOi+FmMfdg="
+              && r.query == "\(base4)&order-id=1234567890&Signature=KLn4U%2FAu9BfxNEAqNebkXqZGpgjxOmyhMwOi%2BFmMfdg%3D"
+      }
+      check("POST：只簽 4 個認證參數（忽略 params），host 轉小寫、method 轉大寫") {
+          let r = signRequest(method: "post", host: "API.Example-Exchange.com", path: "/v1/order/orders/place",
+                              accessKeyId: ak, secretKey: sk, timestamp: ts, params: ["symbol": "btcjpy", "amount": "1"])
+          return r.stringToSign == "POST\napi.example-exchange.com\n/v1/order/orders/place\n\(base4)"
+              && r.signature == "zwVrzld/U+nC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM="
+              && r.query == "\(base4)&Signature=zwVrzld%2FU%2BnC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM%3D"
+      }
+      check("特殊字元：空白 %20、* → %2A、/ → %2F、~ 不編碼") {
+          let r = signRequest(method: "GET", host: host, path: "/v1/account/accounts",
+                              accessKeyId: ak, secretKey: sk, timestamp: ts,
+                              params: ["symbol": "btc jpy", "note": "a~b-c_d.e*f/g"])
+          return r.stringToSign == "GET\napi.example-exchange.com\n/v1/account/accounts\n\(base4)&note=a~b-c_d.e%2Af%2Fg&symbol=btc%20jpy"
+              && r.signature == "vQgltpP9ItCkYjqTs2xwdKQSKchwSnAKRvDdsuTbSTk="
+      }
+      check("ASCII 排序（大寫在小寫之前）與非 ASCII 值") {
+          let r = signRequest(method: "GET", host: host, path: "/v1/account/accounts",
+                              accessKeyId: ak, secretKey: sk, timestamp: ts,
+                              params: ["alpha": "2", "Zeta": "1", "memo": "日本 語"])
+          return r.signature == "p+Ap28XMr9xE48g0EG+HAiomvVL0xi8P8a8i8dbC12w="
+              && r.query == "\(base4)&Zeta=1&alpha=2&memo=%E6%97%A5%E6%9C%AC%20%E8%AA%9E&Signature=p%2BAp28XMr9xE48g0EG%2BHAiomvVL0xi8P8a8i8dbC12w%3D"
+      }
+  kotlin:
+    starter: |
+      data class SignedRequest(
+          val stringToSign: String,
+          val signature: String,   // Base64，尚未 URL encode
+          val query: String        // 排序後的 query，結尾是 &Signature=<編碼後的簽名>
+      )
+
+      fun percentEncode(s: String): String {
+          // TODO
+          return s
+      }
+
+      fun formatTimestamp(epochMs: Long): String {
+          // TODO
+          return ""
+      }
+
+      fun signRequest(
+          method: String, host: String, path: String,
+          accessKeyId: String, secretKey: String,
+          timestamp: String, params: Map<String, String>
+      ): SignedRequest {
+          // TODO
+          return SignedRequest("", "", "")
+      }
+    solution: |
+      import java.time.Instant
+      import java.time.ZoneOffset
+      import java.time.format.DateTimeFormatter
+      import java.util.Base64
+      import java.util.Locale
+      import javax.crypto.Mac
+      import javax.crypto.spec.SecretKeySpec
+
+      data class SignedRequest(val stringToSign: String, val signature: String, val query: String)
+
+      private const val HEX = "0123456789ABCDEF"
+
+      fun percentEncode(s: String): String {
+          val sb = StringBuilder()
+          for (b in s.toByteArray(Charsets.UTF_8)) {
+              val c = b.toInt() and 0xFF
+              val unreserved = (c in 0x30..0x39) || (c in 0x41..0x5A) || (c in 0x61..0x7A) ||
+                  c == 0x2D || c == 0x2E || c == 0x5F || c == 0x7E
+              if (unreserved) {
+                  sb.append(c.toChar())
+              } else {
+                  sb.append('%').append(HEX[c shr 4]).append(HEX[c and 0x0F])
+              }
+          }
+          return sb.toString()
+      }
+
+      private val timestampFormatter: DateTimeFormatter =
+          DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.ROOT)
+
+      fun formatTimestamp(epochMs: Long): String =
+          Instant.ofEpochMilli(epochMs).atOffset(ZoneOffset.UTC).format(timestampFormatter)
+
+      fun signRequest(
+          method: String, host: String, path: String,
+          accessKeyId: String, secretKey: String,
+          timestamp: String, params: Map<String, String>
+      ): SignedRequest {
+          val pairs = mutableListOf(
+              "AccessKeyId" to accessKeyId,
+              "SignatureMethod" to "HmacSHA256",
+              "SignatureVersion" to "2",
+              "Timestamp" to timestamp
+          )
+          val m = method.uppercase()
+          if (m == "GET") pairs.addAll(params.map { it.key to it.value })
+          pairs.sortWith { a, b -> a.first.compareTo(b.first) }
+          val canonical = pairs.joinToString("&") { "${percentEncode(it.first)}=${percentEncode(it.second)}" }
+          val stringToSign = "$m\n${host.lowercase()}\n$path\n$canonical"
+          val mac = Mac.getInstance("HmacSHA256")
+          mac.init(SecretKeySpec(secretKey.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+          val signature = Base64.getEncoder().encodeToString(mac.doFinal(stringToSign.toByteArray(Charsets.UTF_8)))
+          return SignedRequest(stringToSign, signature, canonical + "&Signature=" + percentEncode(signature))
+      }
+    tests: |
+      val host = "api.example-exchange.com"
+      val ak = "test-access-key-0001"
+      val sk = "test-secret-key-0001"
+      val ts = "2017-05-11T15:19:30"
+      val base4 = "AccessKeyId=test-access-key-0001&SignatureMethod=HmacSHA256&SignatureVersion=2&Timestamp=2017-05-11T15%3A19%3A30"
+
+      check("percentEncode：unreserved 不編碼、空白 %20、保留字元大寫 hex") {
+          percentEncode("") == "" && percentEncode("A-z_0.9~") == "A-z_0.9~" &&
+              percentEncode("a b") == "a%20b" && percentEncode("+/=:*") == "%2B%2F%3D%3A%2A"
+      }
+      check("percentEncode：非 ASCII 先轉 UTF-8 再逐 byte 編碼") {
+          percentEncode("日") == "%E6%97%A5" && percentEncode("é") == "%C3%A9"
+      }
+      check("formatTimestamp：UTC、24 小時制、忽略毫秒") {
+          formatTimestamp(1494516006000) == "2017-05-11T15:20:06" &&
+              formatTimestamp(1494516006999) == "2017-05-11T15:20:06" &&
+              formatTimestamp(0) == "1970-01-01T00:00:00" &&
+              formatTimestamp(4102444799000) == "2099-12-31T23:59:59"
+      }
+      check("GET：query 一起簽，Timestamp 的冒號編成 %3A，order-id 排在大寫開頭的參數之後") {
+          val r = signRequest("GET", host, "/v1/order/orders", ak, sk, ts, mapOf("order-id" to "1234567890"))
+          r.stringToSign == "GET\napi.example-exchange.com\n/v1/order/orders\n$base4&order-id=1234567890" &&
+              r.signature == "KLn4U/Au9BfxNEAqNebkXqZGpgjxOmyhMwOi+FmMfdg=" &&
+              r.query == "$base4&order-id=1234567890&Signature=KLn4U%2FAu9BfxNEAqNebkXqZGpgjxOmyhMwOi%2BFmMfdg%3D"
+      }
+      check("POST：只簽 4 個認證參數（忽略 params），host 轉小寫、method 轉大寫") {
+          val r = signRequest("post", "API.Example-Exchange.com", "/v1/order/orders/place", ak, sk, ts,
+              mapOf("symbol" to "btcjpy", "amount" to "1"))
+          r.stringToSign == "POST\napi.example-exchange.com\n/v1/order/orders/place\n$base4" &&
+              r.signature == "zwVrzld/U+nC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM=" &&
+              r.query == "$base4&Signature=zwVrzld%2FU%2BnC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM%3D"
+      }
+      check("特殊字元：空白 %20、* → %2A、/ → %2F、~ 不編碼") {
+          val r = signRequest("GET", host, "/v1/account/accounts", ak, sk, ts,
+              mapOf("symbol" to "btc jpy", "note" to "a~b-c_d.e*f/g"))
+          r.stringToSign == "GET\napi.example-exchange.com\n/v1/account/accounts\n$base4&note=a~b-c_d.e%2Af%2Fg&symbol=btc%20jpy" &&
+              r.signature == "vQgltpP9ItCkYjqTs2xwdKQSKchwSnAKRvDdsuTbSTk="
+      }
+      check("ASCII 排序（大寫在小寫之前）與非 ASCII 值") {
+          val r = signRequest("GET", host, "/v1/account/accounts", ak, sk, ts,
+              mapOf("alpha" to "2", "Zeta" to "1", "memo" to "日本 語"))
+          r.signature == "p+Ap28XMr9xE48g0EG+HAiomvVL0xi8P8a8i8dbC12w=" &&
+              r.query == "$base4&Zeta=1&alpha=2&memo=%E6%97%A5%E6%9C%AC%20%E8%AA%9E&Signature=p%2BAp28XMr9xE48g0EG%2BHAiomvVL0xi8P8a8i8dbC12w%3D"
+      }
+
+- id: exchange-api-signing-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [signing, security]
+  prompt: |
+    如果要在 App 裡實作這套交易所的簽名請求（例如讓使用者匯入自己的 API 金鑰），你會怎麼設計簽名模組、怎麼測試、怎麼處理手機時間不準和金鑰保存？並說明你相關的實務經驗，以及到交易所的 App 你會怎麼做。
+  promptJa: |
+    アプリ内で取引所の署名付きリクエスト（たとえばユーザーが自分の API キーを取り込む機能）を実装する場合、署名モジュールをどう設計し、どうテストし、端末時刻のずれとキーの保管をどう扱いますか。関連する経験と、取引所アプリでどう進めるかも説明してください。
+  keyPoints:
+    - "簽名寫成純函式（輸入：method、host、path、參數、金鑰、timestamp；輸出：簽名字串、簽名、query），不依賴語言設定、時區、系統狀態"
+    - "細節：ASCII 排序、RFC 3986 的大寫十六進位、空白 `%20`、Base64 的特殊字元要再編碼、GET 簽 query、POST 只簽 4 個認證參數"
+    - "測試：固定的 test vector，用獨立的實作（Python 或 openssl）與雙平台交叉驗證；加上非 ASCII、保留字元、排序的案例"
+    - "時間：`GET /v1/common/timestamp` 取得伺服器時間，算 offset，用單調時鐘計算經過的時間；回前景時重新校時；簽名失敗時重新校時並只重試一次"
+    - "金鑰：不內嵌長期 Secret；若支援使用者匯入，存 Keychain（ThisDeviceOnly）或 Keystore 加密空間，使用時要求生物辨識，不進 log"
+    - "權限與限流：只授予必要的權限（讀取、取引、出金），可綁定來源 IP；每個 API key 每秒 10 次"
+    - "經驗連結：社交 App 的 token 過期時單一刷新、最多重試一次，登入憑證存 Keychain；行情分析 App 的 Android 用 Tink 加密、主金鑰放 Keystore"
+  modelAnswer: |
+    我會把簽名寫成純函式：輸入 method、host、path、參數、金鑰與 timestamp，輸出簽名字串、簽名和完整的 query，不依賴語言設定、時區或系統狀態。細節有幾個：參數名稱依 ASCII 排序；名稱與值依 RFC 3986 編碼，十六進位用大寫；空白是 `%20`，不是 `+`；Base64 簽名裡的 `+`、`/`、`=` 要再編碼；GET 要簽 query，POST 只簽四個認證參數。
+
+    測試用固定的 test vector，並且用獨立的實作交叉驗證，例如 openssl，雙平台用同一組案例，另外加入非 ASCII、保留字元和排序的案例。
+
+    時間方面，使用者手機時間不準，會讓簽名全部失敗，所以我用 `/v1/common/timestamp` 取得伺服器時間算 offset，經過的時間用單調時鐘計算，回前景時重新校時；簽名失敗時重新校時並只重試一次。金鑰的部分，App 不內嵌長期的 Secret；如果產品允許使用者匯入 API 金鑰，就存在 Keychain 的 ThisDeviceOnly 或 Keystore 加密空間，使用時要生物辨識，也不能進 log。
+
+    相關的經驗是：在一個社交 App 的 iOS 端，token 過期時只讓一個請求去刷新、每個請求最多重試一次，登入憑證存在 Keychain；在一個行情分析 App 的 Android 端，把登入 cookie 用 Tink 加密，主金鑰放在 Keystore。到交易所的 App，簽名請求我會用同樣的原則來做。
+  modelAnswerJa: |
+    署名は純粋関数にします。入力は method、host、path、パラメータ、秘密鍵、timestamp で、出力は署名対象の文字列、署名、完成した query です。言語設定、タイムゾーン、システムの状態には依存させません。細かい点は次のとおりです。パラメータ名は ASCII 順にソートし、名前と値は RFC 3986 に従って、16 進数は大文字でエンコードします。空白は `+` ではなく `%20` です。Base64 の署名に含まれる `+`、`/`、`=` は再度エンコードします。GET は query も署名の対象にし、POST は 4 つの認証パラメータだけを署名します。
+
+    テストは固定のテストベクターを使い、openssl などの独立した実装で相互に検証します。iOS と Android で同じケースを使い、非 ASCII、予約文字、ソート順のケースも加えます。
+
+    時刻については、ユーザーの端末の時刻がずれていると署名がすべて失敗するため、`/v1/common/timestamp` でサーバー時刻を取得して offset を計算します。経過時間は単調増加のクロックで測り、フォアグラウンドに戻ったときは再校正します。署名に失敗したら再校正して、一度だけ再試行します。キーについては、長期の Secret はアプリに埋め込みません。ユーザーが API キーを取り込む機能がある場合は、Keychain の ThisDeviceOnly か Keystore で暗号化した領域に保存し、使うときは生体認証を求め、ログには出しません。
+
+    関連する経験としては、ソーシャルアプリの iOS で、トークンの期限切れ時に更新するリクエストを 1 つに絞り、リクエストごとに再試行を最大 1 回にしていました。ログイン情報は Keychain に保存していました。相場分析アプリの Android では、ログイン用の cookie を Tink で暗号化し、マスターキーを Keystore に置いていました。取引所の署名付きリクエストでも、同じ考え方で進めます。
+  followUps:
+    - "簽名失敗時，怎麼判斷原因是手機時間不準、編碼錯誤，還是金鑰錯誤？"
+    - "怎麼避免簽名字串被寫進 log？"
+    - "Kronos 這類 NTP 函式庫，和交易所的伺服器時間，你會選哪個？為什麼？"
+  timeLimitSec: 150
+
+- id: exchange-api-signing-09
+  type: flash
+  level: 1
+  priority: P1
+  tags: [signing]
+  front: Signature V2（Huobi 相容的交易所 API）的 5 個步驟與 3 個最常見的編碼錯誤
+  back: |
+    **5 個步驟**：(1) 4 個認證參數（GET 再加上 query，POST 只簽這 4 個）→ (2) 參數名稱依 ASCII 排序、名稱與值做 URL 編碼、用 `&` 連接 → (3) 組成 `METHOD\n小寫host\npath\nquery` → (4) HMAC-SHA256 再 Base64 → (5) `Signature` 再做 URL 編碼，附加在 query 最後。
+    **Timestamp**：UTC 的 `yyyy-MM-ddTHH:mm:ss`（`:` 要編成 `%3A`）。**私有 WebSocket**：SignatureVersion 是 `2.1`、path 是 `/ws/v2`、參數名稱是小寫開頭的駝峰。
+    **三個最常見的錯**：空白編成 `+`（要用 `%20`）；十六進位用小寫（要用大寫）；忘了編碼 `Signature` 裡的 `+`、`/`、`=`。另外不要用 Java 的 `URLEncoder` 和 Swift 的 `urlQueryAllowed`。
+    **手機時間不準**：`GET /v1/common/timestamp` 取得伺服器時間 → 算 offset → 用單調時鐘計算經過的時間。

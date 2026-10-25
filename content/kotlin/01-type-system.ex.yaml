@@ -1,0 +1,183 @@
+- id: kotlin-type-system-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [null-safety, platform-type]
+  prompt: |
+    Java SDK 的 `public String getNickname()` 沒有任何 nullability 標註（沒標明這個值可不可能是 null），實際上可能回傳 `null`。Kotlin 端寫 `val n = sdk.nickname`，編譯器推斷的型別與風險是哪一項？
+  options:
+    - "推斷為 `String`，編譯器保證非 null，不會有風險"
+    - "推斷為 `String?`，使用時一定要先判斷"
+    - "推斷為 platform type `String!`（Java 傳進來、沒標 null 資訊的型別），編譯器不檢查；`n.length` 才會在使用處 NPE"
+    - "編譯失敗，Kotlin 不允許呼叫沒標註的 Java 方法"
+  answer: 2
+  explain: |
+    沒有標註的 Java 型別，Kotlin 無從得知它會不會是 null，所以標成 platform type（`String!`）：當成 `String` 或 `String?` 用，編譯器都放行，由你自己負責。NPE（對 null 呼叫方法時丟出的例外）出現在**使用的那一行**（`n.length`），離來源很遠，不好追。
+    - 第 1 項錯：編譯器並沒有保證，null 一樣會跑進來。
+    - 第 2 項錯：只有 Java 端標了 `@Nullable`，Kotlin 才會推斷成 `String?`；沒標註時不會自動當成可為 null，也不會強迫你判斷。
+    - 第 4 項錯：Kotlin 可以呼叫沒有標註的 Java 方法，只是結果型別是 platform type。
+    如果寫成 `val n: String = sdk.nickname`，編譯器會在指派的地方插入檢查，null 時當場丟例外，反而比較好定位。最好的做法是在邊界處（Java／SDK 回傳的地方）就宣告成 `String?`，讓 domain 層（業務邏輯那一層）看不到 `String!`。
+
+- id: kotlin-type-system-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [generics, variance]
+  prompt: |
+    下列哪些宣告**可以通過編譯**？（複選）
+  options:
+    - "`val a: List<Number> = listOf<Int>(1)`"
+    - "`val b: MutableList<Number> = mutableListOf<Int>(1)`"
+    - "`val c: Comparable<Int> = object : Comparable<Number> { override fun compareTo(other: Number) = 0 }`"
+    - "`val d: java.util.Comparator<Int> = java.util.Comparator<Number> { _, _ -> 0 }`"
+    - "`val e: MutableList<*> = mutableListOf(\"x\"); e.add(\"y\")`"
+  answer: [0, 2]
+  explain: |
+    - 第 1 項可以：`List<out E>` 只會把元素拿出來、不能放進去，所以 `List<Int>` 可以當成 `List<Number>` 用（`out` 的 covariant）。
+    - 第 2 項不行：`MutableList<E>` 既能讀也能寫，是 invariant。如果允許，就能對 `MutableList<Number>` 呼叫 `add(1.5)`，結果在原本的 `MutableList<Int>` 裡塞進一個 `Double`。
+    - 第 3 項可以：`Comparable<in T>` 是 contravariant（`in`，只會接收 T）。能比較任何 `Number` 的比較器，當然也能比較 `Int`，所以 `Comparable<Number>` 可以當 `Comparable<Int>` 用。
+    - 第 4 項不行：`java.util.Comparator<T>` 是 Java 介面，Java 的介面在 Kotlin 裡預設是 invariant，`Comparator<Number>` 不能直接當 `Comparator<Int>` 用。要在使用處寫 `Comparator<in Int>` 才行。
+    - 第 5 項不行：星號投影的 `MutableList<*>`（「不知道裡面是什麼型別」）只能讀，讀出來是 `Any?`；`add` 的參數型別實質上是 `Nothing`，沒有任何值能傳進去，編譯器直接擋掉。
+
+- id: kotlin-type-system-03
+  type: predict
+  level: 2
+  priority: P0
+  tags: [data-class, bigdecimal, equals]
+  prompt: |
+    下列程式依序印出什麼？（4 行輸出）
+  codeLang: kotlin
+  code: |
+    import java.math.BigDecimal
+
+    data class Quote(val symbol: String, val price: BigDecimal) {
+        var seen: Int = 0
+    }
+    data class Blob(val bytes: ByteArray)
+
+    fun main() {
+        val a = Quote("BTC", BigDecimal("1.0"))
+        val b = Quote("BTC", BigDecimal("1.00"))
+        println(a == b)
+        a.seen = 3
+        val c = a.copy()
+        println(c.seen)
+        println(a == c)
+        println(Blob(byteArrayOf(1)) == Blob(byteArrayOf(1)))
+    }
+  answer: |
+    false 0 true false
+  explain: |
+    - 第 1 行 `false`：data class 的 `equals` 會逐個呼叫主建構子屬性的 `equals`。`BigDecimal.equals` 連小數位數（scale）都比，`1.0` 與 `1.00` 不相等，所以整個物件不相等。要比數值大小要用 `compareTo`。
+    - 第 2 行 `0`：`seen` 宣告在 body 裡（不在主建構子的括號內），不參與 `equals`、`hashCode`、`toString`，`copy()` 也不會帶過去，新物件的 `seen` 回到初始值 `0`。
+    - 第 3 行 `true`：因為 `seen` 不參與 `equals`，`a == c` 是 `true`，但兩個物件的狀態其實不同（`seen` 是 3 和 0），這是 data class 常見的誤判。（`price` 兩邊都是 `1.0`，所以相等。）
+    - 第 4 行 `false`：`ByteArray` 屬性比的是「是不是同一個物件」（參考比較），內容一樣也是 `false`。要比較內容，就自己覆寫 `equals`／`hashCode`，或改用 `List<Byte>`。
+
+- id: kotlin-type-system-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [inline, reified, crossinline]
+  prompt: |
+    補上關鍵字。第一個函式要在執行時取得 `T` 的實際型別，讓 `as? T` 真的會檢查；第二個函式的 lambda 會被放進 `Runnable` 在別的地方執行，所以必須禁止 non-local return（在 lambda 裡直接寫 `return`，結果是結束外層函式）。
+  codeLang: kotlin
+  code: |
+    inline fun <____ T : Any> Map<String, Any?>.getAs(key: String): T? = this[key] as? T
+
+    inline fun runOnMain(h: Handler, ____ block: () -> Unit) {
+        h.post { block() }
+    }
+  blanks:
+    - [reified]
+    - [crossinline]
+  explain: |
+    - 第一格 `reified`：泛型有 type erasure（型別擦除），編譯完之後執行時不知道 `T` 是什麼型別，所以一般的泛型函式不能寫 `x is T`。`reified` 必須搭配 `inline`：編譯器把函式內容貼到呼叫處，那裡的 `T` 是明確的型別，`as? T` 才會真的檢查。沒有它，`as? T` 只是會被警告的 unchecked cast（不會真的檢查）。
+    - 第二格 `crossinline`：`block()` 被放進另一個 `Runnable` 裡，等它執行時外層函式可能早就結束了，`return` 沒有地方可以跳回去，所以要用 `crossinline` 明確禁止 non-local return。
+    - 其他關鍵字為什麼不對：`noinline` 是「這個 lambda 不要展開，因為我要把它存起來或當值傳給別人」，不是禁止 `return`；單獨的 `inline` 在這裡已經有了，不能解決 `return` 的問題。
+
+- id: kotlin-type-system-05
+  type: single
+  level: 3
+  priority: P1
+  tags: [value-class, boxing]
+  prompt: |
+    團隊把 `OrderId`、`Symbol` 都改成 `@JvmInline value class`，想避免字串傳錯。關於它在執行時的行為，哪一項敘述正確？
+  options:
+    - "任何情況都是零成本，執行時一律只剩底層的 `String`"
+    - "當它被當成 `Any`、介面型別或泛型參數（例如 `List<OrderId>`）使用時會 boxing（多包成一個物件）；直接當函式參數傳遞時則不會"
+    - "Java 呼叫端可以用原本的函式名稱 `cancel(id)` 呼叫接收它的函式"
+    - "value class 可以繼承另一個 class，以重用欄位"
+  answer: 1
+  explain: |
+    value class 的目標是「編譯時是獨立型別、執行時盡量變回底層值」，直接當函式參數、區域變數使用時，執行時確實只剩底層的 `String`。但放進泛型集合、`Any` 或介面型別時，需要 boxing（多配置一個物件把值包起來），因為泛型在執行時只認得物件。每秒大量更新的行情資料要用 profiler 確認，不要預設它是零成本。
+    - 第 1 項錯：「任何情況都是零成本」不對，上面說的 boxing 就是成本。
+    - 第 3 項錯：編譯器會改掉接收 value class 的函式在 Java 看到的名稱（為了避免和接收底層型別的函式衝突），所以 Java 不能用原名呼叫。要給 Java 呼叫的公開函式，參數不建議用 value class。
+    - 第 4 項錯：value class 只能實作介面，不能繼承 class。
+
+- id: kotlin-type-system-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [sealed, when]
+  prompt: |
+    domain 層有 `sealed interface OrderState`，所有畫面用不帶 `else` 的 `when` 處理（每個子型別都要寫到，也就是窮盡檢查）。現在新增子型別 `Expired`，下列哪個描述最準確？
+  options:
+    - "所有 `when` 會自動走預設路徑，不會有任何錯誤"
+    - "只有 `when` 當表達式（拿來回傳值）時才會報錯，當敘述（單純執行）時不檢查"
+    - "同一次編譯會在每個不窮盡的 `when` 報錯，逼你補分支；若跨 module 且消費端沒有重新編譯，執行時會丟 `NoWhenBranchMatchedException`"
+    - "Kotlin 完全不檢查 sealed 的窮盡性，要靠單元測試"
+  answer: 2
+  explain: |
+    sealed 的價值就是窮盡檢查：編譯器知道所有子型別，所以新增 `Expired` 後，每個沒有 `else` 的 `when` 都會編譯錯誤，逼你補上分支。
+    - 第 1 項錯：沒有 `else` 就沒有預設路徑，漏掉的分支會直接編譯錯誤。
+    - 第 2 項錯：Kotlin 1.7 起，sealed、enum、Boolean 的 `when` 敘述也必須窮盡，不只表達式。
+    - 第 4 項錯：Kotlin 在編譯時就會檢查，不用等單元測試。
+    要注意一個例外，跟二進位相容有關（library 改了之後，使用它的程式不重新編譯也要能跑）：library 先編譯好、使用它的 module 沒有重新編譯時，舊的 `when` 不認得新子型別，會在執行時丟 `NoWhenBranchMatchedException`。公開給外部 module 的 sealed 階層，新增子型別要當成會讓舊程式壞掉的改動，或預先留一個 `Unknown` 子型別接住還不認識的狀態。
+
+- id: kotlin-type-system-07
+  type: open
+  level: 2
+  priority: P1
+  tags: [domain, modeling, exchange]
+  prompt: |
+    設計 Android 端的下單 domain 模型（domain 就是業務邏輯那一層）：價格、數量、交易對、訂單狀態。你會怎麼運用 Kotlin 的型別系統，讓「傳錯參數」與「不合法狀態」在編譯時就寫不出來？
+  promptJa: |
+    Android の注文ドメインモデル（価格・数量・銘柄・注文ステータス）を設計するとき、Kotlin の型システムを使って「引数の取り違え」や「不正な状態」をコンパイル時に防ぐにはどうしますか？
+  keyPoints:
+    - "`Price`、`Quantity`、`Symbol`、`OrderId` 用 value class 包起來，函式簽名帶語意，避免 String／BigDecimal 傳錯"
+    - 金額與數量底層用 `BigDecimal`，value class 不取代運算規則；提醒 boxing 與 `equals` 比 scale 的問題
+    - 訂單狀態用 `sealed interface`：`New`、`PartiallyFilled(filled)`、`Filled`、`Rejected(reason)`，不要用 enum 加上可能是 null 的附屬欄位
+    - UI 層用不帶 `else` 的 `when` 取得窮盡檢查；新增狀態時編譯器會指出所有要改的地方
+    - Java／SDK／JSON 的邊界，要把 platform type 轉成明確的型別，反序列化失敗轉成明確的錯誤型別
+    - 公開給其他 module 的 sealed 階層要考慮二進位相容（未知狀態的 fallback）
+  modelAnswer: |
+    我會分三層處理。第一層是參數語意：`Price`、`Quantity`、`Symbol`、`OrderId` 都包成 value class，函式簽名就能擋掉傳錯。編譯時它們是不同的型別，執行時多半變回底層的值；不過要知道放進泛型集合會 boxing（多包一個物件），行情這種每秒更新很多次的地方我會先量測。
+
+    第二層是金額本身，底層仍然用 `BigDecimal`，從字串建立。value class 只負責擋傳錯，不負責捨入規則。比較金額時也要注意 `BigDecimal.equals` 會連小數位數一起比，要比數值大小我會用 `compareTo`。
+
+    第三層是狀態：用 `sealed interface OrderState`，`PartiallyFilled` 帶已成交量，`Rejected` 帶原因，這樣「已成交但沒有成交量」這種組合根本寫不出來。畫面用不帶 `else` 的 `when`，新增狀態時編譯器會告訴我所有要改的地方。
+
+    最後是邊界：Retrofit、Java SDK 回來、沒有 null 標註的值（platform type），我在 data 層就轉成明確的型別。解析失敗轉成 sealed 的錯誤結果，不讓 `String!` 或 null 流進 domain。後端新增還不認識的狀態時，解析成 `Unknown`，而不是讓 App 在執行時丟例外。
+  modelAnswerJa: |
+    三つの層で考えます。第一に、引数の意味付けです。`Price`、`Quantity`、`Symbol`、`OrderId` を value class で包み、関数のシグネチャに意味を持たせることで、引数の取り違えをコンパイル時に防ぎます。コンパイル時は別々の型ですが、実行時は多くの場合、中身の値に戻ります。ただし、ジェネリクスのコレクションに入れると boxing（オブジェクトで包むこと）が発生するため、相場のように毎秒何度も更新されるデータは計測してから判断します。
+
+    第二に、金額そのものです。中身は `BigDecimal` を使い、文字列から生成します。value class は取り違えを防ぐだけで、丸めのルールは担当しません。また、`BigDecimal.equals` は小数桁数まで比較するので、数値の大小を比べるときは `compareTo` を使います。
+
+    第三に、状態です。`sealed interface OrderState` を使い、`PartiallyFilled` は約定済み数量を、`Rejected` は理由を持たせます。こうすると「約定済みなのに数量がない」という組み合わせを書けなくなります。画面側は `else` なしの `when` で書くので、状態が増えたときはコンパイラが修正箇所をすべて教えてくれます。
+
+    最後に境界です。Retrofit や Java の SDK から返ってくる、null の注釈がない値（platform type）は、data 層で明示的な型に変換します。パースに失敗した場合は sealed のエラー結果にして、`String!` や null を domain に入れません。バックエンドが未知のステータスを追加した場合は `Unknown` として扱い、実行時に例外が出ないようにします。
+  followUps:
+    - value class 放進 `StateFlow<List<Price>>` 會發生什麼事？
+    - 後端新增一種訂單狀態，舊版 App 怎麼處理？
+    - 為什麼不用 enum class？
+
+- id: kotlin-type-system-08
+  type: flash
+  level: 1
+  priority: P1
+  tags: [variance]
+  front: Kotlin 的 `out`／`in`／`*` 對應 Java 的什麼？`MutableList` 為什麼不變？
+  back: |
+    `out T` ＝ Java 的 `? extends T`（只會把 T 拿出來），`in T` ＝ `? super T`（只會接收 T），`*` ＝ `?`（讀得到 `Any?`、不能寫）。Java 的口訣是 PECS（Producer Extends, Consumer Super）：只讀的用 extends，只寫的用 super。
+    `MutableList<E>` 既讀又寫，放寬任何一邊都會破壞型別安全（例如把 `Double` 塞進 `MutableList<Int>`），所以是 invariant（不變）；`List<out E>` 只會讀，才能 covariant（`List<Int>` 可以當 `List<Number>` 用）。
+    Java 介面在 Kotlin 裡預設是 invariant（例如 `Comparator<T>`），需要時用使用處投影（在用的那一行才限制）`Comparator<in T>`。

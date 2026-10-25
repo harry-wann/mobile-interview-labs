@@ -1,0 +1,185 @@
+- id: advanced-architecture-evolution-01
+  type: single
+  level: 2
+  priority: P1
+  tags: [strangler, refactoring]
+  prompt: |
+    接手一個沒有測試、有 1 萬行的 God ViewController（或 Fragment，一個什麼都管的巨大畫面類別），主管要你「重構成乾淨的架構」。最合理的第一步是？
+  options:
+    - "新開一條分支，一次全部重寫，完成後再合併"
+    - "先為現有行為建立 characterization test（不管對不對，先用測試鎖定現在的行為），或至少準備 UI／整合測試作為安全網；再在邊界抽出介面（seam），讓新舊實作可以並存，之後逐畫面遷移"
+    - "先導入最新的架構框架，再把舊程式碼一行一行改寫"
+    - "不要碰它，加新功能時在旁邊另外寫"
+  answer: 1
+  explain: |
+    - 第一個選項錯誤：big bang 重寫沒有安全網、分支壽命很長、出事無法回復，風險最高。
+    - 第二個選項正確：strangler 的順序是安全網、seam、新實作放在 feature flag 後面、逐畫面遷移、刪除舊程式碼。每一小步都可以上線、可以回復。
+    - 第三個選項錯誤：先換框架再改寫，等於一次改動太多東西，而且沒有測試保護，出錯時不知道是框架還是改寫造成。
+    - 第四個選項錯誤：短期可行，但如果沒有計畫刪除舊程式碼，專案會長期停在新舊混合的狀態，這是最常見的失敗模式。
+
+- id: advanced-architecture-evolution-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [usecase, clean-architecture]
+  prompt: |
+    關於 UseCase（又稱 interactor，domain 層裡代表「使用者想做的一件事」的小單位），哪些敘述正確？（複選）
+  options:
+    - "只有轉呼叫 repository 單一方法的 UseCase，通常沒有價值，只會增加樣板程式碼"
+    - "當一段業務規則被多個畫面重用，或需要協調多個 repository 時，UseCase 是合適的位置"
+    - "導入 Clean Architecture 就一定要每個功能都有 UseCase，否則就是違反架構"
+    - "UseCase 讓業務規則不依賴畫面與框架，更容易寫單元測試"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：只是轉呼叫的 UseCase 多一層卻沒有新增任何邏輯。
+    - 第 2 項正確：重用的規則和跨 repository 的協調，才是 UseCase 的價值。
+    - 第 3 項錯誤：架構規則是手段，不是目的。漸進演進時，應該先在重用度高、規則重的地方導入，其餘維持原樣，而不是為了一致性硬加 pass-through（只轉呼叫）的 UseCase。
+    - 第 4 項正確：業務規則放在 domain 層，不依賴 UI 與框架，單元測試就不需要啟動畫面。
+    交易所的業務規則，例如下單前驗證、手續費預估、tick size（最小跳動單位）對齊，很適合放進 domain 層：它們被多個畫面與兩個平台共用，也最需要單元測試。
+
+- id: advanced-architecture-evolution-03
+  type: single
+  level: 2
+  priority: P1
+  tags: [feature-flag, remote-config]
+  prompt: |
+    要用 Remote Config（遠端設定）控制一個新的「進階下單」功能。下列哪個設計最穩健？
+  options:
+    - "取不到設定時預設為開啟，才能讓使用者看到新功能"
+    - "預設值寫在 App 內（金融功能偏保守，預設關閉）；一個 session 內只評估一次，避免畫面中途翻轉；穩定上線後依 flag 的到期日刪除旗標與舊程式碼；授權仍由 server 判斷"
+    - "每次畫面出現都重新抓取設定，確保永遠是最新的"
+    - "用 Remote Config 的值當作出金權限的唯一依據"
+  answer: 1
+  explain: |
+    - 第一個選項錯誤：離線或抓取失敗時，金融功能預設開啟有風險，預設應該偏保守。
+    - 第二個選項正確：flag 的設計要處理三件事：抓取失敗時的預設值、設定在同一個 session 內的一致性、以及 flag debt（沒清掉的旗標越積越多）。
+    - 第三個選項錯誤：畫面每次出現都重新抓，使用者操作到一半功能可能突然翻轉，也增加不必要的網路請求。
+    - 第四個選項錯誤：Remote Config 的值，使用者的手機可以讀到、也可能被竄改，不能當授權依據。權限一律在 server 判斷。
+    kill switch（出事時遠端關閉功能的開關）則要能快速關閉並有監控，必要時搭配「最低支援版本」強制更新。
+
+- id: advanced-architecture-evolution-04
+  type: order
+  level: 2
+  priority: P1
+  tags: [rx, flow, migration]
+  prompt: |
+    把 Android 專案從 RxJava 漸進遷移到 Kotlin Flow。請依合理順序排列。
+  items:
+    - 在 repository（資料層）的邊界，讓新的 API 回傳 Flow（透過橋接函式與舊的 Observable 互轉），其他層暫時不動
+    - ViewModel 內部把 BehaviorRelay／PublishRelay 換成 MutableStateFlow／MutableSharedFlow，對外暴露 StateFlow 或 Flow，畫面改用 collectAsStateWithLifecycle 或 repeatOnLifecycle 收集
+    - 逐一改寫剩下的 Rx 運算子鏈與測試（用 Turbine 這類測試 Flow 的函式庫，取代 RxJava 的 TestObserver）
+    - 確認沒有呼叫端再依賴橋接之後，移除橋接函式與 Rx 依賴
+  explain: |
+    原則是「從邊界往內、一次一個畫面」。先在資料層邊界建立 Flow 的出口（有橋接，下游才能逐步改）；再改 ViewModel 與畫面（內部的狀態與對外暴露的型別要一起換，否則 ViewModel 還是在發 Rx）；接著清掉剩下的運算子鏈與測試；最後才刪橋接。
+    橋接只放在邊界，而且最後一定要刪除，否則專案會永久背著兩套資料流。Dagger 遷移到 Hilt、XML 遷移到 Compose 也適用同樣的思路：先橋接、再遷移、最後刪除。
+
+- id: advanced-architecture-evolution-05
+  type: single
+  level: 3
+  priority: P1
+  tags: [di, service-locator]
+  prompt: |
+    某 iOS 專案的 ViewModel 建構子長這樣：`init(meRepository: any MeRepositoryProtocol = MeRepository.shared)`，另外有一個全域的 `enum DependencyContainer { static var … }`，讓 UI 測試可以整批替換成 stub（測試用的假資料來源）。下列對這個設計的評價，何者最準確？
+  options:
+    - "這是標準的建構子注入，沒有任何缺點"
+    - "它能讓單元測試傳入 mock，也能讓 UI 測試整批替換，成本低；但預設值仍然偷偷指向單例，容器是全域的可變狀態，依賴關係被隱藏。應該限制在邊界，長期往明確的 composition root 收斂"
+    - "它完全是 service locator，無法測試"
+    - "預設參數在 Swift 不能用在協定型別上"
+  answer: 1
+  explain: |
+    預設參數注入加上靜態容器，是務實的過渡做法：單元測試可以傳 mock，UI 測試可以替換外部 SDK（第三方提供的開發套件）。缺點是依賴仍然被隱藏（呼叫端看不出它用了哪個單例），而且可變的全域狀態在平行測試時容易互相污染。
+    - 第一個選項錯誤：標準的建構子注入沒有預設值指向單例，依賴由呼叫端明確傳入。
+    - 第三個選項錯誤：它可以測試，只是依賴被隱藏、全域狀態需要小心。
+    - 第四個選項錯誤：Swift 的預設參數可以用在協定型別上，題目的程式碼就是例子。
+    比較好的方向，是在 App 啟動的地方建立 composition root（統一建立與組裝物件的地方），把依賴明確傳進去。
+
+- id: advanced-architecture-evolution-06
+  type: fill
+  level: 1
+  priority: P1
+  tags: [hilt, di]
+  prompt: |
+    補上 Hilt（Android 官方建議的依賴注入函式庫）的註解：ViewModel 的建構子注入，以及把模組安裝到 Singleton component。
+  codeLang: kotlin
+  code: |
+    @HiltViewModel
+    class OrderViewModel @____ constructor(
+        private val placeOrder: PlaceOrderUseCase,
+    ) : ViewModel()
+
+    @Module
+    @____(SingletonComponent::class)
+    object NetworkModule {
+        @Provides @Singleton
+        fun okHttp(): OkHttpClient = OkHttpClient()
+    }
+  blanks:
+    - [Inject]
+    - [InstallIn]
+  explain: |
+    `@Inject constructor` 告訴 Hilt 如何建立這個類別；`@InstallIn(SingletonComponent::class)` 決定模組綁定的存活時間（Singleton 與整個 Application 一樣長）。
+    Hilt 在編譯時（透過 kapt 或 KSP 這類程式碼產生工具）就驗證整張依賴圖，缺少綁定會直接編譯失敗，這是它相對於 Koin 這類執行時才解析依賴的 service locator 式函式庫的主要優點。
+
+- id: advanced-architecture-evolution-07
+  type: multi
+  level: 2
+  priority: P1
+  tags: [modularization]
+  prompt: |
+    關於 App 的模組化，哪些敘述正確？（複選）
+  options:
+    - "依 feature 切模組，並讓 feature 之間不互相依賴（透過介面或導航契約溝通），可以提升平行編譯與增量編譯的速度，也能強制邊界"
+    - "模組越多越好，每個類別一個模組"
+    - "循環依賴可以靠把共用的程式碼丟進 `common` 模組解決，之後 `common` 會自然保持乾淨"
+    - "太早切得太細的模組，會增加建置設定與跨模組溝通的成本"
+  answer: [0, 3]
+  explain: |
+    - 第 1 項正確：只有改動的模組需要重新編譯（增量編譯），沒有互相依賴的模組可以同時編譯（平行編譯）。
+    - 第 2 項錯誤：模組太多，建置設定和跨模組溝通的成本會超過節省的建置時間。
+    - 第 3 項錯誤：`common` 是最常見的垃圾桶，什麼都放進去，最後所有模組都依賴它，邊界形同虛設。循環依賴要靠改善依賴方向（依賴反轉，也就是兩邊都依賴同一個介面）解決。
+    - 第 4 項正確：模組化的好處要在專案夠大時才划算。建議先從邊界清楚的部分開始（網路層、設計系統、單一 feature），觀察建置時間與耦合的實際痛點，再決定切多細。
+
+- id: advanced-architecture-evolution-08
+  type: open
+  level: 3
+  priority: P0
+  tags: [architecture]
+  prompt: |
+    請介紹你做過的雙平台重構：iOS 與 Android 各自是怎麼做的、你怎麼讓重構可以一步一步上線，以及換成交易所 App 你會怎麼繼續演進架構。
+  promptJa: |
+    取り組んだことのあるリファクタリングについて、iOS と Android それぞれのやり方、段階的にリリースできるようにした工夫、そして取引所アプリでアーキテクチャをどう発展させていくかを説明してください。
+  keyPoints:
+    - iOS：全 App 重構；SwiftUI 與 UIKit 混合（SwiftUI 以 UIHostingController 嵌入），導入 Swift Concurrency 與 Combine；導航用 FlowController，ViewModel 以 Inputs／Outputs 協定組成
+    - Android：開發新功能之餘逐頁重構；導入 Compose、Navigation Component、Paging 3；依賴注入從 Dagger 遷移到 Hilt
+    - "做過的：Android 是 strangler 的做法，新功能用新架構、舊畫面在開發新功能時逐頁換"
+    - "換成交易所 App 我會：先建安全網（測試）、在邊界抽出介面、用 feature flag 讓新舊並存、逐畫面遷移、最後刪除舊程式碼"
+    - 流程：把 AI agent 納入開發，建立規劃、實作、review、修正的循環
+    - 對各模式的取捨：MVVM 簡單好測；MVI 單一 state；Clean 隔離業務規則但要避免 pass-through；TCA 測試強但成本高
+    - 換成交易所 App：金融 App 偏好可決定性與可稽核；精度、tick size、下單預檢放 domain 層，兩個平台共用同一份測試案例；依賴注入往明確的 composition root 收斂
+  modelAnswer: |
+    在一個社交 App，我獨立負責 iOS 和 Android 的重構。iOS 是全 App 重構：採 SwiftUI 與 UIKit 混合的架構，SwiftUI 的畫面以 `UIHostingController` 嵌入；導航由 FlowController 負責，ViewModel 用輸入、輸出協定組成；非同步導入 Swift Concurrency 與 Combine。Android 則是在開發新功能之餘逐頁重構，陸續導入 Compose、Navigation Component 和 Paging 3，並把依賴注入從 Dagger 遷移到 Hilt。
+    Android 的做法就是 strangler 的思路：新功能用新架構寫，舊畫面在開發新功能時一頁一頁換。流程上我把 AI agent 納入開發，建立「規劃、實作、review、修正」的循環。
+    換成交易所 App 做架構演進，我會更系統地走 strangler：每換一塊之前先補測試當安全網，在邊界抽出介面，用 feature flag 讓新舊實作並存，逐畫面遷移，最後把舊程式碼刪掉。這樣每一步都能上線，也能回復。
+    我會把 domain 規則，例如精度、tick size 對齊、下單預檢，放在 domain 層，iOS 和 Android 共用同一份測試案例，因為金融 App 需要可決定性與可稽核。依賴注入我會以明確的 composition root 為主；架構模式則依畫面的複雜度選擇，簡單的畫面用 MVVM，狀態複雜的流程，例如下單，用單一 state 的 MVI 風格。
+  modelAnswerJa: |
+    あるソーシャルアプリで iOS と Android のリファクタリングを一人で担当しました。iOS はアプリ全体をリファクタリングし、SwiftUI と UIKit のハイブリッド構成にしました。SwiftUI の画面は `UIHostingController` で埋め込み、ナビゲーションは FlowController、ViewModel は入力と出力のプロトコルで構成し、非同期処理には Swift Concurrency と Combine を導入しました。Android は新機能の開発の合間に画面ごとにリファクタリングを進め、Compose、Navigation Component、Paging 3 を導入し、依存性の注入を Dagger から Hilt へ移行しました。
+    Android の進め方は strangler の考え方で、新機能は新しいアーキテクチャで書き、古い画面は機能開発の合間に一画面ずつ置き換えました。プロセスとしては、AI エージェントを開発に取り入れ、「計画、実装、レビュー、修正」のサイクルを作りました。
+    取引所アプリでアーキテクチャを発展させる際は、より体系的に strangler を進めたいと考えています。置き換える前にテストで安全網を作り、境界にインターフェースを切り、feature flag で新旧の実装を共存させ、画面単位で移行し、最後に古いコードを削除します。こうすれば一歩ごとにリリースでき、元に戻すこともできます。
+    取引所アプリでは、精度、tick size の調整、注文前チェックといったドメインルールをドメイン層に置き、iOS と Android で同じテストケースを使います。金融アプリには決定性と監査可能性が必要だからです。依存性の注入は明確な composition root を中心にし、アーキテクチャパターンは画面の複雑さに応じて選びます。単純な画面は MVVM、注文のように状態が複雑なフローは単一 state の MVI 風にします。
+  followUps:
+    - 一個畫面一個畫面遷移時，新舊畫面的邊界怎麼設計？
+    - 從 Rx 遷移到 Flow 時，怎麼避免橋接的程式碼永遠留著？
+    - 為什麼不直接導入 TCA？
+  timeLimitSec: 150
+
+- id: advanced-architecture-evolution-09
+  type: flash
+  level: 2
+  priority: P1
+  tags: [patterns]
+  front: MVVM、MVI、Clean、TCA 各自解決什麼問題？代價是什麼？
+  back: |
+    - MVVM：View 觀察 ViewModel 的狀態，簡單好測；代價是狀態分散，容易彼此不一致。
+    - MVI（UDF，單向資料流）：單一 state、intent、reducer，可重現、好測；代價是樣板多，每秒更新很多次的欄位會拖累整個畫面。
+    - Clean：分層、依賴向內，隔離業務規則；代價是容易出現只轉呼叫的樣板。
+    - TCA（iOS）：Reducer、Effect、Dependency，用 `TestStore` 逐步驗證；行為可預測，但學習曲線陡、編譯時間變長。

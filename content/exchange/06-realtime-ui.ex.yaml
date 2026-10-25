@@ -1,0 +1,391 @@
+- id: exchange-realtime-ui-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [conflate, rates]
+  prompt: |
+    行情 WebSocket 每秒推送 200 到 400 則更新，行情列表有 40 個交易對。下列哪個設計最合理？
+  options:
+    - "每收到一則就更新對應那一列的畫面，確保使用者看到每一筆資料"
+    - "背景把每一則資料都套用到「每個交易對的最新報價」；畫面用固定節奏（例如每 100 到 250 毫秒）取一次最新快照，只更新有變動、而且畫面上看得到的列"
+    - "對整個資料流做 `debounce(300 毫秒)`，這樣畫面比較穩定"
+    - "把更新頻率降到每 5 秒一次，比較省電"
+  answer: 1
+  explain: |
+    資料進來的頻率、背景最新狀態的更新頻率、畫面的刷新頻率，是三件不同的事。背景每一則都要處理，但畫面只需要在每次刷新時拿到當下最新的價格；中間被蓋掉的價格沒有人看得到，丟掉不會讓使用者漏掉有意義的資訊。
+    - 第 1 項：每一則都更新畫面，主執行緒每秒要做幾百次版面計算和繪製。一格畫面只有約 16.7 毫秒的時間預算，使用者滑動列表就會卡；而且人眼也讀不了每秒幾百次的變化。
+    - 第 3 項：`debounce` 要等資料「安靜」一段時間才送出最後一筆，行情持續進來時永遠等不到，畫面會收不到更新。
+    - 第 4 項：5 秒太久，使用者會以為價格是舊的，行情畫面通常 100 到 250 毫秒更新一次。
+
+- id: exchange-realtime-ui-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [conflate, sample, debounce]
+  prompt: |
+    關於 Kotlin Flow、Swift 的 `AsyncStream` 與 Combine 在行情上的運算子，哪些敘述正確？（複選）
+  options:
+    - "`conflate()` 在消費者處理得比較慢時，丟掉中間的值，只保留最新的一筆"
+    - "`sample(100)` 每 100 毫秒取一次這段期間內最新的值"
+    - "`debounce(100)` 適合行情：資料連續進來時，每 100 毫秒送出一次"
+    - "Combine 的 `throttle(for:scheduler:latest: true)` 在每個區間結束時，送出這段期間內最新的值"
+    - "`AsyncStream` 的 `.bufferingNewest(1)` 讓處理得慢的消費者只看到最新的一筆，緩衝區的記憶體用量固定"
+  answer: [0, 1, 3, 4]
+  explain: |
+    - 第 3 項錯：`debounce` 要等資料「安靜」一段時間才送出。行情持續進來時，永遠等不到安靜，一筆都送不出去。想要「固定頻率取最新值」要用 `sample` 或 `throttle(latest: true)`。
+    - 第 1、2、4、5 項正確：`conflate` 沒有固定頻率，消費者多快它就多快；`sample` 和 `throttle(latest: true)` 有固定頻率。兩者常搭配，先用 `conflate` 保護消費者，再用 `sample` 控制畫面頻率。`bufferingNewest(1)` 的緩衝區只放 1 筆，新的資料會把舊的擠掉，所以記憶體固定。
+    - 補充：最高價、最低價、成交量這類統計，要在合併之前、每一則都算。合併只用在「畫面要顯示的最新值」。
+
+- id: exchange-realtime-ui-03
+  type: fill
+  level: 2
+  priority: P1
+  tags: [diffable-datasource, ios15]
+  prompt: |
+    iOS 15 以上：行情列表只有 `changedIDs` 這幾檔的價格變動了。要沿用既有的 cell（列表的一列）、只更新內容，避免閃爍和捲動位置跳動。請補上方法名稱。
+  codeLang: swift
+  code: |
+    var snapshot = dataSource.snapshot()
+    snapshot.____(changedIDs)
+    dataSource.apply(snapshot, animatingDifferences: false)
+  blanks:
+    - [reconfigureItems]
+  explain: |
+    `reconfigureItems` 是 iOS 15 加入的，它讓 data source 對既有的 cell 重新呼叫「設定內容」的程式，**不會換掉 cell**。
+    舊的 `reloadItems` 會換成新的 cell，選取狀態和動畫狀態都會丟掉，成本也比較高。高頻的行情更新，應該只對「有變動、而且畫面上看得到」的項目使用 `reconfigureItems`，並且把 `animatingDifferences` 設成 `false`，價格跳動不需要列的位移動畫。
+    Android 對應的做法是 `DiffUtil` 的 `getChangePayload`，搭配 `onBindViewHolder(holder, position, payloads)`，只更新有變的欄位。
+
+- id: exchange-realtime-ui-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [flicker, accessibility]
+  prompt: |
+    設計價格變動的提示（閃爍）。下列哪個做法最好？
+  options:
+    - "每收到一則推播，就讓整列背景閃紅或閃綠，而且只用顏色區分漲跌"
+    - "只在合併後、畫面實際更新時才觸發；文字旁加 ▲▼ 符號，漲跌的顏色可以設定；背景短暫變色，約 200 到 300 毫秒淡出；捲動中暫停；尊重系統的「減少動態效果」"
+    - "不做任何提示，因為動畫會增加處理器的負擔"
+    - "用 `Thread.sleep` 控制閃爍時間，讓顏色停留 1 秒"
+  answer: 1
+  explain: |
+    閃爍的目的是讓使用者感覺到價格在動，但要節制：頻率和合併後的畫面更新一致、時間短、不能影響捲動。
+    - 第 1 項：每一則推播都閃，一秒閃幾十次，畫面一片亂；只靠顏色，色覺異常的使用者看不出漲跌，截圖也失去資訊。要加上 ▲▼ 符號。
+    - 第 3 項：不做提示，使用者看不出哪些價格剛變動。動畫很短而且只在畫面更新時觸發，成本很小。
+    - 第 4 項：`Thread.sleep` 會卡住執行緒，如果在主執行緒呼叫，整個畫面都會停住。動畫要用系統提供的動畫功能。
+    漲跌的顏色慣例因地區和產品而異（亞洲部分市場紅漲綠跌，歐美相反），所以做成可設定。
+
+- id: exchange-realtime-ui-05
+  type: multi
+  level: 2
+  priority: P1
+  tags: [formatter, threading]
+  prompt: |
+    關於行情畫面的數字格式化，哪些做法正確？（複選）
+  options:
+    - "依精度各建一個並快取 `NumberFormatter`／`DecimalFormat`，不要在 cell 設定內容時新建"
+    - "在背景就把顯示字串（價格、漲跌幅、方向）算好，畫面只負責指派，避免在主執行緒格式化"
+    - "Android 的 `DecimalFormat` 是 thread-safe，可以在多個執行緒共用同一個實例，並隨時修改 `maximumFractionDigits`"
+    - "價格欄用等寬數字（`.monospacedDigit()`／`tnum`），價格更新時寬度不會跳動"
+    - "`label.text = newText` 在內容相同時不會觸發任何工作，所以不需要先比較"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：formatter 建立成本高，要依精度重複使用。
+    - 第 2 項正確：背景算好字串，主執行緒就沒有格式化的成本，也不必在主執行緒建立 formatter。
+    - 第 3 項錯：Android 的 `DecimalFormat` **不是** thread-safe，多個執行緒同時使用會出錯，要每個執行緒各一個，或集中在同一個執行緒使用。iOS 的 `NumberFormatter` 同時使用是安全的，但邊用邊改共用實例的屬性不安全（見「精度與金額」單元）。
+    - 第 4 項正確：一般字型的數字寬度不一，等寬數字讓每個數字一樣寬，價格更新時整欄不會左右抖動。
+    - 第 5 項錯：系統沒有保證設定相同內容的 `text` 會被跳過，仍可能觸發重新排版。先比較一次字串，成本很低；在每秒更新很多次的畫面上，省下的工作會累積。
+
+- id: exchange-realtime-ui-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [compose, recomposition]
+  prompt: |
+    Compose 的價格欄位每秒更新數十次，Layout Inspector 顯示整個 row 一直在重新組合（recomposition）。下列哪個改善方向最合理？
+  options:
+    - "在 composable 的主體裡直接讀取價格的 `State`，並讓整個 row 讀同一個 `UiState` 物件"
+    - "讓 row 只接收自己那一檔的 `Ticker`（不可變的型別），並用 `key = symbol`；高頻變動的值把讀取延後到 layout 或 draw 階段（例如 `Modifier.graphicsLayer { alpha = … }`、`drawBehind { }`），或把顯示數字的部分拆成小的 composable，讓重新組合的範圍縮小"
+    - "在 `LaunchedEffect` 裡每 10 毫秒呼叫一次 `recompose()`"
+    - "把整個畫面改成 View 系統，因為 Compose 一定比較慢"
+  answer: 1
+  explain: |
+    Compose 重新組合的範圍，取決於「哪個 composable 讀了哪個 State」。
+    - 第 1 項：在主體裡讀 `State`，這個 State 一變，整個 row 就重新組合；整個 row 又都讀同一個大物件，任何欄位變動都會牽動全部，範圍更大。
+    - 第 2 項正確：把高頻值的讀取延後到 layout 或 draw 階段，值變動時只會重新 layout 或重新繪製，不會觸發重新組合；拆成小的 composable、使用不可變的型別，則能縮小重新組合的範圍；`key = symbol` 讓 Compose 知道哪一列是哪一檔交易對。
+    - 第 3 項：Compose 沒有 `recompose()` 這個函式，也不應該強制重新組合。
+    - 第 4 項：Compose 並不是「一定比較慢」，問題在重新組合的範圍太大，換框架解決不了這個根因。
+
+- id: exchange-realtime-ui-07
+  type: code
+  level: 2
+  priority: P0
+  tags: [throttle, conflation, clock]
+  prompt: |
+    實作 `ThrottleLatest<Value>`：由 display link 或計時器定期呼叫 `tick(nowMs)`，**每隔至少 `intervalMs` 毫秒，送出一次「這段期間內最新的值」**。時間由呼叫端傳入（單位毫秒），測試時就不用等真實的時鐘。
+
+    - `offer(value)`：記下最新值，覆蓋還沒送出的舊值
+    - `tick(nowMs)`：沒有待送的值時，回傳 `nil`／`null`。有待送的值，而且（從來沒送出過，或 `nowMs - 上次送出的時間 >= intervalMs`）時，回傳該值、清除待送值，並記下 `lastEmit = nowMs`；其他情況回傳 `nil`／`null`（待送值保留到下次）
+    - `flush()`：直接取出待送值並清除（不更新 `lastEmit`），串流結束時用來送出尾端的值
+    - 時鐘倒退（`nowMs` 小於上次送出的時間）時不送出
+  hints:
+    - "只需要記兩個狀態：`pending`（待送的值，可能沒有）和 `lastEmitMs`（上次送出的時間，可能還沒送過）。"
+    - "沒有待送的值時，不要更新 `lastEmitMs`。"
+  swift:
+    starter: |
+      struct ThrottleLatest<Value> {
+          init(intervalMs: Int64) {
+              // TODO
+          }
+
+          mutating func offer(_ value: Value) {
+              // TODO
+          }
+
+          mutating func tick(nowMs: Int64) -> Value? {
+              // TODO
+              return nil
+          }
+
+          mutating func flush() -> Value? {
+              // TODO
+              return nil
+          }
+      }
+    solution: |
+      struct ThrottleLatest<Value> {
+          private let intervalMs: Int64
+          private var pending: Value?
+          private var lastEmitMs: Int64?
+
+          init(intervalMs: Int64) {
+              self.intervalMs = intervalMs
+          }
+
+          mutating func offer(_ value: Value) {
+              pending = value
+          }
+
+          mutating func tick(nowMs: Int64) -> Value? {
+              guard let value = pending else { return nil }
+              if let last = lastEmitMs, nowMs - last < intervalMs { return nil }
+              pending = nil
+              lastEmitMs = nowMs
+              return value
+          }
+
+          mutating func flush() -> Value? {
+              let value = pending
+              pending = nil
+              return value
+          }
+      }
+    tests: |
+      check("第一次 tick 立即送出最新值（舊值被覆蓋）") {
+          var t = ThrottleLatest<Int>(intervalMs: 100)
+          t.offer(1); t.offer(2)
+          return t.tick(nowMs: 0) == 2
+      }
+      check("區間內只保留最新值；間隔未到回傳 nil 且保留待送值") {
+          var t = ThrottleLatest<Int>(intervalMs: 100)
+          t.offer(2)
+          _ = t.tick(nowMs: 0)
+          t.offer(3); t.offer(4)
+          let early = t.tick(nowMs: 50)
+          let onTime = t.tick(nowMs: 100)
+          return early == nil && onTime == 4
+      }
+      check("沒有新值就不重複送出") {
+          var t = ThrottleLatest<Int>(intervalMs: 100)
+          t.offer(1)
+          _ = t.tick(nowMs: 0)
+          return t.tick(nowMs: 100) == nil && t.tick(nowMs: 500) == nil
+      }
+      check("間隔從上一次「送出」的時間起算（不是上一次 tick）") {
+          var t = ThrottleLatest<Int>(intervalMs: 100)
+          t.offer(1)
+          _ = t.tick(nowMs: 0)
+          t.offer(5)
+          let a = t.tick(nowMs: 60)
+          let b = t.tick(nowMs: 99)
+          let c = t.tick(nowMs: 100)
+          return a == nil && b == nil && c == 5
+      }
+      check("時鐘倒退不送出，之後正常恢復") {
+          var t = ThrottleLatest<Int>(intervalMs: 100)
+          t.offer(1)
+          _ = t.tick(nowMs: 200)
+          t.offer(6)
+          let back = t.tick(nowMs: 100)
+          let later = t.tick(nowMs: 300)
+          return back == nil && later == 6
+      }
+      check("flush 取出尾端的待送值並清除") {
+          var t = ThrottleLatest<String>(intervalMs: 100)
+          t.offer("a")
+          _ = t.tick(nowMs: 0)
+          t.offer("b")
+          let early = t.tick(nowMs: 10)
+          let tail = t.flush()
+          return early == nil && tail == "b" && t.flush() == nil && t.tick(nowMs: 1000) == nil
+      }
+      check("intervalMs 為 0：每次 tick 只要有待送值就送出") {
+          var t = ThrottleLatest<Int>(intervalMs: 0)
+          t.offer(1)
+          let a = t.tick(nowMs: 5)
+          t.offer(2)
+          let b = t.tick(nowMs: 5)
+          return a == 1 && b == 2 && t.tick(nowMs: 6) == nil
+      }
+  kotlin:
+    starter: |
+      class ThrottleLatest<T : Any>(private val intervalMs: Long) {
+          fun offer(value: T) {
+              // TODO
+          }
+
+          fun tick(nowMs: Long): T? {
+              // TODO
+              return null
+          }
+
+          fun flush(): T? {
+              // TODO
+              return null
+          }
+      }
+    solution: |
+      class ThrottleLatest<T : Any>(private val intervalMs: Long) {
+          private var pending: T? = null
+          private var lastEmitMs: Long? = null
+
+          fun offer(value: T) {
+              pending = value
+          }
+
+          fun tick(nowMs: Long): T? {
+              val value = pending ?: return null
+              val last = lastEmitMs
+              if (last != null && nowMs - last < intervalMs) return null
+              pending = null
+              lastEmitMs = nowMs
+              return value
+          }
+
+          fun flush(): T? {
+              val value = pending
+              pending = null
+              return value
+          }
+      }
+    tests: |
+      check("第一次 tick 立即送出最新值（舊值被覆蓋）") {
+          val t = ThrottleLatest<Int>(100)
+          t.offer(1); t.offer(2)
+          t.tick(0) == 2
+      }
+      check("區間內只保留最新值；間隔未到回傳 null 且保留待送值") {
+          val t = ThrottleLatest<Int>(100)
+          t.offer(2)
+          t.tick(0)
+          t.offer(3); t.offer(4)
+          val early = t.tick(50)
+          val onTime = t.tick(100)
+          early == null && onTime == 4
+      }
+      check("沒有新值就不重複送出") {
+          val t = ThrottleLatest<Int>(100)
+          t.offer(1)
+          t.tick(0)
+          t.tick(100) == null && t.tick(500) == null
+      }
+      check("間隔從上一次「送出」的時間起算（不是上一次 tick）") {
+          val t = ThrottleLatest<Int>(100)
+          t.offer(1)
+          t.tick(0)
+          t.offer(5)
+          val a = t.tick(60)
+          val b = t.tick(99)
+          val c = t.tick(100)
+          a == null && b == null && c == 5
+      }
+      check("時鐘倒退不送出，之後正常恢復") {
+          val t = ThrottleLatest<Int>(100)
+          t.offer(1)
+          t.tick(200)
+          t.offer(6)
+          val back = t.tick(100)
+          val later = t.tick(300)
+          back == null && later == 6
+      }
+      check("flush 取出尾端的待送值並清除") {
+          val t = ThrottleLatest<String>(100)
+          t.offer("a")
+          t.tick(0)
+          t.offer("b")
+          val early = t.tick(10)
+          val tail = t.flush()
+          early == null && tail == "b" && t.flush() == null && t.tick(1000) == null
+      }
+      check("intervalMs 為 0：每次 tick 只要有待送值就送出") {
+          val t = ThrottleLatest<Int>(0)
+          t.offer(1)
+          val a = t.tick(5)
+          t.offer(2)
+          val b = t.tick(5)
+          a == 1 && b == 2 && t.tick(6) == null
+      }
+
+- id: exchange-realtime-ui-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [realtime-ui, performance]
+  prompt: |
+    設計交易所 App 行情列表（數十個交易對，每秒數百筆更新）的 UI 層：資料在哪裡合併、畫面多久更新一次、列表怎麼更新、價格變動怎麼提示、數字怎麼格式化。並說明你在固定間隔刷新、進背景暫停上的相關經驗，以及到交易所的 App 你會怎麼做。
+  promptJa: |
+    取引所アプリの相場一覧（数十銘柄、毎秒数百件の更新）の UI 層を設計してください。どこでデータをまとめるか、画面の更新間隔、リストの更新方法、価格変動の表示、数値のフォーマットを説明してください。あわせて、定期更新やバックグラウンド停止での関連する経験と、取引所アプリでどう進めるかも説明してください。
+  keyPoints:
+    - "把三個頻率分開：資料到達、背景的最新狀態、畫面刷新；合併發生在最新狀態和畫面之間，畫面約 100 到 250 毫秒取一次最新快照"
+    - "背景用字典保存每個交易對的最新報價，每一則都套用；24 小時最高價、成交量這類統計在合併之前算"
+    - "iOS：`CADisplayLink`（`.common` 模式、`preferredFrameRateRange`）、diffable data source 加 `reconfigureItems`；Android：Flow 的 `sample` 或 `Choreographer`、`DiffUtil` payload；Compose 用 `key`，高頻值延後到 layout／draw 階段讀取"
+    - "只更新有變動、而且看得到的列；列表項目的識別用交易對代號，每一列只接收自己的值"
+    - "價格提示：和上次畫在畫面上的價格比較，頻率和畫面刷新一致、短時間淡出、▲▼ 加顏色、顏色慣例可設定、尊重減少動態效果"
+    - "格式化：背景預先算好字串，formatter 依精度重複使用、不在主執行緒新建；價格欄用等寬數字避免寬度跳動"
+    - "量測：Instruments（Time Profiler、Hitches）、Perfetto、JankStats，先量再改"
+    - "經驗連結：固定間隔刷新、進背景暫停、圖表資料沒變就不重設；到交易所的多交易對列表，我會在背景合併、只更新有變動的列"
+  modelAnswer: |
+    我會先把三個頻率分開：資料到達、背景的最新狀態、畫面刷新。背景用一個以交易對代號為 key 的字典，保存每個交易對的最新報價，每一則行情都套用進去；24 小時最高價、成交量這類統計，也在這一步每一則都算。畫面用固定節奏，大約 100 到 250 毫秒，取一次有變動的快照。合併就發生在最新狀態和畫面之間，中間被蓋掉的價格使用者看不到，丟掉沒有影響。
+
+    iOS 用 `CADisplayLink`，用 `preferredFrameRateRange` 把頻率壓低，加到 `.common` 模式讓捲動時不會停；列表用 diffable data source 搭配 `reconfigureItems`，項目識別用交易對代號。Android 用 Flow 的 `sample` 或 `Choreographer`，列表用 `DiffUtil` 的 payload；Compose 用 `key`，並把高頻變動的值延後到 layout 或 draw 階段讀取。只更新有變動、而且看得到的列。
+
+    價格提示是拿這次顯示的價格和上次畫在畫面上的價格比較，約 250 毫秒淡出，用 ▲▼ 加顏色，顏色慣例做成可設定，並尊重減少動態效果。數字在背景先格式化成字串，formatter 依精度重複使用，價格欄用等寬數字。最佳化之前，先用 Instruments 或 Perfetto 量測。
+
+    我做過固定間隔的畫面更新、App 進背景時暫停，還有圖表資料沒變就不重設；當時的即時資料只有單一交易對。到交易所的多交易對行情列表，我會用上面這套做法。
+  modelAnswerJa: |
+    まず 3 つの頻度を分けて考えます。データの到着、バックグラウンドでの最新状態、画面の更新です。バックグラウンドでは、銘柄コードをキーにした辞書に各銘柄の最新の価格を保持し、受信した 1 件ごとに反映します。24 時間の高値や出来高のような統計も、この段階で 1 件ずつ計算します。画面は一定の間隔、100〜250 ミリ秒ほどで、変化があった銘柄の最新の状態を取得します。データをまとめるのは、最新状態と画面の間です。途中で上書きされた価格はユーザーに見えないので、捨てても影響はありません。
+
+    iOS では `CADisplayLink` を使い、`preferredFrameRateRange` で更新頻度を下げ、`.common` モードに追加してスクロール中も止まらないようにします。リストは diffable data source と `reconfigureItems` で更新し、項目の識別には銘柄コードを使います。Android では Flow の `sample` か `Choreographer` を使い、リストは `DiffUtil` の payload で更新します。Compose では `key` を使い、頻繁に変わる値は layout や draw の段階で読み取るようにします。更新するのは、変化があり、かつ画面に見えている行だけです。
+
+    価格変動の表示は、今回表示する価格と、前回画面に表示した価格を比較します。250 ミリ秒ほどでフェードアウトさせ、▲▼ と色を併用し、色の慣習は設定で変えられるようにして、視差効果を減らす設定も尊重します。数値はバックグラウンドで文字列に整形し、formatter は桁数ごとに使い回します。価格欄は等幅数字にします。最適化の前に、Instruments や Perfetto で計測します。
+
+    以前のアプリでは、一定間隔の画面更新、バックグラウンド時の停止、データが変わらないときにチャートを再設定しない処理を経験しました。そのリアルタイムデータは単一の銘柄だけでした。取引所アプリの複数銘柄の相場一覧でも、今述べた方法で進めます。
+  followUps:
+    - "捲動中應該停止更新，還是降低頻率？要怎麼判斷使用者正在捲動？"
+    - "合併時被丟掉的價格裡，如果剛好有當天最高價，圖表和統計值要怎麼反映？"
+    - "價格頻繁變動時，VoiceOver（iOS 的螢幕朗讀）要怎麼控制朗讀，不要一直念？"
+  timeLimitSec: 150
+
+- id: exchange-realtime-ui-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [realtime-ui]
+  front: 行情畫面更新的重點：三個頻率、合併的工具、局部更新、數字顯示
+  back: |
+    - 三個頻率：資料到達與背景的最新狀態（每一則都套用）遠多於畫面刷新（約 100 到 250 毫秒）；合併發生在最新狀態和畫面之間。
+    - 合併的工具：`bufferingNewest(1)`、`conflate`、`sample`、`throttle(latest: true)`；**不要用 `debounce`**（資料一直來，永遠等不到安靜）。要每個交易對各留一筆，統計值在合併之前算。
+    - 驅動畫面：`CADisplayLink`（加到 `.common`、記得 `invalidate`）、`Choreographer`。
+    - 局部更新：`reconfigureItems`（iOS 15）、`DiffUtil` payload、Compose 的 `key` 加上延後讀取。
+    - 顯示：▲▼ 加顏色（顏色可設定）、200 到 300 毫秒淡出、尊重減少動態效果；等寬數字（`.monospacedDigit()`、`tnum`）。
+    - formatter：依精度重複使用，在背景預先格式化；Android 的 `DecimalFormat` 不是 thread-safe。

@@ -1,0 +1,245 @@
+- id: advanced-memory-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [ios, jetsam, crash-reporting]
+  prompt: |
+    使用者回報：交易所 App 放在背景一陣子後切回來，畫面像是重新啟動。Crashlytics（Firebase 的當機回報工具）完全沒有對應的 crash。最可能的原因與佐證方式是什麼？
+  options:
+    - "Crashlytics 漏報了，只要升級 SDK 版本就能解決"
+    - "App 在背景因為記憶體壓力被系統回收（jetsam），不會產生 crash log。可以用 MetricKit 的 `MXAppExitMetric`（統計各種退出原因的次數，包含記憶體相關）或 Xcode Organizer 的終止統計來佐證"
+    - "這是 watchdog（App 啟動或回應太慢被系統終止），需要去看 0x8badf00d 的 crash log"
+    - "iOS 一定會在終止 App 之前呼叫 `applicationWillTerminate`，所以一定能在那裡看到 log"
+  answer: 1
+  explain: |
+    背景的 App 被 jetsam（iOS 因記憶體不足而終止 App 的機制）回收，是正常的系統行為：行程直接消失，沒有 crash log，`applicationWillTerminate` 通常也不會被呼叫。
+    佐證方式：MetricKit 的 `MXAppExitMetric`（iOS 14 起）會統計各種退出原因的次數，其中包含記憶體限制；也可以看 Xcode Organizer 的終止統計。治本的方法是降低背景時的記憶體用量：收到 `didReceiveMemoryWarning`、以及進入背景時，釋放可以重建的快取。
+
+    其他選項錯在哪裡：
+    - 第 1 項：這種終止本來就不會被當機回報工具記錄，不是漏報，升級 SDK 沒有用。
+    - 第 3 項：watchdog 是 App 啟動或回應太慢而被系統終止，會留下 0x8badf00d 的 crash log，但這個情境是「放在背景一陣子」，沒有證據顯示是啟動或卡住造成的。
+    - 第 4 項：系統因為記憶體終止 App 時不保證會呼叫 `applicationWillTerminate`，通常是直接結束。
+
+- id: advanced-memory-02
+  type: predict
+  level: 2
+  priority: P0
+  tags: [ios, arc, retain-cycle]
+  prompt: |
+    下列 Swift 程式依序印出什麼？（以空白或換行分隔）
+  codeLang: swift
+  code: |
+    final class Screen {
+        let name: String
+        var onTick: (() -> Void)?
+        init(_ name: String) { self.name = name }
+        deinit { print("deinit \(name)") }
+        func bindStrong() { onTick = { print(self.name) } }
+        func bindWeak() { onTick = { [weak self] in print(self?.name ?? "gone") } }
+    }
+
+    func run() {
+        let a = Screen("A")
+        a.bindStrong()
+        let b = Screen("B")
+        b.bindWeak()
+    }
+    run()
+    print("after run")
+  answer: |
+    deinit B after run
+  explain: |
+    - `A` 的 closure 強持有 `self`，而 `self.onTick` 又持有這個 closure，形成 retain cycle（兩個物件互相持有）。`run()` 結束後，兩邊的引用計數都不會歸零，所以 `deinit A` 永遠不會印出來，這就是記憶體洩漏。
+    - `B` 的 closure 用 `[weak self]`，沒有循環。離開 `run()` 後 `b` 被釋放，印出 `deinit B`。
+    - 最後才印 `after run`。
+    這就是「在 `deinit` 印 log」這個習慣的用處：離開畫面後沒有看到 `deinit`，就代表有東西還抓著它。
+
+- id: advanced-memory-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [ios, retain-cycle, closures]
+  prompt: |
+    下列哪些寫法會造成 iOS 物件無法釋放？（假設 `self` 是 ViewController，而且 closure 或物件是由 `self` 持有。複選）
+  options:
+    - "`timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in self.tick() }`，`timer` 是 `self` 的屬性"
+    - "`class A { weak var delegate: ADelegate? }`"
+    - "`cancellable = publisher.sink { self.update($0) }`，`cancellable` 是 `self` 的屬性"
+    - "`Task { [weak self] in await self?.load() }`"
+    - "`viewModel.onUpdate = { [weak self] in self?.render() }`"
+  answer: [0, 2]
+  explain: |
+    - 第 1 項會：重複執行的 `Timer` 被主執行緒的 RunLoop（不斷處理事件的迴圈）持有，closure 又持有 `self`，`self` 還持有 timer。只要沒有呼叫 `invalidate()`，`self` 就不會被釋放。
+    - 第 3 項會：`sink` 的 closure 強持有 `self`，`self` 又持有 `cancellable`，繞成一圈。要寫成 `[weak self]`。
+    - 第 2 項不會：delegate 宣告成 `weak`，是打斷循環的標準做法。
+    - 第 4 項不會：`[weak self]` 讓 Task 不強持有 `self`。（注意：如果沒有寫 `[weak self]`，`Task { self.xxx }` 在 Task 結束之前會強持有 `self`，遇到 `for await` 這種長時間的迴圈，就要取消 Task。）
+    - 第 5 項不會：`[weak self]` 同樣打斷了循環。
+
+- id: advanced-memory-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [bitmap, memory-math]
+  prompt: |
+    使用者上傳的 4000 × 3000 JPEG（檔案大小 2 MB），被直接用 `BitmapFactory.decodeFile` 以 ARGB_8888 格式解碼，顯示在 100 × 100 dp 的頭像上。這張 Bitmap 大約占用多少記憶體？
+  options:
+    - "約 2 MB，和檔案大小相同"
+    - "約 48 MB（4000 × 3000 × 4 位元組）"
+    - "約 0.04 MB（只算顯示的 100 × 100）"
+    - "約 12 MB（JPEG 的壓縮比約 1/4）"
+  answer: 1
+  explain: |
+    圖片解碼後占的記憶體 = 寬 × 高 × 每個像素的位元組數，和檔案大小、顯示大小都無關。ARGB_8888 每個像素 4 位元組，所以 4000 × 3000 × 4 = 48,000,000 位元組，約 48 MB（約 46 MiB）。
+
+    其他選項錯在哪裡：
+    - 第 1 項：2 MB 是壓縮後的檔案大小，解碼成像素之後會完全展開。
+    - 第 3 項：記憶體是依解碼後的圖片尺寸計算，不是依顯示的 View 大小。如果解碼時沒有縮小，系統還是先把整張圖放進記憶體。
+    - 第 4 項：JPEG 的壓縮比只影響檔案大小，解碼後的像素資料沒有壓縮。
+
+    頭像只需要 100 × 100 時，應該在解碼時就縮小（`inSampleSize`、`ImageDecoder.setTargetSize`，或交給 Coil、Glide 依 View 大小處理）。iOS 也一樣，用 ImageIO 的縮圖 API 直接解碼成目標尺寸，而不是先載入原圖再縮小。
+
+- id: advanced-memory-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [ios, imageio, downsampling]
+  prompt: |
+    補上 ImageIO downsampling（解碼時直接縮小）的兩個選項：一個是限制輸出圖片的最大邊長，另一個是建立縮圖時就立即解碼（在背景執行緒完成，而不是等到第一次繪製時才在主執行緒解碼）。
+  codeLang: swift
+  code: |
+    let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        ____: maxPixelSize,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        ____: true,
+    ]
+    let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+  blanks:
+    - [kCGImageSourceThumbnailMaxPixelSize]
+    - [kCGImageSourceShouldCacheImmediately]
+  explain: |
+    `kCGImageSourceThumbnailMaxPixelSize` 決定輸出圖片的最大邊長，單位是像素，所以要記得把 point 數乘上螢幕倍率。
+    `kCGImageSourceShouldCacheImmediately` 讓縮圖在建立的當下就解碼，所以如果在背景執行緒呼叫，解碼的成本不會落到第一次繪製的主執行緒上。
+    另外的 `kCGImageSourceCreateThumbnailWithTransform` 會套用照片內建資訊（EXIF）裡的旋轉方向，`kCGImageSourceCreateThumbnailFromImageAlways` 表示一定要建立縮圖。
+    這個流程可以避免把 1200 萬像素的原圖完整解碼進記憶體（約 48 MB），再縮成頭像大小。
+
+- id: advanced-memory-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, fragment, leak]
+  prompt: |
+    LeakCanary（Android 的記憶體洩漏偵測函式庫）回報：一個進入 back stack 的 Fragment（已經呼叫 `onDestroyView`，view 已銷毀）的 view 樹仍然被持有。下列程式碼最可能的問題是什麼？
+  codeLang: kotlin
+  code: |
+    class OrderFragment : Fragment(R.layout.fragment_order) {
+        private lateinit var binding: FragmentOrderBinding
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            binding = FragmentOrderBinding.bind(view)
+            binding.submit.setOnClickListener { vm.submit() }
+        }
+    }
+  options:
+    - "`lateinit` 會讓物件永遠無法被 GC（垃圾回收）"
+    - "Fragment 的 view 在 `onDestroyView` 被銷毀，但 Fragment 實例（例如在 back stack 裡）還活著，`binding` 欄位仍然持有整棵 view 樹。應該使用可為 null 的 `_binding`，並在 `onDestroyView` 設成 null"
+    - "`setOnClickListener` 一定會造成洩漏"
+    - "`FragmentOrderBinding.bind` 會額外建立第二份 view 樹"
+  answer: 1
+  explain: |
+    Fragment 實例的生命週期比它的 view 長：進入 back stack 時，view 被銷毀，Fragment 還活著。如果 Fragment 的欄位（binding、adapter、RecyclerView）還抓著 view，這棵 view 樹就無法被回收，還會連帶持有 Context 和 Activity。
+    標準寫法是 `private var _binding: FragmentOrderBinding? = null`，搭配 `private val binding get() = _binding!!`，並在 `onDestroyView()` 設 `_binding = null`；view 裡有 adapter 時，也要在這時設 `recyclerView.adapter = null`。
+
+    其他選項錯在哪裡：
+    - 第 1 項：`lateinit` 只是延遲初始化的語法，不會阻止回收；問題在於欄位在 view 銷毀後仍然有值。
+    - 第 3 項：click listener 只是被 view 持有，view 被回收時一起消失，並不會一定洩漏。
+    - 第 4 項：`bind` 只是把現有的 view 對應到 binding 物件，不會再建立一份 view 樹。
+
+- id: advanced-memory-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [ios, instruments, leak-diagnosis]
+  prompt: |
+    iOS 上懷疑「進入再離開訂單頁」會造成記憶體洩漏。把排查流程依合理的順序排列。
+  items:
+    - 定義重現路徑：進入訂單頁再離開，重複 3 到 5 次
+    - 用 Instruments Allocations 的 Mark Generation，每一輪結束標記一次，找出殘留的物件類別
+    - 用 Memory Graph Debugger 檢視該物件的引用鏈，找出強引用的來源（closure、timer、delegate）
+    - 修正：改成適當的 weak 或 unowned，或在離開時取消 Task、invalidate timer
+    - 加上 deinit 記錄或測試（對物件持有 weak 參考，離開後斷言為 nil），防止之後復發
+  explain: |
+    先定義固定的重現路徑，每一輪操作才能互相比較。Mark Generation 的價值，是把「正常的快取成長」和「每一輪都多出一份」分開。Memory Graph 則直接顯示是誰持有這個物件，省去猜測。
+    最後一步很重要：洩漏很容易在重構後復發，用測試或 `deinit` log 把它固定下來。
+
+- id: advanced-memory-08
+  type: single
+  level: 3
+  priority: P1
+  tags: [ios, unowned, weak, crash]
+  prompt: |
+    某個 socket 管理類別的回呼寫成 `socket.on("message") { [unowned self] data in self.handle(data) }`。ViewModel 被釋放之後，伺服器又推送了一則訊息。會發生什麼事？
+  options:
+    - "`self` 會自動變成 `nil`，`self.handle` 不會被呼叫"
+    - "`unowned` 既不會讓引用計數加 1，也不會自動歸零。對已經釋放的物件存取，會觸發 runtime 錯誤（crash）。非同步回呼沒辦法保證 self 一定比回呼活得久時，應該使用 `[weak self]`"
+    - "什麼都不會發生，因為 `unowned` 和 `weak` 的行為相同"
+    - "編譯器會在編譯時報錯，因為 `unowned` 不能用在 closure"
+  answer: 1
+  explain: |
+    `unowned` 的意思是「我保證 self 活得比 closure 久」。物件釋放之後再存取它，Swift 會在執行時檢查並 crash。`weak` 則會變成 `nil`，可以用 `guard let self` 安全處理。
+
+    其他選項錯在哪裡：
+    - 第 1 項描述的是 `weak` 的行為，不是 `unowned`。
+    - 第 3 項：兩者的差別正是在物件釋放之後，`weak` 變成 `nil`，`unowned` 會 crash。
+    - 第 4 項：`unowned` 可以用在 closure 的 capture list，編譯沒有問題；問題發生在執行時。
+
+    實務上，socket 這類由外部持有的回呼，物件可能在登出、重建連線的流程中被釋放，之後回呼才進來。非同步回呼預設用 `weak`。
+
+- id: advanced-memory-09
+  type: open
+  level: 3
+  priority: P0
+  tags: [memory, diagnosis]
+  prompt: |
+    交易所 App 的使用者回報：行情畫面開著幾個小時之後，App 變慢，最後被系統殺掉。請說明你在 iOS 與 Android 的排查流程、可能的原因，以及你處理記憶體問題的相關經驗。
+  promptJa: |
+    取引所アプリのユーザーから、相場画面を数時間開いたままにすると動作が重くなり、最終的にシステムに強制終了されるという報告がありました。iOS と Android での調査手順、考えられる原因、そしてメモリ問題に関する経験を説明してください。
+  keyPoints:
+    - 先分辨被殺的方式：iOS 是 jetsam（沒有 crash log），Android 是 OOM（記憶體不足）或 LMK（系統的低記憶體終止機制）；用 MetricKit、Organizer、Android vitals、ApplicationExitInfo 佐證
+    - 重現：做長時間的 soak test，重複進出行情畫面；iOS 用 Instruments 的 Allocations（Mark Generation）與 Memory Graph，Android 用 Memory Profiler 與 LeakCanary
+    - 常見原因：沒有上限的 buffer、訂單簿與 K 線資料；訂閱沒有取消；retain cycle；圖片沒有縮小解碼
+    - 修法：所有快取與 buffer 都設上限、離開畫面就取消訂閱、回應 memory warning 與 onTrimMemory、圖片依顯示尺寸解碼
+    - 社交 App 的經驗：在 deinit 印 log 檢查洩漏的習慣，修過聊天室的記憶體洩漏與 weak self 的問題
+    - 即時行情 App 的經驗：在 SwiftUI 的 dismantleUIView 移除 WKScriptMessageHandler，避免 WebView 洩漏；交易所 App 會在 Android 的 debug build 接上 LeakCanary
+  modelAnswer: |
+    我會先分辨是哪一種死法。iOS 是 jetsam，沒有 crash log，可以用 MetricKit 的退出統計或 Organizer 佐證；Android 看 `ApplicationExitInfo` 與 Android vitals 裡的 OOM（記憶體不足）和 LMK（系統的低記憶體終止機制）回收。
+
+    然後做長時間的 soak test，重複進入、離開行情畫面。iOS 用 Instruments 的 Allocations 標記 generation，找出每一輪多出來的物件，再用 Memory Graph 看引用鏈；Android 用 Memory Profiler 抓 heap dump，並在 debug build 接上 LeakCanary。
+
+    行情 App 最常見的原因是沒有上限的累積：訊息 buffer、訂單簿深度、K 線資料沒有裁剪，加上訂閱沒有取消、closure 的 retain cycle。修法是所有快取與 buffer 都設上限，離開畫面就取消訂閱，並回應 memory warning。
+
+    在一個社交 App 裡，我習慣在 `deinit` 印 log 檢查洩漏，也修過聊天室的記憶體洩漏。一個即時行情 App 的 K 線圖是用 WebView，我在 `dismantleUIView` 移除了 script message handler。換成交易所 App，我會在 Android 的 debug build 接上 LeakCanary，建立記憶體的基準，並把 soak test 加進發版前的檢查。
+  modelAnswerJa: |
+    まず、どの種類の終了かを切り分けます。iOS は jetsam でクラッシュログが残らないため、MetricKit の終了統計や Organizer で裏付けます。Android は `ApplicationExitInfo` と Android vitals の OOM、LMK による回収を確認します。
+
+    次に、相場画面への出入りを繰り返す長時間の soak テストを行います。iOS は Instruments の Allocations で generation をマークして、各ラウンドで増えるオブジェクトを特定し、Memory Graph で参照チェーンを確認します。Android は Memory Profiler で heap dump を取り、debug ビルドに LeakCanary を入れます。
+
+    相場アプリでよくある原因は、上限のない蓄積です。メッセージバッファ、板の深さ、ローソク足データを切り詰めていないこと、さらに購読の解除漏れとクロージャの retain cycle があります。対策は、すべてのキャッシュとバッファに上限を設け、画面を離れたら購読をキャンセルし、メモリ警告に応答することです。
+
+    あるソーシャルアプリでは `deinit` にログを出して解放を確認する習慣があり、チャットのメモリリークも修正しました。あるリアルタイム相場アプリのローソク足チャートは WebView を使っており、`dismantleUIView` で script message handler を削除しました。取引所アプリでは、Android の debug ビルドに LeakCanary を入れ、メモリのベースラインを作り、soak テストをリリース前のチェックに加えます。
+  followUps:
+    - Android 的 ApplicationExitInfo 可以查到哪些資訊？
+    - WKWebView 的內容行程被系統終止時，要怎麼復原？
+    - 訂單簿的深度上限要怎麼決定？
+  timeLimitSec: 150
+
+- id: advanced-memory-10
+  type: flash
+  level: 2
+  priority: P0
+  tags: [weak, unowned]
+  front: "`[weak self]` 與 `[unowned self]` 怎麼選？"
+  back: |
+    `weak`：物件釋放後會變成 `nil`，安全，但要處理 Optional。非同步回呼（網路、socket、Task）的預設選擇。
+    `unowned`：不保留物件，也不會歸零，釋放後再存取會直接 crash。只在「self 一定比 closure 活得久」時使用，例如只由 self 自己持有的子物件。
+    Swift Concurrency 的 `Task { self.x }` 會強持有 self 直到 Task 結束，長時間的 Task 要用 `[weak self]`，並在畫面離開時取消。

@@ -1,0 +1,239 @@
+- id: advanced-concurrency-races-01
+  type: predict
+  level: 3
+  priority: P0
+  tags: [swift, actor, reentrancy]
+  prompt: |
+    `Counter` 是 actor（一次只讓一個任務執行它的程式碼的型別），沒有任何 data race。主程式（top-level code）會印出什麼？（依序：陣列 `r` 的兩個元素，最後的 `value`）
+  codeLang: swift
+  code: |
+    actor Counter {
+        var value = 0
+        func incrementSlowly() async -> Int {
+            let before = value
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            value = before + 1
+            return value
+        }
+        func current() -> Int { value }
+    }
+
+    let c = Counter()
+    async let a = c.incrementSlowly()
+    async let b = c.incrementSlowly()
+    let r = await [a, b]
+    print(r.map(String.init).joined(separator: " "))
+    print(await c.current())
+  answer: |
+    1 1 1
+  explain: |
+    actor 一次只執行一段不會暫停的程式碼，但程式碼執行到 `await` 時會暫停，把 actor 讓給別的呼叫（這叫重入，reentrancy）。兩次 `incrementSlowly` 都在 sleep 之前讀到 `before = 0`，睡醒之後各自寫入 `0 + 1`，所以兩次的回傳值都是 1，最後 `value` 也是 1，不是 2。
+    這是 **race condition**，不是 data race：每一次存取都在 actor 的保護之內，Thread Sanitizer 看不出問題。
+    修法是讓「讀取、修改、寫入」中間不要跨過 `await`（例如直接寫 `value += 1`），或把狀態的變化改成事件，由單一流程依序處理。
+
+- id: advanced-concurrency-races-02
+  type: predict
+  level: 2
+  priority: P0
+  tags: [kotlin, coroutines, race-condition]
+  prompt: |
+    在 `runBlocking`（只有一條執行緒的事件迴圈）裡執行，會印出什麼？
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+
+    var value = 0
+
+    suspend fun inc() {
+        val before = value
+        delay(10)
+        value = before + 1
+    }
+
+    fun main() = runBlocking {
+        coroutineScope {
+            launch { inc() }
+            launch { inc() }
+        }
+        println(value)
+    }
+  answer: |
+    1
+  explain: |
+    只有一條執行緒，完全沒有 data race，結果仍然是 1：兩個協程都在 `delay` 之前讀到 `0`，被暫停點隔開的「讀、改、寫」不是一個不可分割的動作，後寫的蓋掉先寫的。這是協程版本的 lost update（更新遺失）。
+    修法：用 `Mutex.withLock` 把整段「讀、delay、寫」包起來，這樣第二個協程要等第一個做完才能進去，結果就是 2；或是改用 `AtomicInteger.incrementAndGet()` 這類原子操作，完全避開「讀了再寫」的問題。
+
+- id: advanced-concurrency-races-03
+  type: single
+  level: 2
+  priority: P0
+  tags: [ios, gcd, deadlock]
+  prompt: |
+    在 iOS 的主執行緒上呼叫 `DispatchQueue.main.sync { updateUI() }`，會發生什麼事？
+  options:
+    - "立即在主執行緒上同步執行 `updateUI()`，沒有問題"
+    - "deadlock：`sync` 會讓目前的執行緒等到區塊執行完才繼續，但區塊要排進主佇列才能執行，而主佇列正被目前這個呼叫占著，所以永遠等下去"
+    - "區塊會被丟到背景執行緒去執行"
+    - "編譯時就會報錯"
+  answer: 1
+  explain: |
+    `sync` 的意思是「把區塊排進目標佇列，並且讓目前的執行緒等到區塊執行完」。如果目標佇列就是目前正在執行這段程式碼的 serial queue（一次只執行一個工作的佇列），區塊永遠輪不到執行，形成自己等自己，這就是 deadlock。
+
+    其他選項錯在哪裡：
+    - 第 1 項：這正是大家以為的行為，但實際上主佇列正忙著執行這行呼叫，不會有空檔執行區塊。
+    - 第 3 項：`DispatchQueue.main` 的工作一定在主執行緒執行，不會被丟到背景。
+    - 第 4 項：這是執行時的問題，編譯器不會報錯。
+
+    正確做法：改用 `DispatchQueue.main.async`，或把函式標上 `@MainActor`；或先用 `Thread.isMainThread` 判斷。Android 對應的錯誤是在主執行緒呼叫 `runBlocking { withContext(Dispatchers.Main) { } }`。
+
+- id: advanced-concurrency-races-04
+  type: multi
+  level: 2
+  priority: P0
+  tags: [locks, ios, android]
+  prompt: |
+    關於各種鎖與同步工具，哪些敘述正確？（複選）
+  options:
+    - "`os_unfair_lock` 是非遞迴的：同一個執行緒重複取得同一把鎖，程式會出錯"
+    - "`OSSpinLock` 已經被棄用，原因之一是可能造成優先權反轉"
+    - "`DispatchSemaphore` 會記錄持有者，因此會做優先權捐贈"
+    - "Kotlin 協程的 `Mutex` 是可重入的，同一個協程可以重複呼叫 `lock()`"
+    - "Java 與 Kotlin 的 `synchronized` 是可重入的"
+  answer: [0, 1, 4]
+  explain: |
+    - 第 1 項正確：`os_unfair_lock` 不可遞迴。同一個執行緒重複取得會直接當掉；需要重入時改用 `NSRecursiveLock`。
+    - 第 2 項正確：spinlock 等待時會一直占用 CPU（忙等），低優先權的持有者拿不到時間釋放鎖，就會造成優先權反轉。
+    - 第 3 項錯誤：`DispatchSemaphore` 沒有「誰持有」的概念，所以不做優先權捐贈。用它當互斥鎖，在主執行緒等待，容易引發優先權反轉。記錄持有者並能做優先權捐贈的是 `os_unfair_lock`。
+    - 第 4 項錯誤：協程的 `Mutex` 不可重入，在 `withLock` 裡面再對同一個 `Mutex` 呼叫 `lock()`，會永遠等下去。
+    - 第 5 項正確：`synchronized` 是可重入的，同一個執行緒可以重複進入。
+
+- id: advanced-concurrency-races-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [concepts]
+  prompt: |
+    下列哪個例子是 **race condition，但不是 data race**？
+  options:
+    - "兩個執行緒對沒有任何同步的 `var count: Int`，同時執行 `count += 1`"
+    - "每個存取都有 `synchronized` 保護，但程式寫成 `if (!map.containsKey(k)) map.put(k, v)`，兩個執行緒都通過了檢查"
+    - "一個執行緒寫入沒有加 `@Volatile` 的旗標，另一個執行緒在迴圈中讀取它"
+    - "兩個執行緒同時寫入同一塊記憶體，沒有任何同步"
+  answer: 1
+  explain: |
+    第 2 項：`containsKey` 和 `put` 單獨看都有同步，所以沒有 data race；但「檢查」和「動作」之間可以被別的執行緒插進來，結果取決於時序，這是 race condition。正確寫法是讓兩步變成一個不可分割的動作，例如 `putIfAbsent`。
+
+    其他選項錯在哪裡：第 1、3、4 項都是沒有同步的並行存取，而且至少有一個在寫入，所以是 data race。
+    Thread Sanitizer 能抓到 data race，抓不到 race condition，後者要靠設計來避免。
+
+- id: advanced-concurrency-races-06
+  type: fill
+  level: 2
+  priority: P1
+  tags: [ios, unfair-lock]
+  prompt: |
+    使用 iOS 16 以上提供的安全包裝，保護一個計數器。補上型別與方法。
+  codeLang: swift
+  code: |
+    let lock = ____(initialState: 0)
+
+    func increment() -> Int {
+        lock.____ { state in
+            state += 1
+            return state
+        }
+    }
+  blanks:
+    - [OSAllocatedUnfairLock]
+    - [withLock]
+  explain: |
+    直接在 Swift 裡使用 `os_unfair_lock` 很容易出錯：它不能被搬動記憶體位置，而 `var lock = os_unfair_lock()` 在傳遞時可能被複製。`OSAllocatedUnfairLock`（iOS 16 起）把鎖配置在固定的位置，並把受保護的資料和鎖綁在一起，資料只能透過 `withLock` 存取，不會忘記加鎖。
+    iOS 18 起也可以用標準函式庫（`Synchronization` 模組）的 `Mutex`。
+
+- id: advanced-concurrency-races-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [deadlock, diagnosis]
+  prompt: |
+    使用者回報 App 偶爾「整個卡死」（主執行緒沒有回應）。把診斷 deadlock 的流程依合理的順序排列。
+  items:
+    - 取得卡住當下的執行緒堆疊（Xcode 暫停全部執行緒，或 Android 的 ANR trace、thread dump。ANR 是 Application Not Responding，指 App 沒有回應）
+    - 找出主執行緒正在等什麼：哪一把鎖、哪個 semaphore、哪個 sync 呼叫
+    - 沿著「誰持有這個資源、那個執行緒又在等誰」追蹤，確認是否形成循環
+    - 修正：統一取得鎖的順序、持有鎖時不呼叫外部程式碼、改成非同步，或加上 tryLock 與逾時
+    - 補一個壓力測試（多個執行緒反覆呼叫）來重現，並防止之後退步
+  explain: |
+    診斷 deadlock 的核心，是把「誰在等誰」畫成一張圖。要先有卡住當下的執行緒堆疊，才能知道每個執行緒停在哪裡。Android 的 ANR trace 會寫出 `waiting to lock <0x…> held by thread N`，可以直接順著追出循環；iOS 則是逐一檢查各執行緒的堆疊。
+    修完之後要用壓力測試固定下來，因為 deadlock 通常是偶發的，手動測試很難重現，之後也容易在改動程式碼時重新出現。
+
+- id: advanced-concurrency-races-08
+  type: single
+  level: 2
+  priority: P1
+  tags: [android, anr, locks]
+  prompt: |
+    ANR trace（App 沒有回應時，系統留下的各執行緒狀態紀錄）中，主執行緒的堆疊顯示「`- waiting to lock <0x0a1b2c3d> held by thread 17`」，而 17 號執行緒的堆疊停在一次網路 I/O（輸入輸出）。這代表什麼？
+  options:
+    - "主執行緒正在做網路請求"
+    - "主執行緒被某個 monitor（`synchronized` 的鎖）擋住，而持有這把鎖的背景執行緒又在做很慢的 I/O。問題是鎖裡面做了 I/O，而且主執行緒也會去拿同一把鎖"
+    - "這是正常的 GC（垃圾回收）暫停"
+    - "這代表 JIT（執行時編譯）正在編譯程式碼"
+  answer: 1
+  explain: |
+    這是典型的鎖爭用造成的 ANR：持有鎖的執行緒在鎖裡面做很慢的操作，而主執行緒需要同一把鎖，只能一直等。
+    修法：縮小臨界區，把 I/O 移到鎖外面（先把需要的資料複製出來，放掉鎖，再做 I/O）；主執行緒也不要去拿「背景執行緒可能長時間占用」的鎖。
+
+    其他選項錯在哪裡：
+    - 第 1 項：`waiting to lock` 表示主執行緒在等鎖，不是在做網路請求；做網路請求的是 17 號執行緒。
+    - 第 3 項：GC 暫停在 trace 裡不是這樣的字樣，而且不會指出「被某個執行緒持有」。
+    - 第 4 項：JIT 編譯不會表現成等待某一把鎖被另一個執行緒持有。
+
+- id: advanced-concurrency-races-09
+  type: open
+  level: 3
+  priority: P0
+  tags: [concurrency, socket, review]
+  prompt: |
+    一個 App 的即時聊天用 Socket.IO 連線：iOS 用 `DispatchSemaphore` 保護兩個待送佇列，一次送一則訊息，等伺服器回應再送下一則；Android 用 `AtomicBoolean` 防止同時連線，`ConcurrentLinkedQueue` 加 `CompletableDeferred` 管理待送工作。從並發的角度，這樣的連線層有哪些風險要注意？設計交易所 App 的 WebSocket 層時，你會怎麼做？
+  promptJa: |
+    あるアプリのリアルタイムチャットは Socket.IO で接続しています。iOS は `DispatchSemaphore` で 2 つの送信待ちキューを保護し、1 件ずつ送信してサーバーの応答を待ってから次を送ります。Android は `AtomicBoolean` で同時接続を防ぎ、`ConcurrentLinkedQueue` と `CompletableDeferred` で送信待ちの処理を管理しています。並行処理の観点で、この接続層にはどんなリスクがありますか。取引所アプリの WebSocket 層はどう設計しますか。
+  keyPoints:
+    - 說明這種既有做法：iOS 用 DispatchSemaphore 保護兩個待送佇列；Android 用 AtomicBoolean 防止同時連線，ConcurrentLinkedQueue 加 CompletableDeferred 管理待送工作
+    - 風險：用輪詢（睡一下再檢查）等待佇列清空會占住執行緒；狀態分散在多個結構；回呼裡的 self 生命週期；固定間隔重連沒有指數退避
+    - 設計方向：由單一寫入者（iOS 用 actor，Android 用單一執行緒的 dispatcher）管理連線狀態機，事件用 AsyncStream 或 Flow 輸出
+    - 待送訊息用有界佇列加冪等鍵（重送也不會重複處理），重連用指數退避（每次失敗等待時間加倍）加 jitter（隨機的時間偏移，避免大量裝置同時重連）
+    - 心跳與解壓縮放在 socket 這一層處理，不被主執行緒卡頓影響（Huobi 相容的交易所 WebSocket 伺服器大約每 5 秒送 ping，連續兩次沒回 pong 就會斷線，資料是 gzip 壓縮）
+    - 測試：用假的 transport 做確定性的狀態機測試，加上壓力測試，iOS 另外跑一輪 Thread Sanitizer
+  modelAnswer: |
+    題目描述的聊天連線，iOS 用 `DispatchSemaphore` 保護兩個待送佇列，一次送一則、等 ack（伺服器的確認回應）再送下一則；Android 用 `AtomicBoolean` 擋同時連線，`ConcurrentLinkedQueue` 加 `CompletableDeferred` 管理待送工作。這些都能避免最直接的 data race。
+
+    從並發的角度，我會特別注意幾件事：用輪詢等待佇列清空，會一直占住一條執行緒，也沒有清楚的取消與逾時；連線狀態分散在好幾個結構裡，不容易確認某個時刻的狀態；固定間隔的重連，在網路不穩時會一直撞伺服器。
+
+    換成交易所 App，我會讓一個 actor（iOS）或單一執行緒的 dispatcher（Android）當唯一的寫入者，管理連線的狀態機：idle、connecting、connected、reconnecting。事件對外用 `AsyncStream` 或 `Flow`。待送訊息用有界佇列加冪等鍵，重連用指數退避加 jitter。
+
+    另外，Huobi 相容的交易所 WebSocket 伺服器大約每 5 秒送 ping，連續兩次沒回 pong 就會斷線，所以心跳與 gzip 解壓縮要在 socket 這一層處理，不能被主執行緒的卡頓影響。測試上，我會用假的 transport（取代真實網路連線的測試替身）做確定性的狀態機測試，再加壓力測試，iOS 另外開 Thread Sanitizer 跑一輪。
+  modelAnswerJa: |
+    問題文の接続層では、iOS は `DispatchSemaphore` で 2 つの送信待ちキューを保護し、1 件送って ack を待ってから次を送っていました。Android は `AtomicBoolean` で同時接続を防ぎ、`ConcurrentLinkedQueue` と `CompletableDeferred` で送信待ちの処理を管理していました。これで直接的なデータ競合を避けていました。
+
+    並行処理の観点では、いくつか注意が必要です。ポーリングでキューが空になるのを待つと、スレッドを占有し続け、キャンセルやタイムアウトの扱いも曖昧になります。接続状態が複数の構造に分散していると、ある時点の状態を確認しにくくなります。固定間隔の再接続は、ネットワークが不安定なときにサーバーへ接続を繰り返してしまいます。
+
+    取引所アプリでは、actor（iOS）または単一スレッドの dispatcher（Android）を唯一の書き込み主体にして、接続状態を idle、connecting、connected、reconnecting のステートマシンで管理します。イベントは `AsyncStream` や `Flow` で外に出します。送信待ちメッセージは上限付きキューと冪等キーで扱い、再接続は指数バックオフと jitter にします。
+
+    また、Huobi 互換の取引所 WebSocket は約 5 秒ごとに ping を送り、2 回連続で pong が返らないと切断されます。そのため、ハートビートと gzip の解凍は socket 層で処理し、メインスレッドの遅延に影響されないようにします。テストは、疑似 transport で決定的なステートマシンのテストを行い、ストレステストも加えます。iOS では Thread Sanitizer も 1 回実行します。
+  followUps:
+    - actor の reentrancy で、ステートマシンが壊れる例を挙げられますか。
+    - 待送訊息的冪等鍵要怎麼設計？
+    - 背景被系統斷線後，回到前景要怎麼補資料？
+  timeLimitSec: 150
+
+- id: advanced-concurrency-races-10
+  type: flash
+  level: 2
+  priority: P0
+  tags: [priority-inversion]
+  front: 什麼是 priority inversion？iOS 與 Android 各怎麼避免？
+  back: |
+    高優先權的執行緒（例如主執行緒）在等低優先權執行緒持有的鎖，同時中優先權的執行緒一直搶走 CPU，低優先權的執行緒分不到時間，就沒辦法釋放鎖。
+    iOS：用會做優先權捐贈的 `os_unfair_lock`（包含 `OSAllocatedUnfairLock`）或 serial queue，不要用 `DispatchSemaphore` 當互斥鎖；Xcode 的 Thread Performance Checker 會警告。
+    Android：持有鎖的區間盡量短，鎖裡面不做 I/O（網路或讀寫檔案），主執行緒不要拿「背景可能長時間占用」的鎖；用 ANR trace 的 `waiting to lock` 找線索。

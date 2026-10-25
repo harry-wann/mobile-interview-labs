@@ -1,0 +1,20 @@
+node_modules
+node_modules/
+dist/
+dist-static/
+artifact/
+.tools/
+.runner-tmp/
+.DS_Store
+*.log
+# 由 npm run content:build（dev／build 前自動執行）產生
+src/generated/
+# 個人作答資料（我的口徑、進度）；要備份請用「我的口徑」頁的匯出
+data/*.json
+data/*.tmp-*
+data/.lan-token
+data/.lock-*
+# 前雇主程式碼的掃描筆記（含內部細節），只留本機、不進版控
+research/
+# 外部文件（JD 等）
+*.docx

@@ -1,0 +1,42 @@
+# section 順序與標題。id 不要改（單元 id 與題目 id 都以它為前綴）
+# 順序：Swift → Kotlin → 平台對照 → 進階 → 交易所 → 測試 → 系統設計 → Live Coding。
+- id: swift
+  dir: swift
+  title: Swift & SwiftUI
+  short: Swift
+  description: 語言特性、Concurrency、SwiftUI 狀態與效能，外加 Objective-C 速成。
+- id: kotlin
+  dir: kotlin
+  title: Kotlin & Compose
+  short: Kotlin
+  description: 型別系統、Coroutines、Flow、Compose 原理與效能，外加 Java 互通。
+- id: platform
+  dir: platform
+  title: iOS × Android 平台對照
+  short: 平台
+  description: 同一個概念兩個平台並排：生命週期、執行緒、背景、安全儲存、網路、發布。
+- id: advanced
+  dir: advanced
+  title: 資深進階
+  short: 進階
+  description: 效能、記憶體、高併發、穩定性、App 體積、Mobile Security、架構演進。
+- id: exchange
+  dir: exchange
+  title: 交易所 App 技術
+  short: 交易所
+  description: 以 Huobi 相容的公開交易所 API 為藍本的學習單元與可執行實作題。
+- id: testing
+  dir: testing
+  title: AI 自動化測試
+  short: AI 測試
+  description: 測試策略、iOS/Android 工具、E2E、AI 驅動測試與 CI。
+- id: sysdesign
+  dir: sysdesign
+  title: Mobile System Design
+  short: 系統設計
+  description: 作答框架與 4 個交易所 App 設計案例。
+- id: livecoding
+  dir: livecoding
+  title: Live Coding
+  short: Coding
+  description: Swift／Kotlin 雙版本計時練習，題目偏行動端與交易所情境。

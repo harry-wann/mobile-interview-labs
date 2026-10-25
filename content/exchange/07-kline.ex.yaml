@@ -1,0 +1,735 @@
+- id: exchange-kline-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [kline, fields]
+  prompt: |
+    這套交易所 API 的 K 線資料（REST 和 WebSocket 的 `tick`）有 `id`、`open`、`close`、`low`、`high`、`amount`、`vol`、`count` 這幾個欄位。文件的日 K 範例是 `{"id": 1632931200, "amount": 6.634525507825414, "vol": 31208129.2684, "count": 7534, "low": 4580081, "high": 4830000, ...}`（btcjpy）。下列哪個解讀正確？
+  options:
+    - "`id` 是毫秒時間戳記；`amount` 是成交金額；`vol` 是成交筆數"
+    - "`id` 是這根 K 線的起點時間（單位秒）；`amount` 是標的數量（BTC）；`vol` 是計價金額（JPY）；`count` 是成交筆數"
+    - "`amount` 和 `vol` 是同一個值的兩種名稱，畫面上任選一個顯示就好"
+    - "`id` 是這根 K 線的收盤時間（單位毫秒）"
+  answer: 1
+  explain: |
+    可以用範例反推：`vol ÷ amount ≈ 31,208,129 ÷ 6.63 ≈ 4.70M`，這個數字落在當根的 `low`（4,580,081）和 `high`（4,830,000）之間，正是這段時間的平均成交價。所以 `vol` 是以日圓計的成交金額，`amount` 是 BTC 的數量，`count` 是成交筆數。
+    - 第 1 項錯：`id` 不是毫秒（把 `1632931200` 當毫秒，會得到 1970 年 1 月），而且 `amount` 和 `vol` 的意思也說反了。
+    - 第 3 項錯：兩者的單位不同，一個是 BTC、一個是日圓，差好幾個數量級。顯示「成交量」時要標清楚單位。
+    - 第 4 項錯：`id` 是這根 K 線的**起點**時間，不是收盤時間，單位也是秒，不是毫秒。
+
+- id: exchange-kline-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [timezone, day-boundary]
+  prompt: |
+    這套 API 文件的日 K 範例（`period=1day`）回傳兩根 K 線，`id` 分別是 `1632931200` 和 `1632844800`（資料時間是 2021 年）。你要在 App 裡自己用成交聚合日 K，讓最後一根在兩次推送之間也能更新。下列哪個結論與做法最合理？
+  options:
+    - "日界一定是日本時間（JST）的 0 點，本機聚合直接用 `TimeZone(identifier: \"Asia/Tokyo\")` 的 `startOfDay`"
+    - "日界一定是 UTC 的 0 點，因為時間戳記都是 UTC"
+    - "兩個 `id` 對 86400 取餘數都是 57600，也就是 16:00 UTC（UTC+8 的 00:00、JST 的 01:00），所以範例資料的日界既不是 JST 的 0 點，也不是 UTC 的 0 點；日界不寫死，畫伺服器的 K 線一律使用回傳的 `id`，本機聚合的原點做成設定並向交易所確認，現行規則（未證實）"
+    - "`id` 有誤差，應該把它四捨五入到最近的 JST 0 點再畫"
+  answer: 2
+  explain: |
+    `1632931200 mod 86400 = 57600`，也就是一天的第 16 小時，所以這根日 K 從 16:00 UTC 開始，等於 UTC+8 的午夜。這是**從 2021 年的範例資料推得**的結論，現行的日界規則、週 K 和月 K 的起點都（未證實）。
+    - 第 1 項錯：範例資料的日界不是 JST 的 0 點，直接用日本時間的 `startOfDay` 聚合，會和伺服器的 K 線差 1 小時（JST 的 0 點是 15:00 UTC）。
+    - 第 2 項錯：時間戳記都是 UTC，不代表日界就在 UTC 的 0 點，日界是資料來源自己定的規則。
+    - 第 4 項錯：`id` 沒有誤差，它就是伺服器定義的起點，四捨五入到別的日界，圖表會和官方、網頁版對不上。
+    實務做法：伺服器給的 K 線用它的 `id`；只有本機聚合才需要自己決定原點，而且必須和伺服器一致。顯示時區（日本時間或裝置時區）是另一個決定，不要和資料的日界混在一起。
+
+- id: exchange-kline-03
+  type: predict
+  level: 2
+  priority: P0
+  tags: [bucket, timezone, swift]
+  prompt: |
+    一筆成交發生在 `1632929400`（2021-09-29 15:30:00 UTC）。下列程式依序印出什麼？（`1632931200` 是文件範例中一根日 K 的 `id`。）
+  codeLang: swift
+  code: |
+    func bucketStart(_ tsSec: Int64, period: Int64, offset: Int64) -> Int64 {
+        return (tsSec + offset) / period * period - offset
+    }
+
+    let t: Int64 = 1_632_929_400   // 2021-09-29 15:30:00 UTC
+    for off in [0, 28_800, 32_400] as [Int64] {
+        print(bucketStart(t, period: 86_400, offset: off))
+    }
+  answer: |
+    1632873600 1632844800 1632927600
+  explain: |
+    `bucketStart` 算的是這筆成交所屬那根 K 線的起點時間；`offset` 是日界相對 UTC 的偏移秒數。
+    - `offset = 0`（日界在 UTC 的 0 點）：起點是 `1632873600`，也就是 2021-09-29 00:00 UTC。
+    - `offset = 28800`（日界在 UTC+8 的 0 點）：這筆成交在 UTC+8 是 9/29 23:30，所屬那根日 K 的起點是 `1632844800`（9/28 16:00 UTC），也就是文件範例第二根 K 線的 `id`；再過 30 分鐘就會落到 `1632931200` 那一根。
+    - `offset = 32400`（日界在 JST 的 0 點）：這筆成交在 JST 是 9/30 00:30，起點是 `1632927600`（9/29 15:00 UTC）。
+    同一筆成交，在三種日界下落在三根不同的日 K，這就是日界不能寫死的原因。這裡的 `/` 是一般除法（往 0 取整），時間為正時和 floor 除法的結果相同；時間可能是負數時，要改用 floor 除法。
+
+- id: exchange-kline-04
+  type: multi
+  level: 2
+  priority: P1
+  tags: [aggregation, ohlcv]
+  prompt: |
+    把成交聚合成 OHLCV（開高低收量）K 線時，哪些做法正確？（複選）
+  options:
+    - "`open` 是區間內時間最早的成交價、`close` 是時間最晚的；時間相同時，用成交編號（`tradeId`）決定先後"
+    - "收到的成交陣列的第一筆就是 `open`、最後一筆就是 `close`，不需要排序"
+    - "`vol`（計價金額）是 Σ（價格 × 數量），`amount` 是數量的加總，兩者不能混為一談"
+    - "重連或補資料時可能重送相同的成交，要用成交編號去重（WebSocket 的 `tradeId`、REST 的 `trade-id`；逐筆資料的 `id` 是 27 位數，超出 `Int64` 和 `Double` 能精確表示的範圍，不適合拿來去重），否則 `count` 和 `vol` 會重複計算"
+    - "毫秒轉秒、算 K 線起點時用 floor 除法；一般除法在值為負時會往 0 取整，邊界會錯一格"
+    - "遲到的成交屬於已收盤的 K 線時，可以悄悄修改那根的 `close`，圖表不需要被通知"
+  answer: [0, 2, 3, 4]
+  explain: |
+    - 第 1 項正確：資料可能亂序，所以要依（時間, 成交編號）排序，決定先後。
+    - 第 2 項錯：資料可能亂序（重連補資料時常見），陣列的第一筆不一定是時間最早的，不能用陣列順序決定 `open` 和 `close`。
+    - 第 3 項正確：`vol` 是金額，`amount` 是數量，單位不同。
+    - 第 4 項正確：去重要用 `tradeId`（REST 是 `trade-id`）。逐筆的 `id` 是 27 位數，一般 JSON 解析會失真；文件的 REST 範例裡，兩筆不同的成交甚至有相同的 `id`，要當字串解析，或乾脆不用。
+    - 第 5 項正確：負的時間或偏移後的邊界，用一般除法會往 0 取整，結果錯一格。
+    - 第 6 項錯：遲到的成交，嚴格的做法是重算那一根並通知圖表更新，或忽略並以伺服器的 K 線為準。悄悄修改會讓畫面顯示和歷史資料不一致。
+    補充：本機聚合只是補足伺服器 K 線的空檔，伺服器的 K 線才是權威，不要把兩種來源混在同一根 K 線裡。
+
+- id: exchange-kline-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [ema, incremental]
+  prompt: |
+    最後一根 K 線還在進行中，每個 tick（一次價格更新）都會改變收盤價。你為了省事，在每個 tick 都執行 `prevEma = prevEma + k * (price - prevEma)`，並把結果存回 `prevEma`。這會有什麼問題？正確做法是什麼？
+  options:
+    - "沒有問題，EMA 本來就是遞迴計算，每個 tick 套用一次是正確的"
+    - "每個 tick 都把進行中的價格再計入一次，EMA 被「這根 K 線內的 tick 次數」放大；應該保留上一根「已收盤」的 EMA 當 prev，進行中的顯示值 ＝ prevClosed ＋ k ×（price − prevClosed），只在 K 線收盤（`id` 變了）時，才把最後的值固定成新的 prev"
+    - "問題只是浮點數的誤差，改用 Decimal 就會正確"
+    - "應該在每個 tick 都從頭重算整段歷史的 EMA，這是唯一正確的方法"
+  answer: 1
+  explain: |
+    EMA 每根 K 線只應該更新一次。進行中的值是「用目前價格暫時算出來的」，不是新的狀態。把它寫回去，同一根 K 線內的每個 tick 都會再計入一次，結果越來越趨近當前價格，而不是真正的 EMA。
+    - 第 1 項錯：遞迴計算的前提是每個週期只套用一次，每個 tick 都套用，就重複計入了。
+    - 第 3 項錯：問題在邏輯，不是精度。改用 Decimal，一樣會被重複計入。
+    - 第 4 項錯：從頭重算整段歷史雖然結果正確，但沒有必要；只要保存上一根已收盤的值，單步計算就夠了。
+    RSI 的 Wilder 平滑也是同樣的道理：進行中的值用已收盤的平均漲幅、平均跌幅計算，收盤時才更新平均值。
+
+- id: exchange-kline-06
+  type: multi
+  level: 3
+  priority: P1
+  tags: [webview, lightweight-charts, bridge]
+  prompt: |
+    在 WKWebView 或 Android WebView 裡，用 TradingView Lightweight Charts 畫交易所的 K 線，下列哪些做法正確？（複選）
+  options:
+    - "`update` 的時間必須大於或等於最後一根；記住最後推送的時間，跳過比它舊的，並對每次 `update` 加上 `try/catch`"
+    - "資料用 JSON 傳遞（例如 iOS 的 `callAsyncJavaScript` 的 `arguments`，或 JSON 字串再 `JSON.parse`），而不是把 Double 用字串插值塞進 JavaScript 程式碼，因為 `NaN` 和無限大會變成 JavaScript 不認得的文字"
+    - "把所有時間加上「現在」的 UTC 偏移是最好的做法，不會有任何副作用"
+    - "圖表的 JavaScript 打包進 App 並固定版本，避免 CDN 離線或被擋住時圖表空白，也降低供應鏈風險"
+    - "WebView 負責渲染網頁的行程可能被系統終止（iOS 的 `webViewWebContentProcessDidTerminate`、Android 的 `onRenderProcessGone`），要偵測並重建，重新 `setData`"
+    - "每個 tick 都呼叫 `setData` 重設整個資料集，這樣最簡單，效能與 `update` 沒有差別"
+  answer: [0, 1, 3, 4]
+  explain: |
+    - 第 1 項正確：`update` 的時間倒退會丟出例外，沒擋住的話，圖表會悄悄停止更新。前景回來合併補資料時，要把「自上次推送以來的所有 K 線」依序推完，才不會在中間留下洞。
+    - 第 2 項正確：字串插值會把 `NaN` 變成 `nan`、無限大變成 `inf`，JavaScript 不認得這兩個字，會丟 `ReferenceError`；字串內含引號時還會破壞語法。
+    - 第 3 項錯：偏移是「現在」的，橫跨夏令時間的歷史會錯 1 小時，而且資料裡的時間不再是真正的 epoch。比較乾淨的做法是資料保持 UTC，用圖表的格式化選項（`localization.timeFormatter`、`timeScale.tickMarkFormatter`，名稱以所用版本的文件為準）顯示成目標時區。日本沒有夏令時間，所以簡單的位移通常可行，但不是沒有副作用。
+    - 第 4 項正確：腳本來自 CDN，離線或被擋住時圖表就是一片空白，也多了供應鏈風險。
+    - 第 5 項正確：渲染行程被終止後畫面會變白，要偵測並重建 WebView、重新 `setData`。
+    - 第 6 項錯：`setData` 會重設整個資料序列與縮放狀態，高頻情況下比 `update` 貴很多，也會打斷使用者的縮放和十字線。
+
+- id: exchange-kline-07
+  type: code
+  level: 3
+  priority: P0
+  tags: [aggregation, ohlcv, timezone]
+  timeLimitSec: 1500
+  prompt: |
+    實作 `aggregate(trades, periodSec, originOffsetSec)`：把成交聚合成 K 線。價格是日圓整數，數量是 1e-8 BTC 的整數（`qty = 100_000_000` 代表 1 BTC），兩者都用 `Int64`，避免浮點數的誤差。
+
+    - 輸入可能**亂序**，也可能含**重複**的成交
+    - K 線起點（UTC 秒）＝ `floorDiv(秒 + originOffsetSec, periodSec) × periodSec − originOffsetSec`，其中 `秒 = floorDiv(tsMs, 1000)`。`originOffsetSec` 是日界相對 UTC 的偏移秒數：UTC 是 0，UTC+8 是 28800，JST 是 32400
+    - 先依 `(tsMs, id)` 排序再處理：`open` 是最早的一筆、`close` 是最晚的一筆；`high`／`low` 是最大／最小價；`amount` ＝ Σ`qty`；`vol` ＝ Σ`price × qty`；`count` ＝ 筆數
+    - 相同 `id` 的成交只算一次（保留第一次出現的）。這裡的 `id` 對應 API 文件的 `tradeId`（REST 是 `trade-id`），不是 27 位數的逐筆 `id`
+    - `price <= 0` 或 `qty <= 0` 的成交視為無效，略過
+    - 只輸出「有成交」的 K 線（不補空的），依起點由小到大排序
+    - `periodSec <= 0` 時回傳空陣列
+  hints:
+    - "先過濾無效和重複的成交，再排序，最後從頭到尾掃描一次：排序之後，同一根 K 線的成交是連在一起的。"
+    - "Kotlin 用 `Math.floorDiv`；Swift 要自己寫 floor 除法，不要直接用 `/`（`/` 遇到負數會往 0 取整）。"
+  swift:
+    starter: |
+      struct Trade {
+          let id: Int64
+          let tsMs: Int64
+          let price: Int64
+          let qty: Int64
+      }
+
+      struct Candle: Equatable {
+          var start: Int64
+          var open: Int64
+          var high: Int64
+          var low: Int64
+          var close: Int64
+          var amount: Int64
+          var vol: Int64
+          var count: Int
+      }
+
+      func aggregate(_ trades: [Trade], periodSec: Int64, originOffsetSec: Int64) -> [Candle] {
+          // TODO
+          return []
+      }
+    solution: |
+      struct Trade {
+          let id: Int64
+          let tsMs: Int64
+          let price: Int64
+          let qty: Int64
+      }
+
+      struct Candle: Equatable {
+          var start: Int64
+          var open: Int64
+          var high: Int64
+          var low: Int64
+          var close: Int64
+          var amount: Int64
+          var vol: Int64
+          var count: Int
+      }
+
+      func floorDiv(_ a: Int64, _ b: Int64) -> Int64 {
+          let q = a / b
+          return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q
+      }
+
+      func aggregate(_ trades: [Trade], periodSec: Int64, originOffsetSec: Int64) -> [Candle] {
+          guard periodSec > 0 else { return [] }
+          var seen = Set<Int64>()
+          var valid: [Trade] = []
+          for t in trades where t.price > 0 && t.qty > 0 {
+              if seen.insert(t.id).inserted { valid.append(t) }
+          }
+          valid.sort { ($0.tsMs, $0.id) < ($1.tsMs, $1.id) }
+
+          var result: [Candle] = []
+          for t in valid {
+              let sec = floorDiv(t.tsMs, 1000)
+              let start = floorDiv(sec + originOffsetSec, periodSec) * periodSec - originOffsetSec
+              if var last = result.last, last.start == start {
+                  last.high = max(last.high, t.price)
+                  last.low = min(last.low, t.price)
+                  last.close = t.price
+                  last.amount += t.qty
+                  last.vol += t.price * t.qty
+                  last.count += 1
+                  result[result.count - 1] = last
+              } else {
+                  result.append(Candle(start: start, open: t.price, high: t.price, low: t.price,
+                                       close: t.price, amount: t.qty, vol: t.price * t.qty, count: 1))
+              }
+          }
+          return result
+      }
+    tests: |
+      let B: Int64 = 1_632_931_200_000   // 2021-09-29 16:00:00 UTC（文件範例中一根日 K 的 id × 1000）
+      func tr(_ id: Int64, _ ms: Int64, _ p: Int64, _ q: Int64) -> Trade {
+          Trade(id: id, tsMs: ms, price: p, qty: q)
+      }
+
+      check("亂序輸入：open／close 依時間決定，其餘欄位正確") {
+          let trades = [
+              tr(11, B + 40_000, 4_800_000, 20_000_000),
+              tr(10, B + 5_000, 4_790_000, 10_000_000),
+              tr(12, B + 55_000, 4_810_000, 5_000_000),
+              tr(13, B + 20_000, 4_780_000, 30_000_000),
+          ]
+          let expected = [Candle(start: 1_632_931_200, open: 4_790_000, high: 4_810_000, low: 4_780_000,
+                                 close: 4_810_000, amount: 65_000_000, vol: 311_350_000_000_000, count: 4)]
+          return aggregate(trades, periodSec: 60, originOffsetSec: 0) == expected
+      }
+      checkEqual("跨桶：依起點遞增排序，沒有成交的桶不輸出", [
+          Candle(start: 1_632_931_200, open: 4_800_000, high: 4_800_000, low: 4_800_000, close: 4_800_000,
+                 amount: 10_000_000, vol: 48_000_000_000_000, count: 1),
+          Candle(start: 1_632_931_320, open: 4_820_000, high: 4_830_000, low: 4_820_000, close: 4_830_000,
+                 amount: 30_000_000, vol: 144_800_000_000_000, count: 2),
+      ]) {
+          aggregate([
+              tr(21, B + 130_000, 4_820_000, 10_000_000),
+              tr(20, B + 10_000, 4_800_000, 10_000_000),
+              tr(22, B + 135_000, 4_830_000, 20_000_000),
+          ], periodSec: 60, originOffsetSec: 0)
+      }
+      checkEqual("同一毫秒的成交用 id 決定先後", [
+          Candle(start: 1_632_931_200, open: 4_800_000, high: 4_810_000, low: 4_800_000, close: 4_805_000,
+                 amount: 40_000_000, vol: 192_150_000_000_000, count: 3),
+      ]) {
+          aggregate([
+              tr(2, B + 1_000, 4_810_000, 10_000_000),
+              tr(1, B + 1_000, 4_800_000, 20_000_000),
+              tr(3, B + 1_000, 4_805_000, 10_000_000),
+          ], periodSec: 60, originOffsetSec: 0)
+      }
+      checkEqual("重複的成交 id 只算一次", [
+          Candle(start: 1_632_931_200, open: 4_800_000, high: 4_810_000, low: 4_800_000, close: 4_810_000,
+                 amount: 20_000_000, vol: 96_100_000_000_000, count: 2),
+      ]) {
+          aggregate([
+              tr(1, B + 1_000, 4_800_000, 10_000_000),
+              tr(1, B + 1_000, 4_800_000, 10_000_000),
+              tr(2, B + 2_000, 4_810_000, 10_000_000),
+          ], periodSec: 60, originOffsetSec: 0)
+      }
+
+      let day1: Int64 = 1_632_929_400_000   // 2021-09-29 15:30:00 UTC
+      let day2: Int64 = 1_632_933_000_000   // 2021-09-29 16:30:00 UTC
+      let dayTrades = [tr(1, day1, 4_700_000, 10_000_000), tr(2, day2, 4_750_000, 20_000_000)]
+
+      checkEqual("日 K：UTC 日界，兩筆落在同一根", [
+          Candle(start: 1_632_873_600, open: 4_700_000, high: 4_750_000, low: 4_700_000, close: 4_750_000,
+                 amount: 30_000_000, vol: 142_000_000_000_000, count: 2),
+      ]) { aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 0) }
+      checkEqual("日 K：UTC+8 日界，分成兩根（第二根的起點就是文件範例的 id）", [
+          Candle(start: 1_632_844_800, open: 4_700_000, high: 4_700_000, low: 4_700_000, close: 4_700_000,
+                 amount: 10_000_000, vol: 47_000_000_000_000, count: 1),
+          Candle(start: 1_632_931_200, open: 4_750_000, high: 4_750_000, low: 4_750_000, close: 4_750_000,
+                 amount: 20_000_000, vol: 95_000_000_000_000, count: 1),
+      ]) { aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 28_800) }
+      checkEqual("日 K：JST 日界，兩筆落在同一根，起點是 15:00 UTC", [
+          Candle(start: 1_632_927_600, open: 4_700_000, high: 4_750_000, low: 4_700_000, close: 4_750_000,
+                 amount: 30_000_000, vol: 142_000_000_000_000, count: 2),
+      ]) { aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 32_400) }
+
+      checkEqual("毫秒邊界與無效輸入：59_999 ms 屬於第 0 分；price／qty 不合法略過；periodSec 為 0 回傳空", [
+          Candle(start: 0, open: 100, high: 100, low: 100, close: 100, amount: 1, vol: 100, count: 1),
+          Candle(start: 60, open: 200, high: 200, low: 200, close: 200, amount: 1, vol: 200, count: 1),
+      ]) {
+          let ts = [tr(1, 59_999, 100, 1), tr(2, 60_000, 200, 1), tr(3, 61_000, 0, 5),
+                    tr(4, 62_000, 300, 0), tr(5, 63_000, -1, 1)]
+          return aggregate(ts, periodSec: 60, originOffsetSec: 0) + aggregate(ts, periodSec: 0, originOffsetSec: 0)
+      }
+  kotlin:
+    starter: |
+      data class Trade(val id: Long, val tsMs: Long, val price: Long, val qty: Long)
+
+      data class Candle(
+          val start: Long,
+          val open: Long,
+          val high: Long,
+          val low: Long,
+          val close: Long,
+          val amount: Long,
+          val vol: Long,
+          val count: Int,
+      )
+
+      fun aggregate(trades: List<Trade>, periodSec: Long, originOffsetSec: Long): List<Candle> {
+          // TODO
+          return emptyList()
+      }
+    solution: |
+      data class Trade(val id: Long, val tsMs: Long, val price: Long, val qty: Long)
+
+      data class Candle(
+          val start: Long,
+          val open: Long,
+          val high: Long,
+          val low: Long,
+          val close: Long,
+          val amount: Long,
+          val vol: Long,
+          val count: Int,
+      )
+
+      fun aggregate(trades: List<Trade>, periodSec: Long, originOffsetSec: Long): List<Candle> {
+          if (periodSec <= 0) return emptyList()
+          val seen = HashSet<Long>()
+          val valid = ArrayList<Trade>()
+          for (t in trades) {
+              if (t.price > 0 && t.qty > 0 && seen.add(t.id)) valid.add(t)
+          }
+          valid.sortWith(compareBy<Trade>({ it.tsMs }, { it.id }))
+
+          val result = ArrayList<Candle>()
+          for (t in valid) {
+              val sec = Math.floorDiv(t.tsMs, 1000L)
+              val start = Math.floorDiv(sec + originOffsetSec, periodSec) * periodSec - originOffsetSec
+              val last = result.lastOrNull()
+              if (last != null && last.start == start) {
+                  result[result.size - 1] = last.copy(
+                      high = maxOf(last.high, t.price),
+                      low = minOf(last.low, t.price),
+                      close = t.price,
+                      amount = last.amount + t.qty,
+                      vol = last.vol + t.price * t.qty,
+                      count = last.count + 1,
+                  )
+              } else {
+                  result.add(Candle(start, t.price, t.price, t.price, t.price, t.qty, t.price * t.qty, 1))
+              }
+          }
+          return result
+      }
+    tests: |
+      val B = 1_632_931_200_000L   // 2021-09-29 16:00:00 UTC（文件範例中一根日 K 的 id × 1000）
+      fun tr(id: Long, ms: Long, p: Long, q: Long) = Trade(id, ms, p, q)
+
+      check("亂序輸入：open／close 依時間決定，其餘欄位正確") {
+          val trades = listOf(
+              tr(11, B + 40_000, 4_800_000, 20_000_000),
+              tr(10, B + 5_000, 4_790_000, 10_000_000),
+              tr(12, B + 55_000, 4_810_000, 5_000_000),
+              tr(13, B + 20_000, 4_780_000, 30_000_000),
+          )
+          val expected = listOf(
+              Candle(1_632_931_200, 4_790_000, 4_810_000, 4_780_000, 4_810_000, 65_000_000, 311_350_000_000_000, 4),
+          )
+          aggregate(trades, 60, 0) == expected
+      }
+      checkEqual("跨桶：依起點遞增排序，沒有成交的桶不輸出", listOf(
+          Candle(1_632_931_200, 4_800_000, 4_800_000, 4_800_000, 4_800_000, 10_000_000, 48_000_000_000_000, 1),
+          Candle(1_632_931_320, 4_820_000, 4_830_000, 4_820_000, 4_830_000, 30_000_000, 144_800_000_000_000, 2),
+      )) {
+          aggregate(listOf(
+              tr(21, B + 130_000, 4_820_000, 10_000_000),
+              tr(20, B + 10_000, 4_800_000, 10_000_000),
+              tr(22, B + 135_000, 4_830_000, 20_000_000),
+          ), 60, 0)
+      }
+      checkEqual("同一毫秒的成交用 id 決定先後", listOf(
+          Candle(1_632_931_200, 4_800_000, 4_810_000, 4_800_000, 4_805_000, 40_000_000, 192_150_000_000_000, 3),
+      )) {
+          aggregate(listOf(
+              tr(2, B + 1_000, 4_810_000, 10_000_000),
+              tr(1, B + 1_000, 4_800_000, 20_000_000),
+              tr(3, B + 1_000, 4_805_000, 10_000_000),
+          ), 60, 0)
+      }
+      checkEqual("重複的成交 id 只算一次", listOf(
+          Candle(1_632_931_200, 4_800_000, 4_810_000, 4_800_000, 4_810_000, 20_000_000, 96_100_000_000_000, 2),
+      )) {
+          aggregate(listOf(
+              tr(1, B + 1_000, 4_800_000, 10_000_000),
+              tr(1, B + 1_000, 4_800_000, 10_000_000),
+              tr(2, B + 2_000, 4_810_000, 10_000_000),
+          ), 60, 0)
+      }
+
+      val day1 = 1_632_929_400_000L   // 2021-09-29 15:30:00 UTC
+      val day2 = 1_632_933_000_000L   // 2021-09-29 16:30:00 UTC
+      val dayTrades = listOf(tr(1, day1, 4_700_000, 10_000_000), tr(2, day2, 4_750_000, 20_000_000))
+
+      checkEqual("日 K：UTC 日界，兩筆落在同一根", listOf(
+          Candle(1_632_873_600, 4_700_000, 4_750_000, 4_700_000, 4_750_000, 30_000_000, 142_000_000_000_000, 2),
+      )) { aggregate(dayTrades, 86_400, 0) }
+      checkEqual("日 K：UTC+8 日界，分成兩根（第二根的起點就是文件範例的 id）", listOf(
+          Candle(1_632_844_800, 4_700_000, 4_700_000, 4_700_000, 4_700_000, 10_000_000, 47_000_000_000_000, 1),
+          Candle(1_632_931_200, 4_750_000, 4_750_000, 4_750_000, 4_750_000, 20_000_000, 95_000_000_000_000, 1),
+      )) { aggregate(dayTrades, 86_400, 28_800) }
+      checkEqual("日 K：JST 日界，兩筆落在同一根，起點是 15:00 UTC", listOf(
+          Candle(1_632_927_600, 4_700_000, 4_750_000, 4_700_000, 4_750_000, 30_000_000, 142_000_000_000_000, 2),
+      )) { aggregate(dayTrades, 86_400, 32_400) }
+
+      checkEqual("毫秒邊界與無效輸入：59_999 ms 屬於第 0 分；price／qty 不合法略過；periodSec 為 0 回傳空", listOf(
+          Candle(0, 100, 100, 100, 100, 1, 100, 1),
+          Candle(60, 200, 200, 200, 200, 1, 200, 1),
+      )) {
+          val ts = listOf(tr(1, 59_999, 100, 1), tr(2, 60_000, 200, 1), tr(3, 61_000, 0, 5),
+                          tr(4, 62_000, 300, 0), tr(5, 63_000, -1, 1))
+          aggregate(ts, 60, 0) + aggregate(ts, 0, 0)
+      }
+
+- id: exchange-kline-08
+  type: code
+  level: 3
+  priority: P1
+  tags: [ema, rsi, indicators]
+  timeLimitSec: 1500
+  prompt: |
+    實作 `ema`（指數移動平均）與 `rsi`（相對強弱指標），輸入是收盤價陣列，回傳與輸入**等長**的陣列，沒有值的位置是 `nil`／`null`。
+
+    - `ema(closes, period)`：`k = 2 / (period + 1)`。**種子（第一個值）是前 `period` 根的簡單平均（SMA）**，放在索引 `period - 1`，其後 `ema = prev + k × (close − prev)`；更前面的索引是 `nil`／`null`
+    - `rsi(closes, period)`（Wilder 版本）：價差 `d[i] = close[i] − close[i−1]`。第一組平均漲幅與平均跌幅，是前 `period` 個價差的簡單平均，放在索引 `period`；其後 `avg = (prev × (period − 1) + 當期) / period`。`RSI = 100 − 100 / (1 + avgGain / avgLoss)`；`avgLoss == 0` 時回傳 `100`（本題約定，包含全部持平的情況）
+    - `period <= 0`，或資料不足（EMA 需要 `period` 根、RSI 需要 `period + 1` 根）時，全部回傳 `nil`／`null`，不能當掉
+  hints:
+    - "EMA 只需要記一個變數 `prev`；RSI 只需要記 `avgGain`、`avgLoss` 兩個變數。"
+    - "RSI 計算價差的迴圈要從索引 1 開始；平均要除以 `period`，不是除以價差的筆數 − 1。"
+  swift:
+    starter: |
+      func ema(_ closes: [Double], period: Int) -> [Double?] {
+          // TODO
+          return [Double?](repeating: nil, count: closes.count)
+      }
+
+      func rsi(_ closes: [Double], period: Int) -> [Double?] {
+          // TODO
+          return [Double?](repeating: nil, count: closes.count)
+      }
+    solution: |
+      func ema(_ closes: [Double], period: Int) -> [Double?] {
+          var out = [Double?](repeating: nil, count: closes.count)
+          guard period > 0, closes.count >= period else { return out }
+          let k = 2.0 / Double(period + 1)
+          var prev = closes[0..<period].reduce(0, +) / Double(period)
+          out[period - 1] = prev
+          for i in period..<closes.count {
+              prev += k * (closes[i] - prev)
+              out[i] = prev
+          }
+          return out
+      }
+
+      func rsi(_ closes: [Double], period: Int) -> [Double?] {
+          var out = [Double?](repeating: nil, count: closes.count)
+          guard period > 0, closes.count > period else { return out }
+          func value(_ gain: Double, _ loss: Double) -> Double {
+              return loss == 0 ? 100 : 100 - 100 / (1 + gain / loss)
+          }
+          var avgGain = 0.0
+          var avgLoss = 0.0
+          for i in 1...period {
+              let d = closes[i] - closes[i - 1]
+              if d > 0 { avgGain += d } else { avgLoss -= d }
+          }
+          avgGain /= Double(period)
+          avgLoss /= Double(period)
+          out[period] = value(avgGain, avgLoss)
+          for i in (period + 1)..<closes.count {
+              let d = closes[i] - closes[i - 1]
+              let gain = d > 0 ? d : 0
+              let loss = d < 0 ? -d : 0
+              avgGain = (avgGain * Double(period - 1) + gain) / Double(period)
+              avgLoss = (avgLoss * Double(period - 1) + loss) / Double(period)
+              out[i] = value(avgGain, avgLoss)
+          }
+          return out
+      }
+    tests: |
+      let emaData: [Double] = [
+          22.27, 22.19, 22.08, 22.17, 22.18, 22.13, 22.23, 22.43, 22.24, 22.29,
+          22.15, 22.39, 22.38, 22.61, 23.36, 24.05, 23.75, 23.83, 23.95, 23.63,
+          23.82, 23.87, 23.65, 23.19, 23.10, 23.33, 22.68, 23.10, 22.40, 22.17,
+      ]
+      let rsiData: [Double] = [
+          44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08,
+          45.89, 46.03, 45.61, 46.28, 46.28, 46.00, 46.03, 46.41, 46.22, 45.64,
+      ]
+
+      check("EMA(3) 小例：種子是前 3 根的 SMA，其後遞迴") {
+          let r = ema([1, 2, 3, 4, 5], period: 3)
+          return r.count == 5 && r[0] == nil && r[1] == nil && r[2] == 2 && r[3] == 3 && r[4] == 4
+      }
+      check("EMA(10)：索引 9 是前 10 根的 SMA，之前都是 nil") {
+          let r = ema(emaData, period: 10)
+          return (0..<9).allSatisfy { r[$0] == nil } && abs((r[9] ?? -1) - 22.221) < 1e-9
+      }
+      checkClose("EMA(10) 索引 10", 22.208090909090906, 1e-9) { ema(emaData, period: 10)[10] ?? -1 }
+      checkClose("EMA(10) 最後一根（遞迴累積）", 22.915004434033058, 1e-9) { ema(emaData, period: 10)[29] ?? -1 }
+      check("EMA 資料不足或 period 不合法：全部 nil，長度不變") {
+          let a = ema([1, 2], period: 3)
+          let b = ema([1, 2, 3], period: 0)
+          let c = ema([1, 2, 3], period: -2)
+          return a.count == 2 && a.allSatisfy { $0 == nil } && b.count == 3 && b.allSatisfy { $0 == nil }
+              && c.count == 3 && c.allSatisfy { $0 == nil }
+      }
+      check("RSI(2) 小例（可手算）：50、83.33、50、80.77") {
+          let r = rsi([10, 11, 10, 12, 11, 13], period: 2)
+          guard r.count == 6, r[0] == nil, r[1] == nil else { return false }
+          return abs((r[2] ?? -1) - 50) < 1e-9
+              && abs((r[3] ?? -1) - 83.33333333333333) < 1e-9
+              && abs((r[4] ?? -1) - 50) < 1e-9
+              && abs((r[5] ?? -1) - 80.76923076923077) < 1e-9
+      }
+      checkClose("RSI(14) 第一個值在索引 14", 70.46413502109705, 1e-9) { rsi(rsiData, period: 14)[14] ?? -1 }
+      checkClose("RSI(14) 最後一個值（Wilder 平滑）", 57.91502067008556, 1e-9) { rsi(rsiData, period: 14)[19] ?? -1 }
+      check("RSI 邊界：資料不足為 nil；一路上漲 100、一路下跌 0、全平盤 100（約定）") {
+          let short = rsi([1, 2, 3], period: 3)
+          let up = rsi([1, 2, 3, 4, 5, 6], period: 3)
+          let down = rsi([6, 5, 4, 3, 2, 1], period: 3)
+          let flat = rsi([5, 5, 5, 5, 5, 5], period: 3)
+          return short.count == 3 && short.allSatisfy { $0 == nil } && up[3] == 100 && up[5] == 100
+              && down[3] == 0 && down[5] == 0 && flat[3] == 100 && flat[5] == 100
+      }
+  kotlin:
+    starter: |
+      fun ema(closes: List<Double>, period: Int): List<Double?> {
+          // TODO
+          return List(closes.size) { null }
+      }
+
+      fun rsi(closes: List<Double>, period: Int): List<Double?> {
+          // TODO
+          return List(closes.size) { null }
+      }
+    solution: |
+      fun ema(closes: List<Double>, period: Int): List<Double?> {
+          val out = MutableList<Double?>(closes.size) { null }
+          if (period <= 0 || closes.size < period) return out
+          val k = 2.0 / (period + 1)
+          var prev = closes.subList(0, period).sum() / period
+          out[period - 1] = prev
+          for (i in period until closes.size) {
+              prev += k * (closes[i] - prev)
+              out[i] = prev
+          }
+          return out
+      }
+
+      fun rsi(closes: List<Double>, period: Int): List<Double?> {
+          val out = MutableList<Double?>(closes.size) { null }
+          if (period <= 0 || closes.size <= period) return out
+          fun value(gain: Double, loss: Double): Double =
+              if (loss == 0.0) 100.0 else 100.0 - 100.0 / (1.0 + gain / loss)
+          var avgGain = 0.0
+          var avgLoss = 0.0
+          for (i in 1..period) {
+              val d = closes[i] - closes[i - 1]
+              if (d > 0) avgGain += d else avgLoss -= d
+          }
+          avgGain /= period
+          avgLoss /= period
+          out[period] = value(avgGain, avgLoss)
+          for (i in period + 1 until closes.size) {
+              val d = closes[i] - closes[i - 1]
+              val gain = if (d > 0) d else 0.0
+              val loss = if (d < 0) -d else 0.0
+              avgGain = (avgGain * (period - 1) + gain) / period
+              avgLoss = (avgLoss * (period - 1) + loss) / period
+              out[i] = value(avgGain, avgLoss)
+          }
+          return out
+      }
+    tests: |
+      val emaData = listOf(
+          22.27, 22.19, 22.08, 22.17, 22.18, 22.13, 22.23, 22.43, 22.24, 22.29,
+          22.15, 22.39, 22.38, 22.61, 23.36, 24.05, 23.75, 23.83, 23.95, 23.63,
+          23.82, 23.87, 23.65, 23.19, 23.10, 23.33, 22.68, 23.10, 22.40, 22.17,
+      )
+      val rsiData = listOf(
+          44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08,
+          45.89, 46.03, 45.61, 46.28, 46.28, 46.00, 46.03, 46.41, 46.22, 45.64,
+      )
+
+      check("EMA(3) 小例：種子是前 3 根的 SMA，其後遞迴") {
+          val r = ema(listOf(1.0, 2.0, 3.0, 4.0, 5.0), 3)
+          r.size == 5 && r[0] == null && r[1] == null && r[2] == 2.0 && r[3] == 3.0 && r[4] == 4.0
+      }
+      check("EMA(10)：索引 9 是前 10 根的 SMA，之前都是 null") {
+          val r = ema(emaData, 10)
+          (0 until 9).all { r[it] == null } && Math.abs((r[9] ?: -1.0) - 22.221) < 1e-9
+      }
+      checkClose("EMA(10) 索引 10", 22.208090909090906, 1e-9) { ema(emaData, 10)[10] ?: -1.0 }
+      checkClose("EMA(10) 最後一根（遞迴累積）", 22.915004434033058, 1e-9) { ema(emaData, 10)[29] ?: -1.0 }
+      check("EMA 資料不足或 period 不合法：全部 null，長度不變") {
+          val a = ema(listOf(1.0, 2.0), 3)
+          val b = ema(listOf(1.0, 2.0, 3.0), 0)
+          val c = ema(listOf(1.0, 2.0, 3.0), -2)
+          a.size == 2 && a.all { it == null } && b.size == 3 && b.all { it == null } &&
+              c.size == 3 && c.all { it == null }
+      }
+      check("RSI(2) 小例（可手算）：50、83.33、50、80.77") {
+          val r = rsi(listOf(10.0, 11.0, 10.0, 12.0, 11.0, 13.0), 2)
+          r.size == 6 && r[0] == null && r[1] == null &&
+              Math.abs((r[2] ?: -1.0) - 50.0) < 1e-9 &&
+              Math.abs((r[3] ?: -1.0) - 83.33333333333333) < 1e-9 &&
+              Math.abs((r[4] ?: -1.0) - 50.0) < 1e-9 &&
+              Math.abs((r[5] ?: -1.0) - 80.76923076923077) < 1e-9
+      }
+      checkClose("RSI(14) 第一個值在索引 14", 70.46413502109705, 1e-9) { rsi(rsiData, 14)[14] ?: -1.0 }
+      checkClose("RSI(14) 最後一個值（Wilder 平滑）", 57.91502067008556, 1e-9) { rsi(rsiData, 14)[19] ?: -1.0 }
+      check("RSI 邊界：資料不足為 null；一路上漲 100、一路下跌 0、全平盤 100（約定）") {
+          val short = rsi(listOf(1.0, 2.0, 3.0), 3)
+          val up = rsi(listOf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0), 3)
+          val down = rsi(listOf(6.0, 5.0, 4.0, 3.0, 2.0, 1.0), 3)
+          val flat = rsi(listOf(5.0, 5.0, 5.0, 5.0, 5.0, 5.0), 3)
+          short.size == 3 && short.all { it == null } && up[3] == 100.0 && up[5] == 100.0 &&
+              down[3] == 0.0 && down[5] == 0.0 && flat[3] == 100.0 && flat[5] == 100.0
+      }
+
+- id: exchange-kline-09
+  type: predict
+  level: 2
+  priority: P1
+  tags: [webview, javascript, double, swift]
+  prompt: |
+    下列程式印出什麼？（這是把 Double 用字串插值組進 `evaluateJavaScript` 時，JavaScript 實際會看到的文字。）
+  codeLang: swift
+  code: |
+    let values: [Double] = [0.1 + 0.2, 4_815_018, 1e-7, Double.nan, Double.infinity]
+    print(values.map { "\($0)" }.joined(separator: " "))
+  answer: |
+    0.30000000000000004 4815018.0 1e-07 nan inf
+  explain: |
+    - `0.1 + 0.2` 印出完整的 17 位有效數字 `0.30000000000000004`（Swift 會印出能還原原值的最短文字）。`4815018.0` 的 `.0` 在 JavaScript 裡沒問題。`1e-07` 是合法的 JavaScript 數字寫法。
+    - `nan` 和 `inf` 在 JavaScript 裡**不是**合法的識別字（JavaScript 要寫 `NaN` 和 `Infinity`），組出來的 `update({open: nan})` 會丟 `ReferenceError`。如果外面包了 `try/catch` 又沒有記錄，圖表就會悄悄停止更新。
+    - 這些值常來自除以零，例如成交量為 0 的區間算平均價。傳資料給 WebView 時，要用 `callAsyncJavaScript` 的 `arguments`，或先用 `isFinite` 檢查再轉成 JSON。
+    - 轉 JSON 要小心：`JSONSerialization.data(withJSONObject:)` 遇到 `NaN` 會丟 Objective-C 的例外（`NSInvalidArgumentException`，訊息是 Invalid number value (NaN) in JSON write），Swift 的 `do/catch` 接不到，App 會直接閃退（本機實測結束代碼是 134）。要先用 `JSONSerialization.isValidJSONObject`（會回傳 false）檢查，或改用 `JSONEncoder`，它丟的是可以 `catch` 的 `EncodingError.invalidValue`。
+    - 金額和價格也不該用 Double，見「精度與金額」單元。
+
+- id: exchange-kline-10
+  type: order
+  level: 2
+  priority: P1
+  tags: [period-switch, snapshot, race]
+  prompt: |
+    使用者在圖表畫面把週期從 `5min` 切到 `1day`。把處理流程依正確順序排列，目標是不留洞、不重複、不被舊週期的資料污染。
+  items:
+    - "顯示載入中；取消舊週期的 topic 訂閱與進行中的 REST 請求，並丟棄之後才到的舊週期推送"
+    - "訂閱新週期的 topic，先把收到的推送放進暫存區，不直接畫"
+    - "用 REST 取得新週期的歷史 K 線，並依 `id` 由舊到新排序"
+    - "把暫存區的推送依 `id` 合併進歷史：相同 `id` 以推送為準，比歷史最後一根更舊的丟棄"
+    - "在背景算好指標，對圖表一次 `setData`；之後的推送才用 `update` 套用"
+  explain: |
+    先訂閱再抓歷史，是為了避免漏掉「REST 回應」與「訂閱生效」之間的那幾根；先暫存、再合併，和訂單簿的「先暫存增量更新、取快照、再套用」是同一個思路。
+    最前面的取消步驟，是為了擋住舊週期的資料：使用者快速連點多個週期時，慢回來的舊週期回應不能覆蓋新週期。做法是每個請求帶一個遞增的編號（或用可以取消的任務），回應回來時編號不是最新的就丟掉。
+    最後一步，先用 `setData` 整批設定，之後才進入 `update` 模式，而且 `update` 的時間不能比最後一根舊。
+
+- id: exchange-kline-11
+  type: open
+  level: 3
+  priority: P0
+  tags: [kline, chart, design]
+  prompt: |
+    設計交易所 App 的 K 線圖表畫面：資料來源與合併、日界與時區、指標、繪製與效能、圖表元件的選擇。並說明你在 WebView 圖表上的相關經驗，以及到交易所的 App 你會怎麼做。
+  promptJa: |
+    取引所アプリのローソク足チャート画面を設計してください。データソースとマージ、日足の境界とタイムゾーン、インジケーター、描画とパフォーマンス、チャート部品の選択を説明してください。あわせて、WebView チャートでの関連する経験と、取引所アプリでどう進めるかも説明してください。
+  keyPoints:
+    - "資料：REST 取歷史（`size` 上限 2000、新的在前要先排序）、WebSocket 訂閱 `market.$symbol.kline.$period` 取即時；先訂閱暫存、再抓歷史、依 `id` 合併；更舊的歷史用 WebSocket `req` 帶 from／to"
+    - "欄位語意：`id` 是以秒為單位的起點時間；`vol` 是日圓金額、`amount` 是 BTC 數量；沒有 3min、4hour，需要的話在本機聚合"
+    - "日界不寫死：從文件範例推得是 UTC+8 午夜（現行規則未證實），畫伺服器給的 `id`；顯示時區是另一個決定"
+    - "指標（EMA、RSI）在背景計算，多抓歷史暖機，進行中的 K 線用已收盤的值當 prev，不寫回"
+    - "只畫可視範圍、縮小時做最高／最低聚合、歷史分頁載入"
+    - "圖表元件取捨：WebView 的 Lightweight Charts（成熟、可和網頁共用，但資料要跨橋接、有記憶體與離線問題）、原生圖表、自己繪製；腳本打包進 App，處理 WebView 被終止"
+    - "經驗連結：Lightweight Charts 橋接（記住最後推送的時間、擋時間倒退、UTC 偏移）、只串流邊界一致的週期；到交易所的 App 加上成交聚合與指標的背景計算"
+  modelAnswer: |
+    資料面，歷史用 REST、即時用 WebSocket 訂閱 K 線。切換週期時，我會先訂閱新週期的 topic 並暫存推送，再用 REST 抓歷史，依 `id` 合併，這樣不會漏掉兩者之間的幾根；更舊的歷史，用 WebSocket 的 `req` 帶 `from` 和 `to` 分頁取得。要注意 `id` 是以秒為單位的起點時間，`vol` 是日圓的成交金額，`amount` 才是 BTC 的數量；REST 回來是新的在前，進圖表前要排序。文件沒有 3 分鐘或 4 小時，需要的話，用成交或 1 分鐘 K 線在本機聚合。
+
+    日界我不會寫死。文件日 K 範例的 `id` 對 86400 的餘數是 57600，看起來是 UTC+8 的午夜，不是日本時間的 0 點；但這是 2021 年的範例，現行規則我會向交易所確認。畫伺服器的 K 線一律用它給的 `id`，本機聚合的原點做成設定；顯示用日本時間還是裝置時區，是另一個獨立的決定。
+
+    指標在背景計算。EMA 和 RSI 都要暖機，所以多抓一些歷史；進行中的那根，用上一根已收盤的值算顯示值，收盤時才固定，避免每個 tick 重複計入。繪製只提交可視範圍，縮小時做最高、最低的聚合，向左拖時分頁載入。
+
+    圖表元件有三條路：WebView 加 Lightweight Charts 成熟、能和網頁共用，但資料要跨橋接，要處理記憶體、離線和 WebView 被系統終止；原生圖表整合得好，但蠟燭圖和副圖要自己擴充；自己繪製最可控，但開發量大。如果用 Lightweight Charts，我會把腳本打包進 App，用 JSON 傳資料，只推新的一根並擋住時間倒退。
+
+    我做過 Lightweight Charts 的橋接：記住最後推送的時間、擋時間倒退、處理 UTC 偏移，也只串流邊界和資料來源一致的週期。到交易所的 App，我會再加上成交聚合與指標的背景計算、價格用整數或 Decimal 處理、腳本打包進 App，以及 WebView 被終止後的重建。
+  modelAnswerJa: |
+    データ面では、履歴は REST、リアルタイムは WebSocket のローソク足購読を使います。期間を切り替えるときは、まず新しい topic を購読して受信分をバッファし、その後 REST で履歴を取得して `id` でマージします。こうすると、両者の間で数本を取りこぼしません。さらに古い履歴は、WebSocket の `req` に `from` と `to` を指定して分割取得します。`id` は秒単位の起点時刻、`vol` は円建ての約定金額、`amount` が BTC の数量です。REST は新しい順で返ってくるため、チャートに渡す前に並べ替えます。ドキュメントには 3 分足も 4 時間足もないので、必要であれば約定または 1 分足からローカルで集計します。
+
+    日足の境界は固定値にしません。ドキュメントの日足サンプルの `id` は 86400 で割った余りが 57600 で、日本時間の 0 時ではなく UTC+8 の 0 時に見えますが、2021 年のサンプルなので、現在の仕様は取引所に確認します。サーバーのローソク足は返ってきた `id` をそのまま使い、ローカル集計の基準は設定にします。表示を日本時間にするか端末のタイムゾーンにするかは、別の判断です。
+
+    インジケーターはバックグラウンドで計算します。EMA も RSI もウォームアップが必要なので、履歴を多めに取得します。進行中の足は、直前に確定した値を基にして表示用の値を計算し、確定したときに初めて固定します。そうしないと、tick のたびに二重に計算されてしまいます。描画は表示範囲のデータだけを渡し、縮小時は高値と安値で集約し、左へスクロールしたときに履歴を分割して読み込みます。
+
+    チャート部品は 3 つを比較します。WebView と Lightweight Charts は成熟していて Web と共通化できますが、データが橋渡しを越える必要があり、メモリ、オフライン、WebView の強制終了への対応が要ります。ネイティブのチャートは統合しやすい反面、ローソク足やサブチャートの拡張が必要です。自前で描画する方法は最も制御しやすい一方、開発量が大きくなります。Lightweight Charts を使う場合は、スクリプトをアプリに同梱し、データは JSON で渡し、新しい 1 本だけを push し、時間の逆行を防ぎます。
+
+    Lightweight Charts のブリッジを実装した経験があります。最後に push した時刻を保持し、時間の逆行を防ぎ、UTC オフセットを処理しました。また、境界がデータソースと一致する期間だけをストリーミングしました。取引所アプリでは、これに加えて約定の集計とインジケーターのバックグラウンド計算、価格の整数または Decimal での処理、スクリプトの同梱、WebView が終了したときの再構築を行います。
+  followUps:
+    - "只把顯示用的日界改成日本時間，使用者看到的最高價、最低價就會和交易所官方的數字不一樣，你要怎麼說明？"
+    - "把 1 分鐘 K 線在本機合併成 3 分鐘 K 線時，要怎麼發現和伺服器的數字對不上？"
+    - "WebView 的圖表使用一整天後，記憶體一直增加，你會怎麼調查？"
+  timeLimitSec: 180
+
+- id: exchange-kline-12
+  type: flash
+  level: 1
+  priority: P0
+  tags: [kline]
+  front: K 線速記：欄位、日界、聚合、指標、WebView 橋接
+  back: |
+    - 欄位：`id` 是**起點時間（秒）**；`amount` 是 BTC 數量；`vol` 是**日圓金額**；`count` 是成交筆數。REST 回來是新的在前，進圖表前要先排序。period 沒有 3min、4hour。
+    - 日界：從文件範例推得是 **UTC+8 午夜**（現行規則未證實），**不寫死**，畫伺服器的 `id`；顯示時區是另一個決定。
+    - 聚合：K 線起點 ＝ `floorDiv(秒+偏移, 週期)×週期−偏移`；`open`／`close` 依（時間, 成交編號）決定；用 `tradeId` 去重（逐筆的 `id` 是 27 位數，不要用）；`vol` ＝ Σ（價格×數量）；遲到的成交要通知圖表。
+    - 指標：EMA 的種子（SMA 或第一個價格）要和對照的軟體一致；Wilder 版本的 RSI；多抓歷史暖機；進行中的值**不寫回 prev**。
+    - 橋接：先 `setData` 再 `update`；擋時間倒退；用 JSON 傳資料（`NaN` 會出錯）；腳本打包進 App；處理 WebView 被終止；只畫可視範圍。

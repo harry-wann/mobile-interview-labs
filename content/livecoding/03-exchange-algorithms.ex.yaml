@@ -1,0 +1,451 @@
+- id: livecoding-exchange-01
+  type: code
+  level: 3
+  priority: P0
+  tags: [matching-engine, order-book]
+  timeLimitSec: 2100
+  prompt: |
+    實作簡化版的限價單撮合引擎（price-time priority）。
+
+    - `submit(order)` 回傳這筆訂單造成的所有成交（`Fill`），依成交順序
+    - 買單：只要最低賣價 `<=` 買單價格就成交，從最低賣價開始；賣單反之（從最高買價開始，只要 `>=` 賣單價格）
+    - 同一價格依掛單的先後（FIFO）
+    - **成交價是 maker（已在簿上的那筆）的價格**
+    - 沒成交完的數量以自己的價格掛到簿上
+    - `bestBid`／`bestAsk`：目前最高買價／最低賣價，沒有就回傳 nil／null
+  hints:
+    - 買賣兩側各用一個依價格排序的陣列，每個價格底下放一個「先掛先成交」的佇列。面試時插入用 O(n) 可以接受。
+    - 用 `remaining` 記錄新訂單還剩多少沒成交。簿上掛單的數量變成 0 就移除；某個價格的掛單全部成交完，那個價格層也要移除。
+  swift:
+    starter: |
+      enum Side { case buy, sell }
+
+      struct Order {
+          let id: Int
+          let side: Side
+          let price: Int
+          let qty: Int
+      }
+
+      struct Fill: Equatable {
+          let makerId: Int
+          let takerId: Int
+          let price: Int
+          let qty: Int
+      }
+
+      final class MatchingEngine {
+          func submit(_ order: Order) -> [Fill] {
+              // TODO
+              return []
+          }
+
+          var bestBid: Int? { nil }
+          var bestAsk: Int? { nil }
+      }
+    solution: |
+      enum Side { case buy, sell }
+
+      struct Order {
+          let id: Int
+          let side: Side
+          let price: Int
+          let qty: Int
+      }
+
+      struct Fill: Equatable {
+          let makerId: Int
+          let takerId: Int
+          let price: Int
+          let qty: Int
+      }
+
+      final class MatchingEngine {
+          private struct Resting { let id: Int; var qty: Int }
+          private struct Level { let price: Int; var queue: [Resting] }
+
+          private var bids: [Level] = []   // 價格由高到低
+          private var asks: [Level] = []   // 價格由低到高
+
+          var bestBid: Int? { bids.first?.price }
+          var bestAsk: Int? { asks.first?.price }
+
+          func submit(_ order: Order) -> [Fill] {
+              var fills: [Fill] = []
+              var remaining = order.qty
+              while remaining > 0 {
+                  let crosses: Bool
+                  switch order.side {
+                  case .buy: crosses = asks.first.map { $0.price <= order.price } ?? false
+                  case .sell: crosses = bids.first.map { $0.price >= order.price } ?? false
+                  }
+                  guard crosses else { break }
+                  var level = order.side == .buy ? asks[0] : bids[0]
+                  while remaining > 0, !level.queue.isEmpty {
+                      let traded = min(remaining, level.queue[0].qty)
+                      fills.append(Fill(makerId: level.queue[0].id, takerId: order.id, price: level.price, qty: traded))
+                      remaining -= traded
+                      level.queue[0].qty -= traded
+                      if level.queue[0].qty == 0 { level.queue.removeFirst() }
+                  }
+                  if order.side == .buy {
+                      if level.queue.isEmpty { asks.removeFirst() } else { asks[0] = level }
+                  } else {
+                      if level.queue.isEmpty { bids.removeFirst() } else { bids[0] = level }
+                  }
+              }
+              if remaining > 0 { rest(Resting(id: order.id, qty: remaining), side: order.side, price: order.price) }
+              return fills
+          }
+
+          private func rest(_ resting: Resting, side: Side, price: Int) {
+              switch side {
+              case .buy:
+                  if let i = bids.firstIndex(where: { $0.price == price }) {
+                      bids[i].queue.append(resting)
+                  } else {
+                      let i = bids.firstIndex(where: { $0.price < price }) ?? bids.count
+                      bids.insert(Level(price: price, queue: [resting]), at: i)
+                  }
+              case .sell:
+                  if let i = asks.firstIndex(where: { $0.price == price }) {
+                      asks[i].queue.append(resting)
+                  } else {
+                      let i = asks.firstIndex(where: { $0.price > price }) ?? asks.count
+                      asks.insert(Level(price: price, queue: [resting]), at: i)
+                  }
+              }
+          }
+      }
+    tests: |
+      let e1 = MatchingEngine()
+      checkEqual("空簿掛買單不成交", [Fill]()) { e1.submit(Order(id: 1, side: .buy, price: 100, qty: 5)) }
+      checkEqual("買單掛上去成為最佳買價", 100) { e1.bestBid }
+      checkEqual("賣單吃買單，成交價是 maker 的價格",
+                 [Fill(makerId: 1, takerId: 2, price: 100, qty: 3)]) { e1.submit(Order(id: 2, side: .sell, price: 95, qty: 3)) }
+      checkEqual("部分成交後 maker 剩 2", [Fill(makerId: 1, takerId: 3, price: 100, qty: 2)]) { e1.submit(Order(id: 3, side: .sell, price: 100, qty: 4)) }
+      checkEqual("吃不完的賣單掛成最佳賣價", 100) { e1.bestAsk }
+
+      let e2 = MatchingEngine()
+      _ = e2.submit(Order(id: 1, side: .sell, price: 101, qty: 1))
+      _ = e2.submit(Order(id: 2, side: .sell, price: 100, qty: 1))
+      _ = e2.submit(Order(id: 3, side: .sell, price: 100, qty: 1))
+      checkEqual("價格優先、再時間優先",
+                 [Fill(makerId: 2, takerId: 9, price: 100, qty: 1),
+                  Fill(makerId: 3, takerId: 9, price: 100, qty: 1),
+                  Fill(makerId: 1, takerId: 9, price: 101, qty: 1)]) { e2.submit(Order(id: 9, side: .buy, price: 105, qty: 5)) }
+      check("掃完賣方後剩 2 以 105 掛買") { e2.bestBid == 105 && e2.bestAsk == nil }
+
+      let e3 = MatchingEngine()
+      _ = e3.submit(Order(id: 1, side: .sell, price: 100, qty: 1))
+      checkEqual("價格沒交叉不成交", [Fill]()) { e3.submit(Order(id: 2, side: .buy, price: 99, qty: 1)) }
+      check("兩邊都掛在簿上") { e3.bestBid == 99 && e3.bestAsk == 100 }
+  kotlin:
+    starter: |
+      enum class Side { BUY, SELL }
+
+      data class Order(val id: Int, val side: Side, val price: Int, val qty: Int)
+
+      data class Fill(val makerId: Int, val takerId: Int, val price: Int, val qty: Int)
+
+      class MatchingEngine {
+          fun submit(order: Order): List<Fill> {
+              return emptyList()
+          }
+
+          val bestBid: Int? get() = null
+          val bestAsk: Int? get() = null
+      }
+    solution: |
+      enum class Side { BUY, SELL }
+
+      data class Order(val id: Int, val side: Side, val price: Int, val qty: Int)
+
+      data class Fill(val makerId: Int, val takerId: Int, val price: Int, val qty: Int)
+
+      class MatchingEngine {
+          private class Resting(val id: Int, var qty: Int)
+          private class Level(val price: Int, val queue: ArrayDeque<Resting>)
+
+          private val bids = mutableListOf<Level>()   // 價格由高到低
+          private val asks = mutableListOf<Level>()   // 價格由低到高
+
+          val bestBid: Int? get() = bids.firstOrNull()?.price
+          val bestAsk: Int? get() = asks.firstOrNull()?.price
+
+          fun submit(order: Order): List<Fill> {
+              val fills = mutableListOf<Fill>()
+              var remaining = order.qty
+              val book = if (order.side == Side.BUY) asks else bids
+              while (remaining > 0) {
+                  val level = book.firstOrNull() ?: break
+                  val crosses = if (order.side == Side.BUY) level.price <= order.price else level.price >= order.price
+                  if (!crosses) break
+                  while (remaining > 0 && level.queue.isNotEmpty()) {
+                      val maker = level.queue.first()
+                      val traded = minOf(remaining, maker.qty)
+                      fills += Fill(maker.id, order.id, level.price, traded)
+                      remaining -= traded
+                      maker.qty -= traded
+                      if (maker.qty == 0) level.queue.removeFirst()
+                  }
+                  if (level.queue.isEmpty()) book.removeAt(0)
+              }
+              if (remaining > 0) rest(Resting(order.id, remaining), order.side, order.price)
+              return fills
+          }
+
+          private fun rest(resting: Resting, side: Side, price: Int) {
+              val book = if (side == Side.BUY) bids else asks
+              val existing = book.firstOrNull { it.price == price }
+              if (existing != null) {
+                  existing.queue.addLast(resting)
+                  return
+              }
+              val index = book.indexOfFirst { if (side == Side.BUY) it.price < price else it.price > price }
+              val level = Level(price, ArrayDeque(listOf(resting)))
+              if (index == -1) book.add(level) else book.add(index, level)
+          }
+      }
+    tests: |
+      val e1 = MatchingEngine()
+      checkEqual("空簿掛買單不成交", emptyList<Fill>()) { e1.submit(Order(1, Side.BUY, 100, 5)) }
+      checkEqual("買單掛上去成為最佳買價", 100) { e1.bestBid }
+      checkEqual("賣單吃買單，成交價是 maker 的價格", listOf(Fill(1, 2, 100, 3))) { e1.submit(Order(2, Side.SELL, 95, 3)) }
+      checkEqual("部分成交後 maker 剩 2", listOf(Fill(1, 3, 100, 2))) { e1.submit(Order(3, Side.SELL, 100, 4)) }
+      checkEqual("吃不完的賣單掛成最佳賣價", 100) { e1.bestAsk }
+
+      val e2 = MatchingEngine()
+      e2.submit(Order(1, Side.SELL, 101, 1))
+      e2.submit(Order(2, Side.SELL, 100, 1))
+      e2.submit(Order(3, Side.SELL, 100, 1))
+      checkEqual("價格優先、再時間優先",
+          listOf(Fill(2, 9, 100, 1), Fill(3, 9, 100, 1), Fill(1, 9, 101, 1))) { e2.submit(Order(9, Side.BUY, 105, 5)) }
+      check("掃完賣方後剩 2 以 105 掛買") { e2.bestBid == 105 && e2.bestAsk == null }
+
+      val e3 = MatchingEngine()
+      e3.submit(Order(1, Side.SELL, 100, 1))
+      checkEqual("價格沒交叉不成交", emptyList<Fill>()) { e3.submit(Order(2, Side.BUY, 99, 1)) }
+      check("兩邊都掛在簿上") { e3.bestBid == 99 && e3.bestAsk == 100 }
+
+- id: livecoding-exchange-02
+  type: code
+  level: 2
+  priority: P0
+  tags: [binary-search, chart]
+  timeLimitSec: 900
+  prompt: |
+    十字線對齊：`times` 是 K 線的開始時間（嚴格遞增）。給一個時間 `t`，回傳**最後一根 `time <= t` 的 K 線索引**；`t` 比第一根還早、或陣列為空時回傳 nil／null。要求 **O(log n)**。
+  hints:
+    - 先找「第一根時間大於 t」的位置（upper bound），答案是它的前一根（減 1）。
+    - 搜尋範圍用「包含 lo、不包含 hi」，迴圈條件寫 `lo < hi`。
+  swift:
+    starter: |
+      func candleIndex(atOrBefore t: Int, in times: [Int]) -> Int? {
+          // TODO: O(log n)
+          return nil
+      }
+    solution: |
+      func candleIndex(atOrBefore t: Int, in times: [Int]) -> Int? {
+          var lo = 0
+          var hi = times.count
+          while lo < hi {
+              let mid = lo + (hi - lo) / 2
+              if times[mid] <= t {
+                  lo = mid + 1
+              } else {
+                  hi = mid
+              }
+          }
+          return lo == 0 ? nil : lo - 1
+      }
+    tests: |
+      let times = [0, 60, 120, 180, 240]
+      checkEqual("剛好命中", 2) { candleIndex(atOrBefore: 120, in: times) }
+      checkEqual("落在兩根之間", 2) { candleIndex(atOrBefore: 179, in: times) }
+      check("比第一根早") { candleIndex(atOrBefore: -1, in: times) == nil }
+      checkEqual("比最後一根晚", 4) { candleIndex(atOrBefore: 9999, in: times) }
+      check("空陣列") { candleIndex(atOrBefore: 10, in: []) == nil }
+      let many = Array(stride(from: 0, to: 60 * 3_000_000, by: 60))
+      var ok = true
+      for q in stride(from: 0, to: 60 * 3_000_000, by: 59_999) {
+          if candleIndex(atOrBefore: q, in: many) != q / 60 { ok = false; break }
+      }
+      check("300 萬根 × 3000 次查詢要夠快") { ok }
+  kotlin:
+    starter: |
+      fun candleIndex(t: Long, times: LongArray): Int? {
+          // TODO: O(log n)
+          return null
+      }
+    solution: |
+      fun candleIndex(t: Long, times: LongArray): Int? {
+          var lo = 0
+          var hi = times.size
+          while (lo < hi) {
+              val mid = lo + (hi - lo) / 2
+              if (times[mid] <= t) lo = mid + 1 else hi = mid
+          }
+          return if (lo == 0) null else lo - 1
+      }
+    tests: |
+      val times = longArrayOf(0, 60, 120, 180, 240)
+      checkEqual("剛好命中", 2) { candleIndex(120, times) }
+      checkEqual("落在兩根之間", 2) { candleIndex(179, times) }
+      check("比第一根早") { candleIndex(-1, times) == null }
+      checkEqual("比最後一根晚", 4) { candleIndex(9999, times) }
+      check("空陣列") { candleIndex(10, LongArray(0)) == null }
+      val many = LongArray(3_000_000) { it * 60L }
+      var ok = true
+      var q = 0L
+      while (q < 60L * 3_000_000) {
+          if (candleIndex(q, many) != (q / 60).toInt()) { ok = false; break }
+          q += 59_999
+      }
+      check("300 萬根 × 3000 次查詢要夠快") { ok }
+
+- id: livecoding-exchange-03
+  type: code
+  level: 2
+  priority: P1
+  tags: [kline, gaps]
+  timeLimitSec: 1200
+  prompt: |
+    K 線補洞：`candles` 依時間排序、時間對齊 `period`，但沒有成交的時段被省略了。把缺的 K 線補上：
+
+    - 補的 K 線 `open = high = low = close = 前一根的 close`，`volume = 0`
+    - 只補在第一根與最後一根之間
+  hints:
+    - 一根一根往後看：如果下一根的時間比「前一根時間 + period」還晚，就從那個時間開始每次加 period 補一根，直到追上下一根。
+  swift:
+    starter: |
+      struct Candle: Equatable {
+          let time: Int
+          let open: Int
+          let high: Int
+          let low: Int
+          let close: Int
+          let volume: Int
+      }
+
+      func fillGaps(_ candles: [Candle], period: Int) -> [Candle] {
+          // TODO
+          return candles
+      }
+    solution: |
+      struct Candle: Equatable {
+          let time: Int
+          let open: Int
+          let high: Int
+          let low: Int
+          let close: Int
+          let volume: Int
+      }
+
+      func fillGaps(_ candles: [Candle], period: Int) -> [Candle] {
+          guard var previous = candles.first else { return [] }
+          var result = [previous]
+          for candle in candles.dropFirst() {
+              var t = previous.time + period
+              while t < candle.time {
+                  let c = previous.close
+                  result.append(Candle(time: t, open: c, high: c, low: c, close: c, volume: 0))
+                  t += period
+              }
+              result.append(candle)
+              previous = candle
+          }
+          return result
+      }
+    tests: |
+      let a = Candle(time: 0, open: 10, high: 12, low: 9, close: 11, volume: 5)
+      let b = Candle(time: 60, open: 11, high: 13, low: 10, close: 12, volume: 3)
+      let d = Candle(time: 180, open: 12, high: 12, low: 8, close: 9, volume: 7)
+      checkEqual("沒有缺口不變", [a, b]) { fillGaps([a, b], period: 60) }
+      checkEqual("補一根", [a, b, Candle(time: 120, open: 12, high: 12, low: 12, close: 12, volume: 0), d]) { fillGaps([a, b, d], period: 60) }
+      checkEqual("連續缺兩根", 4) { fillGaps([a, d], period: 60).count }
+      check("補的 K 線沿用前一根收盤") { let r = fillGaps([a, d], period: 60); return r.count > 2 && r[2].close == 11 }
+      checkEqual("空陣列", [Candle]()) { fillGaps([], period: 60) }
+      checkEqual("只有一根", [a]) { fillGaps([a], period: 60) }
+  kotlin:
+    starter: |
+      data class Candle(val time: Long, val open: Int, val high: Int, val low: Int, val close: Int, val volume: Int)
+
+      fun fillGaps(candles: List<Candle>, period: Long): List<Candle> {
+          return candles
+      }
+    solution: |
+      data class Candle(val time: Long, val open: Int, val high: Int, val low: Int, val close: Int, val volume: Int)
+
+      fun fillGaps(candles: List<Candle>, period: Long): List<Candle> {
+          if (candles.isEmpty()) return emptyList()
+          val result = mutableListOf(candles.first())
+          for (candle in candles.drop(1)) {
+              val previous = result.last()
+              var t = previous.time + period
+              while (t < candle.time) {
+                  val c = previous.close
+                  result += Candle(t, c, c, c, c, 0)
+                  t += period
+              }
+              result += candle
+          }
+          return result
+      }
+    tests: |
+      val a = Candle(0, 10, 12, 9, 11, 5)
+      val b = Candle(60, 11, 13, 10, 12, 3)
+      val d = Candle(180, 12, 12, 8, 9, 7)
+      checkEqual("沒有缺口不變", listOf(a, b)) { fillGaps(listOf(a, b), 60) }
+      checkEqual("補一根", listOf(a, b, Candle(120, 12, 12, 12, 12, 0), d)) { fillGaps(listOf(a, b, d), 60) }
+      checkEqual("連續缺兩根", 4) { fillGaps(listOf(a, d), 60).size }
+      check("補的 K 線沿用前一根收盤") { fillGaps(listOf(a, d), 60).getOrNull(2)?.close == 11 }
+      checkEqual("空陣列", emptyList<Candle>()) { fillGaps(emptyList(), 60) }
+      checkEqual("只有一根", listOf(a)) { fillGaps(listOf(a), 60) }
+
+- id: livecoding-exchange-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [matching]
+  prompt: |
+    簿上有賣單：100 円 × 1、101 円 × 1、103 円 × 5。使用者下**指値買單 102 円 × 3**。結果是什麼？
+  options:
+    - "全部以 102 円成交 3 單位"
+    - "100 円成交 1、101 円成交 1，剩下 1 單位以 102 円掛在買方"
+    - "100 円成交 1、101 円成交 1、103 円成交 1"
+    - "因為無法全部成交，整筆訂單被拒絕"
+  answer: 1
+  explain: |
+    - 成交價是簿上掛單（maker）的價格：先和 100 円成交 1 個，再和 101 円成交 1 個，不是用買單的限價 102 円。所以第 1 個選項錯。
+    - 103 円比限價 102 円貴，不會成交。所以第 3 個選項錯。
+    - 限價單沒成交完的部分會掛到簿上，不會整筆被拒絕。所以第 4 個選項錯。剩下的 1 個以 102 円掛在買方，成為新的最高買價。
+    如果同一筆換成**成行注文**（市價單），會一路吃到 103 円，平均成交價變高，這就是滑價。
+
+- id: livecoding-exchange-05
+  type: predict
+  level: 2
+  priority: P1
+  tags: [binary-search]
+  prompt: |
+    下列 Swift 程式印出什麼？
+  codeLang: swift
+  code: |
+    func upperBound(_ a: [Int], _ x: Int) -> Int {
+        var lo = 0, hi = a.count
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2
+            if a[mid] <= x { lo = mid + 1 } else { hi = mid }
+        }
+        return lo
+    }
+    let a = [10, 20, 20, 20, 30]
+    print(upperBound(a, 20), upperBound(a, 5), upperBound(a, 99))
+  answer: |
+    4 0 5
+  explain: |
+    這個函式回傳「第一個大於 x 的位置」（upper bound）。
+    - x = 20：第一個大於 20 的是索引 4 的 30，回傳 4。
+    - x = 5：所有元素都比 5 大，第一個就是索引 0，回傳 0。
+    - x = 99：沒有任何元素比 99 大，回傳陣列長度 5（代表「在最後面」）。
+    「最後一個 ≤ x 的位置」就是這個結果減 1；減完是 -1 代表找不到。

@@ -1,0 +1,67 @@
+- id: testing-ci-01
+  type: multi
+  level: 2
+  priority: P1
+  tags: [ci, speed]
+  prompt: |
+    PR 的 CI 從 40 分鐘要降到 10 分鐘以內，哪些做法有效？（複選）
+  options:
+    - "Gradle 的 build cache、SPM／CocoaPods 的套件快取"
+    - "device farm 上完整的端到端測試改到晚上跑，PR 只跑單元測試和截圖比對"
+    - "測試平行執行、分成好幾份同時跑（分片）"
+    - "同一個 PR 有新 push 時取消舊的建置"
+    - "移除所有 UI 測試"
+  answer: [0, 1, 2, 3]
+  explain: |
+    關鍵是分段：PR 要快，完整的保護放在合併後和晚上。
+    第 5 項錯：移除所有 UI 測試確實變快了，但只是把風險移到正式環境，讓使用者來發現 bug。
+
+- id: testing-ci-02
+  type: single
+  level: 2
+  priority: P1
+  tags: [release]
+  prompt: |
+    新版本用 Google Play staged rollout 放到 10% 時，crash-free users 從 99.5% 掉到 98%。最合適的動作是？
+  options:
+    - "繼續放量，下一版再修"
+    - "暫停分階段發布，用 Crashlytics（已上傳 mapping 檔）找出新的 crash，修正後發新版本"
+    - "直接下架整個 App"
+    - "請使用者重新安裝"
+  answer: 1
+  explain: |
+    分階段發布的目的，就是先用一小部分使用者發現問題。指標變差時暫停擴大，修正後用新的版本重新開始。
+    其他選項：繼續放量會讓更多人遇到 crash；下架整個 App 太過頭；請使用者重新安裝解決不了程式的 bug。
+    沒有上傳 mapping 檔（iOS 是 dSYM）的話，crash 報告看不出是哪一行出錯，所以上傳符號檔一定要放進自動化的發布流程。
+
+- id: testing-ci-03
+  type: open
+  level: 2
+  priority: P1
+  tags: [ci]
+  prompt: |
+    「你在之前的專案，CI/CD 是怎麼設計的？如果要為交易所 App 重新建，你會怎麼做？」
+  promptJa: |
+    「これまでのプロジェクトでは、CI/CD をどのように設計していましたか？取引所アプリで作り直すとしたら、どうしますか？」
+  keyPoints:
+    - "社交 App：以 Fastlane 搭配 Codemagic、CircleCI，建立 iOS 和 Android 的自動建置與發布流程"
+    - "即時行情 App：Fastlane 自動發布，涵蓋版號遞增、建置、簽署、上傳 TestFlight 與 Firebase App Distribution，附 release notes、發 Slack 通知"
+    - "長期負責 App Store Connect 與 Google Play Console 的送審與發布"
+    - "換成交易所 App：分成 PR（十分鐘內）、合併後（完整測試、關鍵流程）、每天晚上（device farm、AI 探索）三層"
+    - "發布的安全網：分階段發布、用 crash-free 和 ANR 決定是否繼續、自動上傳符號檔、憑證放在 CI 的加密變數"
+  modelAnswer: |
+    在一個社交 App，我用 Fastlane 搭配 Codemagic 和 CircleCI，建立了 iOS 和 Android 的自動建置與發布流程，App Store Connect 和 Google Play Console 的送審與發布也一直是我負責。在一個即時行情 App，我從零建立 Fastlane 的自動發布流程，從版號遞增、建置、簽署，到上傳 TestFlight 和 Firebase App Distribution，並且每個版本自動附上 release notes、發 Slack 通知，一個指令就能發布。
+
+    換成交易所 App，我會把 CI 分成三層。PR 只跑快速的檢查：lint、編譯、單元測試和截圖比對，控制在十分鐘左右，不然大家會開始不等結果就合併。合併到 main 之後，跑完整的測試和 Maestro 寫的關鍵流程，並建置測試版給內部使用。每天晚上在 device farm 的實機上跑完整的端到端測試，也讓 AI agent 做探索式測試。
+
+    發布的部分，用 Fastlane 把簽章、上傳和符號檔都自動化，憑證放在 CI 的加密變數裡。正式發布用分階段，先開放一小部分使用者，看 crash-free 和 ANR，有異常就暫停。
+  modelAnswerJa: |
+    あるソーシャルアプリでは、Fastlane と Codemagic、CircleCI を組み合わせて、iOS と Android の自動ビルドとリリースの仕組みを構築しました。App Store Connect と Google Play Console での審査提出とリリースも、継続して担当していました。あるリアルタイム相場アプリでは Fastlane の自動リリースをゼロから作り、バージョン番号の更新、ビルド、署名、TestFlight と Firebase App Distribution へのアップロードまで自動化し、リリースノートの添付と Slack 通知も行っていました。
+
+    取引所アプリでは CI を三層に分けたいと考えています。PR では lint、ビルド、ユニットテスト、スナップショットテストなど速いチェックだけを実行し、10分程度に収めます。main へのマージ後は、すべてのテストと Maestro で書いた重要導線を実行し、社内向けのテスト版をビルドします。夜間はデバイスファームの実機で E2E テストを一通り実行し、AI エージェントによる探索的テストも行います。
+
+    リリースでは、署名、アップロード、シンボルファイルを Fastlane で自動化し、証明書は CI の暗号化された変数で管理します。本番リリースは段階的に行い、クラッシュフリー率や ANR を見ながら、異常があれば一時停止します。
+  followUps:
+    - "PR 的 CI 從 40 分鐘降到 10 分鐘，你會先從哪裡下手？"
+    - "簽章憑證你會怎麼管理？新成員加入時怎麼處理？"
+  timeLimitSec: 150

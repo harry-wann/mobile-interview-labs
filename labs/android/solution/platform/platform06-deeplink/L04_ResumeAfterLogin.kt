@@ -1,0 +1,119 @@
+// L04：點推播登入後卻停在首頁（未登入時要先記下目標，登入後再繼續）
+// 對應複習站：Platform06DeepLink 第 5 題「怎麼避免外部連結觸發下單這類敏感操作？」（登入與權限）
+//
+// 情境：價格提醒的連結 /alert/{編號} 要登入才能看。未登入的使用者點了推播，Router 要求先登入。
+//        演練的劇本：使用者點推播 → 看到登入畫面 → 登入成功。接著他登出，過幾天再正常登入一次（沒有連結）。
+// Bug 版：Router 只要求顯示登入畫面，沒有記下原本要去哪裡。登入成功後停在首頁，使用者得自己再找一次。
+// 修正版：Router 把原本的連結存進 pendingLink。登入成功後取出來繼續處理，而且取出來就清掉，
+//        下一次單純的登入不會又被帶去同一個提醒頁。
+package tw.harry.labs.solution.platform06deeplink
+
+import tw.harry.labs.kit.Lab
+import tw.harry.labs.kit.LabLog
+import tw.harry.labs.kit.Variant
+
+private const val ALERT_LINK = "https://www.example.com/alert/ab12cd34"
+
+// MARK: - Bug 版
+private object L04Bug {
+    class Navigator {
+        var screen = "首頁"
+            private set
+
+        fun handle(url: String, isLoggedIn: Boolean) {
+            if ("/alert/" in url && !isLoggedIn) {
+                screen = "登入畫面"                              // 只要求登入，沒有記下原本的連結
+            } else if ("/alert/" in url) {
+                screen = "提醒 ab12cd34"
+            }
+        }
+
+        fun onLoginSuccess() {
+            screen = "首頁"                                     // 登入完成：不知道原本要去哪
+        }
+    }
+
+    suspend fun run(log: LabLog) {
+        val nav = Navigator()
+        nav.handle(ALERT_LINK, isLoggedIn = false)
+        log("未登入點到推播：畫面是 ${nav.screen}")
+        nav.onLoginSuccess()
+        log("登入成功後，畫面停在：${nav.screen}")
+        nav.onLoginSuccess()
+        log("之後單純登入一次，畫面停在：${nav.screen}")
+    }
+}
+
+// MARK: - 修正版
+private object L04Fixed {
+    class Navigator {
+        var screen = "首頁"
+            private set
+        private var pendingLink: String? = null                 // 登入前先記下的目標
+
+        fun handle(url: String, isLoggedIn: Boolean) {
+            if ("/alert/" in url && !isLoggedIn) {
+                pendingLink = url                               // 先記下來，登入完成再繼續
+                screen = "登入畫面"
+            } else if ("/alert/" in url) {
+                screen = "提醒 ab12cd34"
+            }
+        }
+
+        fun onLoginSuccess() {
+            screen = "首頁"
+            pendingLink?.let { link ->
+                pendingLink = null                              // 取出來就清掉：只用一次
+                handle(link, isLoggedIn = true)
+            }
+        }
+    }
+
+    suspend fun run(log: LabLog) {
+        val nav = Navigator()
+        nav.handle(ALERT_LINK, isLoggedIn = false)
+        log("未登入點到推播：畫面是 ${nav.screen}")
+        nav.onLoginSuccess()
+        log("登入成功後，畫面停在：${nav.screen}")
+        nav.onLoginSuccess()
+        log("之後單純登入一次，畫面停在：${nav.screen}")
+    }
+}
+
+// MARK: - 演練設定
+val l04 = Lab(
+    id = "L04",
+    title = "點推播登入後卻停在首頁",
+    question = "第 5 題：怎麼避免外部連結觸發下單這類敏感操作？（登入與權限）",
+    goal = "需要登入的連結，未登入時先記下目標；登入成功後繼續前往，而且只前往一次。",
+    steps = listOf(
+        "選「Bug 版」執行，看登入成功後畫面停在哪裡。",
+        "想一想：Router 要求登入的時候，原本的連結存到哪裡去了？",
+        "選「修正版」執行，登入後要到提醒頁；再單純登入一次，要回到首頁。",
+        "進階：敏感畫面（提領、下單確認）即使已登入，也要再用生物辨識或密碼確認一次。",
+    ),
+    expectBug = "「未登入點到推播：畫面是 登入畫面」「登入成功後，畫面停在：首頁」。",
+    expectFixed = "登入成功後停在「提醒 ab12cd34」，之後單純登入一次停在「首頁」。",
+    file = "platform06-deeplink/L04_ResumeAfterLogin.kt",
+    run = { variant, log ->
+        when (variant) {
+            Variant.BUG -> L04Bug.run(log)
+            Variant.FIXED -> L04Fixed.run(log)
+        }
+    },
+    checkBug = { lines ->
+        when {
+            "未登入點到推播：畫面是 登入畫面" !in lines -> "未登入點到提醒連結，Router 要顯示登入畫面"
+            "登入成功後，畫面停在：首頁" !in lines -> "Bug 還沒重現：Router 沒有記下原本的連結，登入成功後只能停在首頁"
+            else -> null
+        }
+    },
+    checkFixed = { lines ->
+        when {
+            "未登入點到推播：畫面是 登入畫面" !in lines -> "未登入點到提醒連結，Router 要顯示登入畫面"
+            "登入成功後，畫面停在：提醒 ab12cd34" !in lines -> "登入成功後要前往原本的連結：未登入時存進 pendingLink，onLoginSuccess 取出來 handle"
+            "之後單純登入一次，畫面停在：首頁" !in lines -> "pendingLink 取出來之後要清成 null，否則下一次登入又被帶去提醒頁"
+            else -> null
+        }
+    },
+)

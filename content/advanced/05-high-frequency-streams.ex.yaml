@@ -1,0 +1,268 @@
+- id: advanced-high-frequency-streams-01
+  type: code
+  level: 2
+  priority: P0
+  tags: [coalescing, market-data, live-coding]
+  prompt: |
+    實作純函式 `coalesce`：輸入一串行情更新（每一筆有 `symbol` 交易對代號與 `price` 價格），**同一個 symbol 只保留最後一筆**，輸出的順序依該 symbol **第一次出現**的順序。
+
+    - `[A1, B1, A2]` → `[A2, B1]`
+    - `[A1, B1, C1, B2, A3]` → `[A3, B2, C1]`
+    - 時間複雜度要求 O(n)（輸入有 n 筆，只能掃過一次），不要用巢狀迴圈。
+  hints:
+    - 同時需要「最新值」和「首次出現的順序」：用字典存最新值，用陣列記錄順序。
+    - Kotlin 的 `LinkedHashMap` 覆蓋既有 key 時，不會改變它第一次插入的位置。
+  timeLimitSec: 900
+  swift:
+    starter: |
+      struct Tick: Equatable {
+          let symbol: String
+          let price: String
+      }
+
+      func coalesce(_ updates: [Tick]) -> [Tick] {
+          // TODO: 同一個 symbol 只留最後一筆，順序依首次出現
+          return updates
+      }
+    solution: |
+      struct Tick: Equatable {
+          let symbol: String
+          let price: String
+      }
+
+      func coalesce(_ updates: [Tick]) -> [Tick] {
+          var order: [String] = []
+          var latest: [String: Tick] = [:]
+          for u in updates {
+              if latest.updateValue(u, forKey: u.symbol) == nil {
+                  order.append(u.symbol)
+              }
+          }
+          return order.map { latest[$0]! }
+      }
+    tests: |
+      func T(_ s: String, _ p: String) -> Tick { Tick(symbol: s, price: p) }
+      checkEqual("空輸入", [Tick]()) { coalesce([]) }
+      checkEqual("沒有重複時原樣保留", [T("A", "1"), T("B", "1")]) { coalesce([T("A", "1"), T("B", "1")]) }
+      checkEqual("同 symbol 保留最後一筆，位置在首次出現處", [T("A", "2"), T("B", "1")]) {
+          coalesce([T("A", "1"), T("B", "1"), T("A", "2")])
+      }
+      checkEqual("多個 symbol 交錯", [T("A", "3"), T("B", "2"), T("C", "1")]) {
+          coalesce([T("A", "1"), T("B", "1"), T("C", "1"), T("B", "2"), T("A", "3")])
+      }
+      checkEqual("全部同一個 symbol", [T("A", "9")]) { coalesce([T("A", "1"), T("A", "5"), T("A", "9")]) }
+      checkEqual("大量輸入：每個 symbol 只剩一筆且保留最後一筆", true) {
+          var big: [Tick] = []
+          for round in 0..<100 { for i in 0..<100 { big.append(T("s\(i)", "\(round)")) } }
+          let out = coalesce(big)
+          return out.count == 100 && out.allSatisfy { $0.price == "99" }
+      }
+      checkEqual("大量輸入：順序依首次出現", (0..<100).map { "s\($0)" }) {
+          var big: [Tick] = []
+          for round in 0..<3 { for i in 0..<100 { big.append(T("s\(i)", "\(round)")) } }
+          return coalesce(big).map { $0.symbol }
+      }
+  kotlin:
+    starter: |
+      data class Tick(val symbol: String, val price: String)
+
+      fun coalesce(updates: List<Tick>): List<Tick> {
+          // TODO: 同一個 symbol 只留最後一筆，順序依首次出現
+          return updates
+      }
+    solution: |
+      data class Tick(val symbol: String, val price: String)
+
+      fun coalesce(updates: List<Tick>): List<Tick> {
+          val latest = LinkedHashMap<String, Tick>()
+          for (u in updates) latest[u.symbol] = u
+          return latest.values.toList()
+      }
+    tests: |
+      fun T(s: String, p: String) = Tick(s, p)
+      checkEqual("空輸入", emptyList<Tick>()) { coalesce(emptyList()) }
+      checkEqual("沒有重複時原樣保留", listOf(T("A", "1"), T("B", "1"))) { coalesce(listOf(T("A", "1"), T("B", "1"))) }
+      checkEqual("同 symbol 保留最後一筆，位置在首次出現處", listOf(T("A", "2"), T("B", "1"))) {
+          coalesce(listOf(T("A", "1"), T("B", "1"), T("A", "2")))
+      }
+      checkEqual("多個 symbol 交錯", listOf(T("A", "3"), T("B", "2"), T("C", "1"))) {
+          coalesce(listOf(T("A", "1"), T("B", "1"), T("C", "1"), T("B", "2"), T("A", "3")))
+      }
+      checkEqual("全部同一個 symbol", listOf(T("A", "9"))) { coalesce(listOf(T("A", "1"), T("A", "5"), T("A", "9"))) }
+      checkEqual("大量輸入：每個 symbol 只剩一筆且保留最後一筆", true) {
+          val big = ArrayList<Tick>()
+          for (round in 0 until 100) for (i in 0 until 100) big.add(T("s$i", "$round"))
+          val out = coalesce(big)
+          out.size == 100 && out.all { it.price == "99" }
+      }
+      checkEqual("大量輸入：順序依首次出現", (0 until 100).map { "s$it" }) {
+          val big = ArrayList<Tick>()
+          for (round in 0 until 3) for (i in 0 until 100) big.add(T("s$i", "$round"))
+          coalesce(big).map { it.symbol }
+      }
+
+- id: advanced-high-frequency-streams-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [websocket, ping-pong, threading]
+  prompt: |
+    使用者回報：行情列表在快速捲動、畫面卡頓的時候，App 常常被伺服器斷線，然後重連。伺服器大約每 5 秒送一次 ping（心跳檢查），連續兩次沒收到 pong（客戶端的回應）就會斷線。最可能的原因與修法是什麼？
+  options:
+    - "WebSocket 函式庫有 bug，應該換成另一個函式庫"
+    - "ping 的處理（解壓縮、回 pong）和其他訊息，排在同一條被主執行緒的畫面工作占住的執行緒上，pong 來不及回。應該把 socket 的接收、解壓縮、回 pong 放在獨立的執行緒，和畫面更新分開"
+    - "網路頻寬不足，應該減少訂閱的交易對數量"
+    - "伺服器端的心跳設定有誤，客戶端沒辦法處理"
+  answer: 1
+  explain: |
+    心跳必須由不會被畫面卡住的執行緒處理。如果 socket 的回呼直接用 `DispatchQueue.main.async` 切到主執行緒，或在主執行緒解析資料，主執行緒一卡，pong 就來不及回，伺服器等不到就斷線，使用者看到的就是莫名其妙的斷線重連。
+
+    修法是 socket 這一層（接收、gzip 解壓縮、ping／pong）放在專用的執行緒，解析與套用狀態放在單一寫入者，再用緩衝區配合畫面更新的時機送到畫面。Huobi 相容的交易所公開 WebSocket，每個 frame 都是 gzip 壓縮的二進位資料，ping 的格式是 `{"ping":ts}`，客戶端要回 `{"pong":ts}`（以交易所的 API 文件為準）。
+
+    其他選項錯在哪裡：
+    - 第 1 項：症狀發生在「畫面卡頓的時候」，指向的是執行緒被占住，而不是函式庫的 bug，換函式庫解決不了。
+    - 第 3 項：頻寬不足會讓資料延遲，但不會剛好在畫面卡頓時才斷線，而且伺服器斷線的原因是沒收到 pong。
+    - 第 4 項：心跳設定是正常的標準做法，問題出在客戶端沒有及時回應。
+
+- id: advanced-high-frequency-streams-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [backpressure]
+  prompt: |
+    關於高頻行情的背壓（資料產生得比處理得快時的處理方式）與合併策略，哪些敘述正確？（複選）
+  options:
+    - "最新價、最佳買價與最佳賣價（best bid／ask）這類「狀態」資料，可以用同一個 key 覆蓋舊值（latest-wins）的方式合併"
+    - "訂單簿的增量更新（delta）可以安全地用 `conflate` 合併，因為最後一筆一定包含前面全部的資訊"
+    - "對價格串流使用 `debounce`（等安靜一段時間才送出），在高頻更新下，畫面可能長時間完全不更新"
+    - "把中間的緩衝佇列設成無上限，可以避免任何資料遺失，是最安全的做法"
+    - "增量資料要先在背景依序套用並檢查序號，對外發佈快照，再由畫面層取樣"
+  answer: [0, 2, 4]
+  explain: |
+    - 第 1 項正確：狀態資料的每一筆都是完整的當前狀態，新的直接取代舊的，丟掉中間值不會有問題。
+    - 第 2 項錯誤：delta 只描述「跟上一個狀態比，哪裡變了」，不是完整狀態。丟掉任何一筆，本地的訂單簿就跟伺服器不一致。
+    - 第 3 項正確：`debounce` 要等到一段時間都沒有新資料才送出，高頻行情永遠不會安靜，畫面可能一直不更新。
+    - 第 4 項錯誤：無上限的佇列，在生產者比消費者快的時候會一直長大，最後記憶體爆掉，App 被系統殺掉。要明確選擇丟棄的策略，或使用有上限的佇列加合併。
+    - 第 5 項正確：增量資料在背景依序套用、檢查序號；發現序號有缺口，就丟掉本地的簿、重新抓完整快照，再接續套用後面的更新。對外發佈的是快照，快照才可以合併與取樣。
+
+- id: advanced-high-frequency-streams-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [cadisplaylink, choreographer]
+  prompt: |
+    補上兩處：iOS 把 `CADisplayLink` 加入主 run loop 時，要用哪一個 mode，捲動時計時器才不會停止；Android 要用 `Choreographer` 的哪一個方法，註冊下一格畫面的回呼。
+  codeLang: text
+  code: |
+    // iOS
+    link.add(to: .main, forMode: ____)
+
+    // Android（Kotlin）
+    Choreographer.getInstance().____(frameCallback)
+  blanks:
+    - [".common", "RunLoop.Mode.common"]
+    - [postFrameCallback]
+  explain: |
+    使用者捲動列表時，主執行緒的 run loop（不斷處理事件的迴圈）會切換到另一個模式（tracking mode），只加在預設模式（default mode）的計時器會暫停。把 display link 加到 `.common`（一組常用模式的集合），捲動期間才會繼續觸發；否則行情列表在使用者捲動時就會凍結。離開畫面要呼叫 `invalidate()`；而且 display link 對它的 target 是強參考，要傳一個只用 weak 持有真正物件的中間物件，避免 retain cycle。
+    `Choreographer.postFrameCallback` 只會觸發一次，要持續更新，就要在回呼裡再註冊下一次；離開畫面時要呼叫 `removeFrameCallback`。
+
+- id: advanced-high-frequency-streams-05
+  type: order
+  level: 2
+  priority: P0
+  tags: [pipeline, architecture]
+  prompt: |
+    把行情從伺服器到畫面的處理管線，依資料流動的方向排列。
+  items:
+    - Socket 執行緒接收 gzip 壓縮的二進位 frame，解壓縮，並處理 ping／pong
+    - 單一寫入者解析 JSON，套用到本地狀態（ticker 覆蓋舊值、訂單簿依序套用 delta），並標記有變動的交易對
+    - 在 CADisplayLink 或 Choreographer 的每格畫面計時點，取走有變動的交易對，產生快照或差異
+    - 把快照送到主執行緒（StateFlow、@Published 或快照），只更新有變動的列
+    - 列表用 diff 局部更新（reconfigureItems 或 DiffUtil 加 payload），價格字串已經預先格式化
+  explain: |
+    每一段的頻率都不一樣：socket 這一層跟著網路速度，狀態層跟著每一筆訊息，畫面層一個 frame 最多更新一次。
+    最重要的分界是「單一寫入者」：它之後才有合併與標記變動，在它之前的 socket 層不碰畫面的狀態，在它之後的畫面層不碰解析。ping／pong 與解壓縮放在最前面，才不會被後面任何一段拖慢。
+
+- id: advanced-high-frequency-streams-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [order-book, sequence, resync]
+  prompt: |
+    某交易所的訂單簿增量頻道，每筆 delta（增量更新）都帶著遞增的序號。客戶端的本地訂單簿目前套用到 `seq=100`，下一筆收到的卻是 `seq=103`。正確的處理方式是什麼？
+  options:
+    - "直接套用 103，序號不連續只是伺服器的計數方式不同"
+    - "把 101、102 當成沒有變動，補零後繼續"
+    - "判定有遺漏：丟棄本地的簿，重新抓完整快照，再接續套用序號大於快照序號的緩衝更新；必要時重新訂閱"
+    - "對 delta 做 `conflate`，用 103 取代 100"
+  answer: 2
+  explain: |
+    增量更新的正確性建立在「連續」上。序號出現缺口，代表至少漏了一筆，本地的簿已經不可信，唯一安全的做法是重新同步：抓一份完整快照，對齊序號，再接續套用後面的更新。重連之後也一樣，要先重新取得快照。
+
+    其他選項錯在哪裡：
+    - 第 1 項：直接套用 103，會漏掉 101 和 102 的變動，本地的簿跟伺服器就不一致了，而且使用者看不出來。
+    - 第 2 項：「沒有變動」是自己編的假設，漏掉的更新可能改了價位或數量，補零無法還原。
+    - 第 4 項：`conflate` 是丟掉中間的值，只適合「狀態」資料；delta 只描述差異，丟掉就等於漏帳。
+
+    這題是通用的增量資料處理原則。實際的頻道格式，以交易所的 API 文件為準。
+
+- id: advanced-high-frequency-streams-07
+  type: open
+  level: 3
+  priority: P0
+  tags: [market-data, architecture]
+  prompt: |
+    請設計交易所 App 行情畫面的資料管線：WebSocket 每秒推送數百筆更新，畫面是上百個交易對的列表，點進去還有訂單簿。請說明每一段所在的執行緒、合併與背壓策略、配合畫面更新頻率的做法、列表的局部更新，以及你怎麼量測；並說明如果你做過單一交易對的即時 K 線（SSE，伺服器單向推送資料的串流），面對上百個交易對時，需要再加上哪些東西。
+  promptJa: |
+    取引所アプリの相場画面のデータパイプラインを設計してください。WebSocket から毎秒数百件の更新が届き、画面には数百銘柄の一覧があり、タップすると板（オーダーブック）が見られます。各段階のスレッド、集約とバックプレッシャーの戦略、画面の更新頻度への同期、一覧の差分更新、計測方法を説明してください。また、1 銘柄のリアルタイムのローソク足（SSE）を扱った経験があれば、数百銘柄に対応するために追加すべきことも述べてください。
+  keyPoints:
+    - 頻率分離：資料的頻率不等於畫面的頻率，畫面一個 frame 最多更新一次
+    - Socket 層用專用執行緒：接收、gzip 解壓縮、回 ping／pong，不被畫面阻塞
+    - 單一寫入者（actor、serial queue 或單一執行緒的 dispatcher）解析並套用狀態：ticker 覆蓋舊值，訂單簿的 delta 依序套用並檢查序號
+    - 背壓策略：狀態用合併（latest-wins），delta 不能丟，佇列要有上限；debounce 不適用
+    - 配合畫面更新：CADisplayLink（.common mode）或 Choreographer 加緩衝區，輸出快照
+    - 列表局部更新：reconfigureItems 或 DiffUtil 加 payload，預先格式化價格字串，離開畫面就取消訂閱，訂單簿深度設上限
+    - 量測：Instruments、Perfetto、hitch 與 jank 指標、主執行緒占用，先建立基準
+    - 即時行情 App 的經驗：SSE（Server-Sent Events）即時 K 線，每個事件做時間格線檢查後更新資料，回到前景用 REST（一般的 HTTP 請求）補資料；交易所 App 因為交易對很多，要再加單一寫入者、依交易對合併、配合畫面更新輸出
+  modelAnswer: |
+    核心原則是資料頻率不等於畫面頻率。管線分四段。第一段是 socket 專用執行緒，負責接收 gzip 二進位 frame、解壓縮、回 ping 和 pong，絕不能被畫面卡住，不然伺服器連續兩次收不到 pong 就會斷線。
+
+    第二段是單一寫入者，iOS 用 actor 或 serial queue，Android 用單一執行緒的 dispatcher，解析 JSON 並套用狀態：ticker 用字典覆蓋，訂單簿的 delta 依序套用並檢查序號，有缺口就重抓快照，同時記下有變動的交易對。
+
+    第三段配合畫面更新：在 `CADisplayLink`（common mode）或 `Choreographer` 的計時點，取走有變動的交易對，產生快照，送到主執行緒。
+
+    第四段是列表更新：價格字串預先格式化，iOS 用 diffable 的 `reconfigureItems`，Android 用 `DiffUtil` 加 payload，關掉隱式動畫。離開畫面就取消訂閱，訂單簿的深度設上限。
+
+    背壓上，狀態用合併，delta 不能丟，不能用 `debounce` 或無上限的佇列。量測用 Instruments 的 Animation Hitches 與 Perfetto，先建立基準。
+
+    我做過的即時 K 線用 SSE，一次一個交易對，每個事件先做時間格線檢查再更新資料，回到前景會用 REST 補回缺的 K 棒。交易所 App 的行情列表有上百個交易對，我會在這個基礎上加上單一寫入者、依交易對合併，以及配合畫面更新的輸出。
+  modelAnswerJa: |
+    核となる原則は、データの頻度と画面の更新頻度を分離することです。パイプラインは四段階です。第一段階は専用の socket スレッドで、gzip 圧縮されたバイナリフレームの受信、解凍、ping と pong の応答を行い、画面に絶対にブロックされないようにします。そうしないと、サーバーが pong を 2 回連続で受け取れず接続を切ります。
+
+    第二段階は単一の書き込み主体です。iOS は actor か serial queue、Android は単一スレッドの dispatcher を使い、JSON を解析して状態に反映します。ティッカーは辞書で上書きし、板の差分は順番に適用してシーケンスを検査し、欠落があればスナップショットを取り直します。同時に、変更があった銘柄を記録します。
+
+    第三段階は画面の更新への同期です。`CADisplayLink`（common mode）または `Choreographer` のタイミングで、変更のあった銘柄を取り出してスナップショットを作り、メインスレッドに渡します。
+
+    第四段階は一覧の更新です。価格文字列は事前に整形し、iOS は diffable の `reconfigureItems`、Android は `DiffUtil` と payload を使い、暗黙のアニメーションは切ります。画面を離れたら購読を解除し、板の深さには上限を設けます。
+
+    バックプレッシャーは、状態は集約、差分は落とさない、そして `debounce` や無制限のキューは使わない、という方針です。計測は Instruments の Animation Hitches と Perfetto で、まずベースラインを作ります。
+
+    以前扱ったリアルタイムのローソク足は SSE で、1 銘柄ずつ、各イベントで時間の格子を検査してからデータを更新し、フォアグラウンドに戻ったときは REST で足りない足を補っていました。取引所アプリの相場一覧は数百銘柄あるので、これを土台に、単一の書き込み主体、銘柄ごとの集約、画面の更新に合わせた出力を加えます。
+  followUps:
+    - dirty set（變動過的交易對）要怎麼在 frame 之間交給畫面，才不用加鎖？
+    - 在 120Hz 的裝置上，也要每一格畫面都更新嗎？
+    - 訂單簿保存的深度上限，與畫面顯示的深度，要怎麼決定？
+  timeLimitSec: 150
+
+- id: advanced-high-frequency-streams-08
+  type: flash
+  level: 2
+  priority: P0
+  tags: [backpressure]
+  front: coalesce、sample、batch、debounce 各自適合什麼樣的資料？
+  back: |
+    - coalesce（合併：同一個 key 覆蓋，只留最新）：最新價、最佳買賣價這類「狀態」資料。
+    - sample／throttle（取樣：固定的時間間隔取最新的一筆）：把畫面的更新頻率壓到能承受的程度。
+    - batch（批次：累積一段時間後一次處理）：寫入資料庫、送出分析事件、套用一批增量更新。
+    - debounce（等安靜一段時間才送出）：搜尋框這類使用者輸入；高頻價格串流永遠不會安靜，會讓畫面一直不更新。
+    delta（增量更新）一筆都不能丟：先在背景依序套用，再對外發佈快照。

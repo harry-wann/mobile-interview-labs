@@ -1,0 +1,316 @@
+- id: swift-swiftui-identity-performance-01
+  type: predict
+  level: 2
+  priority: P0
+  tags: [identity, structural-identity]
+  prompt: |
+    畫面顯示後，`flag` 被切換了 2 次。依序印出 `created["branch"]` 與 `created["single"]`（兩種 `Model` 被建立的次數）是多少？
+  codeLang: swift
+  code: |
+    import SwiftUI
+
+    var created: [String: Int] = [:]
+
+    final class Model: ObservableObject {
+        init(_ tag: String) { created[tag, default: 0] += 1 }
+    }
+
+    struct Leaf: View {
+        @StateObject private var model: Model
+        init(_ tag: String) { _model = StateObject(wrappedValue: Model(tag)) }
+        var body: some View { Text("leaf") }
+    }
+
+    struct Demo: View {
+        @State var flag = false
+        var body: some View {
+            VStack {
+                if flag { Leaf("branch") } else { Leaf("branch") }
+                Leaf("single").opacity(flag ? 1 : 0.4)
+                Button("toggle") { flag.toggle() }
+            }
+        }
+    }
+  answer: |
+    3 1
+  explain: |
+    - `if / else` 的兩個分支是**不同的 structural identity**（SwiftUI 用位置與型別判斷身分），就算寫的是同一個 view 型別也一樣。每次切換分支，舊的被銷毀、新的被建立，`@StateObject` 的 `Model` 就重新建立一次：第一次顯示 1 次，加上切換 2 次，共 3 次。
+    - `Leaf("single").opacity(...)` 的位置與型別都沒變，只是 modifier 的參數不同，identity 不變，狀態被保留，`Model` 只建立 1 次。
+
+    想要保留狀態，就用 modifier 或參數去改變外觀，不要用 `if` 切換。我們把這段程式放進真的 SwiftUI 視窗實際跑過，結果就是 3 與 1。
+
+- id: swift-swiftui-identity-performance-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [id, identity]
+  prompt: |
+    同事為了「確保資料有更新」，在 `TickerRow` 外面寫了 `.id(UUID())`，而且是直接寫在 `body` 裡。會發生什麼事？
+  options:
+    - "UUID 保證唯一，可以避免重複 identity 的警告，而且不影響效能"
+    - "只有第一次計算有效，之後 SwiftUI 會忽略"
+    - "只讓動畫失效，`@State` 與 `.task` 都會保留"
+    - "每次計算 body 都產生新的 identity，這棵子樹每次都被銷毀並重建，`@State`、`@StateObject`、捲動位置與進行中的 `.task` 全部重置"
+  answer: 3
+  explain: |
+    SwiftUI 一看到 explicit identity（明確指定的 id）改變，就當作「舊的 view 消失、新的 view 出現」：整棵子樹重建，狀態重置，轉場動畫變成移除加插入，進行中的 `.task` 被取消後重新啟動。`UUID()` 寫在 `body` 裡，每次計算都會產生新的值，等於每次都換一個 identity。
+
+    - 「UUID 保證唯一、不影響效能」錯在：唯一正是問題所在，identity 每次都不同，所以每次都整個重建，效能反而更差。
+    - 「只有第一次有效、之後會忽略」錯在：SwiftUI 不會忽略 `.id` 的改變，每次改變都會重建。
+    - 「只讓動畫失效、狀態都會保留」錯在：狀態的壽命就等於 identity 的壽命，identity 一換，狀態、`.task` 全部跟著重置。
+
+    `.id()` 的正確用途是「刻意重置」，例如切換帳號後重置整個表單，而且 id 的值要由狀態決定，不是每次都新產生。
+
+- id: swift-swiftui-identity-performance-03
+  type: multi
+  level: 3
+  priority: P0
+  tags: [body, diffing, equatable]
+  prompt: |
+    父層重新計算 body 時，子 view 的 body 會不會也被計算？哪些敘述正確？（複選，結果為 Xcode 26.3 本機實測）
+  options:
+    - "子 view 的欄位都是沒變的值型別時，子 view 的 body 會被跳過"
+    - "傳給子 view 的 closure 捕獲了會變動的變數時，子 view 每次都會重新計算 body"
+    - "每次計算 body 都 `new` 一個 class 物件傳給子 view，子 view 每次都會重新計算"
+    - "只要把子 view 包進 `AnyView`，它的 body 就一定每次都重新計算"
+    - "`ForEach(names, id: \\.self)` 即使 `names` 裡有重複的字串，也不會有任何問題"
+  answer: [0, 1, 2]
+  explain: |
+    實測方式：父層更新 3 次，看子 view 的 body 被計算幾次。
+
+    - 第 1 項正確：欄位是沒變的值型別，body 只計算 1 次，其餘都被跳過。
+    - 第 2 項正確：closure 沒辦法比較，SwiftUI 當作「每次都有變」，實測 4 次（每次都算）。
+    - 第 3 項正確：每次都是不同的物件，也是 4 次。
+    - 第 4 項錯誤：被 `AnyView` 包住的 view，欄位沒變時 body 一樣會被跳過（實測 1 次）。`AnyView` 的問題在於抹掉了型別資訊，SwiftUI 沒辦法利用靜態結構；底層型別改變時整個階層也會被丟掉重建，不是每次都重算。
+    - 第 5 項錯誤：`id: \.self` 搭配重複的值，identity 就不唯一，會出現警告與錯亂的更新。
+
+- id: swift-swiftui-identity-performance-04
+  type: single
+  level: 2
+  priority: P0
+  tags: [anyview, viewbuilder]
+  prompt: |
+    下面這個函式用 `AnyView` 回傳不同的畫面。哪個重構最合適？
+  codeLang: swift
+  code: |
+    enum Mode { case price, depth, trades }
+
+    func content(for mode: Mode) -> AnyView {
+        switch mode {
+        case .price:  return AnyView(PriceView())
+        case .depth:  return AnyView(DepthView())
+        case .trades: return AnyView(TradesView())
+        }
+    }
+  options:
+    - "改成回傳 `any View`，Swift 5.7 之後這樣就能直接放進 body"
+    - "維持 `AnyView`，但把結果存進 `@State`，避免重複建立"
+    - "加上 `@ViewBuilder` 並改成回傳 `some View`，用 `switch` 直接寫出各個分支，讓 SwiftUI 保留靜態結構"
+    - "改用 `[AnyView]` 陣列預先建好三個畫面，再以 index 取用"
+  answer: 2
+  explain: |
+    `@ViewBuilder` 搭配 `switch`，SwiftUI 看得到每個分支的型別與結構，identity 與前後比對都正確，也不用抹掉型別資訊。
+
+    - 「改成 `any View`」錯在：`any View` 是「某種遵守 `View` 的型別」，它本身並不遵守 `View`，所以不能直接放進 body 使用。
+    - 「存進 `@State`」錯在：只是把同一個 `AnyView` 保管起來，型別資訊還是被抹掉了，問題並沒有解決。
+    - 「用 `[AnyView]` 陣列」錯在：一樣是 `AnyView`，沒有解決型別被抹掉的問題，還會一次建立三個畫面。
+
+- id: swift-swiftui-identity-performance-05
+  type: fill
+  level: 2
+  priority: P0
+  tags: [task, foreach]
+  prompt: |
+    切換交易對時，要自動取消舊的請求並重新載入；列表要用穩定的 symbol（幣種代號）當 identity。補上缺的 API。
+  codeLang: swift
+  code: |
+    struct MarketView: View {
+        let tickers: [Ticker]
+        let selectedSymbol: String
+        let vm: MarketViewModel
+
+        var body: some View {
+            List(tickers, ____: \.symbol) { ticker in
+                Text(ticker.symbol)
+            }
+            .____(id: selectedSymbol) {
+                await vm.load(selectedSymbol)
+            }
+        }
+    }
+  blanks:
+    - [id]
+    - [task]
+  explain: |
+    - 第一格填 `id`：`List(tickers, id: \.symbol)`（或讓 `Ticker` 遵守 `Identifiable`）用穩定且唯一的 symbol 當 identity，插入或刪除時，狀態才不會對到錯的列。不要用 index，也不要每次產生新的 `UUID()`。
+    - 第二格填 `task`：`.task(id:)`（iOS 15 以上）在 view 出現時啟動非同步工作，`id` 的值改變時，會自動取消舊的工作、啟動新的，view 消失時也會取消。比 `onAppear { Task { } }` 少了自己保存與取消 `Task` 的負擔。
+
+- id: swift-swiftui-identity-performance-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [equatable, closure, performance]
+  prompt: |
+    行情列表每次價格更新，所有 `TickerRow` 的 body 都被重新計算，即使該列的 `Ticker` 沒變。`TickerRow` 有 `let ticker: Ticker` 與 `let onTap: (String) -> Void`，父層以 `TickerRow(ticker: t, onTap: { vm.select($0) })` 建立。哪個修法最合理？
+  options:
+    - "在每個 row 上加 `.id(ticker.price)`，價格變了才重建"
+    - "把 `onTap` 改存成 `@State`"
+    - "讓 `TickerRow` 遵守 `Equatable`，`==` 只比較 `ticker`（Swift 6 語言模式下標上 `nonisolated`），並在使用處加 `.equatable()`，讓 closure 不參與比較"
+    - "把 `ForEach` 換成 `VStack`，這樣 SwiftUI 就不會比對每一列"
+  answer: 2
+  explain: |
+    SwiftUI 沒辦法比較捕獲了變數的 closure，子 view 的欄位含有這種 closure 時，會被視為「每次都有變」，body 每次都重新計算（本機實測）。讓 row 遵守 `Equatable`、自己定義 `==` 只比較會影響畫面的資料，再用 `.equatable()` 套用，沒變的 row 就能被跳過。
+
+    - 「`.id(ticker.price)`」錯在：價格一變就銷毀、重建整列，比重新計算 body 還貴。
+    - 「把 `onTap` 存成 `@State`」錯在：`@State` 只在 view 第一次建立時採用初始值，之後父層傳進新的 closure 也不會更新，行為會出錯；而且它沒有解決「SwiftUI 無法比較 closure」的問題。
+    - 「換成 `VStack`」錯在：`VStack` 會一次建立全部的列，只會更慢，而且不影響比較的邏輯。
+
+- id: swift-swiftui-identity-performance-07
+  type: code
+  level: 2
+  priority: P1
+  tags: [conflation, throttle, high-frequency]
+  prompt: |
+    實作行情畫面使用的批次器 `TickBatcher<Value>`：每個 tick 先累積起來，每個 symbol（幣種代號）只保留**最新的值**，並以固定間隔送出，避免每個 tick 都更新畫面（這種做法叫 conflation，合併後只保留最新）。時間由呼叫端傳入（`now`，單位毫秒），方便測試。
+
+    - `push(_:_:now:)`：記錄該 symbol 的最新值。若是第一筆，或距離上次送出已達 `intervalMs`，回傳目前累積的所有 symbol（並清空、重新計時）；否則回傳 `nil`
+    - `flush(now:)`：強制回傳目前累積的內容（可能是空的）、清空，並以 `now` 重新計時（給計時器在沒有新 tick 時收尾用）
+    - `pendingCount`：目前累積的 symbol 數量
+  hints:
+    - "用 `[String: Value]` 保存最新值，用 `Int64?` 保存上次送出的時間。"
+    - "`push` 可以先寫入，再判斷是否到了送出的時機，到了就呼叫 `flush`。"
+  swift:
+    starter: |
+      struct TickBatcher<Value> {
+          let intervalMs: Int64
+          init(intervalMs: Int64) { self.intervalMs = intervalMs }
+
+          var pendingCount: Int { 0 }
+
+          // TODO: 累積每個 symbol 的最新值，到了間隔才送出
+          mutating func push(_ symbol: String, _ value: Value, now: Int64) -> [String: Value]? {
+              return nil
+          }
+
+          // TODO: 強制送出目前累積的內容並清空
+          mutating func flush(now: Int64) -> [String: Value] {
+              return [:]
+          }
+      }
+    solution: |
+      struct TickBatcher<Value> {
+          let intervalMs: Int64
+          private var pending: [String: Value] = [:]
+          private var lastFlush: Int64?
+
+          init(intervalMs: Int64) { self.intervalMs = intervalMs }
+
+          var pendingCount: Int { pending.count }
+
+          mutating func push(_ symbol: String, _ value: Value, now: Int64) -> [String: Value]? {
+              pending[symbol] = value
+              if let last = lastFlush, now - last < intervalMs { return nil }
+              return flush(now: now)
+          }
+
+          mutating func flush(now: Int64) -> [String: Value] {
+              let batch = pending
+              pending = [:]
+              lastFlush = now
+              return batch
+          }
+      }
+    tests: |
+      checkEqual("第一筆立即送出", ["BTC": 1]) {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          return b.push("BTC", 1, now: 0) ?? [:]
+      }
+      check("區間內的後續資料先累積、不送出") {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          _ = b.push("BTC", 1, now: 0)
+          let r1 = b.push("BTC", 2, now: 50)
+          let r2 = b.push("ETH", 9, now: 99)
+          return r1 == nil && r2 == nil && b.pendingCount == 2
+      }
+      checkEqual("到達間隔後送出每個 symbol 的最新值", ["BTC": 4, "ETH": 9]) {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          _ = b.push("BTC", 1, now: 0)
+          _ = b.push("BTC", 2, now: 30)
+          _ = b.push("ETH", 9, now: 60)
+          _ = b.push("BTC", 3, now: 80)
+          return b.push("BTC", 4, now: 100) ?? [:]
+      }
+      checkEqual("送出後清空累積", 0) {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          _ = b.push("BTC", 1, now: 0)
+          _ = b.push("BTC", 2, now: 50)
+          _ = b.push("BTC", 3, now: 100)
+          return b.pendingCount
+      }
+      checkEqual("flush 強制送出累積的內容", ["BTC": 2]) {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          _ = b.push("BTC", 1, now: 0)
+          _ = b.push("BTC", 2, now: 50)
+          return b.flush(now: 60)
+      }
+      checkEqual("沒有累積時 flush 回傳空", 0) {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          return b.flush(now: 10).count
+      }
+      check("flush 之後從該時間點重新計時") {
+          var b = TickBatcher<Int>(intervalMs: 100)
+          _ = b.push("BTC", 1, now: 0)
+          _ = b.push("BTC", 2, now: 50)
+          _ = b.flush(now: 150)
+          let early = b.push("BTC", 3, now: 220)
+          let late = b.push("BTC", 4, now: 250)
+          return early == nil && late == ["BTC": 4]
+      }
+
+- id: swift-swiftui-identity-performance-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [performance, swiftui, field]
+  prompt: |
+    行情列表在滑動與價格快速更新時卡頓。你會怎麼診斷、怎麼改善 SwiftUI 的部分？
+  promptJa: |
+    相場一覧がスクロールや価格の高速更新でカクつきます。SwiftUI 側をどのように調査し、どのように最適化しますか。
+  keyPoints:
+    - "先量再改：Instruments 的 SwiftUI 模板（Long View Body Updates、Cause & Effect Graph）、Time Profiler、Hitches；簡單的做法是 `_printChanges()` 與在 body 內計數"
+    - "每一幀的時間預算：60 Hz 約 16.7 毫秒、120 Hz 約 8.3 毫秒，先確認是 body 太慢，還是更新太頻繁"
+    - "更新太頻繁：資料層做 conflation，以固定間隔批次更新（約 100–250 毫秒）"
+    - "影響範圍太大：縮小觀察範圍，高頻變動的資料隔離到最末端的 view，row 只接收自己的值並遵守 `Equatable`，注意 closure 會讓 row 每次都重新計算"
+    - "identity：`ForEach` 用穩定的 symbol 當 id，不要 `.id(UUID())`，不要用 if / else 切換外觀"
+    - "body 太慢：不在 body 內排序、建立 formatter，格式化預先在資料層完成並快取"
+    - "長列表用 Lazy 容器或 `List`"
+    - "實務經驗：Lazy 容器、圖表只推送新資料，不重複設定"
+  modelAnswer: |
+    我會先量再改。工具是 Xcode 26 Instruments 的 SwiftUI 模板：Long View Body Updates 找出哪個 body 計算太久，Cause & Effect Graph 看哪個狀態變化引發了哪些 view 更新，再用 Hitches 確認真的有掉幀；簡單的情況也可以用 `_printChanges()` 或在 body 內計數。每一幀的預算，60 Hz 約 16.7 毫秒，120 Hz 約 8.3 毫秒。
+
+    如果是更新太頻繁，我會在資料層做 conflation，用固定間隔（約 100 到 250 毫秒）批次更新。如果是影響範圍太大，就縮小觀察範圍：高頻變動的資料隔離到最末端的 view，row 只接收自己的值並遵守 `Equatable`，同時注意傳 closure 會讓 row 每次都重新計算。identity 方面，`ForEach` 用穩定的 symbol，不用 `.id(UUID())`，也不用 if / else 切換外觀造成狀態重置。body 內不做排序，也不建立 formatter。
+
+    在一個即時行情 App 的 iOS 版，我全面用 SwiftUI，列表用 Lazy 容器，K 線圖表更新時只推送新的資料，Android 的圖表也用資料雜湊判斷，資料沒變就不重新設定。做交易所 App 的行情頁，我也會先建立量測流程，確認瓶頸在哪裡，再依結果改善。
+  modelAnswerJa: |
+    まず計測してから直します。ツールは Xcode 26 の Instruments の SwiftUI テンプレートです。Long View Body Updates でどの body の計算に時間がかかっているかを調べ、Cause & Effect Graph でどの状態変化がどの View の更新を引き起こしているかを確認し、Hitches で実際にフレーム落ちしているかを確かめます。簡易的には `_printChanges()` や body 内のカウントも使います。フレーム予算は、60 Hz で約 16.7 ミリ秒、120 Hz で約 8.3 ミリ秒です。
+
+    更新が多すぎる場合は、データ層でコンフレーションを行い、一定間隔（約 100〜250 ミリ秒）でまとめて更新します。影響範囲が広すぎる場合は、観察範囲を小さくします。高頻度で変わるデータは末端の View に閉じ込め、各行は自分の値だけを受け取って `Equatable` に準拠させます。closure を渡すと行が毎回再計算される点にも注意します。identity については、`ForEach` に安定した symbol を使い、`.id(UUID())` は使わず、if / else で見た目を切り替えて状態をリセットしないようにします。body 内ではソートや formatter の生成はしません。
+
+    あるリアルタイム相場アプリの iOS 版では全面的に SwiftUI を使い、リストには Lazy コンテナを使いました。ローソク足チャートの更新では新しいデータだけを渡し、Android のチャートでもデータのハッシュで判定して、データが変わらなければ再設定しないようにしています。取引所アプリの相場画面でも、まず計測の流れを作ってボトルネックを特定し、その結果に応じて最適化します。
+  followUps:
+    - "Instruments で body が遅いと分かったら、次に何を見ますか。"
+    - "120 Hz 端末でのフレーム予算はどのくらいですか。"
+    - "`drawingGroup()` を使うと何が変わり、どんな副作用がありますか。"
+  timeLimitSec: 150
+
+- id: swift-swiftui-identity-performance-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [identity]
+  front: SwiftUI 的 identity 速記：什麼情況會保留狀態、什麼情況會重置？
+  back: |
+    - **保留**：同位置、同型別，只改參數；用 modifier（例如 `.opacity`）或三元運算子（`flag ? a : b`）切換外觀。
+    - **重置**：`if / else` 的不同分支（即使型別相同）、`.id(x)` 的 x 改變、`AnyView` 裡面的型別改變、`ForEach` 的 id 改變。
+    - `.id(UUID())` 寫在 body 裡，等於每次都整個重建。
+    - `@State`、`@StateObject`、`.task` 的壽命都等於 identity 的壽命。

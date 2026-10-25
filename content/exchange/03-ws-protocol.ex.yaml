@@ -1,0 +1,764 @@
+- id: exchange-ws-protocol-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [heartbeat]
+  prompt: |
+    這套交易所公開 WebSocket（Huobi 相容）的心跳（定時確認「連線還活著」的訊息），哪個描述正確？
+  options:
+    - "App 每 5 秒要主動送 `{\"ping\":現在時間}`，伺服器才會維持連線"
+    - "伺服器約每 5 秒送 `{\"ping\":ts}`，App 要回 `{\"pong\":ts}`，值必須與收到的 ping **相同**；連續兩次沒有回應，伺服器會斷線"
+    - "App 回覆 pong 時要填目前的 Unix 時間，伺服器用來估算延遲"
+    - "WebSocket 協定層的 ping frame 就足以維持連線，不需要處理 JSON 格式的 `ping`"
+  answer: 1
+  explain: |
+    API 文件的說明是：連線建立後，伺服器每 5 秒（文件註明可能變更）送出 ping，App 回 pong，而且「pong 的值與收到的 ping 的值相同」；連續兩次沒回應，伺服器就斷線。
+    - 第 1 項錯：方向說反了。這個協定是伺服器主動送 ping，App 負責回（App 也可以主動送 ping，但不是維持連線的必要條件）。
+    - 第 3 項錯：pong 的值要原樣回傳收到的 ping，不是填當下的時間。
+    - 第 4 項錯：這套協定的 `{"ping":...}` 是協定自己定義的 JSON 訊息，要由程式自己回；和 WebSocket 協定層的 ping／pong frame 是兩回事。OkHttp 的 `pingInterval` 或 `URLSessionWebSocketTask.sendPing` 用的是協定層的 ping，不會取代它。
+
+- id: exchange-ws-protocol-02
+  type: order
+  level: 2
+  priority: P0
+  tags: [pipeline, gzip]
+  prompt: |
+    App 收到公開 WebSocket 的一個 binary frame（一則二進位訊息），依合理順序排列處理步驟。
+  items:
+    - "在 socket 的背景執行緒對 frame 做 gzip 解壓縮"
+    - "解碼成 JSON（失敗就記錄並丟棄該 frame，不讓連線崩潰）"
+    - "最先檢查是不是 `ping`，是的話立即回 `{\"pong\":原值}`"
+    - "檢查是否為 `status: error` 或 `subbed`／`unsubbed`／`rep` 的回覆，對應到 App 送出的 `id`"
+    - "依 `ch` 解析 topic，把 `tick`／`data` 分派給對應的處理者（合併、套用到狀態）"
+  explain: |
+    - 解壓一定在最前面：frame 是壓縮過的二進位資料，沒解壓就看不到 JSON，也就不知道這是不是 ping。解壓放在背景執行緒，不要卡住主執行緒。
+    - 解碼成 JSON 其次，失敗就丟棄，不能讓連線崩潰。
+    - 心跳的優先權最高，而且不依賴任何狀態，所以解碼之後要最先檢查，避免被行情處理拖慢，被伺服器判定超時。
+    - 接著才處理回覆（確認和錯誤），要靠 `id` 對回你送出的請求。
+    - 最後是推送，依 `ch`（主題名稱）分派給對應的處理者。畫面只會收到整理過的狀態。
+
+- id: exchange-ws-protocol-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [protocol, req, sub, topic]
+  prompt: |
+    關於這套交易所公開 WebSocket 的訊息格式（以 API 文件為準），哪些敘述正確？（複選）
+  options:
+    - "`req`（一次性請求）的回覆用 `rep` 欄位標示 topic，推送則用 `ch`"
+    - "`sub` 的 `freq-ms` 可以填任意毫秒數，例如 250"
+    - "文件的 K 線 period 清單沒有 3min；訂閱 `market.btcjpy.kline.3min` 會得到 `bad-request`／`invalid topic`"
+    - "depth 頻道推送的資料放在 `data`，K 線與 BBO 放在 `tick`"
+    - "對沒有訂閱的 topic 送 `unsub` 會被當作成功，不會有錯誤"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 1 項對：`req` 的回覆長這樣 `{"status":"ok","rep":"<topic>","tick":[...]}`，用 `rep`；持續推送的訊息才用 `ch`。
+    - 第 2 項錯：`freq-ms` 的合法值只有 1000、2000、3000、4000、5000（毫秒）；不給就是有更新就立即推送。
+    - 第 3 項對：文件列的 period 是 1min、5min、15min、30min、60min、1day、1mon、1week、1year，沒有 3min，訂閱會收到 `status: error`。
+    - 第 4 項對：依 API 文件的 WebSocket 範例，depth 推送放在 `data`（含 `bids`、`asks`），K 線和 BBO 放在 `tick`；而 REST 的 depth 回應放在 `tick`。所以解析器兩個欄位都要接受（本單元的 code 題就是這樣做）。
+    - 第 5 項錯：對未訂閱的 topic 退訂會得到 `status: error`，`err-msg` 是 `unsub with not subbed topic …`。
+
+- id: exchange-ws-protocol-04
+  type: fill
+  level: 2
+  priority: P1
+  tags: [json, unsub, pong]
+  prompt: |
+    補上 JSON 的欄位名稱：退訂成交頻道，以及回覆伺服器的心跳（收到 `{"ping":18212558000}`）。
+  codeLang: json
+  code: |
+    {"____":"market.btcjpy.trade.detail","id":"id4"}
+    {"____":18212558000}
+  blanks:
+    - [unsub]
+    - [pong]
+  explain: |
+    退訂的格式是 `{"unsub":"<topic>","id":"<id>"}`，成功會回 `{"id":"id4","status":"ok","unsubbed":"market.btcjpy.trade.detail","ts":...}`。
+    心跳回覆是 `{"pong":<原值>}`，值必須與伺服器送的 ping 相同。私有 WebSocket 的格式不一樣，是 `{"action":"pong","data":{"ts":...}}`。
+
+- id: exchange-ws-protocol-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [private-ws, ordering]
+  prompt: |
+    你訂閱了私有頻道 `trade.clearing#btcjpy#1`（成交與取消都推送）。一筆 IOC 單（Immediate Or Cancel：能立刻成交的部分成交，剩下的立刻取消）部分成交後剩餘被取消，App 先收到「取消」通知，才收到「成交」通知。依 API 文件的說明，下列做法哪個正確？
+  options:
+    - "不可能發生，WebSocket 一定依序送達"
+    - "把先收到的取消當作最終狀態，之後的成交通知丟棄"
+    - "文件指出這個頻道的通知**順序不保證**。如果順序有依賴，應該使用 `orders#${symbol}` 頻道；App 的狀態合併要容許事件亂序（成交量只增不減、終態不被覆蓋；終態＝已完成或已取消這種不會再變的狀態）"
+    - "兩種頻道都不可靠，必須改用輪詢（定時用 REST 去查）"
+  answer: 2
+  explain: |
+    API 文件在「注文状態更新」（`trade.clearing`）的說明中明確寫到：不保證接收順序，例如 IOC 單成交後剩餘部分被取消，取消的通知可能先到；順序有依賴時請使用 `orders#${symbol}`。
+    - 第 1 項錯：文件已經明說會發生。WebSocket 在同一條連線上會依序送達，但伺服器送出通知的先後，不一定等於事件發生的先後。
+    - 第 2 項錯：把先到的取消當作最後的結果，成交的數量就被蓋掉了，使用者會看到「完全沒成交」。
+    - 第 4 項錯：沒有必要放棄推送，改成輪詢反而增加延遲和請求次數。要做的是讓狀態合併可以處理亂序。
+    所以 App 把新事件合併進現有狀態的函式，要能處理亂序：累計成交量只增不減、終態不能被舊事件蓋掉、以伺服器的資料為準（見下單流程單元）。
+
+- id: exchange-ws-protocol-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [ios, gzip, compression]
+  prompt: |
+    iOS 工程師對收到的 gzip binary frame 直接呼叫 `compression_decode_buffer(..., COMPRESSION_ZLIB)`（Compression framework 的解壓函式），回傳 0（解壓失敗）。最可能的原因與處理方式是？
+  options:
+    - "Compression framework 不支援 gzip，必須改用第三方 JSON 函式庫"
+    - "frame 沒有被伺服器壓縮，是文件寫錯"
+    - "`COMPRESSION_ZLIB` 處理的是 raw DEFLATE（沒有 gzip 標頭的壓縮資料），不包含 gzip 的標頭與結尾；要先解析並跳過 gzip 標頭（至少 10 bytes，含可選欄位）與結尾 8 bytes，再解壓中間的 DEFLATE 資料，或改用 libz 的 `inflateInit2` 設定 gzip 模式"
+    - "必須在 `URLSessionWebSocketTask` 設定 `Accept-Encoding: gzip`，系統才會自動解壓 binary frame"
+  answer: 2
+  explain: |
+    實測：對 `gzip` 指令壓縮出來的資料直接呼叫 `compression_decode_buffer(COMPRESSION_ZLIB)` 會回傳 0，`NSData.decompressed(using: .zlib)` 也會失敗；跳過 gzip 標頭與結尾，只解中間的 DEFLATE 資料，就可以還原原始 JSON。
+    - 第 1 項錯：Compression framework 可以解壓，只是它只認裸的 DEFLATE，不認 gzip 的標頭；而且解壓和 JSON 函式庫沒有關係。
+    - 第 2 項錯：API 文件明確寫了所有回傳資料都是 gzip 壓縮，不是文件寫錯。
+    - 第 4 項錯：`Accept-Encoding` 是 HTTP 的機制，只對一般的 HTTP 回應有效；WebSocket 的 binary frame 是協定自己壓縮的，URLSession 不會自動解壓。
+    Android 的 `GZIPInputStream` 可以直接處理 gzip，所以這是兩個平台的實作差異。
+
+- id: exchange-ws-protocol-07
+  type: code
+  level: 2
+  priority: P0
+  tags: [websocket, dispatch, parsing]
+  prompt: |
+    實作公開 WebSocket 的訊息處理（輸入是**已解壓的 JSON 字串**，gzip 不在這題處理）。`parseJSONObject`／`integerValue` 等輔助函式已經提供，不要修改。（白話：收到一則 JSON 訊息，判斷它是心跳、錯誤、回覆還是推送，回傳 App 下一步該做什麼。）
+
+    **`handleFrame(_ json:)` 回傳 `WSAction`**，規則依序為：
+    1. 不是 JSON 物件 → `.ignore`
+    2. 有整數的 `ping` → `.send({"pong":<原值>})`（字串格式固定為 `{"pong":18212558000}`，無空白）；`ping` 不是整數（字串、小數）→ `.ignore`
+    3. 有 `pong` → `.ignore`
+    4. 私有 WebSocket 的心跳：`{"action":"ping","data":{"ts":N}}` → `.send({"action":"pong","data":{"ts":N}})`
+    5. `status` 為 `"error"` → `.error(id:code:message:)`，取 `err-code`、`err-msg`（缺少時 code 用 `"unknown"`、message 用 `""`）
+    6. `status` 為 `"ok"` 且有 `subbed`／`unsubbed`／`rep` → 依序對應 `.subscribed`／`.unsubscribed`／`.reply`（`id` 沒有就是 nil）
+    7. 有 `ch`，且有 `tick` 或 `data`，且 topic 合法 → `.push(symbol:kind:param:)`
+       - `market.<symbol>.kline.<period>` → kind `kline`、param `<period>`
+       - `market.<symbol>.depth.<type>` → kind `depth`、param `<type>`
+       - `market.<symbol>.bbo` → kind `bbo`；`market.<symbol>.trade.detail` → kind `trade.detail`；`market.<symbol>.detail` → kind `detail`（param 都是 nil）
+    8. 其他 → `.ignore`
+
+    **`makeSubscribe(topic:id:freqMs:)`／`makeUnsubscribe(topic:id:)`** 組出要送的 JSON 字串（欄位順序固定：`sub`、`id`、`freq-ms`）。`topic` 與 `id` 只允許 `[A-Za-z0-9._#-]` 且長度 1–64，否則回傳 nil（避免字串串接造成 JSON 注入：使用者輸入裡的引號等字元會破壞 JSON 結構）；`freqMs` 只能是 1000–5000 的整千毫秒，否則回傳 nil。
+  hints:
+    - "把 topic 解析寫成獨立函式：以 `.` 分割，第一段必須是 `market`。"
+    - "心跳最先檢查，而且不需要任何狀態。"
+  swift:
+    starter: |
+      import Foundation
+
+      // ---- 已提供，請勿修改 ----
+      func parseJSONObject(_ text: String) -> [String: Any]? {
+          guard let data = text.data(using: .utf8),
+                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+          return obj
+      }
+
+      func integerValue(_ any: Any?) -> Int64? {
+          guard let n = any as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+          let d = n.doubleValue
+          guard d == d.rounded(), abs(d) < 9.0e15 else { return nil }
+          return n.int64Value
+      }
+
+      func stringValue(_ any: Any?) -> String? { any as? String }
+
+      enum WSAction: Equatable {
+          case send(String)
+          case subscribed(id: String?, topic: String)
+          case unsubscribed(id: String?, topic: String)
+          case reply(id: String?, topic: String)
+          case push(symbol: String, kind: String, param: String?)
+          case error(id: String?, code: String, message: String)
+          case ignore
+      }
+      // ---- 以上已提供 ----
+
+      func handleFrame(_ json: String) -> WSAction {
+          // TODO
+          return .ignore
+      }
+
+      func makeSubscribe(topic: String, id: String, freqMs: Int? = nil) -> String? {
+          // TODO
+          return nil
+      }
+
+      func makeUnsubscribe(topic: String, id: String) -> String? {
+          // TODO
+          return nil
+      }
+    solution: |
+      import Foundation
+
+      func parseJSONObject(_ text: String) -> [String: Any]? {
+          guard let data = text.data(using: .utf8),
+                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+          return obj
+      }
+
+      func integerValue(_ any: Any?) -> Int64? {
+          guard let n = any as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+          let d = n.doubleValue
+          guard d == d.rounded(), abs(d) < 9.0e15 else { return nil }
+          return n.int64Value
+      }
+
+      func stringValue(_ any: Any?) -> String? { any as? String }
+
+      enum WSAction: Equatable {
+          case send(String)
+          case subscribed(id: String?, topic: String)
+          case unsubscribed(id: String?, topic: String)
+          case reply(id: String?, topic: String)
+          case push(symbol: String, kind: String, param: String?)
+          case error(id: String?, code: String, message: String)
+          case ignore
+      }
+
+      private func parseTopic(_ ch: String) -> WSAction? {
+          let parts = ch.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+          guard parts.count >= 3, parts[0] == "market", !parts[1].isEmpty else { return nil }
+          let symbol = parts[1]
+          let rest = Array(parts[2...])
+          switch rest {
+          case ["bbo"]: return .push(symbol: symbol, kind: "bbo", param: nil)
+          case ["detail"]: return .push(symbol: symbol, kind: "detail", param: nil)
+          case ["trade", "detail"]: return .push(symbol: symbol, kind: "trade.detail", param: nil)
+          case _ where rest.count == 2 && (rest[0] == "kline" || rest[0] == "depth") && !rest[1].isEmpty:
+              return .push(symbol: symbol, kind: rest[0], param: rest[1])
+          default: return nil
+          }
+      }
+
+      func handleFrame(_ json: String) -> WSAction {
+          guard let obj = parseJSONObject(json) else { return .ignore }
+
+          if obj["ping"] != nil {
+              if let v = integerValue(obj["ping"]) { return .send("{\"pong\":\(v)}") }
+              return .ignore
+          }
+          if obj["pong"] != nil { return .ignore }
+          if stringValue(obj["action"]) == "ping",
+             let data = obj["data"] as? [String: Any], let ts = integerValue(data["ts"]) {
+              return .send("{\"action\":\"pong\",\"data\":{\"ts\":\(ts)}}")
+          }
+
+          let id = stringValue(obj["id"])
+          let status = stringValue(obj["status"])
+          if status == "error" {
+              return .error(id: id,
+                            code: stringValue(obj["err-code"]) ?? "unknown",
+                            message: stringValue(obj["err-msg"]) ?? "")
+          }
+          if status == "ok" {
+              if let t = stringValue(obj["subbed"]) { return .subscribed(id: id, topic: t) }
+              if let t = stringValue(obj["unsubbed"]) { return .unsubscribed(id: id, topic: t) }
+              if let t = stringValue(obj["rep"]) { return .reply(id: id, topic: t) }
+          }
+          if let ch = stringValue(obj["ch"]), obj["tick"] != nil || obj["data"] != nil,
+             let action = parseTopic(ch) {
+              return action
+          }
+          return .ignore
+      }
+
+      private func validToken(_ s: String) -> Bool {
+          guard (1...64).contains(s.count) else { return false }
+          return s.unicodeScalars.allSatisfy { c in
+              (c.value >= 48 && c.value <= 57) || (c.value >= 65 && c.value <= 90) ||
+              (c.value >= 97 && c.value <= 122) || c == "." || c == "_" || c == "#" || c == "-"
+          }
+      }
+
+      func makeSubscribe(topic: String, id: String, freqMs: Int? = nil) -> String? {
+          guard validToken(topic), validToken(id) else { return nil }
+          var out = "{\"sub\":\"\(topic)\",\"id\":\"\(id)\""
+          if let f = freqMs {
+              guard [1000, 2000, 3000, 4000, 5000].contains(f) else { return nil }
+              out += ",\"freq-ms\":\(f)"
+          }
+          return out + "}"
+      }
+
+      func makeUnsubscribe(topic: String, id: String) -> String? {
+          guard validToken(topic), validToken(id) else { return nil }
+          return "{\"unsub\":\"\(topic)\",\"id\":\"\(id)\"}"
+      }
+    tests: |
+      checkEqual("伺服器 ping → 原值 pong", WSAction.send("{\"pong\":18212558000}")) {
+          handleFrame("{\"ping\": 18212558000}")
+      }
+      check("ping 不是整數（字串、小數）→ ignore") {
+          handleFrame("{\"ping\":\"abc\"}") == .ignore && handleFrame("{\"ping\":1.5}") == .ignore
+      }
+      checkEqual("私有 WS 心跳", WSAction.send("{\"action\":\"pong\",\"data\":{\"ts\":1575537778295}}")) {
+          handleFrame("{\"action\":\"ping\",\"data\":{\"ts\":1575537778295}}")
+      }
+      check("pong、非 JSON、空物件都是 ignore") {
+          handleFrame("{\"pong\":1}") == .ignore && handleFrame("not json") == .ignore && handleFrame("{}") == .ignore
+      }
+      check("sub／unsub／req 的回覆（id 可有可無）") {
+          handleFrame("{\"id\":\"id1\",\"status\":\"ok\",\"subbed\":\"market.btcjpy.kline.1min\",\"ts\":1}")
+              == .subscribed(id: "id1", topic: "market.btcjpy.kline.1min")
+          && handleFrame("{\"status\":\"ok\",\"unsubbed\":\"market.btcjpy.trade.detail\",\"ts\":1}")
+              == .unsubscribed(id: nil, topic: "market.btcjpy.trade.detail")
+          && handleFrame("{\"status\":\"ok\",\"id\":\"id10\",\"rep\":\"market.btcjpy.kline.1min\",\"tick\":[]}")
+              == .reply(id: "id10", topic: "market.btcjpy.kline.1min")
+      }
+      check("錯誤訊息：取 id、err-code、err-msg，缺欄位用預設") {
+          handleFrame("{\"id\":\"id3\",\"status\":\"error\",\"err-code\":\"bad-request\",\"err-msg\":\"invalid topic market.btcjpy.kline.3min\",\"ts\":1}")
+              == .error(id: "id3", code: "bad-request", message: "invalid topic market.btcjpy.kline.3min")
+          && handleFrame("{\"status\":\"error\"}") == .error(id: nil, code: "unknown", message: "")
+      }
+      check("推送依 ch 分派（kline、depth、bbo、trade.detail、detail）") {
+          handleFrame("{\"ch\":\"market.btcjpy.kline.1min\",\"ts\":1,\"tick\":{\"id\":1}}")
+              == .push(symbol: "btcjpy", kind: "kline", param: "1min")
+          && handleFrame("{\"ch\":\"market.ethjpy.depth.step0\",\"ts\":1,\"data\":{\"bids\":[],\"asks\":[]}}")
+              == .push(symbol: "ethjpy", kind: "depth", param: "step0")
+          && handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1,\"tick\":{}}")
+              == .push(symbol: "btcjpy", kind: "bbo", param: nil)
+          && handleFrame("{\"ch\":\"market.btcjpy.trade.detail\",\"ts\":1,\"tick\":{\"data\":[]}}")
+              == .push(symbol: "btcjpy", kind: "trade.detail", param: nil)
+          && handleFrame("{\"ch\":\"market.btcjpy.detail\",\"ts\":1,\"tick\":{}}")
+              == .push(symbol: "btcjpy", kind: "detail", param: nil)
+      }
+      check("未知或格式錯誤的 ch、沒有資料的推送、私有 push 都是 ignore") {
+          handleFrame("{\"ch\":\"market.btcjpy.kline\",\"ts\":1,\"tick\":{}}") == .ignore
+          && handleFrame("{\"ch\":\"foo.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") == .ignore
+          && handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1}") == .ignore
+          && handleFrame("{\"action\":\"push\",\"ch\":\"orders#btcjpy\",\"data\":{}}") == .ignore
+      }
+      check("makeSubscribe／makeUnsubscribe：格式與驗證") {
+          makeSubscribe(topic: "market.btcjpy.kline.1min", id: "id1") == "{\"sub\":\"market.btcjpy.kline.1min\",\"id\":\"id1\"}"
+          && makeSubscribe(topic: "market.btcjpy.bbo", id: "id2", freqMs: 2000) == "{\"sub\":\"market.btcjpy.bbo\",\"id\":\"id2\",\"freq-ms\":2000}"
+          && makeSubscribe(topic: "market.btcjpy.bbo", id: "id2", freqMs: 250) == nil
+          && makeSubscribe(topic: "market.btcjpy.bbo\",\"x\":\"y", id: "id3") == nil
+          && makeSubscribe(topic: "", id: "id4") == nil
+          && makeUnsubscribe(topic: "market.btcjpy.trade.detail", id: "id4") == "{\"unsub\":\"market.btcjpy.trade.detail\",\"id\":\"id4\"}"
+      }
+  kotlin:
+    starter: |
+      // ---- 已提供，請勿修改 ----
+      class MiniJson(private val s: String) {
+          private var i = 0
+
+          fun parse(): Any? {
+              val v = value()
+              skipWs()
+              if (i != s.length) throw IllegalArgumentException("trailing characters")
+              return v
+          }
+
+          private fun skipWs() { while (i < s.length && s[i].isWhitespace()) i++ }
+
+          private fun value(): Any? {
+              skipWs()
+              if (i >= s.length) throw IllegalArgumentException("unexpected end")
+              val c = s[i]
+              return when {
+                  c == '{' -> obj()
+                  c == '[' -> arr()
+                  c == '"' -> str()
+                  s.startsWith("true", i) -> { i += 4; true }
+                  s.startsWith("false", i) -> { i += 5; false }
+                  s.startsWith("null", i) -> { i += 4; null }
+                  c == '-' || c.isDigit() -> num()
+                  else -> throw IllegalArgumentException("unexpected '$c'")
+              }
+          }
+
+          private fun obj(): Map<String, Any?> {
+              val m = LinkedHashMap<String, Any?>()
+              i++
+              skipWs()
+              if (i < s.length && s[i] == '}') { i++; return m }
+              while (true) {
+                  skipWs()
+                  val k = str()
+                  skipWs()
+                  if (i >= s.length || s[i] != ':') throw IllegalArgumentException("expected ':'")
+                  i++
+                  m[k] = value()
+                  skipWs()
+                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
+                  if (s[i] == ',') { i++; continue }
+                  if (s[i] == '}') { i++; return m }
+                  throw IllegalArgumentException("expected ',' or '}'")
+              }
+          }
+
+          private fun arr(): List<Any?> {
+              val l = ArrayList<Any?>()
+              i++
+              skipWs()
+              if (i < s.length && s[i] == ']') { i++; return l }
+              while (true) {
+                  l.add(value())
+                  skipWs()
+                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
+                  if (s[i] == ',') { i++; continue }
+                  if (s[i] == ']') { i++; return l }
+                  throw IllegalArgumentException("expected ',' or ']'")
+              }
+          }
+
+          private fun str(): String {
+              if (i >= s.length || s[i] != '"') throw IllegalArgumentException("expected string")
+              i++
+              val sb = StringBuilder()
+              while (i < s.length) {
+                  val c = s[i++]
+                  when (c) {
+                      '"' -> return sb.toString()
+                      '\\' -> {
+                          if (i >= s.length) throw IllegalArgumentException("bad escape")
+                          when (val e = s[i++]) {
+                              '"', '\\', '/' -> sb.append(e)
+                              'b' -> sb.append('\b')
+                              'f' -> sb.append('\u000C')
+                              'n' -> sb.append('\n')
+                              'r' -> sb.append('\r')
+                              't' -> sb.append('\t')
+                              'u' -> {
+                                  if (i + 4 > s.length) throw IllegalArgumentException("bad unicode escape")
+                                  sb.append(s.substring(i, i + 4).toInt(16).toChar())
+                                  i += 4
+                              }
+                              else -> throw IllegalArgumentException("bad escape")
+                          }
+                      }
+                      else -> sb.append(c)
+                  }
+              }
+              throw IllegalArgumentException("unterminated string")
+          }
+
+          private fun num(): Any {
+              val start = i
+              if (s[i] == '-') i++
+              while (i < s.length && (s[i].isDigit() || s[i] in ".eE+-")) i++
+              val t = s.substring(start, i)
+              return if (t.any { it == '.' || it == 'e' || it == 'E' }) t.toDouble() else (t.toLongOrNull() ?: t.toDouble())
+          }
+      }
+
+      @Suppress("UNCHECKED_CAST")
+      fun parseJsonObject(text: String): Map<String, Any?>? =
+          try { MiniJson(text).parse() as? Map<String, Any?> } catch (e: Exception) { null }
+
+      fun integerValue(v: Any?): Long? = when (v) {
+          is Long -> v
+          is Double -> if (v == Math.floor(v) && Math.abs(v) < 9.0e15) v.toLong() else null
+          else -> null
+      }
+
+      fun stringValue(v: Any?): String? = v as? String
+
+      sealed class WSAction {
+          data class Send(val text: String) : WSAction()
+          data class Subscribed(val id: String?, val topic: String) : WSAction()
+          data class Unsubscribed(val id: String?, val topic: String) : WSAction()
+          data class Reply(val id: String?, val topic: String) : WSAction()
+          data class Push(val symbol: String, val kind: String, val param: String?) : WSAction()
+          data class Error(val id: String?, val code: String, val message: String) : WSAction()
+          object Ignore : WSAction()
+      }
+      // ---- 以上已提供 ----
+
+      fun handleFrame(json: String): WSAction {
+          // TODO
+          return WSAction.Ignore
+      }
+
+      fun makeSubscribe(topic: String, id: String, freqMs: Int? = null): String? {
+          // TODO
+          return null
+      }
+
+      fun makeUnsubscribe(topic: String, id: String): String? {
+          // TODO
+          return null
+      }
+    solution: |
+      class MiniJson(private val s: String) {
+          private var i = 0
+
+          fun parse(): Any? {
+              val v = value()
+              skipWs()
+              if (i != s.length) throw IllegalArgumentException("trailing characters")
+              return v
+          }
+
+          private fun skipWs() { while (i < s.length && s[i].isWhitespace()) i++ }
+
+          private fun value(): Any? {
+              skipWs()
+              if (i >= s.length) throw IllegalArgumentException("unexpected end")
+              val c = s[i]
+              return when {
+                  c == '{' -> obj()
+                  c == '[' -> arr()
+                  c == '"' -> str()
+                  s.startsWith("true", i) -> { i += 4; true }
+                  s.startsWith("false", i) -> { i += 5; false }
+                  s.startsWith("null", i) -> { i += 4; null }
+                  c == '-' || c.isDigit() -> num()
+                  else -> throw IllegalArgumentException("unexpected '$c'")
+              }
+          }
+
+          private fun obj(): Map<String, Any?> {
+              val m = LinkedHashMap<String, Any?>()
+              i++
+              skipWs()
+              if (i < s.length && s[i] == '}') { i++; return m }
+              while (true) {
+                  skipWs()
+                  val k = str()
+                  skipWs()
+                  if (i >= s.length || s[i] != ':') throw IllegalArgumentException("expected ':'")
+                  i++
+                  m[k] = value()
+                  skipWs()
+                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
+                  if (s[i] == ',') { i++; continue }
+                  if (s[i] == '}') { i++; return m }
+                  throw IllegalArgumentException("expected ',' or '}'")
+              }
+          }
+
+          private fun arr(): List<Any?> {
+              val l = ArrayList<Any?>()
+              i++
+              skipWs()
+              if (i < s.length && s[i] == ']') { i++; return l }
+              while (true) {
+                  l.add(value())
+                  skipWs()
+                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
+                  if (s[i] == ',') { i++; continue }
+                  if (s[i] == ']') { i++; return l }
+                  throw IllegalArgumentException("expected ',' or ']'")
+              }
+          }
+
+          private fun str(): String {
+              if (i >= s.length || s[i] != '"') throw IllegalArgumentException("expected string")
+              i++
+              val sb = StringBuilder()
+              while (i < s.length) {
+                  val c = s[i++]
+                  when (c) {
+                      '"' -> return sb.toString()
+                      '\\' -> {
+                          if (i >= s.length) throw IllegalArgumentException("bad escape")
+                          when (val e = s[i++]) {
+                              '"', '\\', '/' -> sb.append(e)
+                              'b' -> sb.append('\b')
+                              'f' -> sb.append('\u000C')
+                              'n' -> sb.append('\n')
+                              'r' -> sb.append('\r')
+                              't' -> sb.append('\t')
+                              'u' -> {
+                                  if (i + 4 > s.length) throw IllegalArgumentException("bad unicode escape")
+                                  sb.append(s.substring(i, i + 4).toInt(16).toChar())
+                                  i += 4
+                              }
+                              else -> throw IllegalArgumentException("bad escape")
+                          }
+                      }
+                      else -> sb.append(c)
+                  }
+              }
+              throw IllegalArgumentException("unterminated string")
+          }
+
+          private fun num(): Any {
+              val start = i
+              if (s[i] == '-') i++
+              while (i < s.length && (s[i].isDigit() || s[i] in ".eE+-")) i++
+              val t = s.substring(start, i)
+              return if (t.any { it == '.' || it == 'e' || it == 'E' }) t.toDouble() else (t.toLongOrNull() ?: t.toDouble())
+          }
+      }
+
+      @Suppress("UNCHECKED_CAST")
+      fun parseJsonObject(text: String): Map<String, Any?>? =
+          try { MiniJson(text).parse() as? Map<String, Any?> } catch (e: Exception) { null }
+
+      fun integerValue(v: Any?): Long? = when (v) {
+          is Long -> v
+          is Double -> if (v == Math.floor(v) && Math.abs(v) < 9.0e15) v.toLong() else null
+          else -> null
+      }
+
+      fun stringValue(v: Any?): String? = v as? String
+
+      sealed class WSAction {
+          data class Send(val text: String) : WSAction()
+          data class Subscribed(val id: String?, val topic: String) : WSAction()
+          data class Unsubscribed(val id: String?, val topic: String) : WSAction()
+          data class Reply(val id: String?, val topic: String) : WSAction()
+          data class Push(val symbol: String, val kind: String, val param: String?) : WSAction()
+          data class Error(val id: String?, val code: String, val message: String) : WSAction()
+          object Ignore : WSAction()
+      }
+
+      private fun parseTopic(ch: String): WSAction? {
+          val parts = ch.split(".")
+          if (parts.size < 3 || parts[0] != "market" || parts[1].isEmpty()) return null
+          val symbol = parts[1]
+          val rest = parts.drop(2)
+          return when {
+              rest == listOf("bbo") -> WSAction.Push(symbol, "bbo", null)
+              rest == listOf("detail") -> WSAction.Push(symbol, "detail", null)
+              rest == listOf("trade", "detail") -> WSAction.Push(symbol, "trade.detail", null)
+              rest.size == 2 && (rest[0] == "kline" || rest[0] == "depth") && rest[1].isNotEmpty() ->
+                  WSAction.Push(symbol, rest[0], rest[1])
+              else -> null
+          }
+      }
+
+      fun handleFrame(json: String): WSAction {
+          val obj = parseJsonObject(json) ?: return WSAction.Ignore
+
+          if (obj.containsKey("ping")) {
+              val v = integerValue(obj["ping"]) ?: return WSAction.Ignore
+              return WSAction.Send("{\"pong\":$v}")
+          }
+          if (obj.containsKey("pong")) return WSAction.Ignore
+          if (stringValue(obj["action"]) == "ping") {
+              val data = obj["data"] as? Map<*, *>
+              val ts = integerValue(data?.get("ts"))
+              if (ts != null) return WSAction.Send("{\"action\":\"pong\",\"data\":{\"ts\":$ts}}")
+          }
+
+          val id = stringValue(obj["id"])
+          val status = stringValue(obj["status"])
+          if (status == "error") {
+              return WSAction.Error(id, stringValue(obj["err-code"]) ?: "unknown", stringValue(obj["err-msg"]) ?: "")
+          }
+          if (status == "ok") {
+              stringValue(obj["subbed"])?.let { return WSAction.Subscribed(id, it) }
+              stringValue(obj["unsubbed"])?.let { return WSAction.Unsubscribed(id, it) }
+              stringValue(obj["rep"])?.let { return WSAction.Reply(id, it) }
+          }
+          val ch = stringValue(obj["ch"])
+          if (ch != null && (obj.containsKey("tick") || obj.containsKey("data"))) {
+              parseTopic(ch)?.let { return it }
+          }
+          return WSAction.Ignore
+      }
+
+      private val tokenRegex = Regex("^[A-Za-z0-9._#-]{1,64}$")
+
+      fun makeSubscribe(topic: String, id: String, freqMs: Int? = null): String? {
+          if (!tokenRegex.matches(topic) || !tokenRegex.matches(id)) return null
+          val sb = StringBuilder("{\"sub\":\"$topic\",\"id\":\"$id\"")
+          if (freqMs != null) {
+              if (freqMs !in listOf(1000, 2000, 3000, 4000, 5000)) return null
+              sb.append(",\"freq-ms\":$freqMs")
+          }
+          return sb.append("}").toString()
+      }
+
+      fun makeUnsubscribe(topic: String, id: String): String? {
+          if (!tokenRegex.matches(topic) || !tokenRegex.matches(id)) return null
+          return "{\"unsub\":\"$topic\",\"id\":\"$id\"}"
+      }
+    tests: |
+      checkEqual("伺服器 ping → 原值 pong", WSAction.Send("{\"pong\":18212558000}")) {
+          handleFrame("{\"ping\": 18212558000}")
+      }
+      check("ping 不是整數（字串、小數）→ ignore") {
+          handleFrame("{\"ping\":\"abc\"}") == WSAction.Ignore && handleFrame("{\"ping\":1.5}") == WSAction.Ignore
+      }
+      checkEqual("私有 WS 心跳", WSAction.Send("{\"action\":\"pong\",\"data\":{\"ts\":1575537778295}}")) {
+          handleFrame("{\"action\":\"ping\",\"data\":{\"ts\":1575537778295}}")
+      }
+      check("pong、非 JSON、空物件都是 ignore") {
+          handleFrame("{\"pong\":1}") == WSAction.Ignore && handleFrame("not json") == WSAction.Ignore && handleFrame("{}") == WSAction.Ignore
+      }
+      check("sub／unsub／req 的回覆（id 可有可無）") {
+          handleFrame("{\"id\":\"id1\",\"status\":\"ok\",\"subbed\":\"market.btcjpy.kline.1min\",\"ts\":1}") ==
+              WSAction.Subscribed("id1", "market.btcjpy.kline.1min") &&
+          handleFrame("{\"status\":\"ok\",\"unsubbed\":\"market.btcjpy.trade.detail\",\"ts\":1}") ==
+              WSAction.Unsubscribed(null, "market.btcjpy.trade.detail") &&
+          handleFrame("{\"status\":\"ok\",\"id\":\"id10\",\"rep\":\"market.btcjpy.kline.1min\",\"tick\":[]}") ==
+              WSAction.Reply("id10", "market.btcjpy.kline.1min")
+      }
+      check("錯誤訊息：取 id、err-code、err-msg，缺欄位用預設") {
+          handleFrame("{\"id\":\"id3\",\"status\":\"error\",\"err-code\":\"bad-request\",\"err-msg\":\"invalid topic market.btcjpy.kline.3min\",\"ts\":1}") ==
+              WSAction.Error("id3", "bad-request", "invalid topic market.btcjpy.kline.3min") &&
+          handleFrame("{\"status\":\"error\"}") == WSAction.Error(null, "unknown", "")
+      }
+      check("推送依 ch 分派（kline、depth、bbo、trade.detail、detail）") {
+          handleFrame("{\"ch\":\"market.btcjpy.kline.1min\",\"ts\":1,\"tick\":{\"id\":1}}") ==
+              WSAction.Push("btcjpy", "kline", "1min") &&
+          handleFrame("{\"ch\":\"market.ethjpy.depth.step0\",\"ts\":1,\"data\":{\"bids\":[],\"asks\":[]}}") ==
+              WSAction.Push("ethjpy", "depth", "step0") &&
+          handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") ==
+              WSAction.Push("btcjpy", "bbo", null) &&
+          handleFrame("{\"ch\":\"market.btcjpy.trade.detail\",\"ts\":1,\"tick\":{\"data\":[]}}") ==
+              WSAction.Push("btcjpy", "trade.detail", null) &&
+          handleFrame("{\"ch\":\"market.btcjpy.detail\",\"ts\":1,\"tick\":{}}") ==
+              WSAction.Push("btcjpy", "detail", null)
+      }
+      check("未知或格式錯誤的 ch、沒有資料的推送、私有 push 都是 ignore") {
+          handleFrame("{\"ch\":\"market.btcjpy.kline\",\"ts\":1,\"tick\":{}}") == WSAction.Ignore &&
+          handleFrame("{\"ch\":\"foo.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") == WSAction.Ignore &&
+          handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1}") == WSAction.Ignore &&
+          handleFrame("{\"action\":\"push\",\"ch\":\"orders#btcjpy\",\"data\":{}}") == WSAction.Ignore
+      }
+      check("makeSubscribe／makeUnsubscribe：格式與驗證") {
+          makeSubscribe("market.btcjpy.kline.1min", "id1") == "{\"sub\":\"market.btcjpy.kline.1min\",\"id\":\"id1\"}" &&
+          makeSubscribe("market.btcjpy.bbo", "id2", 2000) == "{\"sub\":\"market.btcjpy.bbo\",\"id\":\"id2\",\"freq-ms\":2000}" &&
+          makeSubscribe("market.btcjpy.bbo", "id2", 250) == null &&
+          makeSubscribe("market.btcjpy.bbo\",\"x\":\"y", "id3") == null &&
+          makeSubscribe("", "id4") == null &&
+          makeUnsubscribe("market.btcjpy.trade.detail", "id4") == "{\"unsub\":\"market.btcjpy.trade.detail\",\"id\":\"id4\"}"
+      }
+
+- id: exchange-ws-protocol-08
+  type: open
+  level: 2
+  priority: P0
+  tags: [websocket, architecture]
+  prompt: |
+    請設計交易所 App 的 WebSocket 層：從連線、gzip 解壓、心跳、訂閱管理到重連與重新訂閱。哪些要在背景處理？並說明你在長連線上的實務經驗，以及到交易所的 App 你會怎麼做。
+  promptJa: |
+    取引所アプリの WebSocket 層（接続、gzip 解凍、ハートビート、購読管理、再接続と再購読）を設計してください。バックグラウンドで処理すべきことは何ですか。これまでの長時間接続の経験と、取引所アプリでどう進めるかも説明してください。
+  keyPoints:
+    - "分三層：連線層（連線、binary frame、gzip 解壓，在背景執行緒）、協定層（JSON 解碼、心跳、確認與錯誤用 id 對回請求、依 `ch` 分派）、訂閱管理（記錄目前訂了哪些 topic）；各 topic 的狀態（板、ticker、K 線）再放在更上面"
+    - "心跳最優先、不依賴狀態、不經過畫面更新：伺服器約 5 秒 ping，連續兩次沒回就斷線，要回原值 pong"
+    - "訂閱管理：記錄目前所有 topic，每個請求帶唯一 id；重連後依序重新 auth（私有）、重新訂閱、對 depth 這類資料先抓快照（snapshot，整份最新的板）；離開畫面就 unsub"
+    - "gzip：iOS 的 `COMPRESSION_ZLIB` 是 raw DEFLATE，需處理 gzip 標頭；Android 用 `GZIPInputStream`；解壓與解碼失敗要容錯"
+    - "限流與錯誤：429／too.many.connection 要退避（等待時間逐次加倍，再加一點隨機誤差 jitter），不要立即重連；私有頻道每個 API key 最多 10 條連線"
+    - "資料送到畫面：先在背景合併（多筆更新只留最新一筆），再以固定頻率更新；斷線時標示資料過期並禁止用過期價格下單"
+    - "經驗：即時行情 App 的 SSE（先用 REST 取得短效 token，再開串流）與回前景補資料、社交 App 聊天室的 Socket.IO 重連與 ack；這套協定的細節讀 API 文件並用純函式練習分派與心跳"
+  modelAnswer: |
+    我會分三層。連線層處理連線與 binary frame，在背景執行緒做 gzip 解壓；iOS 的 `COMPRESSION_ZLIB` 是 raw DEFLATE（沒有 gzip 標頭的壓縮資料），要先跳過 gzip 標頭，Android 用 `GZIPInputStream`。協定層解 JSON，**最先處理心跳**：伺服器約每 5 秒送 `{"ping":ts}`，我要原值回 `{"pong":ts}`，連續兩次沒回就會被斷線，所以這條路徑不能經過畫面更新。之後處理確認與錯誤，靠每個請求的 `id` 對回去，推送再依 `ch` 解析成 topic 分派。
+    訂閱管理層記錄目前所有 topic。重連後依序重新 auth（私有頻道）、重新訂閱、對 depth 這類資料先抓快照（整份最新的板）；離開畫面就 `unsub`。遇到 429 或 `too.many.connection`（請求或連線太多），用指數退避加 jitter（等待時間逐次加倍，再加一點隨機誤差），不立即重連。資料送到畫面之前，先在背景合併（多筆更新只留最新一筆），以固定頻率更新；斷線時標示資料過期，並禁止用過期價格下單。
+    經驗上，我在一個即時行情 App 做過 SSE 的兩段式握手（先用 REST 取得短效 token，再開串流）與回前景補資料，也在一個社交 App 做過聊天室 Socket.IO 的重連與 ack。這套協定的細節，我讀過 API 文件，並用純函式練習過分派與心跳；到交易所的 App，我會把重連改成指數退避加 jitter。
+  modelAnswerJa: |
+    3 層に分けます。接続層は接続と binary frame を扱い、バックグラウンドスレッドで gzip を解凍します。iOS の `COMPRESSION_ZLIB` は raw DEFLATE（gzip ヘッダーのない圧縮データ）なので gzip ヘッダーを先に飛ばす必要があり、Android では `GZIPInputStream` を使います。プロトコル層は JSON をデコードし、**最初にハートビートを処理します**。サーバーは約 5 秒ごとに `{"ping":ts}` を送り、同じ値で `{"pong":ts}` を返す必要があります。2 回連続で応答がないと切断されるため、この経路は画面の更新処理を通しません。その後、確認とエラーを各リクエストの `id` で対応付け、プッシュは `ch` から topic を解析して振り分けます。
+    購読管理層は現在のすべての topic を保持します。再接続後は、（プライベートなら）認証、再購読、板のようなデータはスナップショット取得の順で行い、画面を離れたら `unsub` します。429 や `too.many.connection`（リクエストや接続が多すぎる）のときは、指数バックオフに jitter（ランダムな揺らぎ）を加え、すぐには再接続しません。画面に渡す前にバックグラウンドで更新をまとめ（複数の更新のうち最新の 1 件だけを残し）、一定間隔で更新します。切断中はデータが古いことを表示し、古い価格での発注を禁止します。
+    経験としては、相場アプリで SSE の 2 段階ハンドシェイク（まず REST で短命のトークンを取得してからストリームを開く）とフォアグラウンド復帰時のデータ再取得を、ソーシャルアプリではチャットの Socket.IO の再接続と ack を扱いました。このプロトコルの詳細は API ドキュメントを読み、純粋関数でメッセージの振り分けとハートビートを練習しました。取引所アプリでは、再接続を指数バックオフと jitter に変更します。
+  followUps:
+    - "ping に対する pong が遅れる原因を、アプリ側でどう調べる？"
+    - "再購読の途中で再び切断されたらどうなる？"
+    - "同じ topic を複数の画面が購読したいとき、参照カウントはどう持つ？"
+  timeLimitSec: 150
+
+- id: exchange-ws-protocol-09
+  type: flash
+  level: 1
+  priority: P0
+  tags: [websocket]
+  front: 交易所公開 WebSocket（Huobi 相容）：心跳、訊息種類、gzip 重點
+  back: |
+    - **gzip 二進位 frame**（每則訊息都是壓縮過的），App 自己解壓（iOS：`COMPRESSION_ZLIB` 是 raw DEFLATE，要跳過 gzip 標頭；Android：`GZIPInputStream`）。
+    - **ping**：伺服器約 5 秒送 `{"ping":ts}` → App 回 `{"pong":ts}`（原值），連續 2 次沒回就斷線。私有：`{"action":"ping"|"pong","data":{"ts":...}}`。
+    - `sub`（訂閱）／`unsub`（退訂）／`req`（一次性請求）＋`id`；回覆 `subbed`／`unsubbed`／`rep`；推送 `ch`＋`tick`（depth 是 `data`）；`freq-ms` 只能填 1000 到 5000 的整千毫秒。
+    - topic：`market.$symbol.kline.$period|depth.$type|bbo|trade.detail|detail`。
+    - 私有 `/ws/v2`：先送 `auth`（SignatureVersion 2.1）；`trade.clearing` 的通知順序不保證。

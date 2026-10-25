@@ -1,0 +1,325 @@
+- id: exchange-precision-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [decimal]
+  prompt: |
+    使用者在 BTC/JPY 取引所輸入數量 `0.12345678`、價格 `10,234,567`。下列哪一個做法最適合在 client 端計算「預估成交金額」？
+  options:
+    - "用 `Double` 相乘，再用 `String(format: \"%.0f\")` 顯示"
+    - "用 `Decimal`／`BigDecimal` 從字串建立後相乘，結果依日圓規則往下捨入到整數再顯示"
+    - "用 `Float` 計算以節省記憶體，顯示時四捨五入"
+    - "先把兩個值都轉成 `Int64` 的 satoshi（BTC 的最小單位，1e-8）與日圓再相乘，不需要處理捨入"
+  answer: 1
+  explain: |
+    和錢有關的計算要用十進位型別，而且要從**字串**建立，避免一開始就帶進二進位的誤差。
+    - 第 1、3 項：`Double`、`Float` 有二進位誤差，有效位數也不夠（`Float` 只有約 7 位）。
+    - 第 4 項：把數量乘上 1 億變成整數（satoshi）的思路可行，但價格乘數量之後還是要除回小數並捨入，乘積也可能超過 `Int64` 的範圍，所以「不需要處理捨入」是錯的。
+
+- id: exchange-precision-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [bigdecimal, kotlin]
+  prompt: |
+    關於 Kotlin/Java 的 `BigDecimal`，哪些敘述正確？（複選）
+  options:
+    - "`BigDecimal(\"1.0\") == BigDecimal(\"1.00\")` 為 `false`，因為 `equals` 也比較 scale（小數位數）"
+    - "`BigDecimal(0.1)` 與 `BigDecimal(\"0.1\")` 的值完全相同"
+    - "`BigDecimal(\"0.00000001\").toString()` 會輸出 `1E-8`，顯示時應改用 `toPlainString()`"
+    - "`BigDecimal.ONE.divide(BigDecimal(3))` 會回傳 `0.3333333333`（預設 10 位）"
+    - "把 `BigDecimal(\"2.0\")` 與 `BigDecimal(\"2.00\")` 放進同一個 `HashSet`，size 是 2"
+  answer: [0, 2, 4]
+  explain: |
+    - `equals` 與 `hashCode` 都會考慮 scale（小數位數），所以 `2.0` 和 `2.00` 放進 `HashSet` 會變成 2 個元素。比大小要用 `compareTo`。
+    - `BigDecimal(0.1)` 保存的是 `Double` 的二進位近似值 `0.1000000000000000055511…`，不是真的 0.1，所以第 2 項錯。要用字串建立，或 `BigDecimal.valueOf(0.1)`。
+    - 除不盡（例如 1 ÷ 3）、又沒有指定小數位數時，會丟 `ArithmeticException: Non-terminating decimal expansion`，不會自動取 10 位，所以第 4 項錯。
+
+- id: exchange-precision-03
+  type: predict
+  level: 2
+  priority: P0
+  tags: [bigdecimal, rounding]
+  prompt: |
+    下列 Kotlin 程式依序印出什麼？
+  codeLang: kotlin
+  code: |
+    import java.math.BigDecimal
+    import java.math.RoundingMode
+
+    fun main() {
+        val a = BigDecimal("1.0")
+        val b = BigDecimal("1.00")
+        println(a == b)
+        println(a.compareTo(b))
+        println(setOf(a, b).size)
+        println(BigDecimal("0.00000001"))
+        println(BigDecimal("-1.5").setScale(0, RoundingMode.DOWN))
+    }
+  answer: |
+    false 0 2 1E-8 -1
+  explain: |
+    - `==` 呼叫 `equals`，會比較 scale，所以是 `false`。`compareTo` 只比數值，回傳 `0`。
+    - `Set` 用 `hashCode` 和 `equals` 判斷重複，兩者 scale 不同，算兩個元素。
+    - `toString()` 在指數小於 -6 時會改用科學記號。
+    - `RoundingMode.DOWN` 是**往 0 的方向**截斷（直接丟掉小數），所以 `-1.5` 變成 `-1`。要往負無限大取整（floor）要用 `FLOOR`。
+
+- id: exchange-precision-04
+  type: predict
+  level: 3
+  priority: P1
+  tags: [decimal, rounding, swift]
+  prompt: |
+    同一個需求「把損益 `-1.5` 往下取整」，iOS 工程師寫了下面的程式。印出什麼？（依序）
+  codeLang: swift
+  code: |
+    import Foundation
+
+    var value = Decimal(string: "-1.5")!
+    var result = Decimal()
+    NSDecimalRound(&result, &value, 0, .down)
+    print(result)
+    print(0.1 + 0.2 == 0.3)
+  answer: |
+    -2 false
+  explain: |
+    `NSDecimalRound` 的 `.down` 是往**負無限大**取整（floor），所以 `-1.5` 變成 `-2`。
+    Android 的 `RoundingMode.DOWN` 是往 0 截斷（直接丟掉小數），同樣的輸入得到 `-1`。兩個平台會差 1。
+    可能出現負值的欄位（損益、資金費率），在規格上要寫清楚是 floor 還是 truncate（截斷），並用同一組測試案例在兩端各驗證一次。
+
+- id: exchange-precision-05
+  type: fill
+  level: 2
+  priority: P1
+  tags: [formatstyle, swift]
+  prompt: |
+    iOS 15+：把價格顯示成小數 2 位，並且**一律往下捨入**（不要四捨五入）。
+  codeLang: swift
+  code: |
+    let text = price.formatted(
+        .number
+            .precision(.____(2))
+            .____(rule: .down)
+    )
+  blanks:
+    - [fractionLength]
+    - [rounded]
+  explain: |
+    `FormatStyle` 是 iOS 15 加入的格式化 API，寫法比 `NumberFormatter` 簡單，系統內部也會幫你重用格式化工具，不必自己管理 `NumberFormatter` 的建立和共用。
+    `.precision(.fractionLength(2))` 控制小數位數，`.rounded(rule: .down)` 控制捨入方向。
+    如果 App 的最低支援版本是 iOS 15，就可以全面採用。
+
+- id: exchange-precision-06
+  type: fill
+  level: 1
+  priority: P0
+  tags: [bigdecimal, kotlin]
+  prompt: |
+    Android：使用者按「全部賣出」，把可用餘額依交易對的數量精度 `amountPrecision`（小數位數）捨入，**不能超過可用餘額**。
+  codeLang: kotlin
+  code: |
+    val qty = available.____(amountPrecision, RoundingMode.____)
+  blanks:
+    - [setScale]
+    - [DOWN, FLOOR]
+  explain: |
+    餘額一定是正數，所以這裡 `DOWN`（往 0）與 `FLOOR`（往負無限大）結果相同，兩者都接受。
+    重點是**不能往上進位**，否則送出的數量會超過可用餘額，被伺服器拒絕。
+
+- id: exchange-precision-07
+  type: order
+  level: 1
+  priority: P1
+  tags: [order, validation]
+  prompt: |
+    使用者在取引所輸入指値（限價）買單後按下「確認」。把 client 端的處理依正確順序排列。
+  items:
+    - 依目前顯示的 locale 解析輸入字串，失敗時再以 en_US_POSIX 解析一次
+    - 轉成 Decimal／BigDecimal，價格對齊 tick size（價格的最小跳動單位），數量往下對齊 step size（數量的最小單位）
+    - 檢查最小下單量與最小成交額
+    - 用「數量 × 價格 ＋ 預估手續費」檢查可用日圓餘額
+    - 顯示確認畫面（格式化後的數值）
+    - 送出 API，數值用原始十進位值轉成 POSIX 字串
+  explain: |
+    解析與對齊要在驗證之前做，否則驗證的是錯的數字。
+    確認畫面顯示的是格式化後的字串，送出時要用原始的十進位值，不要把顯示字串 parse 回來。
+    App 端的所有檢查都只是預先檢查，伺服器還會再驗證一次。
+
+- id: exchange-precision-08
+  type: code
+  level: 2
+  priority: P0
+  tags: [decimal, tick-size]
+  prompt: |
+    實作 `floorToStep`：把**正數** `value` 往下對齊到 `step` 的整數倍。價格對齊 tick size、數量對齊 step size 都用這個函式。（白話：tick size 是 5 円，價格就只能是 5 的倍數，所以 1234 要變成 1230。）
+
+    - `floorToStep(1234.567, step: 0.01)` → `1234.56`
+    - `floorToStep(1234, step: 5)` → `1230`
+    - `value` 小於 `step` 時回傳 `0`
+  hints:
+    - 先算 `value / step`，取整數部分（往下），再乘回 `step`。
+    - Swift 用 `NSDecimalRound(&result, &value, 0, .down)`；Kotlin 用 `divide(step, 0, RoundingMode.DOWN)`。
+  swift:
+    starter: |
+      import Foundation
+
+      func floorToStep(_ value: Decimal, step: Decimal) -> Decimal {
+          // TODO: 往下對齊到 step 的整數倍
+          return value
+      }
+    solution: |
+      import Foundation
+
+      func floorToStep(_ value: Decimal, step: Decimal) -> Decimal {
+          var quotient = value / step
+          var whole = Decimal()
+          NSDecimalRound(&whole, &quotient, 0, .down)
+          return whole * step
+      }
+    tests: |
+      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+      checkEqual("價格 tick 0.01", D("1234.56")) { floorToStep(D("1234.567"), step: D("0.01")) }
+      checkEqual("數量 step 0.0001", D("0.1234")) { floorToStep(D("0.123456789"), step: D("0.0001")) }
+      checkEqual("tick 為 5 円", D("1230")) { floorToStep(D("1234"), step: D("5")) }
+      checkEqual("小於 step 回傳 0", D("0")) { floorToStep(D("0.00009"), step: D("0.0001")) }
+      checkEqual("已對齊不變", D("2.5")) { floorToStep(D("2.5"), step: D("0.5")) }
+      checkEqual("satoshi 精度", D("0.12345678")) { floorToStep(D("0.123456789123"), step: D("0.00000001")) }
+  kotlin:
+    starter: |
+      import java.math.BigDecimal
+
+      fun floorToStep(value: BigDecimal, step: BigDecimal): BigDecimal {
+          TODO("往下對齊到 step 的整數倍")
+      }
+    solution: |
+      import java.math.BigDecimal
+      import java.math.RoundingMode
+
+      fun floorToStep(value: BigDecimal, step: BigDecimal): BigDecimal =
+          value.divide(step, 0, RoundingMode.DOWN).multiply(step)
+    tests: |
+      fun plain(v: BigDecimal) = v.stripTrailingZeros().toPlainString()
+      checkEqual("價格 tick 0.01", "1234.56") { plain(floorToStep(BigDecimal("1234.567"), BigDecimal("0.01"))) }
+      checkEqual("數量 step 0.0001", "0.1234") { plain(floorToStep(BigDecimal("0.123456789"), BigDecimal("0.0001"))) }
+      checkEqual("tick 為 5 円", "1230") { plain(floorToStep(BigDecimal("1234"), BigDecimal("5"))) }
+      checkEqual("小於 step 回傳 0", "0") { plain(floorToStep(BigDecimal("0.00009"), BigDecimal("0.0001"))) }
+      checkEqual("已對齊不變", "2.5") { plain(floorToStep(BigDecimal("2.5"), BigDecimal("0.5"))) }
+      checkEqual("satoshi 精度", "0.12345678") { plain(floorToStep(BigDecimal("0.123456789123"), BigDecimal("0.00000001"))) }
+
+- id: exchange-precision-09
+  type: code
+  level: 2
+  priority: P1
+  tags: [decimal, formatting]
+  prompt: |
+    實作 24h 漲跌幅的顯示字串 `formatChangePercent(open:last:)`：
+
+    - 公式 `(last - open) × 100 ÷ open`，捨入到小數 2 位，**四捨五入且 0.5 遠離 0**（Swift `.plain`、Kotlin `HALF_UP`；意思是 `1.5` 變 `2`、`-1.5` 變 `-2`）
+    - 正數前面加 `+`，負數保留 `-`，0 顯示 `0.00%`
+    - 固定 2 位小數、不要千分位：`+15000.00%`
+    - `open` 為 0 時回傳 `--`
+  hints:
+    - 先乘 100 再除，可減少捨入誤差。
+    - Swift 可用 `NumberFormatter`（locale `en_US_POSIX`，`minimumFractionDigits = 2`）；Kotlin 用 `toPlainString()`。
+  swift:
+    starter: |
+      import Foundation
+
+      func formatChangePercent(open: Decimal, last: Decimal) -> String {
+          // TODO
+          return "0.00%"
+      }
+    solution: |
+      import Foundation
+
+      func formatChangePercent(open: Decimal, last: Decimal) -> String {
+          guard open != 0 else { return "--" }
+          var pct = (last - open) * 100 / open
+          var rounded = Decimal()
+          NSDecimalRound(&rounded, &pct, 2, .plain)
+          let formatter = NumberFormatter()
+          formatter.locale = Locale(identifier: "en_US_POSIX")
+          formatter.minimumIntegerDigits = 1
+          formatter.minimumFractionDigits = 2
+          formatter.maximumFractionDigits = 2
+          let body = formatter.string(from: rounded as NSDecimalNumber) ?? "0.00"
+          return (rounded > 0 ? "+" : "") + body + "%"
+      }
+    tests: |
+      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+      checkEqual("上漲", "+1.23%") { formatChangePercent(open: D("100"), last: D("101.234")) }
+      checkEqual("下跌補零", "-0.50%") { formatChangePercent(open: D("100"), last: D("99.5")) }
+      checkEqual("持平", "0.00%") { formatChangePercent(open: D("100"), last: D("100")) }
+      checkEqual("open 為 0", "--") { formatChangePercent(open: D("0"), last: D("1")) }
+      checkEqual("0.005 進位", "+0.01%") { formatChangePercent(open: D("200"), last: D("200.01")) }
+      checkEqual("-0.005 遠離 0", "-0.01%") { formatChangePercent(open: D("200"), last: D("199.99")) }
+      checkEqual("極小跌幅顯示 0.00%", "0.00%") { formatChangePercent(open: D("100000"), last: D("99999.999")) }
+      checkEqual("不加千分位", "+15000.00%") { formatChangePercent(open: D("1"), last: D("151")) }
+  kotlin:
+    starter: |
+      import java.math.BigDecimal
+
+      fun formatChangePercent(open: BigDecimal, last: BigDecimal): String {
+          return "0.00%"
+      }
+    solution: |
+      import java.math.BigDecimal
+      import java.math.RoundingMode
+
+      fun formatChangePercent(open: BigDecimal, last: BigDecimal): String {
+          if (open.signum() == 0) return "--"
+          val pct = (last - open).multiply(BigDecimal(100)).divide(open, 2, RoundingMode.HALF_UP)
+          val sign = if (pct.signum() > 0) "+" else ""
+          return sign + pct.toPlainString() + "%"
+      }
+    tests: |
+      checkEqual("上漲", "+1.23%") { formatChangePercent(BigDecimal("100"), BigDecimal("101.234")) }
+      checkEqual("下跌補零", "-0.50%") { formatChangePercent(BigDecimal("100"), BigDecimal("99.5")) }
+      checkEqual("持平", "0.00%") { formatChangePercent(BigDecimal("100"), BigDecimal("100")) }
+      checkEqual("open 為 0", "--") { formatChangePercent(BigDecimal("0"), BigDecimal("1")) }
+      checkEqual("0.005 進位", "+0.01%") { formatChangePercent(BigDecimal("200"), BigDecimal("200.01")) }
+      checkEqual("-0.005 遠離 0", "-0.01%") { formatChangePercent(BigDecimal("200"), BigDecimal("199.99")) }
+      checkEqual("極小跌幅顯示 0.00%", "0.00%") { formatChangePercent(BigDecimal("100000"), BigDecimal("99999.999")) }
+      checkEqual("不加千分位", "+15000.00%") { formatChangePercent(BigDecimal("1"), BigDecimal("151")) }
+
+- id: exchange-precision-10
+  type: open
+  level: 2
+  priority: P0
+  tags: [architecture, money]
+  prompt: |
+    只顯示資料、不下單的行情 App，把價格當 `Double` 顯示通常就夠了。如果要設計交易所 App 的下單與資產頁，你會怎麼設計金額的資料型別、解析與格式化？
+  promptJa: |
+    表示専用の相場アプリでは価格を `Double` で扱っても多くの場合は問題になりませんが、取引所アプリで注文画面や資産画面を設計する場合、金額の型・パース・フォーマットをどう設計しますか？
+  keyPoints:
+    - 先說明差別：只顯示資料的行情 App，App 端沒有金額運算，數字主要用來顯示；交易所的值會影響使用者的錢
+    - 交易所和錢有關的值改用 Decimal／BigDecimal，JSON 的數字當字串讀，不經過 Double
+    - 在商業邏輯層定義 Money／Quantity 這類專用型別，綁定幣種與精度，不直接到處傳 Decimal
+    - 依交易對設定做 tick size／step size（價格、數量的最小跳動單位）對齊，數量一律往下捨入，並檢查最小下單量
+    - 格式化集中在一個地方：依精度各建一個 formatter 重複使用，不要邊用邊改共用的 formatter；顯示和計算分開
+    - 雙平台的捨入規則用同一份測試案例驗證（iOS `.down` 是 floor 往負無限大，Kotlin `DOWN` 是往 0 截斷）
+    - App 端只做預估和預先檢查，成交金額和手續費以伺服器回報為準
+  modelAnswer: |
+    只顯示資料的行情 App，App 端通常沒有任何金額運算，數字主要用來顯示。
+    交易所的情況不同。下單數量、手續費、可用餘額都會影響使用者的錢，我會這樣設計：
+
+    1. **型別**：在商業邏輯層定義 `Money`／`Quantity`，內部用 `Decimal`（iOS）和 `BigDecimal`（Android），並帶上幣種與精度。API 的數值當字串讀，不經過 `Double`。
+    2. **交易規則**：交易對的 tick size（價格刻度）、step size（數量刻度）、最小下單量做成一個 `TradingRule`。價格對齊刻度，數量一律往下捨入，送出前做預檢。
+    3. **格式化**：集中在一個地方，依精度各建一個 formatter 重複使用，不在使用中修改共用的 formatter；日圓沒有小數，也要支援「万／億」這類在地化顯示。
+    4. **一致性**：雙平台的捨入規則寫成同一份測試案例。例如 iOS 的 `.down` 是 floor（往負無限大），Kotlin 的 `DOWN` 是往 0 截斷，負數會差 1，要在規格裡寫清楚。
+
+    最後，App 端的計算只用來預估和提早擋掉錯誤，成交金額和手續費一律以伺服器回報為準。
+  followUps:
+    - 為什麼不用 Int64 存最小單位（satoshi）就好？什麼情況下會出問題？
+    - 手續費應該往上還是往下捨入？由誰決定？
+    - 高頻行情列表裡，formatter 會不會成為效能瓶頸？你會怎麼量測？
+
+- id: exchange-precision-11
+  type: flash
+  level: 1
+  priority: P0
+  tags: [rounding]
+  front: iOS `NSDecimalRound` 的 `.down`／`.plain` 對應到 Kotlin 的哪個 `RoundingMode`？
+  back: |
+    `.down` 對應 `FLOOR`（往負無限大），不是 `DOWN`。`.plain` 對應 `HALF_UP`（一般四捨五入，0.5 遠離 0），`.bankers` 對應 `HALF_EVEN`（銀行家捨入，剛好 0.5 時捨到偶數）。
+    Kotlin 的 `DOWN` 是往 0 截斷（直接丟掉小數）；iOS 沒有直接對應，正數用 `.down`、負數用 `.up`。

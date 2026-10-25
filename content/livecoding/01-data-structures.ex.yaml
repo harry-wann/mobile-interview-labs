@@ -1,0 +1,397 @@
+- id: livecoding-ds-01
+  type: code
+  level: 2
+  priority: P0
+  tags: [lru, cache]
+  timeLimitSec: 1500
+  prompt: |
+    實作一個泛型 LRU 快取，`get` 與 `put` 都要 **O(1)**。
+
+    - `get(key)`：存在就回傳值，並把它標為「最近使用」；不存在回傳 nil／null
+    - `put(key, value)`：寫入或更新，標為最近使用；超過容量時淘汰**最久沒用**的
+    - `keysByRecency`：依「最近 → 最久」回傳目前的 key（測試用）
+    - 容量至少為 1
+  hints:
+    - Dictionary 存「key → 串列上的節點」；雙向鏈結串列記錄使用順序，最前面是最近用的、最後面是最久沒用的。
+    - 串列頭尾各放一個不存資料的假節點（sentinel，head 和 tail），插入、刪除時就不用特別處理「串列是空的」這類情況。
+    - Kotlin 先手寫串列；寫完再補充「也可以用 `LinkedHashMap(capacity, 0.75f, true)` 加上覆寫 `removeEldestEntry`」。
+  swift:
+    starter: |
+      final class LRUCache<Key: Hashable, Value> {
+          private let capacity: Int
+
+          init(capacity: Int) {
+              self.capacity = capacity
+          }
+
+          func get(_ key: Key) -> Value? {
+              // TODO
+              return nil
+          }
+
+          func put(_ key: Key, _ value: Value) {
+              // TODO
+          }
+
+          var keysByRecency: [Key] {
+              // TODO
+              return []
+          }
+      }
+    solution: |
+      final class LRUCache<Key: Hashable, Value> {
+          private final class Node {
+              let key: Key?
+              var value: Value?
+              var prev: Node?
+              var next: Node?
+              init(key: Key?, value: Value?) {
+                  self.key = key
+                  self.value = value
+              }
+          }
+
+          private let capacity: Int
+          private var map: [Key: Node] = [:]
+          private let head = Node(key: nil, value: nil)
+          private let tail = Node(key: nil, value: nil)
+
+          init(capacity: Int) {
+              self.capacity = max(1, capacity)
+              head.next = tail
+              tail.prev = head
+          }
+
+          func get(_ key: Key) -> Value? {
+              guard let node = map[key] else { return nil }
+              moveToFront(node)
+              return node.value
+          }
+
+          func put(_ key: Key, _ value: Value) {
+              if let node = map[key] {
+                  node.value = value
+                  moveToFront(node)
+                  return
+              }
+              let node = Node(key: key, value: value)
+              map[key] = node
+              insertAfterHead(node)
+              if map.count > capacity, let lru = tail.prev, let lruKey = lru.key {
+                  unlink(lru)
+                  map[lruKey] = nil
+              }
+          }
+
+          var keysByRecency: [Key] {
+              var result: [Key] = []
+              var cursor = head.next
+              while let node = cursor, let key = node.key {
+                  result.append(key)
+                  cursor = node.next
+              }
+              return result
+          }
+
+          private func unlink(_ node: Node) {
+              node.prev?.next = node.next
+              node.next?.prev = node.prev
+              node.prev = nil
+              node.next = nil
+          }
+
+          private func insertAfterHead(_ node: Node) {
+              node.next = head.next
+              node.prev = head
+              head.next?.prev = node
+              head.next = node
+          }
+
+          private func moveToFront(_ node: Node) {
+              unlink(node)
+              insertAfterHead(node)
+          }
+      }
+    tests: |
+      let c = LRUCache<String, Int>(capacity: 2)
+      c.put("btc", 1)
+      c.put("eth", 2)
+      checkEqual("put 後的順序", ["eth", "btc"]) { c.keysByRecency }
+      checkEqual("get 命中", 1) { c.get("btc") }
+      checkEqual("get 會更新順序", ["btc", "eth"]) { c.keysByRecency }
+      c.put("xrp", 3)
+      check("超過容量淘汰最久沒用的 eth") { c.get("eth") == nil }
+      checkEqual("淘汰後的順序", ["xrp", "btc"]) { c.keysByRecency }
+      c.put("btc", 10)
+      checkEqual("更新既有 key 不增加數量", ["btc", "xrp"]) { c.keysByRecency }
+      checkEqual("更新後的值", 10) { c.get("btc") }
+      let one = LRUCache<Int, String>(capacity: 1)
+      one.put(1, "a"); one.put(2, "b")
+      check("容量 1") { one.get(1) == nil && one.get(2) == "b" }
+  kotlin:
+    starter: |
+      class LRUCache<K, V>(private val capacity: Int) {
+          fun get(key: K): V? {
+              // TODO
+              return null
+          }
+
+          fun put(key: K, value: V) {
+              // TODO
+          }
+
+          fun keysByRecency(): List<K> {
+              // TODO
+              return emptyList()
+          }
+      }
+    solution: |
+      class LRUCache<K, V>(capacity: Int) {
+          private class Node<K, V>(val key: K?, var value: V?) {
+              var prev: Node<K, V>? = null
+              var next: Node<K, V>? = null
+          }
+
+          private val capacity = maxOf(1, capacity)
+          private val map = HashMap<K, Node<K, V>>()
+          private val head = Node<K, V>(null, null)
+          private val tail = Node<K, V>(null, null)
+
+          init {
+              head.next = tail
+              tail.prev = head
+          }
+
+          fun get(key: K): V? {
+              val node = map[key] ?: return null
+              moveToFront(node)
+              return node.value
+          }
+
+          fun put(key: K, value: V) {
+              map[key]?.let {
+                  it.value = value
+                  moveToFront(it)
+                  return
+              }
+              val node = Node(key, value)
+              map[key] = node
+              insertAfterHead(node)
+              if (map.size > capacity) {
+                  val lru = tail.prev!!
+                  unlink(lru)
+                  map.remove(lru.key)
+              }
+          }
+
+          fun keysByRecency(): List<K> {
+              val result = mutableListOf<K>()
+              var cursor = head.next
+              while (cursor != null && cursor !== tail) {
+                  @Suppress("UNCHECKED_CAST")
+                  result.add(cursor.key as K)
+                  cursor = cursor.next
+              }
+              return result
+          }
+
+          private fun unlink(node: Node<K, V>) {
+              node.prev?.next = node.next
+              node.next?.prev = node.prev
+              node.prev = null
+              node.next = null
+          }
+
+          private fun insertAfterHead(node: Node<K, V>) {
+              node.next = head.next
+              node.prev = head
+              head.next?.prev = node
+              head.next = node
+          }
+
+          private fun moveToFront(node: Node<K, V>) {
+              unlink(node)
+              insertAfterHead(node)
+          }
+      }
+    tests: |
+      val c = LRUCache<String, Int>(2)
+      c.put("btc", 1)
+      c.put("eth", 2)
+      checkEqual("put 後的順序", listOf("eth", "btc")) { c.keysByRecency() }
+      checkEqual("get 命中", 1) { c.get("btc") }
+      checkEqual("get 會更新順序", listOf("btc", "eth")) { c.keysByRecency() }
+      c.put("xrp", 3)
+      check("超過容量淘汰最久沒用的 eth") { c.get("eth") == null }
+      checkEqual("淘汰後的順序", listOf("xrp", "btc")) { c.keysByRecency() }
+      c.put("btc", 10)
+      checkEqual("更新既有 key 不增加數量", listOf("btc", "xrp")) { c.keysByRecency() }
+      checkEqual("更新後的值", 10) { c.get("btc") }
+      val one = LRUCache<Int, String>(1)
+      one.put(1, "a"); one.put(2, "b")
+      check("容量 1") { one.get(1) == null && one.get(2) == "b" }
+
+- id: livecoding-ds-02
+  type: code
+  level: 1
+  priority: P1
+  tags: [top-k, sorting]
+  timeLimitSec: 900
+  prompt: |
+    成交量排行榜：給一個 `symbol → 24h 成交量` 的字典，回傳成交量**最高的 k 個** symbol。
+
+    - 依成交量由大到小；成交量相同時，依 symbol 字母順序（避免 UI 跳動）
+    - `k` 大於數量時回傳全部；`k <= 0` 回傳空陣列
+  hints:
+    - 幣種只有幾百個時，排序後取前 k 個就是最清楚的寫法。寫完再補充：資料量很大時可以改用大小為 k 的 min-heap。
+  swift:
+    starter: |
+      func topSymbols(_ volumes: [String: Double], k: Int) -> [String] {
+          // TODO
+          return Array(volumes.keys.prefix(k))
+      }
+    solution: |
+      func topSymbols(_ volumes: [String: Double], k: Int) -> [String] {
+          guard k > 0 else { return [] }
+          return volumes
+              .sorted { lhs, rhs in
+                  lhs.value != rhs.value ? lhs.value > rhs.value : lhs.key < rhs.key
+              }
+              .prefix(k)
+              .map(\.key)
+      }
+    tests: |
+      let v: [String: Double] = ["btc": 900, "eth": 700, "xrp": 700, "sol": 100, "doge": 800]
+      checkEqual("前 3 名", ["btc", "doge", "eth"]) { topSymbols(v, k: 3) }
+      checkEqual("同量依字母", ["eth", "xrp"]) { Array(topSymbols(v, k: 5)[2...3]) }
+      checkEqual("k 大於數量", 5) { topSymbols(v, k: 10).count }
+      checkEqual("k 為 0", [String]()) { topSymbols(v, k: 0) }
+      checkEqual("空字典", [String]()) { topSymbols([:], k: 3) }
+  kotlin:
+    starter: |
+      fun topSymbols(volumes: Map<String, Double>, k: Int): List<String> {
+          return volumes.keys.take(k)
+      }
+    solution: |
+      fun topSymbols(volumes: Map<String, Double>, k: Int): List<String> {
+          if (k <= 0) return emptyList()
+          return volumes.entries
+              .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+              .take(k)
+              .map { it.key }
+      }
+    tests: |
+      val v = mapOf("btc" to 900.0, "eth" to 700.0, "xrp" to 700.0, "sol" to 100.0, "doge" to 800.0)
+      checkEqual("前 3 名", listOf("btc", "doge", "eth")) { topSymbols(v, 3) }
+      checkEqual("同量依字母", listOf("eth", "xrp")) { topSymbols(v, 5).subList(2, 4) }
+      checkEqual("k 大於數量", 5) { topSymbols(v, 10).size }
+      checkEqual("k 為 0", emptyList<String>()) { topSymbols(v, 0) }
+      checkEqual("空 Map", emptyList<String>()) { topSymbols(emptyMap(), 3) }
+
+- id: livecoding-ds-03
+  type: code
+  level: 2
+  priority: P1
+  tags: [intervals, kline]
+  timeLimitSec: 1500
+  prompt: |
+    K 線分段載入：已載入的資料是幾段**閉區間**（以 candle 的整數索引表示，可能重疊、未排序）。使用者要看 `request` 這個範圍，請回傳**還沒載入**的區間，依起點排序。
+
+    - 相鄰的整數視為連續：`[1...3]` 與 `[4...6]` 中間沒有缺口
+    - 已載入的區間可能超出 `request`
+  hints:
+    - 先依起點排序；用一個游標 `cursor` 從 `request` 的起點往右掃。
+    - 遇到起點大於 `cursor` 的區間，就代表 `cursor ... 起點-1` 是缺口。
+  swift:
+    starter: |
+      func missingRanges(loaded: [ClosedRange<Int>], request: ClosedRange<Int>) -> [ClosedRange<Int>] {
+          // TODO
+          return [request]
+      }
+    solution: |
+      func missingRanges(loaded: [ClosedRange<Int>], request: ClosedRange<Int>) -> [ClosedRange<Int>] {
+          var gaps: [ClosedRange<Int>] = []
+          var cursor = request.lowerBound
+          for range in loaded.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+              if range.upperBound < cursor { continue }
+              if range.lowerBound > request.upperBound { break }
+              if range.lowerBound > cursor {
+                  gaps.append(cursor...min(range.lowerBound - 1, request.upperBound))
+              }
+              cursor = max(cursor, range.upperBound + 1)
+              if cursor > request.upperBound { break }
+          }
+          if cursor <= request.upperBound {
+              gaps.append(cursor...request.upperBound)
+          }
+          return gaps
+      }
+    tests: |
+      checkEqual("沒有已載入", [0...99]) { missingRanges(loaded: [], request: 0...99) }
+      checkEqual("完全涵蓋", [ClosedRange<Int>]()) { missingRanges(loaded: [0...200], request: 10...20) }
+      checkEqual("中間缺一段", [11...19]) { missingRanges(loaded: [0...10, 20...30], request: 0...30) }
+      checkEqual("重疊且未排序", [41...50]) { missingRanges(loaded: [20...40, 0...25], request: 0...50) }
+      checkEqual("相鄰視為連續", [ClosedRange<Int>]()) { missingRanges(loaded: [4...6, 1...3], request: 1...6) }
+      checkEqual("頭尾都缺", [0...4, 16...20]) { missingRanges(loaded: [5...15, 100...200], request: 0...20) }
+  kotlin:
+    starter: |
+      fun missingRanges(loaded: List<IntRange>, request: IntRange): List<IntRange> {
+          return listOf(request)
+      }
+    solution: |
+      fun missingRanges(loaded: List<IntRange>, request: IntRange): List<IntRange> {
+          val gaps = mutableListOf<IntRange>()
+          var cursor = request.first
+          for (range in loaded.sortedBy { it.first }) {
+              if (range.last < cursor) continue
+              if (range.first > request.last) break
+              if (range.first > cursor) {
+                  gaps.add(cursor..minOf(range.first - 1, request.last))
+              }
+              cursor = maxOf(cursor, range.last + 1)
+              if (cursor > request.last) break
+          }
+          if (cursor <= request.last) gaps.add(cursor..request.last)
+          return gaps
+      }
+    tests: |
+      checkEqual("沒有已載入", listOf(0..99)) { missingRanges(emptyList(), 0..99) }
+      checkEqual("完全涵蓋", emptyList<IntRange>()) { missingRanges(listOf(0..200), 10..20) }
+      checkEqual("中間缺一段", listOf(11..19)) { missingRanges(listOf(0..10, 20..30), 0..30) }
+      checkEqual("重疊且未排序", listOf(41..50)) { missingRanges(listOf(20..40, 0..25), 0..50) }
+      checkEqual("相鄰視為連續", emptyList<IntRange>()) { missingRanges(listOf(4..6, 1..3), 1..6) }
+      checkEqual("頭尾都缺", listOf(0..4, 16..20)) { missingRanges(listOf(5..15, 100..200), 0..20) }
+
+- id: livecoding-ds-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [cache, ios]
+  prompt: |
+    面試官：「iOS 有 `NSCache`，為什麼還要自己寫 LRU？」哪個回答最準確？
+  options:
+    - "`NSCache` 不是 thread-safe"
+    - "`NSCache` 會在記憶體壓力時自動清除，但淘汰順序不是嚴格的 LRU，也不保證何時清；需要可預期的淘汰行為或要依大小精準控制時，才自己寫"
+    - "`NSCache` 只能存字串"
+    - "`NSCache` 在 iOS 15 之後已經 deprecated"
+  answer: 1
+  explain: |
+    其他選項都不對：`NSCache` 本身就可以安全地被多個執行緒同時使用，可以存任意物件，也沒有被標為棄用（deprecated）。
+    它的特點是：系統記憶體不足時會自動清除內容，但清除的順序和時間點都不保證。大部分圖片快取用 `NSCache`（或 Kingfisher 的記憶體快取）就夠了；需要嚴格照「最久沒用」淘汰、或要精準控制容量時，才自己實作。
+
+- id: livecoding-ds-05
+  type: single
+  level: 1
+  priority: P1
+  tags: [complexity]
+  prompt: |
+    從 n 個交易對中找成交量前 k 名，用大小為 k 的 min-heap，時間複雜度是多少？
+  options:
+    - "O(n)"
+    - "O(n log k)"
+    - "O(n log n)"
+    - "O(k log n)"
+  answer: 1
+  explain: |
+    heap 裡最多只放 k 筆。每看一筆資料，最多做一次插入或替換，成本是 O(log k)；n 筆資料總共 O(n log k)。
+    對照：全部排序是 O(n log n)。幣種只有幾百個時兩者差異很小，面試時講出這個判斷，比硬寫 heap 更好。

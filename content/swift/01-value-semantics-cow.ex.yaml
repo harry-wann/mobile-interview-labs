@@ -1,0 +1,288 @@
+- id: swift-value-semantics-cow-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [struct, arc]
+  prompt: |
+    行情列表每秒傳遞數千次 `Quote` 值。下列哪一種 `Quote` 的定義，每次複製的成本最高？
+  options:
+    - "`struct Quote { var price: Int64; var qty: Int64; var time: Int64 }`"
+    - "`struct Quote { var symbol: SymbolInfo; var exchange: ExchangeInfo; var tags: Tags; var meta: Meta }`，四個欄位都是 class"
+    - "`struct Quote { var levels: [Level] }`，只有一個 Array"
+    - "`enum Side { case buy, sell }`"
+  answer: 1
+  explain: |
+    複製 struct 時，裡面**每個 class 欄位的引用計數都要 +1**（retain），用完再 −1（release）。四個 class 欄位，等於每複製一次就多 4 次 retain、4 次 release；每秒幾千次，就會變成看得到的成本。
+    其他選項：只有 `Int64` 的 struct，複製就是把數字抄過去，最便宜。只有一個 Array 的 struct，複製時只是多一個人共用 Array 的 storage（retain 1 次），不會複製元素（這就是 COW）。沒有附帶值的 enum（`buy`／`sell`）只是一個小整數。
+    結論：複製成本看的是「裡面有幾個 class 欄位」，不是 struct 或 class 這個關鍵字。
+
+- id: swift-value-semantics-cow-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [cow, array]
+  prompt: |
+    關於 COW，哪些敘述正確？（複選）
+  options:
+    - "把 Array 賦值給另一個變數很快（不管陣列多大都一樣），要等到修改、而且 storage 還被別的變數共用時，才複製整份"
+    - "`isKnownUniquelyReferenced` 會把 `weak` 與 `unowned` 參考也算進去，所以只要有 weak 指到這個物件就回傳 `false`"
+    - "struct 裡只有一個 Array 屬性時，複製這個 struct 仍然很快，不會複製陣列元素"
+    - "struct 裡放了一個自己寫的 class 物件、又沒有實作 COW，複製出來的兩份 struct 會共用同一個物件"
+    - "`let items: [Foo]`（`Foo` 是 class）保證裡面的 `Foo` 實例不會被修改"
+  answer: [0, 2, 3]
+  explain: |
+    - `isKnownUniquelyReferenced` 只計算一般的（strong）參考。weak、unowned 參考另外計算，不會讓它回傳 `false`。
+    - `let` 宣告的陣列只是不能增減或替換元素；元素如果是 class 物件，物件本身仍然可以被修改。
+    - struct 裡放自己的 class 卻沒做 COW：宣告成 struct，行為卻像 class，複製後共用同一個物件。這是 code review 常抓的問題。
+
+- id: swift-value-semantics-cow-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [cow, isKnownUniquelyReferenced]
+  prompt: |
+    下列程式依序印出什麼？（5 行輸出）
+  codeLang: swift
+  code: |
+    final class Box { var value: [Int]; init(_ v: [Int]) { value = v } }
+
+    struct Wrapper {
+        private var box = Box([1, 2, 3])
+        var values: [Int] { box.value }
+        var id: ObjectIdentifier { ObjectIdentifier(box) }
+        mutating func append(_ x: Int) {
+            if !isKnownUniquelyReferenced(&box) { box = Box(box.value) }
+            box.value.append(x)
+        }
+    }
+
+    var a = Wrapper()
+    var b = a
+    print(a.id == b.id)
+    b.append(4)
+    print(a.id == b.id)
+    print(a.values.count, b.values.count)
+    a.append(9)
+    let idBefore = a.id
+    a.append(10)
+    print(a.id == idBefore)
+    print(a.values.count)
+  answer: |
+    true false 3 4 true 5
+  explain: |
+    - `var b = a` 只複製了指向 `Box` 的參考，`a`、`b` 指向同一個 `Box`，所以 id 相同，印 `true`。
+    - `b.append(4)` 時，這個 `Box` 被 `a`、`b` 兩個地方共用，所以 `b` 先複製一個自己的新 `Box` 再修改，id 不同，印 `false`；`a` 仍是 3 個元素、`b` 是 4 個。
+    - 這時 `a` 的 `Box` 只剩 `a` 自己在用，`a.append(9)` 直接修改，不複製；第二次 `append(10)` 也一樣，id 沒變，印 `true`，總共 3＋2＝5 個元素。
+    重點：**複製只發生在「修改、而且被共用」的時候，而且只有要修改的那一方換新的 storage**。
+
+- id: swift-value-semantics-cow-05
+  type: multi
+  level: 3
+  priority: P1
+  tags: [exclusivity, inout]
+  prompt: |
+    下列哪些程式會違反 Swift 的 exclusivity 規則，而在編譯期或執行期被擋下來？（複選）
+  options:
+    - "`var a = [1, 2]; swap(&a[0], &a[1])`"
+    - "非 final 的 `class Counter` 有屬性 `n` 與方法 `bump(_ x: inout Int)`（內部執行 `n += 1`），呼叫端寫 `c.bump(&c.n)`"
+    - "`var a = [1, 2]; a.swapAt(0, 1)`"
+    - "`let a = [1, 2]; let s = a + a`（同一個值被同時讀取兩次）"
+    - "兩個 `DispatchQueue.global()` 的 task 同時對同一個 class 屬性做 `n += 1`，期待 exclusivity 檢查在執行期報錯提醒你有 data race"
+  answer: [0, 1]
+  explain: |
+    - 第 1 項：`swap` 要同時借走 `a[0]` 和 `a[1]` 來修改，對 Swift 來說兩個都是在修改 `a`，編譯器直接報錯 `overlapping accesses to 'a'`，建議改用 `swapAt`。
+    - 第 2 項：`c.n` 借給 `bump` 修改的期間，`bump` 裡面又直接修改 `n`，同一個變數同時被改兩次。編譯器看不出參數 `x` 就是 `c.n`，所以改在**執行時**檢查，違反就 crash：`Simultaneous accesses to …, but modification requires exclusive access`。（實測：debug 版本會 crash；release 版本經過最佳化，即使類別不是 `final`，也可能不報。所以不要依賴這個檢查來抓錯。）
+    - 第 3 項：`swapAt` 是陣列自己的方法，只借用一次，沒有衝突。
+    - 第 4 項：兩個地方同時「讀」是允許的。
+    - 第 5 項是常見誤解：exclusivity 只檢查**同一個執行緒**裡的重疊存取，不負責多執行緒。多執行緒同時修改要用 actor、鎖或 `Mutex` 保護；Swift 6 的 strict concurrency 會在編譯時抓這類問題。
+
+- id: swift-value-semantics-cow-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [cow, computed-property, performance]
+  prompt: |
+    行情 ViewModel 每收到一筆報價就呼叫 `vm.prices.append(p)`，列表變大後越來越卡，Time Profiler 上看到大量 `Array` 複製。最可能的原因是？
+  codeLang: swift
+  code: |
+    final class PriceViewModel {
+        private var _prices: [Decimal] = []
+        var prices: [Decimal] {
+            get { _prices }
+            set { _prices = newValue }
+        }
+    }
+  options:
+    - "`prices` 是計算屬性：`append` 其實是先用 `get` 拿出一份（這時 storage 被兩個地方共用）、修改時複製整份、再用 `set` 寫回，所以每次 append 都要複製整個陣列"
+    - "`Decimal` 比較複雜，Array 只要裝 `Decimal` 每次 append 都會複製"
+    - "`final class` 沒有加 `@MainActor`，所以 append 要鎖"
+    - "`private var _prices` 的底線命名讓編譯器停用 COW"
+  answer: 0
+  explain: |
+    計算屬性的 `get`／`set` 不會直接修改原本的陣列，而是「拿出一份 → 修改 → 寫回去」。拿出來的那一份讓 storage 被兩個地方共用，所以 append 時要複製整份。陣列越大越慢。
+    修法：讓 `prices` 成為儲存屬性 `private(set) var prices: [Decimal] = []`，並在類別裡提供 `func append(_ p: Decimal)` 直接修改原本的陣列。
+    本機實測 5 萬筆陣列 append 5000 次：儲存屬性約 0.06 ms，計算屬性約 45 ms，差約 700 倍。
+    其他選項都不是 Swift 的行為：`Decimal` 不影響 COW、`@MainActor` 與複製無關、變數名稱不會影響編譯器。
+
+- id: swift-value-semantics-cow-07
+  type: code
+  level: 2
+  priority: P1
+  tags: [cow, isKnownUniquelyReferenced]
+  prompt: |
+    實作 `COWList<Element>`：一個行為像 Array 的容器（複製後各自獨立），內部用 class `Storage` 保存陣列，並用 `isKnownUniquelyReferenced` 實作 COW。
+
+    - `append(_:)` 與 `subscript` 的 setter：storage **只有自己在用**時，直接修改，不換 storage
+    - storage 還被其他變數共用時，先複製一份新的 storage 再修改，**其他變數不受影響**
+    - 讀取（`count`、subscript getter）不可以觸發複製
+    - `storageID` 用來讓測試觀察 storage 是否被換掉
+  hints:
+    - "寫一個 `makeUnique()`，所有會修改的入口都先呼叫它。"
+    - "`isKnownUniquelyReferenced(&storage)` 的參數必須是可變的 stored property。"
+  swift:
+    starter: |
+      final class Storage<Element> {
+          var items: [Element]
+          init(_ items: [Element]) { self.items = items }
+      }
+
+      struct COWList<Element> {
+          private var storage: Storage<Element>
+
+          init(_ items: [Element] = []) { storage = Storage(items) }
+
+          var count: Int { storage.items.count }
+          var storageID: ObjectIdentifier { ObjectIdentifier(storage) }
+
+          // TODO: 在修改前確保 storage 是唯一持有，否則複製一份
+          mutating func append(_ element: Element) {
+              storage.items.append(element)
+          }
+
+          subscript(index: Int) -> Element {
+              get { storage.items[index] }
+              set { storage.items[index] = newValue }
+          }
+      }
+    solution: |
+      final class Storage<Element> {
+          var items: [Element]
+          init(_ items: [Element]) { self.items = items }
+      }
+
+      struct COWList<Element> {
+          private var storage: Storage<Element>
+
+          init(_ items: [Element] = []) { storage = Storage(items) }
+
+          var count: Int { storage.items.count }
+          var storageID: ObjectIdentifier { ObjectIdentifier(storage) }
+
+          private mutating func makeUnique() {
+              if !isKnownUniquelyReferenced(&storage) {
+                  storage = Storage(storage.items)
+              }
+          }
+
+          mutating func append(_ element: Element) {
+              makeUnique()
+              storage.items.append(element)
+          }
+
+          subscript(index: Int) -> Element {
+              get { storage.items[index] }
+              set {
+                  makeUnique()
+                  storage.items[index] = newValue
+              }
+          }
+      }
+    tests: |
+      check("複製後 append，原本不受影響") {
+          let a = COWList([1, 2, 3])
+          var b = a
+          b.append(4)
+          return a.count == 3 && b.count == 4
+      }
+      check("唯一持有時 append 不換 storage") {
+          var a = COWList([1, 2, 3])
+          let before = a.storageID
+          a.append(4)
+          a.append(5)
+          return a.storageID == before && a.count == 5
+      }
+      check("共用時寫入，被寫的那份換新 storage，另一份保持原 storage") {
+          let a = COWList([1, 2, 3])
+          var b = a
+          let shared = a.storageID
+          b.append(4)
+          return a.storageID == shared && b.storageID != shared
+      }
+      check("subscript setter 也遵守 COW") {
+          let a = COWList([1, 2, 3])
+          var b = a
+          b[0] = 99
+          return a[0] == 1 && b[0] == 99
+      }
+      check("讀取不會觸發複製") {
+          let a = COWList([1, 2, 3])
+          let b = a
+          _ = b[0]
+          _ = b.count
+          return a.storageID == b.storageID
+      }
+      check("複製出來的新 storage 之後可以繼續就地修改") {
+          let a = COWList([1])
+          var b = a
+          b.append(2)
+          let afterFirst = b.storageID
+          b.append(3)
+          return b.storageID == afterFirst && b.count == 3 && a.count == 1
+      }
+
+- id: swift-value-semantics-cow-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [architecture, performance, field]
+  prompt: |
+    交易所 App 的行情列表有數百檔幣種，每檔每秒更新好幾次。`Ticker` 這個 model 你會用 struct 還是 class？更新時怎麼避免複製的成本，以及畫面刷新太多次？
+  promptJa: |
+    取引所アプリの相場一覧には数百銘柄があり、各銘柄が毎秒何度も更新されます。`Ticker` モデルは struct と class のどちらにしますか。コピーのコストと、画面の更新が多すぎる問題をどう避けますか。
+  keyPoints:
+    - "選 struct：複製後各自獨立，不會有共用資料被意外修改的問題，傳到其他執行緒也安全"
+    - "欄位用 Decimal、enum 和少量 String，不放 class 物件，讓複製保持便宜"
+    - "資料層用以幣種代號為 key 的字典保存每檔最新的值，WebSocket 每收到一筆只更新字典"
+    - "畫面不要每筆都刷新：只保留每檔最新的一筆，固定每 100–250 ms 批次更新一次畫面"
+    - "只更新有變化、而且在畫面上看得到的列"
+    - "用 Instruments 的 Time Profiler 確認瓶頸在哪裡，而不是憑感覺"
+    - "class 留給需要大家共用同一個實體的東西，例如 WebSocket 連線管理"
+  modelAnswer: |
+    我會用 struct 當 `Ticker`，欄位用 `Decimal`、enum 和少量 String，不放 class 物件。這樣複製只是把數字抄過去，也不會有共用資料被意外修改的問題，傳到背景執行緒或 actor 也安全。
+
+    其實這種畫面的瓶頸通常不在 struct 的複製，而在畫面刷新的次數。我會在資料層用一個以幣種代號為 key 的字典，保存每一檔最新的值；WebSocket 每收到一筆，只更新字典，不直接動畫面。畫面固定每 100 到 250 毫秒取一次最新的資料，只更新有變化、而且在畫面上看得到的列。中間被覆蓋掉的價格不用顯示，使用者看到的永遠是最新價格。
+
+    如果之後 `Ticker` 變大，或在 Time Profiler 上看到很多 retain／release，我才會再調整結構。我會先量，再決定要不要最佳化。class 我只留給需要共用同一個實體的東西，例如 WebSocket 連線管理。
+  modelAnswerJa: |
+    `Ticker` は struct にします。フィールドは `Decimal`、enum、少しの String にして、class のオブジェクトは持たせません。コピーは値を写すだけで済み、共有データが意図せず変更される心配もなく、バックグラウンドスレッドや actor に渡しても安全です。
+
+    実際には、この種の画面のボトルネックは struct のコピーよりも画面の更新回数です。データ層では銘柄コードをキーにした辞書に各銘柄の最新値を保持し、WebSocket で受信するたびに辞書だけを更新します。画面は 100〜250 ミリ秒ごとに最新データを取り、変化があって画面に見えている行だけを更新します。途中で上書きされた価格は表示する必要がなく、ユーザーには常に最新価格が見えます。
+
+    `Ticker` が大きくなったり、Time Profiler で retain／release が目立ったりした場合に、はじめて構造を見直します。まず計測してから最適化します。class は WebSocket の接続管理のように、一つのインスタンスを共有する必要があるものに限定します。
+  followUps:
+    - "struct 裡有一個 String 屬性，複製時會發生什麼事？"
+    - "每 250 毫秒才更新一次畫面，中間的最高價、最低價會不會漏掉？要怎麼處理？"
+    - "你會怎麼用 Instruments 證明瓶頸真的在這裡？"
+  timeLimitSec: 150
+
+- id: swift-value-semantics-cow-09
+  type: flash
+  level: 1
+  priority: P1
+  tags: [cow, performance]
+  front: COW 在哪三種情況會失效，讓每次修改都複製整個陣列？
+  back: |
+    共通原因：修改的那一刻，storage 還被另一個地方共用。
+    1. 透過計算屬性修改：`vm.prices.append(x)` 會先 `get` 拿出一份，再修改、再 `set` 寫回。
+    2. 修改前先存了一份舊的：`let snapshot = items` 之後再 `items.append(x)`。
+    3. 一邊用 for-in 跑迴圈、一邊修改同一個陣列。

@@ -1,0 +1,486 @@
+- id: livecoding-async-01
+  type: code
+  level: 2
+  priority: P0
+  tags: [taskgroup, semaphore, concurrency-limit]
+  timeLimitSec: 1500
+  prompt: |
+    實作 `mapConcurrently`：對每個元素執行非同步的 `transform`，**同時最多 `limit` 個**，回傳結果要和輸入的順序相同。
+
+    （情境：同時下載多個交易對的 K 線，避免一次送出太多請求、超過 API 的限流。）
+  hints:
+    - "Swift：`withTaskGroup`，先加入前 `limit` 個，之後每完成一個就再補一個。每個 task 回傳時帶著自己的索引，最後依索引排回原本的順序。"
+    - Kotlin：`coroutineScope` ＋ `Semaphore(limit)`，在 `async { semaphore.withPermit { … } }` 裡面呼叫 transform。
+  swift:
+    starter: |
+      func mapConcurrently<T: Sendable, R: Sendable>(
+          _ items: [T],
+          limit: Int,
+          _ transform: @escaping @Sendable (T) async -> R
+      ) async -> [R] {
+          // TODO: 目前是一個一個做
+          var results: [R] = []
+          for item in items {
+              results.append(await transform(item))
+          }
+          return results
+      }
+    solution: |
+      func mapConcurrently<T: Sendable, R: Sendable>(
+          _ items: [T],
+          limit: Int,
+          _ transform: @escaping @Sendable (T) async -> R
+      ) async -> [R] {
+          await withTaskGroup(of: (Int, R).self) { group in
+              var results = [R?](repeating: nil, count: items.count)
+              var next = 0
+              for _ in 0..<min(limit, items.count) {
+                  let index = next
+                  group.addTask { (index, await transform(items[index])) }
+                  next += 1
+              }
+              while let (index, value) = await group.next() {
+                  results[index] = value
+                  if next < items.count {
+                      let i = next
+                      group.addTask { (i, await transform(items[i])) }
+                      next += 1
+                  }
+              }
+              return results.map { $0! }
+          }
+      }
+    tests: |
+      actor Tracker {
+          var current = 0
+          var peak = 0
+          func enter() { current += 1; peak = max(peak, current) }
+          func leave() { current -= 1 }
+      }
+      let tracker = Tracker()
+      let results = await mapConcurrently(Array(0..<10), limit: 3) { x in
+          await tracker.enter()
+          try? await Task.sleep(nanoseconds: 20_000_000)
+          await tracker.leave()
+          return x * 2
+      }
+      checkEqual("結果順序與輸入相同", Array(0..<10).map { $0 * 2 }) { results }
+      let peak = await tracker.peak
+      check("同時執行數不超過 limit") { peak <= 3 }
+      check("確實有並行（峰值 ≥ 2）") { peak >= 2 }
+      let empty = await mapConcurrently([Int](), limit: 3) { $0 }
+      checkEqual("空輸入", [Int]()) { empty }
+  kotlin:
+    starter: |
+      suspend fun <T, R> mapConcurrently(items: List<T>, limit: Int, transform: suspend (T) -> R): List<R> {
+          // TODO: 目前是一個一個做
+          return items.map { transform(it) }
+      }
+    solution: |
+      import kotlinx.coroutines.async
+      import kotlinx.coroutines.awaitAll
+      import kotlinx.coroutines.coroutineScope
+      import kotlinx.coroutines.sync.Semaphore
+      import kotlinx.coroutines.sync.withPermit
+
+      suspend fun <T, R> mapConcurrently(items: List<T>, limit: Int, transform: suspend (T) -> R): List<R> =
+          coroutineScope {
+              val semaphore = Semaphore(limit)
+              items.map { item ->
+                  async { semaphore.withPermit { transform(item) } }
+              }.awaitAll()
+          }
+    tests: |
+      import kotlinx.coroutines.delay
+      var current = 0
+      var peak = 0
+      val results = mapConcurrently((0 until 10).toList(), 3) { x ->
+          current++
+          peak = maxOf(peak, current)
+          delay(20)
+          current--
+          x * 2
+      }
+      checkEqual("結果順序與輸入相同", (0 until 10).map { it * 2 }) { results }
+      check("同時執行數不超過 limit") { peak <= 3 }
+      check("確實有並行（峰值 ≥ 2）") { peak >= 2 }
+      checkEqual("空輸入", emptyList<Int>()) { mapConcurrently(emptyList<Int>(), 3) { it } }
+
+- id: livecoding-async-02
+  type: code
+  level: 2
+  priority: P0
+  tags: [retry, backoff]
+  timeLimitSec: 1200
+  prompt: |
+    實作指數退避重試 `retry`：
+
+    - 最多嘗試 `maxAttempts` 次（含第一次）
+    - 第 n 次失敗後、下一次嘗試前，呼叫 `sleep(baseDelay × 2^(n−1))`（100、200、400…）
+    - `shouldRetry(error)` 為 false 的錯誤**立刻丟出**，不重試
+    - 全部失敗時丟出**最後一次**的錯誤
+    - `sleep` 由外部注入，所以測試不用真的等
+
+    （正式的程式還會加上等待上限與隨機誤差 jitter；這題為了方便測試先不加。）
+  hints:
+    - "用迴圈 `attempt in 1...maxAttempts`：成功就 return；失敗時先檢查這個錯誤能不能重試、還有沒有下一次，都可以才 sleep 再試。"
+  swift:
+    starter: |
+      func retry<T>(
+          maxAttempts: Int,
+          baseDelay: Int,
+          shouldRetry: (Error) -> Bool,
+          sleep: (Int) async -> Void,
+          operation: () async throws -> T
+      ) async throws -> T {
+          // TODO: 目前只試一次
+          return try await operation()
+      }
+    solution: |
+      func retry<T>(
+          maxAttempts: Int,
+          baseDelay: Int,
+          shouldRetry: (Error) -> Bool,
+          sleep: (Int) async -> Void,
+          operation: () async throws -> T
+      ) async throws -> T {
+          var delay = baseDelay
+          for attempt in 1...maxAttempts {
+              do {
+                  return try await operation()
+              } catch {
+                  guard shouldRetry(error), attempt < maxAttempts else { throw error }
+                  await sleep(delay)
+                  delay *= 2
+              }
+          }
+          fatalError("unreachable")
+      }
+    tests: |
+      enum NetError: Error, Equatable { case timeout(Int), unauthorized }
+      final class Log { var delays: [Int] = []; var calls = 0 }
+      let retryable: (Error) -> Bool = { if case NetError.timeout = $0 { return true } else { return false } }
+
+      let ok = Log()
+      let value = try? await retry(maxAttempts: 5, baseDelay: 100, shouldRetry: retryable, sleep: { ok.delays.append($0) }) { () async throws -> String in
+          ok.calls += 1
+          if ok.calls < 3 { throw NetError.timeout(ok.calls) }
+          return "done"
+      }
+      checkEqual("第 3 次成功", "done") { value }
+      checkEqual("退避間隔 100、200", [100, 200]) { ok.delays }
+
+      let fail = Log()
+      var lastError: NetError?
+      do {
+          _ = try await retry(maxAttempts: 3, baseDelay: 100, shouldRetry: retryable, sleep: { fail.delays.append($0) }) { () async throws -> String in
+              fail.calls += 1
+              throw NetError.timeout(fail.calls)
+          }
+      } catch let e as NetError { lastError = e } catch {}
+      checkEqual("全部失敗丟出最後一次的錯誤", NetError.timeout(3)) { lastError }
+      checkEqual("最多嘗試 3 次", 3) { fail.calls }
+
+      let auth = Log()
+      do {
+          _ = try await retry(maxAttempts: 5, baseDelay: 100, shouldRetry: retryable, sleep: { auth.delays.append($0) }) { () async throws -> String in
+              auth.calls += 1
+              throw NetError.unauthorized
+          }
+      } catch {}
+      check("不可重試的錯誤不重試") { auth.calls == 1 && auth.delays.isEmpty }
+  kotlin:
+    starter: |
+      suspend fun <T> retry(
+          maxAttempts: Int,
+          baseDelay: Long,
+          shouldRetry: (Throwable) -> Boolean,
+          sleep: suspend (Long) -> Unit,
+          operation: suspend () -> T,
+      ): T {
+          // TODO: 目前只試一次
+          return operation()
+      }
+    solution: |
+      suspend fun <T> retry(
+          maxAttempts: Int,
+          baseDelay: Long,
+          shouldRetry: (Throwable) -> Boolean,
+          sleep: suspend (Long) -> Unit,
+          operation: suspend () -> T,
+      ): T {
+          var delay = baseDelay
+          for (attempt in 1..maxAttempts) {
+              try {
+                  return operation()
+              } catch (e: Throwable) {
+                  if (e is kotlinx.coroutines.CancellationException) throw e
+                  if (!shouldRetry(e) || attempt == maxAttempts) throw e
+                  sleep(delay)
+                  delay *= 2
+              }
+          }
+          error("unreachable")
+      }
+    tests: |
+      class Timeout(val attempt: Int) : Exception("timeout #$attempt")
+      class Unauthorized : Exception("401")
+      val retryable: (Throwable) -> Boolean = { it is Timeout }
+
+      val okDelays = mutableListOf<Long>()
+      var okCalls = 0
+      val value = try {
+          retry(5, 100, retryable, { okDelays += it }) {
+              okCalls++
+              if (okCalls < 3) throw Timeout(okCalls)
+              "done"
+          }
+      } catch (e: Exception) {
+          "丟出例外：${e.message}"
+      }
+      checkEqual("第 3 次成功", "done") { value }
+      checkEqual("退避間隔 100、200", listOf(100L, 200L)) { okDelays }
+
+      var failCalls = 0
+      val lastAttempt = try {
+          retry(3, 100, retryable, { }) {
+              failCalls++
+              throw Timeout(failCalls)
+          }
+          -1
+      } catch (e: Timeout) {
+          e.attempt
+      }
+      checkEqual("全部失敗丟出最後一次的錯誤", 3) { lastAttempt }
+      checkEqual("最多嘗試 3 次", 3) { failCalls }
+
+      var authCalls = 0
+      val authDelays = mutableListOf<Long>()
+      try {
+          retry(5, 100, retryable, { authDelays += it }) {
+              authCalls++
+              throw Unauthorized()
+          }
+      } catch (e: Unauthorized) {
+      }
+      check("不可重試的錯誤不重試") { authCalls == 1 && authDelays.isEmpty() }
+
+- id: livecoding-async-03
+  type: code
+  level: 3
+  priority: P0
+  tags: [single-flight, actor, mutex]
+  timeLimitSec: 1800
+  prompt: |
+    實作 single-flight 快取：`value(for:load:)`／`get(key, load)`。
+
+    - 已經有值就直接回傳
+    - **同一個 key 同時有多個呼叫時，只執行一次 `load`**，其他呼叫等同一個結果
+    - `load` 失敗時丟出錯誤，而且**不快取失敗**（下一次呼叫會重新載入）
+
+    （情境：首頁、行情頁、下單頁同時要「交易對設定」，只應該打一次 API。）
+  hints:
+    - "Swift：actor 裡用 `[Key: Task<Value, Error>]` 記錄正在進行的載入。actor 在 await 時會讓其他呼叫進來，所以**在 `await` 之前**就要把 Task 放進字典。"
+    - "Kotlin：用 `Mutex` 保護一個 `Map<K, CompletableDeferred<V>>`。第一個呼叫者建立 `CompletableDeferred` 並負責載入，完成後呼叫 `complete`；其他呼叫者拿到同一個，呼叫 `await()` 等結果。"
+  swift:
+    starter: |
+      actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
+          private var values: [Key: Value] = [:]
+
+          func value(for key: Key, load: @escaping @Sendable (Key) async throws -> Value) async throws -> Value {
+              if let cached = values[key] { return cached }
+              // TODO: 同時的請求應該共用同一次載入
+              let loaded = try await load(key)
+              values[key] = loaded
+              return loaded
+          }
+      }
+    solution: |
+      actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
+          private var values: [Key: Value] = [:]
+          private var inFlight: [Key: Task<Value, Error>] = [:]
+
+          func value(for key: Key, load: @escaping @Sendable (Key) async throws -> Value) async throws -> Value {
+              if let cached = values[key] { return cached }
+              if let task = inFlight[key] { return try await task.value }
+              let task = Task { try await load(key) }
+              inFlight[key] = task
+              do {
+                  let loaded = try await task.value
+                  values[key] = loaded
+                  inFlight[key] = nil
+                  return loaded
+              } catch {
+                  inFlight[key] = nil
+                  throw error
+              }
+          }
+      }
+    tests: |
+      actor Counter { var n = 0; func inc() { n += 1 } }
+      enum LoadError: Error { case boom }
+      let loads = Counter()
+      let cache = SingleFlightCache<String, String>()
+      let results = await withTaskGroup(of: String.self) { group in
+          for _ in 0..<10 {
+              group.addTask {
+                  (try? await cache.value(for: "btc") { key in
+                      await loads.inc()
+                      try? await Task.sleep(nanoseconds: 50_000_000)
+                      return "config-\(key)"
+                  }) ?? "error"
+              }
+          }
+          var all: [String] = []
+          for await r in group { all.append(r) }
+          return all
+      }
+      await checkEqualAsync("10 個同時請求只載入 1 次", 1) { await loads.n }
+      checkEqual("大家拿到同一個結果", Array(repeating: "config-btc", count: 10)) { results }
+      let again = try? await cache.value(for: "btc") { _ in await loads.inc(); return "x" }
+      await checkAsync("已快取不再載入") { await loads.n == 1 && again == "config-btc" }
+
+      let failures = Counter()
+      var failedOnce = false
+      do {
+          _ = try await cache.value(for: "eth") { _ in await failures.inc(); throw LoadError.boom }
+      } catch { failedOnce = true }
+      let retried = try? await cache.value(for: "eth") { key in await failures.inc(); return "config-\(key)" }
+      await checkAsync("失敗不快取，下次重新載入") { await failures.n == 2 && failedOnce && retried == "config-eth" }
+  kotlin:
+    starter: |
+      class SingleFlightCache<K, V> {
+          private val values = HashMap<K, V>()
+
+          suspend fun get(key: K, load: suspend (K) -> V): V {
+              values[key]?.let { return it }
+              // TODO: 同時的請求應該共用同一次載入
+              val loaded = load(key)
+              values[key] = loaded
+              return loaded
+          }
+      }
+    solution: |
+      import kotlinx.coroutines.CompletableDeferred
+      import kotlinx.coroutines.sync.Mutex
+      import kotlinx.coroutines.sync.withLock
+
+      class SingleFlightCache<K, V> {
+          private val mutex = Mutex()
+          private val values = HashMap<K, V>()
+          private val inFlight = HashMap<K, CompletableDeferred<V>>()
+
+          suspend fun get(key: K, load: suspend (K) -> V): V {
+              var isOwner = false
+              val deferred = mutex.withLock {
+                  values[key]?.let { return it }
+                  inFlight[key] ?: CompletableDeferred<V>().also {
+                      inFlight[key] = it
+                      isOwner = true
+                  }
+              }
+              if (!isOwner) return deferred.await()
+              return try {
+                  val loaded = load(key)
+                  mutex.withLock {
+                      values[key] = loaded
+                      inFlight.remove(key)
+                  }
+                  deferred.complete(loaded)
+                  loaded
+              } catch (e: Throwable) {
+                  mutex.withLock { inFlight.remove(key) }
+                  deferred.completeExceptionally(e)
+                  throw e
+              }
+          }
+      }
+    tests: |
+      import kotlinx.coroutines.async
+      import kotlinx.coroutines.awaitAll
+      import kotlinx.coroutines.coroutineScope
+      import kotlinx.coroutines.delay
+      var loads = 0
+      val cache = SingleFlightCache<String, String>()
+      val results = coroutineScope {
+          (1..10).map {
+              async {
+                  cache.get("btc") { key ->
+                      loads++
+                      delay(50)
+                      "config-$key"
+                  }
+              }
+          }.awaitAll()
+      }
+      checkEqual("10 個同時請求只載入 1 次", 1) { loads }
+      checkEqual("大家拿到同一個結果", List(10) { "config-btc" }) { results }
+      val again = cache.get("btc") { loads++; "x" }
+      check("已快取不再載入") { loads == 1 && again == "config-btc" }
+
+      var failures = 0
+      val failedOnce = try {
+          cache.get("eth") { failures++; throw IllegalStateException("boom") }
+          false
+      } catch (e: IllegalStateException) {
+          true
+      }
+      val retried = cache.get("eth") { key -> failures++; "config-$key" }
+      check("失敗不快取，下次重新載入") { failures == 2 && failedOnce && retried == "config-eth" }
+
+- id: livecoding-async-04
+  type: predict
+  level: 3
+  priority: P1
+  tags: [actor, reentrancy]
+  prompt: |
+    下列程式中，3 個 Task 幾乎同時呼叫 `load()`。`fetchCount` 最後印出多少？
+  codeLang: swift
+  code: |
+    actor Config {
+        var cached: String?
+        var fetchCount = 0
+
+        func load() async -> String {
+            if let cached { return cached }
+            fetchCount += 1
+            try? await Task.sleep(nanoseconds: 50_000_000)  // 模擬 API
+            cached = "v1"
+            return "v1"
+        }
+    }
+
+    let config = Config()
+    await withTaskGroup(of: String.self) { group in
+        for _ in 0..<3 { group.addTask { await config.load() } }
+        for await _ in group {}
+    }
+    print(await config.fetchCount)
+  answer: |
+    3
+  explain: |
+    actor 保證同一時間只有一段程式碼在存取它的資料，但在 `await` 的時候，會先讓其他呼叫進來執行（這叫做 actor reentrancy，可重入）。
+    第一個呼叫在 `Task.sleep` 暫停時，第二個、第三個呼叫也進來了。這時 `cached` 還是 nil，所以三個都把 `fetchCount` 加 1、都去抓資料，最後印出 3。
+    修法：在 await 之前就先記錄「正在進行的 Task」，後來的呼叫直接等同一個 Task（就是 single-flight 那一題的做法）。
+
+- id: livecoding-async-05
+  type: multi
+  level: 2
+  priority: P0
+  tags: [retry]
+  prompt: |
+    交易所 App 呼叫 API 時，哪些錯誤**適合自動重試**？（複選）
+  options:
+    - "連線逾時（timeout）"
+    - "HTTP 503 Service Unavailable"
+    - "HTTP 401 token 過期（應該先 refresh，而不是原封不動重試）"
+    - "下單回覆「餘額不足」"
+    - "網路中斷後恢復"
+    - "HTTP 429 Too Many Requests（依 Retry-After 等待後重試）"
+  answer: [0, 1, 4, 5]
+  explain: |
+    - 逾時、503、網路中斷恢復：都是暫時性的問題，等一下再試可能就成功。
+    - 429：可以重試，但要依伺服器回傳的 `Retry-After` 等待，或用指數退避；也要檢查自己為什麼送太多請求（例如交易所的公開 API 常限制每秒 10 次左右）。
+    - 401：token 過期，要先換新的 token 再重送，原封不動重試只會一直失敗。
+    - 餘額不足：請求本身有問題（業務上的錯誤），重試結果都一樣。
+    另外，下單這種「送兩次會變成兩筆」的請求，重試前一定要帶同一個 client order id，伺服器才能認出是同一筆。

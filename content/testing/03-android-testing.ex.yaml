@@ -1,0 +1,83 @@
+- id: testing-android-01
+  type: fill
+  level: 2
+  priority: P1
+  tags: [turbine, runtest]
+  prompt: |
+    用 `runTest` 與 Turbine 驗證：行情 ViewModel 在收到價格後，`uiState` 先是 Loading、再變成 Success。
+  codeLang: kotlin
+  code: |
+    @Test
+    fun emitsLoadingThenPrice() = ____ {
+        val repo = FakePriceRepository()
+        val vm = PriceViewModel(repo, StandardTestDispatcher(testScheduler))
+        vm.uiState.____ {
+            assertEquals(UiState.Loading, awaitItem())
+            repo.emit(Price("btcjpy", "15000000"))
+            assertEquals(UiState.Success("15,000,000"), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+  blanks:
+    - [runTest]
+    - [test]
+  explain: |
+    `runTest` 提供虛擬時間和 `testScheduler`（控制虛擬時間的排程器）。把用同一個 scheduler 建立的測試 dispatcher 傳給 ViewModel，ViewModel 裡的時間才會跟著測試的虛擬時間走。
+    Turbine 的 `test { }` 讓你一個值一個值取出來檢查；StateFlow 不會自己結束，所以檢查完要呼叫 `cancelAndIgnoreRemainingEvents()` 結束測試。
+
+- id: testing-android-02
+  type: single
+  level: 2
+  priority: P1
+  tags: [coroutines, testing]
+  prompt: |
+    ViewModel 在 `viewModelScope.launch(Dispatchers.IO) { … }` 裡呼叫 repository。單元測試一直拿不到結果，最根本的修法是？
+  options:
+    - "在測試裡加 `Thread.sleep(1000)`"
+    - "把 dispatcher 改成從建構子傳進來，測試時傳入測試用的 dispatcher，並用 `Dispatchers.setMain` 換掉主執行緒的 dispatcher"
+    - "改用 `GlobalScope.launch`"
+    - "把測試改成 instrumented test 在模擬器上跑"
+  answer: 1
+  explain: |
+    寫死 `Dispatchers.IO`，工作就會跑在真的背景執行緒上，測試沒辦法用虛擬時間控制，也不知道什麼時候做完。把 dispatcher 從外面傳進來是 Android 官方建議的做法。
+    其他選項：`Thread.sleep` 不穩定又慢；`GlobalScope` 不受生命週期控制，讓問題更糟；改成在模擬器上跑也沒有解決「時間無法控制」的問題，只是更慢。
+
+- id: testing-android-03
+  type: multi
+  level: 2
+  priority: P1
+  tags: [tools]
+  prompt: |
+    下列工具與用途的配對，哪些正確？（複選）
+  options:
+    - "Turbine：逐值驗證 Flow 發出的資料"
+    - "Robolectric：不開模擬器，在一般的 JVM 上執行需要 Android 系統功能的測試"
+    - "Paparazzi／Roborazzi：截圖測試"
+    - "MockK 的 `coEvery`：設定 suspend 函式的回傳值"
+    - "Espresso：測試 Kotlin 純邏輯的效能"
+  answer: [0, 1, 2, 3]
+  explain: |
+    第 5 項錯：Espresso 是傳統 View 系統的畫面測試工具。純邏輯的效能要用效能測試工具（Jetpack Microbenchmark）。
+
+- id: testing-android-04
+  type: open
+  level: 2
+  priority: P1
+  tags: [android, testing]
+  prompt: |
+    「你會怎麼測試一個 WebSocket 重連的邏輯：斷線後依 1、2、4、8 秒退避重連，最多 30 秒？」
+  promptJa: |
+    「切断後に1、2、4、8秒と指数バックオフし、最大30秒で再接続するロジックを、どのようにテストしますか？」
+  keyPoints:
+    - 拆開：把「下一次要等多久」做成純函式或狀態機，單獨測
+    - 注入：WebSocket 換成 fake，可以手動觸發斷線、連線成功
+    - 時間：用 runTest 的虛擬時間，用 advanceTimeBy 驗證在正確的時間點才重連
+    - 隨機誤差（jitter）：亂數來源從外面傳進來，測試時固定
+    - 驗證：上限 30 秒、成功後重置、網路恢復時立即重試、重連後重新訂閱
+  modelAnswer: |
+    我會把邏輯拆成兩部分。第一部分是「下一次要等多久」，做成純函式或狀態機，輸入是失敗次數，輸出是延遲；jitter 的亂數來源用參數注入，測試時固定。這部分用一般的單元測試就能驗證 1、2、4、8 秒，以及上限 30 秒、成功後歸零。
+
+    第二部分是整合：WebSocket 換成 fake，我可以手動觸發斷線和連線成功。在 runTest 的虛擬時間裡，觸發斷線後用 advanceTimeBy 推進 999 毫秒並呼叫 runCurrent()，驗證還沒重連；再推進 1 毫秒、呼叫 runCurrent()，驗證開始重連（advanceTimeBy 不會執行「剛好排在目標時間」的任務，所以要補 runCurrent）。也要測網路恢復的通知會讓它立即重試，以及重連成功後會重新送出所有訂閱。
+
+    這樣測試不用真的等，也不會因為 CI 機器慢而時好時壞（flaky）。
+  timeLimitSec: 150

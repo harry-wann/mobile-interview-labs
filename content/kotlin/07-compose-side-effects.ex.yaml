@@ -1,0 +1,205 @@
+- id: kotlin-compose-side-effects-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [effect-api, disposableeffect]
+  prompt: |
+    行情畫面需要在進入 composition（Composable 第一次出現在畫面上）時，對 WebSocket client 註冊 listener，離開時解除註冊。哪個 API 最合適？
+  options:
+    - "`SideEffect { socket.addListener(l) }`"
+    - "`rememberCoroutineScope()` 在 Composable 的函式裡 `scope.launch { socket.addListener(l) }`"
+    - "`DisposableEffect(socket) { socket.addListener(l); onDispose { socket.removeListener(l) } }`"
+    - "`derivedStateOf { socket.addListener(l) }`"
+  answer: 2
+  explain: |
+    - 第 3 項正確。`DisposableEffect` 專門處理「進入時註冊、離開時清理」，key（`socket`）改變時，會先執行舊的 `onDispose`（清理），再重新註冊，所以不會同時掛著兩個 listener。
+    - 第 1 項錯：`SideEffect` 每次成功重組後都會執行，每重組一次就註冊一次，而且沒有地方清理，會造成 listener 洩漏。
+    - 第 2 項錯：在函式裡直接 `scope.launch`，每次重組都再啟動一次；`rememberCoroutineScope` 是給 `onClick` 這類事件回呼用的，而且也沒有解除註冊。
+    - 第 4 項錯：`derivedStateOf` 是從別的 State 推導出新的 State，不是 effect，不能拿來註冊 listener。
+
+- id: kotlin-compose-side-effects-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [effect-api, bug]
+  prompt: |
+    下列程式碼哪些**有 bug**？（複選）
+  codeLang: kotlin
+  code: |
+    @Composable
+    fun A(repo: Repo) {
+        val scope = rememberCoroutineScope()
+        scope.launch { repo.load() }
+    }
+
+    @Composable
+    fun B(onTimeout: () -> Unit) {
+        LaunchedEffect(Unit) {
+            delay(5_000)
+            onTimeout()
+        }
+    }
+
+    @Composable
+    fun C(listState: LazyListState) {
+        val showTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    }
+
+    @Composable
+    fun D(socket: Socket, vm: Vm) {
+        DisposableEffect(socket) {
+            val l = Socket.Listener { vm.onEvent(it) }
+            socket.addListener(l)
+            onDispose { socket.removeListener(l) }
+        }
+    }
+  options:
+    - "A：在 Composable 的函式裡直接 `scope.launch`，每次重組都會再啟動一次"
+    - "B：`LaunchedEffect(Unit)` 只啟動一次，如果 `onTimeout` 之後換成新的 lambda，5 秒後呼叫的仍是舊的"
+    - "C：`derivedStateOf` 讀取 `firstVisibleItemIndex`，用來判斷是否顯示回到頂端按鈕"
+    - "D：用 `DisposableEffect` 註冊與解除 listener"
+  answer: [0, 1]
+  explain: |
+    - A 有 bug：Composable 的函式會被重複執行，直接寫 `scope.launch` 會每次重組都啟動一次。「進入畫面做一次」要用 `LaunchedEffect`；`rememberCoroutineScope` 是給事件回呼（例如 `onClick`）用的。
+    - B 有 bug：`LaunchedEffect(Unit)` 啟動後一直等 5 秒，捕獲的是當初的 `onTimeout`；之後父層換了新的 lambda，effect 仍然呼叫舊的（長時間運作的 lambda 抓著舊值，稱為 stale closure）。修法是 `val current by rememberUpdatedState(onTimeout)`，effect 裡呼叫 `current()`。不要把 `onTimeout` 放進 key，那樣每次 lambda 換掉，5 秒計時就要重來。
+    - C 沒有 bug，是 `derivedStateOf` 的標準用法：index 捲動時一直在變，但布林值只有跨越門檻時才變，只有布林改變才會重組。
+    - D 沒有 bug，是標準寫法：註冊、離開時解除，一一對應。
+
+- id: kotlin-compose-side-effects-03
+  type: fill
+  level: 2
+  priority: P1
+  tags: [rememberupdatedstate, snapshotflow]
+  prompt: |
+    補上兩個 API：第一處讓長時間運作的 effect 永遠呼叫最新的 `onTimeout`，而且不重啟計時；第二處把 Compose 的 State 讀取轉成 Flow，以便使用 `distinctUntilChanged`。
+  codeLang: kotlin
+  code: |
+    val currentOnTimeout by ____(onTimeout)
+    LaunchedEffect(Unit) {
+        delay(30_000)
+        currentOnTimeout()
+    }
+
+    LaunchedEffect(listState) {
+        ____ { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collect { vm.onScrolled(it) }
+    }
+  blanks:
+    - [rememberUpdatedState]
+    - [snapshotFlow]
+  explain: |
+    - 第一格是 `rememberUpdatedState`。它回傳一個 State，值永遠是最新一次組合傳進來的 `onTimeout`。effect 讀的是這個 State，所以既拿到最新的值，又不用把 `onTimeout` 放進 key 而讓 30 秒計時重來。
+    - 第二格是 `snapshotFlow`。它在大括號裡讀取 State，值改變時發射，而且自動去重（相同的值不會重複發射）。它的方向是 Compose 的 State 到 Flow，和 `produceState`（外面的非同步資料到 Compose 的 State）相反。
+
+- id: kotlin-compose-side-effects-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [derivedstateof]
+  prompt: |
+    下列哪一個 `derivedStateOf` 的使用情境**最有實際效益**？
+  options:
+    - "`val total by remember { derivedStateOf { price * qty } }`，其中 `price` 與 `qty` 是 State，每次更新結果都會不同"
+    - "`val showTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }`"
+    - "`val label = derivedStateOf { \"%.2f\".format(price) }`，沒有 `remember`，直接寫在 Composable 的函式裡"
+    - "`val size by remember { derivedStateOf { items.size } }`，其中 `items` 是函式參數（一般的 `List`）"
+  answer: 1
+  explain: |
+    `derivedStateOf` 的價值，是在**輸入變化頻繁、輸出很少變**時，只在輸出真的改變才通知重組。
+    - 第 2 項正確：捲動時 index 一直在變，但「是不是大於 0」只在跨越門檻時才變。
+    - 第 1 項錯：輸出隨輸入同步改變（輸入變，結果也跟著變），沒有效益，直接計算就好。
+    - 第 3 項錯：沒有 `remember`，每次重組都會建立新的 derived state，快取失效。
+    - 第 4 項錯：它依賴的是一般的函式參數，不是 State；參數變了它不會自己更新，要寫成 `remember(items) { derivedStateOf { … } }`，而且 `size` 本來就很便宜，不需要這樣做。
+
+- id: kotlin-compose-side-effects-05
+  type: single
+  level: 2
+  priority: P1
+  tags: [launchedeffect, key]
+  prompt: |
+    下列 effect 在使用者從 `btcjpy` 切換到 `ethjpy` 時會發生什麼事？
+  codeLang: kotlin
+  code: |
+    @Composable
+    fun PriceHeader(symbol: String, repo: Repo) {
+        var price by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(symbol) {
+            repo.prices(symbol).collect { price = it }
+        }
+        Text(price ?: "--")
+    }
+  options:
+    - "舊的 coroutine 繼續收集 `btcjpy`，並新增一個收集 `ethjpy` 的 coroutine，兩者同時寫入 `price`"
+    - "舊的 coroutine 被取消（收集 `btcjpy` 的訂閱結束），啟動新的 coroutine 收集 `ethjpy`；離開 composition 時也會取消"
+    - "不會有任何變化，因為 `LaunchedEffect` 只在第一次組合時執行"
+    - "整個 `PriceHeader` 被重新建立，`price` 被重設為 `null`"
+  answer: 1
+  explain: |
+    - 第 2 項正確。key 改變時，`LaunchedEffect` 會先取消舊的 coroutine，再啟動新的，這正是「切換交易對就換訂閱」需要的行為。
+    - 第 1 項錯：舊的 coroutine 會被取消，不會同時有兩個在寫入。
+    - 第 3 項錯：只有 `LaunchedEffect(Unit)` 這種 key 不會變的才只執行一次；這裡的 key 是 `symbol`，`symbol` 變了就會重啟。
+    - 第 4 項錯：`PriceHeader` 只是重組，不會被重新建立，`remember` 保存的 `price` 也不會被重設。所以畫面會暫時顯示上一個交易對的最後價格，直到新資料到達；實務上要在切換時清成 `null`，或把 `symbol` 當成 `remember` 的 key。
+    另外，正式專案裡，訂閱的生命週期如果要撐過旋轉螢幕，應該放在 ViewModel（用 `flatMapLatest`，新值一來就取消舊的內層 Flow）；這裡的寫法適合只屬於這個畫面的資料。
+
+- id: kotlin-compose-side-effects-06
+  type: order
+  level: 2
+  priority: P1
+  tags: [disposableeffect, lifecycle]
+  prompt: |
+    `DisposableEffect(symbol)` 的 `symbol` 從 A 變成 B，之後這個 Composable 離開 composition。把事件依發生順序排列。
+  items:
+    - 以 A 註冊 listener（第一次進入 composition）
+    - "`symbol` 變成 B，重組發生"
+    - A 的 `onDispose` 執行，解除 A 的 listener
+    - 以 B 重新執行 effect 的區塊，註冊 B 的 listener
+    - Composable 離開 composition，B 的 `onDispose` 執行
+  explain: |
+    key 改變時，Compose 會**先清理舊的 effect，再執行新的**，所以不會同時掛著兩個 listener。離開 composition 時，最後一個 effect 的 `onDispose` 也會被呼叫。
+    這就是為什麼 `onDispose` 一定要對稱地撤銷區塊裡做過的每一件事：註冊了什麼就解除什麼，漏掉任何一項，都會造成 listener 洩漏。
+
+- id: kotlin-compose-side-effects-07
+  type: open
+  level: 3
+  priority: P1
+  tags: [webview, kline, field]
+  prompt: |
+    一個即時 K 線畫面用 TradingView Lightweight Charts 顯示圖表，Android 版是在 Compose 裡用 `AndroidView`（把傳統 View 嵌進 Compose 的方式）載入 WebView，並用 `LaunchedEffect` 把新的 K 棒推送給 WebView。做這種即時 K 線時，App 從背景回到前景、重新抓資料並合併後，你怎麼確保圖表不會缺少中間的 K 棒？
+  promptJa: |
+    あるリアルタイムのローソク足画面では TradingView Lightweight Charts を使っており、Android 版は Compose の `AndroidView`（従来の View を Compose に埋め込む仕組み）で WebView を読み込み、`LaunchedEffect` で新しいローソク足を WebView に送っています。このようなリアルタイムのローソク足を作る場合、アプリがバックグラウンドからフォアグラウンドに戻り、データを再取得してマージした後でも、途中のローソク足が欠けないようにするには、どうしますか。
+  keyPoints:
+    - "App 從背景回前景會重新抓資料並合併，這時新增的 K 棒可能不只一根"
+    - "只推送最後一根，會讓中間的 K 棒缺漏，圖表出現空洞"
+    - "做法：記錄「已推送到哪個時間」（例如 iOS 版用 lastPushedTime），每次資料變化時，把時間大於它的 K 棒依序全部推送"
+    - "跳過時間倒退的資料，因為 Lightweight Charts 遇到時間倒退會丟出例外"
+    - "在 Compose 用 remember 保存已推送的時間，搭配 LaunchedEffect（必要時加 snapshotFlow）取出新增的 K 棒"
+    - "比較與過濾的邏輯抽成純函式，可以單元測試，例如把 K 線的更新邏輯獨立成一個小型別"
+  modelAnswer: |
+    K 線更新的重點是「不要漏掉任何一根」。App 從背景回到前景時，會重新抓資料再和現有資料合併，這時新增的 K 棒可能不只一根。如果只推送最後一根給 WebView，中間的就缺了，圖表會出現空洞。
+
+    我在 iOS 版是在 Coordinator（SwiftUI 包 WebView 時用來保存狀態的物件）裡記錄 `lastPushedTime`，也就是已經推送到哪一根。每次更新時，把時間大於它的 K 棒依序全部推送，並且跳過時間倒退的資料，因為 Lightweight Charts 遇到時間倒退會丟出例外。
+
+    在 Android 做 K 線，我會用同樣的做法：在 Compose 裡用 `remember` 記錄已推送到的時間，搭配 `LaunchedEffect`，在資料變化時找出所有比它新的 K 棒，依序推送給 WebView。這段比較邏輯我會抽成純函式，方便寫單元測試。
+  modelAnswerJa: |
+    ローソク足の更新で大切なのは「1 本も取りこぼさないこと」です。アプリがバックグラウンドからフォアグラウンドに戻ると、データを再取得して既存のデータとマージするため、新しく増えるローソク足が 1 本とは限りません。最後の 1 本だけを WebView に送ると、途中の足が欠けて、チャートに穴が空いてしまいます。
+
+    iOS 版では、Coordinator（SwiftUI で WebView を包むときに状態を保持するオブジェクト）に `lastPushedTime`、つまりどこまで送信済みかを記録しています。更新のたびに、それより新しい時刻のローソク足をすべて順番に送信し、時刻が逆戻りしているデータは飛ばします。Lightweight Charts は時刻が逆戻りすると例外を投げるためです。
+
+    Android でローソク足を作る場合も同じ方法にします。Compose で `remember` を使って送信済みの時刻を保持し、`LaunchedEffect` でデータが変わったときに、それより新しいローソク足をすべて見つけて順番に WebView へ送ります。この比較ロジックは純粋関数にして、単体テストを書きやすくします。
+  followUps:
+    - WebView 圖表嵌在 Compose 裡，每次重組時 AndroidView 的 update 會被呼叫幾次？
+    - 如果要支援每秒幾十次的 tick 更新，你會怎麼降低更新頻率？
+  timeLimitSec: 150
+
+- id: kotlin-compose-side-effects-08
+  type: flash
+  level: 1
+  priority: P1
+  tags: [effect-api]
+  front: LaunchedEffect、DisposableEffect、SideEffect、rememberCoroutineScope 要怎麼區分？
+  back: |
+    - `LaunchedEffect`：進入 composition（出現在畫面上）時做 suspend 工作，key 變了就取消再重啟。
+    - `DisposableEffect`：進入時註冊，離開時在 `onDispose` 裡清理。
+    - `SideEffect`：每次成功重組後，把 Compose 的值同步給非 Compose 的物件。
+    - `rememberCoroutineScope`：在事件回呼（例如 `onClick`）裡啟動 coroutine，絕不要寫在 Composable 的函式裡。

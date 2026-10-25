@@ -1,0 +1,654 @@
+- id: exchange-order-book-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [depth, snapshot]
+  prompt: |
+    這套交易所公開 WebSocket 的 `market.btcjpy.depth.step0`，API 文件範例每次推送都帶有完整的 `bids` 與 `asks`（整份板的買單與賣單），沒有序號欄位。App 收到一筆推送後，最合理的處理是？
+  options:
+    - "把推送的檔位逐一「加到」本地簿上，數量相加"
+    - "視為**完整快照**（整份最新的板），直接用它取代本地簿（頂多保留 `ts` 判斷是否比上一版新），不需要序號檢查與跳號時的重新同步"
+    - "忽略推送，只使用 REST 的 `/market/depth`"
+    - "只更新數量有變的價位，其他價位維持原狀"
+  answer: 1
+  explain: |
+    文件範例每次都帶完整的 `bids` 和 `asks`，沒有序號，所以看起來是每次推整份最新的板（完整快照）。逐筆增量（只告訴你哪些檔位變了，需要用序號檢查）是另一種設計，公開的 topic 清單裡沒有看到；實際行為以實測為準（未證實）。
+    - 第 1 項錯：推送的是整份板的絕對數量，不是「變動量」，相加會讓數量越算越大。
+    - 第 3 項錯：REST 是問一次答一次，沒辦法即時更新，WebSocket 的推送才是即時資料的來源。
+    - 第 4 項錯：只更新有變的價位，是增量更新的做法；完整快照沒有出現的價位，代表它已經不在這份板裡（被吃掉或掉出顯示範圍），舊的檔位也要一起移除，直接整份取代最單純。
+    用快照取代時要注意：`ts`（時間戳）可以用來丟掉順序顛倒的舊快照；高頻推送要在背景合併（只留最新一筆）後再更新畫面。
+
+- id: exchange-order-book-02
+  type: order
+  level: 2
+  priority: P0
+  tags: [incremental, resync]
+  prompt: |
+    某個交易所提供「增量簿」頻道（推送的只是「哪些檔位變了」，每筆增量有連續遞增的 `seq`）。排列 App 初始化與維護本地簿的正確流程。
+  items:
+    - "連上 WebSocket，開始**緩衝**收到的增量（先不套用）"
+    - "取得簿的快照（REST 或 `req`），記下快照的 `seq`"
+    - "丟棄緩衝中 `seq <= 快照 seq` 的增量"
+    - "依序套用剩下的增量，每筆都檢查 `seq == lastSeq + 1`"
+    - "發現跳號（`seq > lastSeq + 1`）時，把簿標為失效並從頭重新同步"
+  explain: |
+    - 必須「先緩衝、再取快照」：如果先取快照再連線，兩者之間產生的增量會遺失。
+    - 快照已經包含 `seq` 不超過它的所有變更，所以緩衝裡這一段要丟掉，重複套用會讓數量算錯。
+    - 快照之後的第一筆增量必須接得上快照的序號；之後每一筆都要檢查 `seq == lastSeq + 1`。
+    - 接不上就是跳號（中間漏了幾筆），簿已經不可信，要失效並重新同步。
+    跳號、重連、回前景（背景期間漏掉增量）、解析失敗，都走同一條「失效、重新同步」路徑，期間畫面標示更新中，或維持上一版並標為過期。
+
+- id: exchange-order-book-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [order-book, decimal]
+  prompt: |
+    關於訂單簿的實作，哪些敘述正確？（複選）
+  options:
+    - "增量中某價位的數量為 0，代表刪除該價位"
+    - "`bestBid >= bestAsk` 表示簿處於交叉狀態（買方最高價不低於賣方最低價），資料不一致，應重新同步"
+    - "用 `Double` 當價格的字典 key 最簡單，沒有精度問題"
+    - "Java／Kotlin 的 `HashMap<BigDecimal, …>` 對 `100.0` 與 `100` 會視為同一個 key"
+    - "收到 `seq` 比 `lastSeq` 小或相等的增量，應直接忽略（重複或過期）"
+  answer: [0, 1, 4]
+  explain: |
+    - 第 1 項對：數量 0 是「這一檔沒有單了」，要把該價位整個移除，不是顯示 0。
+    - 第 2 項對：正常的板不可能買價高於等於賣價（早就成交了），出現代表資料出錯。
+    - 第 3 項錯：`Double` 當 key 會有 `0.1 + 0.2` 這類精度問題，價位對不上。
+    - 第 4 項錯：`BigDecimal.equals` 會連小數位數（scale）一起比，`100.0` 與 `100` 不相等，放進 `HashMap` 會變成兩檔；要用 `TreeMap`（以 `compareTo` 排序）或先 `stripTrailingZeros()`（見精度與金額單元）。
+    - 第 5 項對：重複與過期的增量忽略；真正需要重新同步的是**跳號**。
+
+- id: exchange-order-book-04
+  type: single
+  level: 2
+  priority: P1
+  tags: [aggregation, rounding]
+  prompt: |
+    把 BTC/JPY 的簿依 step ＝ 1,000 円 聚合顯示（把相近價格合併成一檔）。買方的 `4,860,380` 與賣方的 `4,860,850` 分別應該歸到哪一檔，為什麼？
+  options:
+    - "買方 4,861,000、賣方 4,860,000（四捨五入，最接近）"
+    - "買方 4,860,000（往下）、賣方 4,861,000（往上）。買方往下、賣方往上取整，聚合後的最佳買價不會比真實買價高、最佳賣價不會比真實賣價低，不會讓使用者誤以為成交條件更有利"
+    - "兩邊都往下取整，因為數量一律往下捨入"
+    - "兩邊都往上取整，這樣價差看起來比較小"
+  answer: 1
+  explain: |
+    這是常見的聚合慣例（買方 floor 往下、賣方 ceil 往上）。
+    - 第 1 項錯：四捨五入的結果還弄反了方向（4,860,380 離 4,860,000 比較近，不會變成 4,861,000），而且四捨五入可能讓買價比真實的更高，使用者會誤以為有人願意出更高的價。
+    - 第 3 項錯：數量往下捨入是下單的規則，與簿的聚合方向無關；賣方往下取整會讓最佳賣價比真實的更低，看起來更便宜。
+    - 第 4 項錯：兩邊都往上，買方價格會被墊高；價差看起來比較小，是在誤導使用者。
+    這套 API 的 `type=stepN` 實際取整方向文件沒有明講（未證實），自己在 App 聚合時才由你決定，並要在規格中寫清楚。實作要用 `Decimal`／`BigDecimal`：`price / step` 取整再乘回 `step`。
+
+- id: exchange-order-book-05
+  type: predict
+  level: 2
+  priority: P1
+  tags: [aggregation, decimal, swift]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    import Foundation
+
+    func D(_ s: String) -> Decimal { Decimal(string: s)! }
+
+    func toStep(_ price: Decimal, _ step: Decimal, up: Bool) -> Decimal {
+        var q = price / step
+        var r = Decimal()
+        NSDecimalRound(&r, &q, 0, up ? .up : .down)
+        return r * step
+    }
+
+    print(toStep(D("100.7"), D("0.5"), up: false))
+    print(toStep(D("100.7"), D("0.5"), up: true))
+    print(toStep(D("99.9"), D("1"), up: false))
+    print(toStep(D("100"), D("1"), up: true))
+  answer: |
+    100.5 101 99 100
+  explain: |
+    - `100.7 ÷ 0.5 ＝ 201.4`，往下取整 201，乘回 0.5 得 `100.5`。
+    - 同樣的 201.4 往上取整 202，乘回得 `101`。
+    - `99.9` 往下取整到 1 的倍數是 `99`。
+    - 已經對齊的 `100` 往上取整仍是 `100`（不會多跳一檔）。
+    注意正數時 `NSDecimalRound` 的 `.down` 是往小、`.up` 是往大（負數的行為見精度與金額單元）。
+
+- id: exchange-order-book-06
+  type: single
+  level: 3
+  priority: P0
+  tags: [resync, sequence, buffer]
+  prompt: |
+    增量簿的快照 `seq = 100`（快照已包含序號 100 以前的所有變更）。你緩衝到的增量序號依序是 98、99、100、101、103。正確的處理是？
+  options:
+    - "全部依序套用，缺 102 也沒關係，下一筆會補上"
+    - "丟棄 98、99、100（≤ 100），套用 101（接得上快照），遇到 103 時發現跳號（期望 102），把簿標為失效並重新同步（重新取快照）"
+    - "丟棄 98、99，套用 100、101、103"
+    - "因為 103 沒接上，丟棄整個緩衝區並直接把 103 當作新的起點"
+  answer: 1
+  explain: |
+    快照已經包含序號 ≤ 100 的所有變更，所以 98、99、100 要丟棄（重複套用會讓數量錯誤）。101 的 `seq == 100 + 1`，接得上；103 期望的是 102，缺了一筆，簿已不可信，必須重新同步。
+    - 第 1 項錯：102 不會自動補上，漏掉的那一筆可能刪除了某個檔位，不套用，板上就會留下已經不存在的檔位。
+    - 第 3 項錯：100 已經包含在快照裡，重複套用會讓數量算錯；而且 103 仍然是跳號。
+    - 第 4 項錯：把 103 當起點會讓簿缺少 102 的變更；真正的做法是重新取一份快照。
+
+- id: exchange-order-book-07
+  type: code
+  level: 3
+  priority: P0
+  tags: [order-book, sequence, decimal]
+  prompt: |
+    實作 `OrderBook`：快照＋增量，含序號檢查。（白話：手上維持一份買賣兩邊的板；收到快照就整份重建，收到增量就逐筆套用，序號接不上就把板標成不可信。）
+
+    - `reset(seq:bids:asks:)`：用快照重建簿（數量為 0 的檔位忽略），並記下 `seq`；簿此時有效
+    - `apply(seq:bids:asks:)`：
+      - 簿**尚未有效**（還沒 reset，或之前已失效）→ `.needsSnapshot`，簿不變
+      - `seq <= lastSeq` → `.stale`，簿不變
+      - `seq != lastSeq + 1` → 簿**失效**（保留現有檔位但視為不可信），回傳 `.gap(expected: lastSeq + 1, got: seq)`
+      - 否則套用：數量為 0 → 刪除該價位，否則設定為該數量；`lastSeq = seq`。套用後若 `bestBid >= bestAsk`（交叉）→ 簿失效，回傳 `.crossed`；否則 `.applied`
+    - `bids`（價格由高到低）、`asks`（價格由低到高）、`bestBid`、`bestAsk`、`isValid`
+    - 價格與數量用 `Decimal`／`BigDecimal`；`100.0` 與 `100` 必須是同一檔
+  hints:
+    - "Swift 的 `Decimal` 可直接當字典 key；Kotlin 用 `TreeMap<BigDecimal, BigDecimal>`（以 `compareTo` 比較，不看 scale）。"
+    - "失效用 `lastSeq == nil` 表示最簡單。"
+  swift:
+    starter: |
+      import Foundation
+
+      struct PriceLevel: Equatable {
+          let price: Decimal
+          let qty: Decimal
+      }
+
+      enum ApplyResult: Equatable {
+          case applied
+          case stale
+          case gap(expected: Int64, got: Int64)
+          case needsSnapshot
+          case crossed
+      }
+
+      struct OrderBook {
+          var isValid: Bool { false }
+          var bids: [PriceLevel] { [] }
+          var asks: [PriceLevel] { [] }
+          var bestBid: PriceLevel? { nil }
+          var bestAsk: PriceLevel? { nil }
+
+          mutating func reset(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) {
+              // TODO
+          }
+
+          mutating func apply(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) -> ApplyResult {
+              // TODO
+              return .applied
+          }
+      }
+    solution: |
+      import Foundation
+
+      struct PriceLevel: Equatable {
+          let price: Decimal
+          let qty: Decimal
+      }
+
+      enum ApplyResult: Equatable {
+          case applied
+          case stale
+          case gap(expected: Int64, got: Int64)
+          case needsSnapshot
+          case crossed
+      }
+
+      struct OrderBook {
+          private var bidMap: [Decimal: Decimal] = [:]
+          private var askMap: [Decimal: Decimal] = [:]
+          private var lastSeq: Int64?
+
+          var isValid: Bool { lastSeq != nil }
+          var bids: [PriceLevel] {
+              bidMap.map { PriceLevel(price: $0.key, qty: $0.value) }.sorted { $0.price > $1.price }
+          }
+          var asks: [PriceLevel] {
+              askMap.map { PriceLevel(price: $0.key, qty: $0.value) }.sorted { $0.price < $1.price }
+          }
+          var bestBid: PriceLevel? { bids.first }
+          var bestAsk: PriceLevel? { asks.first }
+
+          mutating func reset(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) {
+              bidMap = [:]
+              askMap = [:]
+              for l in bids where l.qty > 0 { bidMap[l.price] = l.qty }
+              for l in asks where l.qty > 0 { askMap[l.price] = l.qty }
+              lastSeq = seq
+          }
+
+          mutating func apply(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) -> ApplyResult {
+              guard let last = lastSeq else { return .needsSnapshot }
+              if seq <= last { return .stale }
+              if seq != last + 1 {
+                  lastSeq = nil
+                  return .gap(expected: last + 1, got: seq)
+              }
+              for l in bids { bidMap[l.price] = l.qty > 0 ? l.qty : nil }
+              for l in asks { askMap[l.price] = l.qty > 0 ? l.qty : nil }
+              lastSeq = seq
+              if let bb = bestBid, let ba = bestAsk, bb.price >= ba.price {
+                  lastSeq = nil
+                  return .crossed
+              }
+              return .applied
+          }
+      }
+    tests: |
+      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+      func L(_ p: String, _ q: String) -> PriceLevel { PriceLevel(price: D(p), qty: D(q)) }
+      func snapshotBook() -> OrderBook {
+          var b = OrderBook()
+          b.reset(seq: 10, bids: [L("98", "3"), L("100", "1"), L("99", "2"), L("97", "0")],
+                  asks: [L("102", "2"), L("101", "1")])
+          return b
+      }
+
+      check("快照：買方由高到低、賣方由低到高、忽略數量為 0 的檔位") {
+          let b = snapshotBook()
+          return b.isValid
+              && b.bids == [L("100", "1"), L("99", "2"), L("98", "3")]
+              && b.asks == [L("101", "1"), L("102", "2")]
+              && b.bestBid == L("100", "1") && b.bestAsk == L("101", "1")
+      }
+      check("seq 連續：新增與更新價位") {
+          var b = snapshotBook()
+          let r = b.apply(seq: 11, bids: [L("99", "5"), L("99.5", "1")], asks: [L("101", "0.5")])
+          return r == .applied
+              && b.bids == [L("100", "1"), L("99.5", "1"), L("99", "5"), L("98", "3")]
+              && b.asks == [L("101", "0.5"), L("102", "2")]
+      }
+      check("數量為 0 代表刪除，100.0 與 100 是同一檔") {
+          var b = snapshotBook()
+          let r = b.apply(seq: 11, bids: [L("100.0", "0")], asks: [])
+          return r == .applied && b.bestBid == L("99", "2") && b.bids.count == 2
+      }
+      check("重複或過期的 seq → stale，簿不變，之後仍可接續") {
+          var b = snapshotBook()
+          let r1 = b.apply(seq: 10, bids: [L("100", "9")], asks: [])
+          let r2 = b.apply(seq: 5, bids: [L("100", "9")], asks: [])
+          let r3 = b.apply(seq: 11, bids: [L("100", "2")], asks: [])
+          return r1 == .stale && r2 == .stale && r3 == .applied && b.bestBid == L("100", "2")
+      }
+      check("缺口 → gap，簿失效；失效後即使 seq 正確也要先 reset") {
+          var b = snapshotBook()
+          let r1 = b.apply(seq: 12, bids: [L("100", "9")], asks: [])
+          let valid1 = b.isValid
+          let r2 = b.apply(seq: 11, bids: [L("100", "9")], asks: [])
+          return r1 == .gap(expected: 11, got: 12) && !valid1 && r2 == .needsSnapshot
+              && b.bestBid == L("100", "1")
+      }
+      check("還沒有快照就收到增量 → needsSnapshot") {
+          var b = OrderBook()
+          return b.apply(seq: 1, bids: [L("100", "1")], asks: []) == .needsSnapshot && b.bids.isEmpty
+      }
+      check("交叉簿（最佳買價 >= 最佳賣價）→ crossed，簿失效") {
+          var b = snapshotBook()
+          let r = b.apply(seq: 11, bids: [L("101.5", "1")], asks: [])
+          return r == .crossed && !b.isValid
+      }
+      check("重新同步：reset 後從新的 seq 繼續") {
+          var b = snapshotBook()
+          _ = b.apply(seq: 20, bids: [], asks: [])
+          b.reset(seq: 30, bids: [L("200", "1")], asks: [L("201", "1")])
+          let r = b.apply(seq: 31, bids: [L("200", "2")], asks: [])
+          return r == .applied && b.isValid && b.bids == [L("200", "2")]
+      }
+  kotlin:
+    starter: |
+      import java.math.BigDecimal
+
+      data class PriceLevel(val price: BigDecimal, val qty: BigDecimal)
+
+      sealed class ApplyResult {
+          object Applied : ApplyResult()
+          object Stale : ApplyResult()
+          data class Gap(val expected: Long, val got: Long) : ApplyResult()
+          object NeedsSnapshot : ApplyResult()
+          object Crossed : ApplyResult()
+      }
+
+      class OrderBook {
+          val isValid: Boolean get() = false
+          val bids: List<PriceLevel> get() = emptyList()
+          val asks: List<PriceLevel> get() = emptyList()
+          val bestBid: PriceLevel? get() = null
+          val bestAsk: PriceLevel? get() = null
+
+          fun reset(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>) {
+              // TODO
+          }
+
+          fun apply(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>): ApplyResult {
+              // TODO
+              return ApplyResult.Applied
+          }
+      }
+    solution: |
+      import java.math.BigDecimal
+      import java.util.TreeMap
+
+      data class PriceLevel(val price: BigDecimal, val qty: BigDecimal)
+
+      sealed class ApplyResult {
+          object Applied : ApplyResult()
+          object Stale : ApplyResult()
+          data class Gap(val expected: Long, val got: Long) : ApplyResult()
+          object NeedsSnapshot : ApplyResult()
+          object Crossed : ApplyResult()
+      }
+
+      class OrderBook {
+          private val bidMap = TreeMap<BigDecimal, BigDecimal>(Comparator.reverseOrder())
+          private val askMap = TreeMap<BigDecimal, BigDecimal>()
+          private var lastSeq: Long? = null
+
+          val isValid: Boolean get() = lastSeq != null
+          val bids: List<PriceLevel> get() = bidMap.map { PriceLevel(it.key, it.value) }
+          val asks: List<PriceLevel> get() = askMap.map { PriceLevel(it.key, it.value) }
+          val bestBid: PriceLevel? get() = bidMap.firstEntry()?.let { PriceLevel(it.key, it.value) }
+          val bestAsk: PriceLevel? get() = askMap.firstEntry()?.let { PriceLevel(it.key, it.value) }
+
+          fun reset(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>) {
+              bidMap.clear()
+              askMap.clear()
+              for (l in bids) if (l.qty.signum() > 0) bidMap[l.price] = l.qty
+              for (l in asks) if (l.qty.signum() > 0) askMap[l.price] = l.qty
+              lastSeq = seq
+          }
+
+          fun apply(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>): ApplyResult {
+              val last = lastSeq ?: return ApplyResult.NeedsSnapshot
+              if (seq <= last) return ApplyResult.Stale
+              if (seq != last + 1) {
+                  lastSeq = null
+                  return ApplyResult.Gap(last + 1, seq)
+              }
+              for (l in bids) if (l.qty.signum() > 0) bidMap[l.price] = l.qty else bidMap.remove(l.price)
+              for (l in asks) if (l.qty.signum() > 0) askMap[l.price] = l.qty else askMap.remove(l.price)
+              lastSeq = seq
+              val bb = bestBid
+              val ba = bestAsk
+              if (bb != null && ba != null && bb.price >= ba.price) {
+                  lastSeq = null
+                  return ApplyResult.Crossed
+              }
+              return ApplyResult.Applied
+          }
+      }
+    tests: |
+      import java.math.BigDecimal
+
+      fun L(p: String, q: String) = PriceLevel(BigDecimal(p), BigDecimal(q))
+      fun txt(ls: List<PriceLevel>) = ls.map { it.price.stripTrailingZeros().toPlainString() + "@" + it.qty.stripTrailingZeros().toPlainString() }
+      fun txt1(l: PriceLevel?) = l?.let { it.price.stripTrailingZeros().toPlainString() + "@" + it.qty.stripTrailingZeros().toPlainString() }
+      fun snapshotBook(): OrderBook {
+          val b = OrderBook()
+          b.reset(10, listOf(L("98", "3"), L("100", "1"), L("99", "2"), L("97", "0")), listOf(L("102", "2"), L("101", "1")))
+          return b
+      }
+
+      check("快照：買方由高到低、賣方由低到高、忽略數量為 0 的檔位") {
+          val b = snapshotBook()
+          b.isValid && txt(b.bids) == listOf("100@1", "99@2", "98@3") && txt(b.asks) == listOf("101@1", "102@2") &&
+              txt1(b.bestBid) == "100@1" && txt1(b.bestAsk) == "101@1"
+      }
+      check("seq 連續：新增與更新價位") {
+          val b = snapshotBook()
+          val r = b.apply(11, listOf(L("99", "5"), L("99.5", "1")), listOf(L("101", "0.5")))
+          r == ApplyResult.Applied && txt(b.bids) == listOf("100@1", "99.5@1", "99@5", "98@3") &&
+              txt(b.asks) == listOf("101@0.5", "102@2")
+      }
+      check("數量為 0 代表刪除，100.0 與 100 是同一檔") {
+          val b = snapshotBook()
+          val r = b.apply(11, listOf(L("100.0", "0")), emptyList())
+          r == ApplyResult.Applied && txt1(b.bestBid) == "99@2" && b.bids.size == 2
+      }
+      check("重複或過期的 seq → stale，簿不變，之後仍可接續") {
+          val b = snapshotBook()
+          val r1 = b.apply(10, listOf(L("100", "9")), emptyList())
+          val r2 = b.apply(5, listOf(L("100", "9")), emptyList())
+          val r3 = b.apply(11, listOf(L("100", "2")), emptyList())
+          r1 == ApplyResult.Stale && r2 == ApplyResult.Stale && r3 == ApplyResult.Applied && txt1(b.bestBid) == "100@2"
+      }
+      check("缺口 → gap，簿失效；失效後即使 seq 正確也要先 reset") {
+          val b = snapshotBook()
+          val r1 = b.apply(12, listOf(L("100", "9")), emptyList())
+          val valid1 = b.isValid
+          val r2 = b.apply(11, listOf(L("100", "9")), emptyList())
+          r1 == ApplyResult.Gap(11, 12) && !valid1 && r2 == ApplyResult.NeedsSnapshot && txt1(b.bestBid) == "100@1"
+      }
+      check("還沒有快照就收到增量 → needsSnapshot") {
+          val b = OrderBook()
+          b.apply(1, listOf(L("100", "1")), emptyList()) == ApplyResult.NeedsSnapshot && b.bids.isEmpty()
+      }
+      check("交叉簿（最佳買價 >= 最佳賣價）→ crossed，簿失效") {
+          val b = snapshotBook()
+          val r = b.apply(11, listOf(L("101.5", "1")), emptyList())
+          r == ApplyResult.Crossed && !b.isValid
+      }
+      check("重新同步：reset 後從新的 seq 繼續") {
+          val b = snapshotBook()
+          b.apply(20, emptyList(), emptyList())
+          b.reset(30, listOf(L("200", "1")), listOf(L("201", "1")))
+          val r = b.apply(31, listOf(L("200", "2")), emptyList())
+          r == ApplyResult.Applied && b.isValid && txt(b.bids) == listOf("200@2")
+      }
+
+- id: exchange-order-book-08
+  type: code
+  level: 2
+  priority: P0
+  tags: [aggregation, cumulative, decimal]
+  prompt: |
+    實作簿的聚合與累計。（白話：把相近的價格合併成一檔，以及從最佳價開始把數量一路加總。）
+
+    - `aggregate(levels, step, side)`：把每個價位**取整到 `step` 的倍數**再合併數量。買方（`.bid`）往下取整、賣方（`.ask`）往上取整。數量 ≤ 0 的檔位忽略。輸出買方由高到低、賣方由低到高。`step <= 0` 時不聚合，只過濾與排序。輸入可以未排序
+    - `cumulative(levels)`：依輸入順序回傳每一檔的**累計數量**（running sum，一路加總的結果）；空陣列回傳空陣列
+    - 價格與數量用 `Decimal`／`BigDecimal`
+  hints:
+    - "取整：`price / step` 取整數部分，再乘回 `step`。Swift 用 `NSDecimalRound(&r, &q, 0, .down／.up)`，Kotlin 用 `divide(step, 0, RoundingMode.FLOOR／CEILING)`。"
+    - "用字典（Swift）或 `TreeMap`（Kotlin）以取整後的價格當 key 合併。"
+  swift:
+    starter: |
+      import Foundation
+
+      struct PriceLevel: Equatable {
+          let price: Decimal
+          let qty: Decimal
+      }
+
+      enum Side { case bid, ask }
+
+      func aggregate(_ levels: [PriceLevel], step: Decimal, side: Side) -> [PriceLevel] {
+          // TODO
+          return levels
+      }
+
+      func cumulative(_ levels: [PriceLevel]) -> [Decimal] {
+          // TODO
+          return []
+      }
+    solution: |
+      import Foundation
+
+      struct PriceLevel: Equatable {
+          let price: Decimal
+          let qty: Decimal
+      }
+
+      enum Side { case bid, ask }
+
+      func aggregate(_ levels: [PriceLevel], step: Decimal, side: Side) -> [PriceLevel] {
+          var buckets: [Decimal: Decimal] = [:]
+          for l in levels where l.qty > 0 {
+              var price = l.price
+              if step > 0 {
+                  var q = l.price / step
+                  var r = Decimal()
+                  NSDecimalRound(&r, &q, 0, side == .bid ? .down : .up)
+                  price = r * step
+              }
+              buckets[price, default: 0] += l.qty
+          }
+          let out = buckets.map { PriceLevel(price: $0.key, qty: $0.value) }
+          return out.sorted { side == .bid ? $0.price > $1.price : $0.price < $1.price }
+      }
+
+      func cumulative(_ levels: [PriceLevel]) -> [Decimal] {
+          var running: Decimal = 0
+          return levels.map { running += $0.qty; return running }
+      }
+    tests: |
+      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+      func L(_ p: String, _ q: String) -> PriceLevel { PriceLevel(price: D(p), qty: D(q)) }
+
+      checkEqual("買方往下取整並合併", [L("100", "3"), L("99", "3")]) {
+          aggregate([L("100.7", "1"), L("100.2", "2"), L("99.9", "3")], step: D("1"), side: .bid)
+      }
+      checkEqual("賣方往上取整並合併", [L("101", "7")]) {
+          aggregate([L("100.1", "1"), L("100.9", "2"), L("101.0", "4")], step: D("1"), side: .ask)
+      }
+      checkEqual("step 為 0.5（買方）", [L("100.5", "2"), L("100", "2")]) {
+          aggregate([L("100.74", "1"), L("100.50", "1"), L("100.49", "2")], step: D("0.5"), side: .bid)
+      }
+      checkEqual("step 為 10（賣方），已對齊的價位不往上多跳一檔", [L("110", "3"), L("120", "3")]) {
+          aggregate([L("101", "1"), L("110", "2"), L("111", "3")], step: D("10"), side: .ask)
+      }
+      checkEqual("step <= 0：不聚合，只排序", [L("100", "2"), L("99", "1")]) {
+          aggregate([L("99", "1"), L("100", "2")], step: D("0"), side: .bid)
+      }
+      checkEqual("數量 <= 0 的檔位忽略；輸入未排序時輸出依方向排序", [L("102", "1"), L("101", "2")]) {
+          aggregate([L("101", "2"), L("103", "0"), L("102", "1")], step: D("1"), side: .ask).reversed()
+      }
+      checkEqual("空輸入", 0) { aggregate([], step: D("1"), side: .bid).count }
+      checkEqual("累計數量", [D("1"), D("3"), D("3.5")]) {
+          cumulative([L("100", "1"), L("99", "2"), L("98", "0.5")])
+      }
+      checkEqual("累計：空陣列", 0) { cumulative([]).count }
+  kotlin:
+    starter: |
+      import java.math.BigDecimal
+
+      data class PriceLevel(val price: BigDecimal, val qty: BigDecimal)
+
+      enum class Side { BID, ASK }
+
+      fun aggregate(levels: List<PriceLevel>, step: BigDecimal, side: Side): List<PriceLevel> {
+          // TODO
+          return levels
+      }
+
+      fun cumulative(levels: List<PriceLevel>): List<BigDecimal> {
+          // TODO
+          return emptyList()
+      }
+    solution: |
+      import java.math.BigDecimal
+      import java.math.RoundingMode
+      import java.util.TreeMap
+
+      data class PriceLevel(val price: BigDecimal, val qty: BigDecimal)
+
+      enum class Side { BID, ASK }
+
+      fun aggregate(levels: List<PriceLevel>, step: BigDecimal, side: Side): List<PriceLevel> {
+          val buckets = TreeMap<BigDecimal, BigDecimal>()
+          for (l in levels) {
+              if (l.qty.signum() <= 0) continue
+              val price = if (step.signum() > 0) {
+                  val mode = if (side == Side.BID) RoundingMode.FLOOR else RoundingMode.CEILING
+                  l.price.divide(step, 0, mode).multiply(step)
+              } else l.price
+              buckets.merge(price, l.qty) { a, b -> a.add(b) }
+          }
+          val out = buckets.map { PriceLevel(it.key, it.value) }
+          return if (side == Side.BID) out.reversed() else out
+      }
+
+      fun cumulative(levels: List<PriceLevel>): List<BigDecimal> {
+          var running = BigDecimal.ZERO
+          return levels.map { running = running.add(it.qty); running }
+      }
+    tests: |
+      import java.math.BigDecimal
+
+      fun L(p: String, q: String) = PriceLevel(BigDecimal(p), BigDecimal(q))
+      fun txt(ls: List<PriceLevel>) = ls.map { it.price.stripTrailingZeros().toPlainString() + "@" + it.qty.stripTrailingZeros().toPlainString() }
+      fun plain(ds: List<BigDecimal>) = ds.map { it.stripTrailingZeros().toPlainString() }
+
+      checkEqual("買方往下取整並合併", listOf("100@3", "99@3")) {
+          txt(aggregate(listOf(L("100.7", "1"), L("100.2", "2"), L("99.9", "3")), BigDecimal("1"), Side.BID))
+      }
+      checkEqual("賣方往上取整並合併", listOf("101@7")) {
+          txt(aggregate(listOf(L("100.1", "1"), L("100.9", "2"), L("101.0", "4")), BigDecimal("1"), Side.ASK))
+      }
+      checkEqual("step 為 0.5（買方）", listOf("100.5@2", "100@2")) {
+          txt(aggregate(listOf(L("100.74", "1"), L("100.50", "1"), L("100.49", "2")), BigDecimal("0.5"), Side.BID))
+      }
+      checkEqual("step 為 10（賣方），已對齊的價位不往上多跳一檔", listOf("110@3", "120@3")) {
+          txt(aggregate(listOf(L("101", "1"), L("110", "2"), L("111", "3")), BigDecimal("10"), Side.ASK))
+      }
+      checkEqual("step <= 0：不聚合，只排序", listOf("100@2", "99@1")) {
+          txt(aggregate(listOf(L("99", "1"), L("100", "2")), BigDecimal("0"), Side.BID))
+      }
+      checkEqual("數量 <= 0 的檔位忽略；輸入未排序時輸出依方向排序", listOf("101@2", "102@1")) {
+          txt(aggregate(listOf(L("101", "2"), L("103", "0"), L("102", "1")), BigDecimal("1"), Side.ASK))
+      }
+      checkEqual("空輸入", 0) { aggregate(emptyList(), BigDecimal("1"), Side.BID).size }
+      checkEqual("累計數量", listOf("1", "3", "3.5")) {
+          plain(cumulative(listOf(L("100", "1"), L("99", "2"), L("98", "0.5"))))
+      }
+      checkEqual("累計：空陣列", 0) { cumulative(emptyList()).size }
+
+- id: exchange-order-book-09
+  type: open
+  level: 2
+  priority: P0
+  tags: [order-book, architecture]
+  prompt: |
+    設計交易所 App 的「訂單簿」資料層與畫面：資料如何進來、如何保持正確、如何呈現與更新？請區分這套交易所 API 文件中看到的完整快照頻道與一般交易所的增量頻道，並說明你的相關經驗。
+  promptJa: |
+    取引所アプリの「板情報」のデータ層と画面を設計してください。データの取り込み方、正しさの保ち方、表示と更新の方法を説明してください。この取引所 API のドキュメントにある完全スナップショットのチャンネルと、一般的な取引所の差分チャンネルの違いも整理し、関連する経験も説明してください。
+  keyPoints:
+    - "這套交易所 API 文件：depth 頻道推送完整 `bids`／`asks`（無序號），REST 有 `version`；`bbo` 有 `seqId`；增量簿頻道是否存在以 API 文件為準"
+    - "完整快照型（每次推整份板）：直接取代，用 `ts` 丟棄順序顛倒的舊資料；增量型（只推變動的檔位）：先緩衝、再取快照、丟棄 ≤ 快照 seq、逐筆檢查 `seq == last + 1`、跳號就重新同步"
+    - "資料結構：Decimal／BigDecimal 價格、排序結構、數量 0 即刪除；交叉簿（買價高於等於賣價）檢查；重連與回前景走同一條重新同步路徑"
+    - "呈現：10–20 檔、依 step 合併（買方往下、賣方往上取整）、累計數量與深度條、等寬數字；點價格帶入下單表單並對齊 tick size"
+    - "更新：背景套用與合併，固定頻率取一份目前的板，以價格當識別做 diff，只更新變動的列（iOS `reconfigureItems`、Android `DiffUtil`）"
+    - "斷線或重新同步時標示資料過期，並禁止用過期的簿估算成交價或下單"
+    - "經驗：即時行情 App 的 K 線在套用更新前先檢查能不能接上（時間相同取代、差距是週期整數倍才新增、其他丟棄），回前景補抓；訂單簿的套用、合併、累計用 Decimal 和純函式練習過"
+  modelAnswer: |
+    先分清楚資料來源。這套交易所的 API 文件裡，depth 頻道每次推送都是完整的 `bids`／`asks`，沒有序號，所以我會把它當快照（整份最新的板）：直接取代本地簿，用 `ts` 丟掉順序顛倒的舊資料。如果日後要用增量頻道（只推變動的檔位），或對接其他有增量的交易所，流程是先緩衝增量、再取快照、丟棄序號不超過快照的增量、之後每筆都檢查 `seq == last + 1`，有跳號就把簿標為失效並重新同步。重連和回前景都走同一條重新同步路徑。
+
+    資料層用 Decimal／BigDecimal，數量 0 代表刪除，並檢查最佳買價不能高於等於最佳賣價。呈現上顯示 10 到 20 檔，依 step 合併時買方往下、賣方往上取整，畫累計數量與深度條；點價格帶入下單表單時要對齊 tick size。更新方面，背景先套用與合併（多筆更新只留最新一筆），再以固定頻率取一份目前的板，用價格當識別做 diff（比較新舊兩版，只更新變動的列），數字用等寬數字。斷線或重新同步時要標示資料過期，並禁止用過期的簿估算成交價或下單。
+
+    經驗上，我在一個即時行情 App 做過即時 K 線：套用每一筆更新前，先檢查能不能接上（同一時間就取代，差距是週期的整數倍才新增，其他丟掉），回前景時重新抓資料補齊。訂單簿的套用、合併和累計，我用 Decimal 和純函式練習過。概念是相通的，到交易所的 App 我會把這套檢查用在訂單簿上。
+  modelAnswerJa: |
+    まずデータの出所を区別します。この取引所 API のドキュメントでは、depth チャンネルは毎回完全な `bids`／`asks` を送ってきて、シーケンス番号はありません。そのためスナップショットとして扱い、ローカルの板を丸ごと置き換え、`ts` で順序が逆転した古いデータを捨てます。将来、差分チャンネルを使う場合や、差分のある他の取引所に対応する場合の手順は、まず差分をバッファし、次にスナップショットを取得し、スナップショットのシーケンス番号以下の差分を捨て、以降は毎回 `seq == last + 1` を確認して、欠落があれば板を無効にして再同期します。再接続とフォアグラウンド復帰も、同じ再同期の経路を通します。
+
+    データ層は Decimal／BigDecimal を使い、数量 0 は削除として扱い、最良買値が最良売値以上にならないかも確認します。表示は 10〜20 本で、集約するときは買いを切り捨て、売りを切り上げ、累計数量と深度バーを描きます。価格をタップして注文フォームに入れるときは tick size に合わせます。更新はバックグラウンドで適用してまとめ（複数の更新のうち最新の 1 件だけを残し）、一定間隔で現在の板を取り出して、価格を識別子にして差分を取り、変わった行だけ更新します。数字は等幅数字を使います。切断中や再同期中はデータが古いことを表示し、古い板で約定価格を見積もったり発注したりしないようにします。
+
+    経験としては、相場アプリのリアルタイムのローソク足で、更新を適用する前に連続して接続できるかを確認し（同じ時刻なら置き換え、期間の整数倍の差のときだけ追加し、それ以外は捨てる）、フォアグラウンド復帰時にデータを再取得して補っていました。板情報の適用、集約、累計は Decimal と純粋関数で練習しました。考え方は共通なので、取引所アプリではこの確認を板情報にも使います。
+  followUps:
+    - "完整快照型頻道的推送頻率很高，你會在哪一層合併？"
+    - "增量簿套用到一半 App 進背景，回來時要做什麼？"
+    - "如何測試序號檢查？有哪些邊界案例？"
+  timeLimitSec: 150
+
+- id: exchange-order-book-10
+  type: flash
+  level: 1
+  priority: P0
+  tags: [order-book]
+  front: 增量簿的規則與聚合方向速記
+  back: |
+    - 順序：先**緩衝**增量 → 取快照 → 丟棄 `seq ≤ 快照 seq` → 逐筆 `seq == last + 1` → 跳號（漏了幾筆）就失效並重新同步。
+    - 數量 0＝刪除；`bestBid >= bestAsk`＝交叉簿（買方最高價不低於賣方最低價）＝重新同步；`BigDecimal` 用 `TreeMap`／`compareTo`。
+    - 聚合（把相近價格合併成一檔）：買往下（floor）、賣往上（ceil），再合併數量（這套 API 的 stepN 實際方向文件沒有明講）。
+    - 這套 API 文件：`depth.stepN` 每次推完整快照（無序號）；`bbo` 有 `seqId`；REST `type=step0..5`，step1＝價格精度×10。

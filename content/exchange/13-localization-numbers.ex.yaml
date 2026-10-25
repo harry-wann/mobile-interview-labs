@@ -1,0 +1,461 @@
+- id: exchange-localization-numbers-01
+  type: single
+  level: 1
+  priority: P1
+  tags: [locale, zh-hans, zh-hant]
+  prompt: |
+    交易所 App 要同時支援簡體與繁體中文（另有日文與英文）。下列哪個語系標籤與降級的做法最合理？
+  options:
+    - "簡中就是 `zh-CN`、繁中就是 `zh-TW`，其他地區不用考慮"
+    - "以文字種類（script）區分語言資源：`zh-Hans` 與 `zh-Hant`；格式（日期、數字）依 locale 的地區；香港、澳門的繁體使用者落到 `zh-Hant`，查找順序是完整標籤 → 基礎語言 → 預設語言 → key，用語差異另外評估"
+    - "只提供繁中，簡中使用者請自行轉換"
+    - "只維護一份中文字串，執行時由系統自動做簡繁轉換"
+  answer: 1
+  explain: |
+    簡體與繁體是文字（script）的差異，不是地區的差異；`zh-Hant-HK`、`zh-Hant-MO` 的使用者看的是繁體，但用語可能和台灣不同。
+
+    其他選項錯在哪裡：
+    - 第 1 項：把簡繁和單一地區綁死，香港、澳門的繁體使用者就沒有對應的資源。
+    - 第 3 項：日本的加密資產交易所 App 常見提供簡體中文，不提供簡中等於放棄這群使用者。
+    - 第 4 項：自動轉換無法處理用語差異（例如「軟體」和「软件」、「程式」和「程序」），金融術語尤其不能自動轉。
+
+    降級鏈（找不到字串時的查找順序）：完整標籤（`zh-Hant-HK`）→ 基礎語言（`zh-Hant`）→ 預設語言 → key 本身。
+
+- id: exchange-localization-numbers-02
+  type: single
+  level: 2
+  priority: P1
+  tags: [units, cldr, large-numbers]
+  prompt: |
+    行情頁要顯示成交額 1,234,567,890,123（約 1.23 乘以 10 的 12 次方）。依序是 ja、zh-Hant（台灣）、zh-Hans、en 的標準大數單位，哪一組完全正確？
+  options:
+    - "1.23兆、1.23兆、1.23万亿、1.23T"
+    - "1.23兆、1.23兆、1.23兆、1.23T"
+    - "1.23兆、1.23兆、1.23万亿、1.23B"
+    - "12.3千億、12.3千億、12.3千亿、12.3B"
+  answer: 0
+  explain: |
+    - 日文與繁體（台灣）：萬（10^4）、億（10^8）、兆（10^12），四位一組。
+    - 簡體：万、亿、**万亿**（10^12）；簡體沒有把「兆」當作 10^12 的標準單位。
+    - 英文：K、M、B、T，三位一組；10^12 是 T，B 是 10^9。
+
+    其他選項錯在哪裡：
+    - 第 2 項：簡體中文的 10^12 是「万亿」，不是「兆」。
+    - 第 3 項：英文的 B 是 10^9（十億），10^12 要用 T。
+    - 第 4 項：日文與中文的標準單位是萬、億、兆，沒有「千億」這種單位；英文的 B 是 10^9，用 B 也不對。
+
+    本機（macOS 的 Foundation）實測這四個 locale 的 compact formatter 也是這樣的單位，但精度只有約兩位有效數字，見下一題。
+
+- id: exchange-localization-numbers-03
+  type: multi
+  level: 2
+  priority: P1
+  tags: [compact, icu, rounding]
+  prompt: |
+    關於用平台的 compact formatter（把大數縮短顯示，例如 iOS 的 `.number.notation(.compactName)`、Android 的 `CompactDecimalFormat`）顯示大數，哪些敘述正確？（複選）
+  options:
+    - "預設約保留兩位有效數字：本機實測 123,456,789 在 ja 得到 `1.2億`、在 en 得到 `123M`；若產品要 `1.23億` 這種兩位小數，就不能直接使用，要自訂有效位數與捨入"
+    - "compact 是有損的顯示，只適合市值、成交量等輔助標籤；不可用於下單數量、確認頁、損益明細，也不能把顯示字串當成數值送回 API"
+    - "所有繁體中文 locale（包含 `zh_Hant_HK`）都使用萬、億作為單位"
+    - "`NumberFormatter` 與 Java 的 `DecimalFormat` 預設的捨入模式是 half-even，不是一般人以為的四捨五入；需要 half-up 必須明確設定"
+    - "iOS 與 Android 的 compact formatter 因為都依 CLDR，輸出一定相同，不需要在兩個平台分別測試"
+    - "把 compact 的顯示字串（例如 `1.2億`）解析回數字，可以安全地用在後續計算"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：平台的 compact formatter 預設只保留約兩位有效數字，要兩位小數就得自己實作。
+    - 第 2 項正確：`1.2億` 已經丟掉後面的位數，用在金額會出錯。
+    - 第 3 項錯：本機實測 `zh_Hant_HK` 得到 `123M`（英文式單位），與 `zh_Hant_TW` 的 `1.2億` 不同，不能假設所有繁體中文 locale 都用萬、億。
+    - 第 4 項正確：half-even 是剛好在中間的數字捨入到偶數；需要一般的四捨五入，必須明確設定 half-up。
+    - 第 5 項錯：CLDR（各語言格式資料庫）和 ICU 的版本在 iOS 與 Android 不同，結果也可能不同，所以兩個平台、目標系統版本都要實測。
+    - 第 6 項錯：compact 是有損的，解析回來的數字已經不準，不能用在計算。
+
+    要可預測的規則（兩位小數、half-up、進位升級單位），自己實作並用固定輸入的測試案例固定下來，見本單元的程式題。
+
+- id: exchange-localization-numbers-04
+  type: predict
+  level: 2
+  priority: P1
+  tags: [numberformatter, rounding, swift]
+  prompt: |
+    下列程式印出什麼？（兩行輸出，依序列出所有 token）
+  codeLang: swift
+  code: |
+    import Foundation
+
+    let nf = NumberFormatter()
+    nf.numberStyle = .decimal
+    nf.locale = Locale(identifier: "en_US")
+    nf.maximumFractionDigits = 0
+
+    func show() {
+        print([0.5, 1.5, 2.5, 3.5].map { nf.string(from: NSNumber(value: $0))! }.joined(separator: " "))
+    }
+    show()
+    nf.roundingMode = .halfUp
+    show()
+  answer: |
+    0 2 2 4 1 2 3 4
+  explain: |
+    `NumberFormatter` 預設的 `roundingMode` 是 `.halfEven`（銀行家捨入）：剛好在中間的數字，捨入到最近的偶數，所以 `0.5 → 0`、`1.5 → 2`、`2.5 → 2`、`3.5 → 4`，第一行是 `0 2 2 4`。
+    設成 `.halfUp` 才是一般人預期的「四捨五入」（剛好在中間時進位）：`0.5 → 1`、`1.5 → 2`、`2.5 → 3`、`3.5 → 4`，第二行是 `1 2 3 4`。Java 的 `DecimalFormat` 預設也是 `HALF_EVEN`。
+
+    顯示用的價格、漲跌幅若要與 Android 或網頁版一致，要在兩邊明確設定相同的捨入模式。實際下單的數量與價格則依「精度與金額」單元的規則，用截斷。
+
+- id: exchange-localization-numbers-05
+  type: predict
+  level: 2
+  priority: P1
+  tags: [dateformatter, calendar, week-year, swift]
+  prompt: |
+    下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    import Foundation
+
+    let d = Date(timeIntervalSince1970: 1_766_977_200)   // 2025-12-29 12:00:00 JST
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+    f.dateFormat = "yyyy-MM-dd"
+    print(f.string(from: d))
+    f.dateFormat = "YYYY-MM-dd"
+    print(f.string(from: d))
+
+    let g = DateFormatter()
+    g.locale = Locale(identifier: "ja_JP@calendar=japanese")
+    g.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+    g.dateFormat = "yyyy-MM-dd"
+    print(g.string(from: d))
+  answer: |
+    2025-12-29 2026-12-29 0007-12-29
+  explain: |
+    - 第一行：`yyyy` 是西曆年，所以是 `2025-12-29`。
+    - 第二行：`YYYY` 是**週年**（week-based year，以「週」為單位算的年份）。2025-12-29 所在的那一週屬於 2026 年的第 1 週，所以顯示 `2026-12-29`。K 線與交易紀錄的時間標籤在年底年初最容易踩到。
+    - 第三行：這個 locale 使用日本曆，同樣的固定格式 `yyyy` 輸出的是令和 7 年（`0007`）。使用者如果把裝置日曆設為日本曆，而你用 `Locale.current` 產生給 API 的時間字串，就會得到這種結果。與 API 交換的時間字串，一律用 `en_US_POSIX`、西曆、明確的時區。
+
+- id: exchange-localization-numbers-06
+  type: code
+  level: 3
+  priority: P0
+  tags: [compact, formatting, cldr]
+  timeLimitSec: 1500
+  prompt: |
+    實作 `formatCompact(value, lang)`：把整數金額顯示成帶大數單位的短字串（例如日文的 12,345 顯示成 `1.23万`）。`value` 是 `Int64`／`Long`（不會傳入最小值），不含貨幣符號。
+
+    單位（每一行是「門檻」→「單位」）：
+    - ja：10^4 → `万`、10^8 → `億`、10^12 → `兆`
+    - zhHant：10^4 → `萬`、10^8 → `億`、10^12 → `兆`
+    - zhHans：10^4 → `万`、10^8 → `亿`、10^12 → `万亿`
+    - en：10^3 → `K`、10^6 → `M`、10^9 → `B`、10^12 → `T`
+
+    規則：
+    1. `|value|` 小於最小的門檻 → 輸出原整數，**每三位加 `,`**（例如 `9,999`、`999`、`0`）
+    2. 否則選擇**不大於** `|value|` 的最大單位，把 `|value| / 單位` 以 **half-up（遠離零）** 捨入到 **2 位小數**
+    3. 若捨入後的值已經達到下一個單位的換算比（例如 ja 的 `10000万`，en 的 `1000K`），改用**下一個單位**，並**重新**從原值計算捨入（例如 ja 的 99,999,999 → `1億`）
+    4. 整數部分每三位加 `,`；小數部分去掉尾端的 0，沒有小數就不顯示小數點（`1.20` → `1.2`、`1.00` → `1`）
+    5. 負數在前面加 `-`；單位緊接在數字後面，沒有空白
+    6. 超過最大單位也不再升級（例如 ja 的 10^16 → `10,000兆`）
+  hints:
+    - "用整數運算避免 Double 的誤差：`q = a / u`、`r = a % u`，再算 `total2 = q * 100 + (r * 100 + u / 2) / u`（相當於「乘 100 之後做 half-up」）。"
+    - "進位升級要放在迴圈裡：`total2 >= (下一單位 / 本單位) * 100` 就換成下一個單位，並重算。"
+  swift:
+    starter: |
+      enum Lang {
+          case ja, zhHans, zhHant, en
+      }
+
+      func formatCompact(_ value: Int64, lang: Lang) -> String {
+          // TODO
+          return String(value)
+      }
+    solution: |
+      enum Lang {
+          case ja, zhHans, zhHant, en
+      }
+
+      func unitTable(_ lang: Lang) -> [(Int64, String)] {
+          switch lang {
+          case .ja: return [(10_000, "万"), (100_000_000, "億"), (1_000_000_000_000, "兆")]
+          case .zhHant: return [(10_000, "萬"), (100_000_000, "億"), (1_000_000_000_000, "兆")]
+          case .zhHans: return [(10_000, "万"), (100_000_000, "亿"), (1_000_000_000_000, "万亿")]
+          case .en: return [(1_000, "K"), (1_000_000, "M"), (1_000_000_000, "B"), (1_000_000_000_000, "T")]
+          }
+      }
+
+      func groupDigits(_ n: Int64) -> String {
+          var out = ""
+          for (i, ch) in String(n).reversed().enumerated() {
+              if i > 0 && i % 3 == 0 { out.append(",") }
+              out.append(ch)
+          }
+          return String(out.reversed())
+      }
+
+      func formatCompact(_ value: Int64, lang: Lang) -> String {
+          let units = unitTable(lang)
+          let a = abs(value)
+          let sign = value < 0 ? "-" : ""
+          guard a >= units[0].0 else { return sign + groupDigits(a) }
+          var i = units.lastIndex(where: { $0.0 <= a })!
+          while true {
+              let u = units[i].0
+              let q = a / u
+              let r = a % u
+              let total2 = q * 100 + (r * 100 + u / 2) / u
+              if i + 1 < units.count && total2 >= (units[i + 1].0 / u) * 100 {
+                  i += 1
+                  continue
+              }
+              var s = groupDigits(total2 / 100)
+              let frac = total2 % 100
+              if frac != 0 {
+                  var f = String(frac)
+                  if f.count < 2 { f = "0" + f }
+                  while f.hasSuffix("0") { f.removeLast() }
+                  s += "." + f
+              }
+              return sign + s + units[i].1
+          }
+      }
+    tests: |
+      func fmt(_ lang: Lang, _ values: [Int64]) -> [String] {
+          return values.map { formatCompact($0, lang: lang) }
+      }
+
+      checkEqual("ja：未達 1 万不縮寫、有千分位；整數倍不顯示小數", ["0", "999", "9,999", "-9,999", "1万", "1.23万"]) {
+          fmt(.ja, [0, 999, 9_999, -9_999, 10_000, 12_345])
+      }
+      checkEqual("ja：億、兆與負數", ["1.23億", "1億", "1.23兆", "-1.23億", "25億"]) {
+          fmt(.ja, [123_456_789, 100_000_000, 1_234_567_890_123, -123_456_789, 2_500_000_000])
+      }
+      checkEqual("zhHant：萬、億、兆", ["1.23萬", "1.23億", "1.23兆"]) {
+          fmt(.zhHant, [12_345, 123_456_789, 1_234_567_890_123])
+      }
+      checkEqual("zhHans：万、亿、万亿", ["1.23万", "1.23亿", "1.23万亿"]) {
+          fmt(.zhHans, [12_345, 123_456_789, 1_234_567_890_123])
+      }
+      checkEqual("en：K、M、B、T，三位一組", ["999", "1K", "1.5K", "123.46M", "2.5B", "1.23T"]) {
+          fmt(.en, [999, 1_000, 1_500, 123_456_789, 2_500_000_000, 1_234_567_890_123])
+      }
+      checkEqual("half-up（遠離零）而不是 half-even：1.225 → 1.23、1.235 → 1.24、-1.225 → -1.23", ["1.23万", "1.24万", "-1.23万"]) {
+          fmt(.ja, [12_250, 12_350, -12_250])
+      }
+      checkEqual("捨入後進位升級單位", ["1億", "9,999.5万", "100万", "1M", "1M", "999.99K", "100万亿"]) {
+          fmt(.ja, [99_999_999, 99_995_000]) + fmt(.zhHans, [999_999])
+              + fmt(.en, [999_999, 999_995, 999_994]) + fmt(.zhHans, [99_999_999_999_999])
+      }
+      checkEqual("超過最大單位不再升級；Int64 最大值", ["10,000兆", "9,223,372.04兆", "9,223,372.04万亿", "9,223,372.04T"]) {
+          [formatCompact(10_000_000_000_000_000, lang: .ja),
+           formatCompact(Int64.max, lang: .ja),
+           formatCompact(Int64.max, lang: .zhHans),
+           formatCompact(Int64.max, lang: .en)]
+      }
+  kotlin:
+    starter: |
+      enum class Lang { JA, ZH_HANS, ZH_HANT, EN }
+
+      fun formatCompact(value: Long, lang: Lang): String {
+          // TODO
+          return value.toString()
+      }
+    solution: |
+      enum class Lang { JA, ZH_HANS, ZH_HANT, EN }
+
+      private fun unitTable(lang: Lang): List<Pair<Long, String>> = when (lang) {
+          Lang.JA -> listOf(10_000L to "万", 100_000_000L to "億", 1_000_000_000_000L to "兆")
+          Lang.ZH_HANT -> listOf(10_000L to "萬", 100_000_000L to "億", 1_000_000_000_000L to "兆")
+          Lang.ZH_HANS -> listOf(10_000L to "万", 100_000_000L to "亿", 1_000_000_000_000L to "万亿")
+          Lang.EN -> listOf(1_000L to "K", 1_000_000L to "M", 1_000_000_000L to "B", 1_000_000_000_000L to "T")
+      }
+
+      private fun groupDigits(n: Long): String {
+          val sb = StringBuilder()
+          val s = n.toString()
+          for ((i, ch) in s.reversed().withIndex()) {
+              if (i > 0 && i % 3 == 0) sb.append(',')
+              sb.append(ch)
+          }
+          return sb.reverse().toString()
+      }
+
+      fun formatCompact(value: Long, lang: Lang): String {
+          val units = unitTable(lang)
+          val a = Math.abs(value)
+          val sign = if (value < 0) "-" else ""
+          if (a < units[0].first) return sign + groupDigits(a)
+          var i = units.indexOfLast { it.first <= a }
+          while (true) {
+              val u = units[i].first
+              val q = a / u
+              val r = a % u
+              val total2 = q * 100 + (r * 100 + u / 2) / u
+              if (i + 1 < units.size && total2 >= (units[i + 1].first / u) * 100) {
+                  i += 1
+                  continue
+              }
+              var s = groupDigits(total2 / 100)
+              val frac = total2 % 100
+              if (frac != 0L) {
+                  val f = frac.toString().padStart(2, '0').trimEnd('0')
+                  s += ".$f"
+              }
+              return sign + s + units[i].second
+          }
+      }
+    tests: |
+      fun fmt(lang: Lang, vararg values: Long): List<String> = values.map { formatCompact(it, lang) }
+
+      checkEqual("ja：未達 1 万不縮寫、有千分位；整數倍不顯示小數", listOf("0", "999", "9,999", "-9,999", "1万", "1.23万")) {
+          fmt(Lang.JA, 0, 999, 9_999, -9_999, 10_000, 12_345)
+      }
+      checkEqual("ja：億、兆與負數", listOf("1.23億", "1億", "1.23兆", "-1.23億", "25億")) {
+          fmt(Lang.JA, 123_456_789, 100_000_000, 1_234_567_890_123, -123_456_789, 2_500_000_000)
+      }
+      checkEqual("zhHant：萬、億、兆", listOf("1.23萬", "1.23億", "1.23兆")) {
+          fmt(Lang.ZH_HANT, 12_345, 123_456_789, 1_234_567_890_123)
+      }
+      checkEqual("zhHans：万、亿、万亿", listOf("1.23万", "1.23亿", "1.23万亿")) {
+          fmt(Lang.ZH_HANS, 12_345, 123_456_789, 1_234_567_890_123)
+      }
+      checkEqual("en：K、M、B、T，三位一組", listOf("999", "1K", "1.5K", "123.46M", "2.5B", "1.23T")) {
+          fmt(Lang.EN, 999, 1_000, 1_500, 123_456_789, 2_500_000_000, 1_234_567_890_123)
+      }
+      checkEqual("half-up（遠離零）而不是 half-even：1.225 → 1.23、1.235 → 1.24、-1.225 → -1.23", listOf("1.23万", "1.24万", "-1.23万")) {
+          fmt(Lang.JA, 12_250, 12_350, -12_250)
+      }
+      checkEqual("捨入後進位升級單位", listOf("1億", "9,999.5万", "100万", "1M", "1M", "999.99K", "100万亿")) {
+          fmt(Lang.JA, 99_999_999, 99_995_000) + fmt(Lang.ZH_HANS, 999_999) +
+              fmt(Lang.EN, 999_999, 999_995, 999_994) + fmt(Lang.ZH_HANS, 99_999_999_999_999)
+      }
+      checkEqual("超過最大單位不再升級；Long 最大值", listOf("10,000兆", "9,223,372.04兆", "9,223,372.04万亿", "9,223,372.04T")) {
+          listOf(
+              formatCompact(10_000_000_000_000_000, Lang.JA),
+              formatCompact(Long.MAX_VALUE, Lang.JA),
+              formatCompact(Long.MAX_VALUE, Lang.ZH_HANS),
+              formatCompact(Long.MAX_VALUE, Lang.EN),
+          )
+      }
+
+- id: exchange-localization-numbers-07
+  type: single
+  level: 3
+  priority: P0
+  tags: [input, normalization, nfkc, fullwidth]
+  prompt: |
+    日本使用者用日文輸入法在金額欄位輸入全形的 `１２３．５`。本機實測：Swift 的 `Double("１２３．５")` 與 `Decimal(string:)` 都回傳 `nil`；JDK 21 的 `NumberFormat.getInstance(Locale.JAPAN).parse("１２３．５")` 回傳 `123`（在全形小數點處悄悄截斷），`parse("1,234.5abc")` 回傳 `1234.5`。下列哪個處理最穩？
+  options:
+    - "Kotlin 直接用 `NumberFormat.parse`，它會處理全形，結果可信"
+    - "先 NFKC 正規化（Swift `precomposedStringWithCompatibilityMapping`、Java／Kotlin `Normalizer.normalize(s, NFKC)`），再用嚴格規則（只允許 ASCII 數字與最多一個小數點、需完整消耗整個字串）驗證，最後轉成 Decimal；解析失敗要顯示錯誤，不可靜默採用部分結果"
+    - "把鍵盤限制成只能輸入半形數字，就不需要處理其他輸入來源"
+    - "解析失敗時當作 0，避免 App 崩潰"
+  answer: 1
+  explain: |
+    其他選項錯在哪裡：
+    - 第 1 項：`NumberFormat.parse` 是寬鬆解析，遇到不認得的字元就停，回傳前面解析到的部分。金額從 123.5 變成 123，完全沒有錯誤，這對交易所是致命的。
+    - 第 3 項：全形數字、小數點可能來自輸入法、貼上或外接鍵盤，不能只靠鍵盤類型。
+    - 第 4 項：把失敗當作 0，使用者看不到錯誤，可能送出數量為 0 或錯誤的委託；解析失敗應該顯示錯誤訊息。
+
+    第 2 項的細節：NFKC 會把全形數字與全形小數點轉成 ASCII（本機實測 `１２３．５` → `123.5`），但負號 `−`（U+2212）和長音符 `ー` 不會被轉換；數量與價格欄位不需要負號，直接拒絕。另外，`BigDecimal("１２３")` 反而可以解析 Unicode 數字（得到 123），各個函式行為不一致，正是要自己先正規化再嚴格驗證的原因。Android 的行為需另外實測。
+
+- id: exchange-localization-numbers-08
+  type: multi
+  level: 2
+  priority: P1
+  tags: [date, timezone, calendar]
+  prompt: |
+    關於日期、曆法與時區的顯示，哪些做法或敘述正確？（複選）
+  options:
+    - "與 API 交換的時間字串用 `en_US_POSIX`、西曆、明確的時區；只有顯示給使用者時才用使用者的 locale"
+    - "使用者若把裝置的日曆設為日本曆，用 `Locale.current` 的 `DateFormatter` 配固定格式 `yyyy-MM-dd` 會輸出令和年（例如 `0007-12-29`）"
+    - "`YYYY` 與 `yyyy` 等價，都是西曆年份"
+    - "同一個時區 `Asia/Tokyo` 的 `zzz` 縮寫在不同 locale 不一致（本機實測 `ja_JP` 為 `JST`，`en_US`、`zh_Hans_CN`、`zh_Hant_TW` 為 `GMT+9`），要顯示 JST 就自行加後綴"
+    - "交易紀錄的時間用最口語的長格式（例如 `Dec 29, 2025 at 12:00 PM`）最適合，因為最貼近使用者習慣"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：顯示和資料交換要分開，API 的時間字串不能跟著使用者的設定變。
+    - 第 2 項正確：日本曆會讓固定格式的 `yyyy` 變成令和年。
+    - 第 3 項錯：`YYYY` 是週年（week-based year），跨年那一週的日期會顯示成下一年。
+    - 第 4 項正確：`zzz` 的縮寫依 locale 而不同，要顯示 JST 就自己加後綴，不要依賴系統給的縮寫。
+    - 第 5 項錯：交易紀錄與 K 線的時間需要沒有歧義：固定的 24 小時格式並標示時區（例如 `2026-10-23 14:05:09 JST`）。口語格式省略時區、使用 12 小時制，容易誤解，只適合一般的提示文字。
+
+    日本沒有夏令時間，但使用者可能在國外。顯示 JST 或裝置時區是產品決定，標籤要明確，資料內部一律存 UTC。
+
+- id: exchange-localization-numbers-09
+  type: single
+  level: 2
+  priority: P1
+  tags: [plural, format-string]
+  prompt: |
+    畫面要顯示「您有 N 筆未成交的委託」。英文是 `You have 1 open order` 與 `You have 3 open orders`。下列哪個做法最合理？
+  options:
+    - "用字串拼接：`\"You have \" + n + \" open orders\"`，單數的情況在程式裡特別處理"
+    - "使用格式字串與位置參數，並以平台的複數機制（iOS 的 `.stringsdict`／String Catalog 的 plural variation、Android 的 `<plurals>`）定義各語言的複數類別；日文與中文只需要 `other`，英文需要 `one` 與 `other`；來源語言（英文）的 plural 變體要完整提供"
+    - "全部語言都只寫一種形式（例如複數形），單數的情況使用者看得懂就好"
+    - "把數字放在最前面，文字固定不變，省去在地化"
+  answer: 1
+  explain: |
+    語序因語言而異（日文是「未約定の注文が N 件あります」），不能拼接。CLDR 的複數類別因語言而不同：日文與中文只有 `other`，英文有 `one`、`other`，其他語言還有 `few`、`many` 等。
+
+    其他選項錯在哪裡：
+    - 第 1 項：拼接字串無法處理其他語言的語序，單數的特殊處理也要在每個語言重寫一次，很容易漏。
+    - 第 3 項：「1 open orders」是文法錯誤，會讓產品顯得不專業。
+    - 第 4 項：數字放前面、文字固定，在日文與中文的語序下不自然，也無法處理複數變化。
+
+    要支援更多語言時，應該使用平台或 CLDR 的資料，而不是自己維護規則。
+
+- id: exchange-localization-numbers-10
+  type: open
+  level: 3
+  priority: P1
+  tags: [localization, numbers, design]
+  prompt: |
+    交易所 App 常見日、簡中、繁中、英等多種語言。請說明你會怎麼設計數字、日期與文字的在地化：語系標籤與降級、大數單位、捨入、曆法與時區、輸入解析、測試。並說明你過去的相關經驗可以怎麼延伸。
+  promptJa: |
+    取引所のアプリは日本語、簡体字、繁体字、英語など複数の言語に対応しているのが一般的です。数値、日付、文言のローカライズをどう設計しますか。ロケールタグとフォールバック、大きな数の単位、丸め、暦とタイムゾーン、入力のパース、テストを説明してください。これまでの関連経験をどう活かせるかも説明してください。
+  keyPoints:
+    - "語系：`zh-Hans`／`zh-Hant` 以 script 區分；降級鏈（完整標籤 → 基礎語言 → 預設語言 → key）；App 內語言與系統地區統一成同一個 Locale"
+    - "大數單位：ja 万億兆、zh-Hant 萬億兆、zh-Hans 万亿万亿、en KMBT；平台 compact 只有約兩位有效數字且依版本不同，需要明確規則時自己實作並用固定輸入的測試案例固定；compact 只用於輔助標籤"
+    - "捨入：預設是 half-even，要明確設定；下單金額截斷，顯示用 half-up；日圓沒有小數；顯示字串與 API 字串分離"
+    - "日期：API 用 `en_US_POSIX`、西曆、明確時區；`yyyy` 與 `YYYY`、日本曆、`zzz` 縮寫的差異；交易紀錄用固定、無歧義的格式並標示 JST"
+    - "輸入：NFKC 正規化後嚴格解析（全形、貼上、鍵盤小數點）；不依賴寬鬆的 parse"
+    - "文字：格式字串與 plural，不拼接；價格不截斷；字形與 `lang` 標記；金融術語詞彙表"
+    - "測試：注入 locale 的 golden test、偽在地化、各語言版面檢查；對應經驗：社交 App 自建多語系系統（英、日、繁中）與複數、行情分析 App 雙平台一致的數字顯示規則"
+  modelAnswer: |
+    語系上，簡體和繁體用 script 區分，標籤用 zh-Hans 與 zh-Hant，不寫死 zh-CN 和 zh-TW；查找順序是完整標籤、基礎語言、預設語言、key。App 內選的語言和系統地區要統一成同一個 Locale，不要兩套並存。
+
+    大數單位，日文是万、億、兆，繁體是萬、億、兆，簡體是万、亿、万亿，英文是 K、M、B、T。平台的 compact formatter 只保留約兩位有效數字，而且版本不同結果可能不同，所以我會依產品規格自己實作，規則明確：兩位小數、half-up、去尾端 0、進位升級，並用固定輸入的測試案例固定下來。compact 只用在市值、成交量等輔助標籤，不用在下單金額和確認頁。
+
+    捨入要明確：NumberFormatter 和 DecimalFormat 預設是 half-even，我會明確設定，顯示用 half-up，下單金額依精度截斷，顯示字串和 API 字串完全分離。日圓沒有小數。日期方面，API 一律 en_US_POSIX、西曆、明確時區；顯示時小心 yyyy 與 YYYY、日本曆、zzz 縮寫的差異；交易紀錄用固定的 24 小時格式並標示 JST。
+
+    輸入端，日本使用者會用全形數字，我會先做 NFKC 正規化，再用嚴格的規則解析，不依賴寬鬆的 parse，因為它可能悄悄把 123.5 截斷成 123。文字不拼接，用格式字串與 plural；價格不被截斷；並維護金融術語的詞彙表。
+
+    測試用注入 locale 的測試案例、偽在地化和各語言的版面檢查。經驗上，我在一個社交 App 做過自建的多語系系統，包含字串同步和複數規則；在一個行情分析 App 做過雙平台一致的數字顯示規則。到交易所的 App，簡繁並存的管理、大數單位的實作、全形輸入和 compact 的規格，我會照上面的做法處理。
+  modelAnswerJa: |
+    ロケールは、簡体字と繁体字をスクリプトで区別し、タグは zh-CN や zh-TW を固定せず zh-Hans と zh-Hant を使います。検索順序は完全なタグ、基本言語、デフォルト言語、キーの順です。アプリ内で選んだ言語とシステムの地域は、1 つの Locale に統一し、2 系統を併存させません。
+
+    大きな数の単位は、日本語が万・億・兆、繁体字が萬・億・兆、簡体字が万・亿・万亿、英語が K・M・B・T です。プラットフォームの compact formatter は有効数字が約 2 桁で、バージョンによって結果が変わる可能性があるため、仕様に沿って自前で実装します。小数 2 桁、half-up、末尾の 0 の除去、単位の繰り上げというルールを明確にし、固定入力のテストケースで固定します。compact は時価総額や出来高などの補助ラベルに限り、注文金額や確認画面には使いません。
+
+    丸めは明示します。NumberFormatter と DecimalFormat のデフォルトは half-even なので、表示用は half-up を明示し、注文金額は精度に従って切り捨て、表示用の文字列と API 用の文字列は完全に分けます。日本円には小数がありません。日付は、API では常に en_US_POSIX、西暦、明示的なタイムゾーンを使います。表示では yyyy と YYYY、和暦、zzz の略称の違いに注意し、取引履歴は固定の 24 時間形式で JST を表示します。
+
+    入力では、日本のユーザーが全角数字を使うため、まず NFKC で正規化し、その後に厳密なルールでパースします。寛容な parse は 123.5 を黙って 123 に切り捨てる可能性があるため、頼りません。文言は連結せず、フォーマット文字列と plural を使い、価格は省略せず、金融用語の用語集を維持します。
+
+    テストは、ロケールを注入したテストケース、疑似ローカライズ、各言語でのレイアウト確認で行います。経験としては、ソーシャルアプリで文字列の同期や複数形ルールを含む自前の多言語システムを作り、相場分析アプリでは iOS と Android で同じ数値表示ルールを使いました。取引所アプリでは、簡体字と繁体字の併存管理、大きな数の単位の実装、全角入力、compact の仕様を、上の方針で進めます。
+  followUps:
+    - "「1.23億」と「約 1.2億」のように、画面ごとに丸めルールが違うとき、どう統一する？"
+    - "ユーザーが海外にいる場合、取引時刻は JST と端末タイムゾーンのどちらで表示すべきか？"
+    - "用語集を AI 翻訳にどう組み込む？"
+  timeLimitSec: 180
+
+- id: exchange-localization-numbers-11
+  type: flash
+  level: 1
+  priority: P1
+  tags: [localization]
+  front: 在地化速記：標籤、大數單位、捨入、日期、輸入
+  back: |
+    - **標籤**：簡繁用 `zh-Hans`／`zh-Hant`（script）；降級鏈；App 內語言與系統地區用同一個 Locale。
+    - **單位**：ja 万億兆；zh-Hant 萬億兆；zh-Hans 万亿**万亿**；en KMBT。compact 只約 2 位有效數字、**有損**、不用在金額。
+    - **捨入**：`NumberFormatter`／`DecimalFormat` 預設 **half-even**（0.5 1.5 2.5 3.5 → 0 2 2 4）；要明確設定。日圓沒有小數。
+    - **日期**：API 用 `en_US_POSIX`＋西曆＋時區；**`YYYY` 是週年**；日本曆讓 `yyyy` 變令和年；`zzz` 在 ja 是 JST、在 en 是 GMT+9。
+    - **輸入**：全形數字先 **NFKC**，再嚴格解析；寬鬆的 `NumberFormat.parse` 會把 `１２３．５` 截成 123。
+    - **文字**：格式字串＋plural，不拼接；價格不截斷；術語詞彙表。

@@ -1,0 +1,317 @@
+- id: kotlin-coroutines-sync-testing-01
+  type: single
+  level: 2
+  priority: P0
+  tags: [runblocking, okhttp, token]
+  prompt: |
+    Android 專案的 OkHttp `Interceptor`（攔截每個請求的元件）為了呼叫 suspend 的 refresh API，在 `intercept()` 裡用了 `runBlocking`（卡住當前執行緒、等 suspend 函式做完），外面還包一層 `synchronized(lock)`。下列哪個評估最準確？
+  options:
+    - "完全安全：`runBlocking` 會自動切到 `Dispatchers.IO`，所以不會阻塞任何執行緒"
+    - "一定會 ANR，因為 `runBlocking` 只要出現就會卡住主執行緒"
+    - "interceptor 本來就跑在 OkHttp 的阻塞執行緒上，不會直接卡 UI；但它占用執行緒池、取消無法傳進去，外層 `synchronized` 還會讓其他請求也被卡在鎖上。應把 `runBlocking` 限縮在橋接邊界，改用 `Mutex` 做 single-flight，並加 timeout 與重試上限"
+    - "會造成 deadlock，因為 `runBlocking` 不能在 OkHttp 的執行緒上使用"
+  answer: 2
+  explain: |
+    - 第 1 項錯：`runBlocking` 會卡住呼叫它的那條執行緒，不會自動切換 dispatcher（決定在哪條執行緒跑的設定），所以「不會阻塞任何執行緒」是錯的。
+    - 第 2 項錯：OkHttp 的 interceptor 跑在 OkHttp 自己的執行緒上，不是主執行緒，所以不會直接造成 ANR（Application Not Responding：主執行緒卡太久，系統跳出「App 沒有回應」）。「只要出現就卡住主執行緒」是過度簡化。
+    - 第 4 項錯：`runBlocking` 可以在 OkHttp 的執行緒上使用，那裡本來就是阻塞的世界，是常見的橋接做法，不會因此 deadlock。
+    - 第 3 項正確：真正的問題是幾個風險疊在一起：執行緒池被占住、`Call.cancel()` 傳不進 coroutine、`synchronized` 讓其他請求都卡在鎖上，持續出錯時會放大成整批請求卡住。
+    建議的結構是 `Authenticator`（401 時才呼叫）加 `Mutex`，比對舊 token，加上重試上限和 `withTimeout`，`runBlocking` 只留在 `Authenticator` 這個橋接點。
+
+- id: kotlin-coroutines-sync-testing-02
+  type: predict
+  level: 2
+  priority: P1
+  tags: [mutex, reentrancy]
+  prompt: |
+    Mutex 不可重入。下列程式依序印出什麼？（4 行輸出）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+    import kotlinx.coroutines.sync.*
+
+    fun main() = runBlocking {
+        val m = Mutex()
+        m.withLock {
+            println(m.tryLock())
+            println(m.isLocked)
+            println(withTimeoutOrNull(50) { m.withLock { "inner" } })
+        }
+        println(m.isLocked)
+    }
+  answer: |
+    false true null false
+  explain: |
+    - 第 1 行 `false`：已持鎖時 `tryLock()`（嘗試拿鎖，拿不到就直接回傳 `false`，不等待）回傳 `false`，這就是「不可重入」：已經拿著鎖的同一個 coroutine，也拿不到第二次。
+    - 第 2 行 `true`：此時鎖仍被外層的 `withLock` 持有。
+    - 第 3 行 `null`：如果不加 `withTimeoutOrNull`，內層的 `withLock` 會永遠等待，形成 deadlock（死結：自己等自己，永遠卡住）；這裡 50 毫秒後逾時，回傳 `null`。`Mutex` 的等待是可取消的，所以逾時能順利中止。
+    - 第 4 行 `false`：離開外層 `withLock` 後鎖被釋放。
+    設計上，需要巢狀呼叫時把「已持鎖」的內部版本拆出來，避免重入。
+
+- id: kotlin-coroutines-sync-testing-03
+  type: multi
+  level: 3
+  priority: P0
+  tags: [limitedparallelism, thread-confinement, realm]
+  prompt: |
+    關於 `limitedParallelism` 與單執行緒封閉（讓資源只在一條執行緒上被碰），哪些敘述正確？（複選）
+  options:
+    - "`Dispatchers.Default.limitedParallelism(1)` 保證任何時刻最多只有一個任務在執行，可以用來取代鎖保護狀態"
+    - "`limitedParallelism(1)` 保證所有任務都在同一條執行緒上執行，所以可以安全地操作 Realm 實例"
+    - "有執行緒親和性的資源（如 Realm）應使用專屬單執行緒，例如 `Executors.newSingleThreadExecutor().asCoroutineDispatcher()`，用完要關閉"
+    - "`Dispatchers.IO.limitedParallelism(100)` 仍會被 IO 的 64 條執行緒上限限制，最多只有 64 個任務並行"
+  answer: [0, 2]
+  explain: |
+    - 第 1 項正確：`limitedParallelism(1)` 保證的是**互斥**（一次一個），任務之間有 happens-before 的保證（前一個任務寫入的資料，後一個一定看得到，不會讀到舊值），所以可以取代鎖來保護狀態。
+    - 第 2 項錯：它不保證所有任務都在同一條執行緒，執行緒可能每次都不同。Realm 這類有 thread affinity（只能在建立它的那條執行緒使用）的資源會因此出錯。
+    - 第 3 項正確：有 thread affinity 的資源要用真正的單執行緒 dispatcher。它持有一條執行緒，不用時要 `close()`，否則那條執行緒不會被釋放。
+    - 第 4 項錯：`Dispatchers.IO` 預設的上限是 64 條執行緒（或 CPU 核心數，取較大的），但它的 `limitedParallelism(n)` 例外，可以超過這個上限，所以可以替資料庫連線池之類的資源開專用的並行度。
+
+- id: kotlin-coroutines-sync-testing-04
+  type: fill
+  level: 2
+  priority: P0
+  tags: [semaphore, rate-limit]
+  prompt: |
+    同時最多只讓 4 個請求在飛，其餘等待。補上型別與擴充函式。
+  codeLang: kotlin
+  code: |
+    private val gate = ____(4)
+
+    suspend fun fetchAll(ids: List<String>): List<Quote> = coroutineScope {
+        ids.map { id -> async { gate.____ { api.quote(id) } } }.awaitAll()
+    }
+  blanks:
+    - [Semaphore]
+    - [withPermit]
+  explain: |
+    - 第一格 `Semaphore`：號誌，`Semaphore(4)` 表示最多 4 個人同時在做，其他人排隊。
+    - 第二格 `withPermit`：取得許可、執行、最後（finally）釋放。等待許可是可取消的，取消時不會洩漏許可。
+    要注意：對交易所 API 這種有 rate limit（限速，交易所的公開 REST API 常見會限制每個 IP 每秒約 10 個請求，實際以官方文件為準）的場景，要同時控制「並行數」與「速率」。`Semaphore` 只管前者，速率需要另外用 token bucket（令牌桶，按固定速度發放請求許可），或在許可內加最小間隔。
+
+- id: kotlin-coroutines-sync-testing-05
+  type: order
+  level: 2
+  priority: P0
+  tags: [token, single-flight]
+  prompt: |
+    多個並行請求同時收到 401（token 過期）。把「single-flight token refresh」（同時只真的刷新一次，其他人共用結果）的處理依正確順序排列。
+  items:
+    - 請求收到 401，記下送出時所使用的舊 token
+    - 進入 Mutex.withLock
+    - 檢查目前儲存的 token 是否已與舊 token 不同（代表前一個等鎖者已經 refresh）
+    - 若沒變，才呼叫 refresh API 並儲存新 token；若已變，直接使用現有 token
+    - 離開鎖，用最新 token 重送原請求，且只重試一次
+  explain: |
+    順序是：先記下舊 token，進鎖，在鎖裡比對，需要時才刷新，離開鎖後重送。
+    關鍵是「檢查」與「刷新」必須在**同一個**鎖內完成，否則兩個請求都會看到舊 token 而各自刷新（refresh token 若是一次性的，第二次還會失敗並把使用者登出）。
+    比對的是「送出時用的 token」而不是過期時間 `expiresAt`，因為這樣不依賴手機的時鐘，也能處理伺服器提早撤銷 token 的情況。重送要有次數上限，避免伺服器持續回 401 造成無限遞迴。
+
+- id: kotlin-coroutines-sync-testing-06
+  type: predict
+  level: 3
+  priority: P0
+  tags: [runtest, virtual-time]
+  prompt: |
+    使用 `kotlinx-coroutines-test` 的 `runTest`（預設 `StandardTestDispatcher`，`launch` 只是排進佇列），依序印出什麼？（一行，6 個詞）
+  codeLang: kotlin
+  code: |
+    import kotlinx.coroutines.*
+    import kotlinx.coroutines.test.*
+
+    fun main() = runTest {
+        val log = mutableListOf<String>()
+        launch { log += "A"; delay(100); log += "B" }
+        log += "main"
+        runCurrent()
+        log += "t$currentTime"
+        advanceTimeBy(100)
+        log += "t$currentTime"
+        runCurrent()
+        log += "end"
+        println(log.joinToString(" "))
+    }
+  answer: |
+    main A t0 t100 B end
+  explain: |
+    - `main`：`StandardTestDispatcher` 下 `launch` 只是排進佇列，測試主體繼續往下，所以 `main` 先出現。
+    - `A`、`t0`：`runCurrent()` 才執行排隊中的 `A`，此時虛擬時鐘（測試裡不真的等待的時鐘）還在 0，所以接著是 `t0`。
+    - `t100`：`advanceTimeBy(100)` 把虛擬時鐘推到 100，但**剛好排在 100 的任務不會執行**（只執行嚴格早於目標時間的任務），所以此時 `B` 還沒出現。
+    - `B`、`end`：需要再 `runCurrent()` 才會執行排在 100 的 `B`。測 debounce（連續事件只取最後一次）、逾時邏輯時，這個邊界常是出錯點。
+    這段需要 `kotlinx-coroutines-test`，本站的 code runner classpath 沒有它，只能在自己的專案驗證。
+
+- id: kotlin-coroutines-sync-testing-07
+  type: multi
+  level: 3
+  priority: P1
+  tags: [runtest, dispatcher-injection, testing]
+  prompt: |
+    關於 `runTest` 與 dispatcher，哪些敘述正確？（複選）
+  options:
+    - "`runTest` 內的 `delay(10_000)` 不會真的等待 10 秒"
+    - "ViewModel 內寫死 `withContext(Dispatchers.IO) { delay(10_000) }`，在 `runTest` 下也會被虛擬時間跳過"
+    - "ViewModel 的 dispatcher 應該用建構子注入，測試時換成與 `TestScope` 共用 scheduler 的 `TestDispatcher`"
+    - "要收集永遠不會結束的 flow（例如行情推送），應該放進 `backgroundScope.launch`，否則 `runTest` 無法結束"
+    - "`Dispatchers.setMain(testDispatcher)` 只要在第一個測試呼叫一次，不需要 `resetMain()`"
+  answer: [0, 2, 3]
+  explain: |
+    - 第 1 項正確：`runTest` 用虛擬時間，`delay` 由測試排程器把時鐘撥快，不會真的等待。
+    - 第 2 項錯：虛擬時間只對與 `TestScope` 共用同一個 scheduler（測試排程器）的 dispatcher 有效。寫死 `Dispatchers.IO` 會逃出虛擬時間，`delay` 變成真實等待。
+    - 第 3 項正確：dispatcher 用建構子注入（從外面傳進來），測試時才換得掉。
+    - 第 4 項正確：`backgroundScope` 裡的 coroutine 在測試結束時自動取消，不會讓 `runTest` 一直等下去。
+    - 第 5 項錯：`setMain` 改的是全域狀態，每個測試之後要 `resetMain()`（通常用 JUnit rule 包起來），否則污染後面的測試。
+
+- id: kotlin-coroutines-sync-testing-08
+  type: code
+  level: 2
+  priority: P0
+  tags: [mutex, single-flight, token, kotlin]
+  prompt: |
+    實作 `TokenStore.refreshAfter401(stale)`：多個請求帶著同一個舊 token 同時收到 401 時，**只呼叫一次** `refreshRemote`，其他人拿到同一個新 token。
+
+    - 已經被別人換新（`current != stale`）就直接回傳目前的 token，不再 refresh。
+    - `refreshRemote` 丟例外時，例外傳給呼叫者，鎖必須釋放，下一次呼叫可以重試。
+    - 正在 refresh 的呼叫者被取消時，鎖也要釋放。
+  hints:
+    - 用 `Mutex().withLock { }`，把「檢查」與「refresh」放在同一個 `withLock` 裡。
+    - 成功後把新 token 存回 `current`，並回傳它。
+  kotlin:
+    starter: |
+      import kotlinx.coroutines.*
+      import kotlinx.coroutines.sync.Mutex
+      import kotlinx.coroutines.sync.withLock
+
+      class TokenStore(
+          initial: String,
+          private val refreshRemote: suspend (stale: String) -> String,
+      ) {
+          private val mutex = Mutex()
+          @Volatile private var current: String = initial
+
+          fun peek(): String = current
+
+          suspend fun refreshAfter401(stale: String): String {
+              // TODO: 用 mutex 讓並行的 401 只 refresh 一次
+              val fresh = refreshRemote(stale)
+              current = fresh
+              return fresh
+          }
+      }
+    solution: |
+      import kotlinx.coroutines.*
+      import kotlinx.coroutines.sync.Mutex
+      import kotlinx.coroutines.sync.withLock
+
+      class TokenStore(
+          initial: String,
+          private val refreshRemote: suspend (stale: String) -> String,
+      ) {
+          private val mutex = Mutex()
+          @Volatile private var current: String = initial
+
+          fun peek(): String = current
+
+          suspend fun refreshAfter401(stale: String): String = mutex.withLock {
+              if (current != stale) {
+                  current
+              } else {
+                  val fresh = refreshRemote(stale)
+                  current = fresh
+                  fresh
+              }
+          }
+      }
+    tests: |
+      import java.util.concurrent.atomic.AtomicInteger
+
+      checkEqual("10 個並行 401 只 refresh 一次", 1) {
+          val calls = AtomicInteger(0)
+          val store = TokenStore("t0") { _ -> val n = calls.incrementAndGet(); delay(30); "t$n" }
+          (1..10).map { async(Dispatchers.Default) { store.refreshAfter401("t0") } }.awaitAll()
+          calls.get()
+      }
+      checkEqual("所有人拿到同一個新 token", setOf("t1")) {
+          val calls = AtomicInteger(0)
+          val store = TokenStore("t0") { _ -> val n = calls.incrementAndGet(); delay(30); "t$n" }
+          (1..10).map { async(Dispatchers.Default) { store.refreshAfter401("t0") } }.awaitAll().toSet()
+      }
+      checkEqual("peek 取得最新 token", "t1") {
+          val store = TokenStore("t0") { _ -> delay(1); "t1" }
+          store.refreshAfter401("t0")
+          store.peek()
+      }
+      checkEqual("舊 token 的請求不再 refresh、新 token 失效才會 refresh", "t1|t1|t2|2") {
+          val calls = AtomicInteger(0)
+          val store = TokenStore("t0") { _ -> "t${calls.incrementAndGet()}" }
+          val a = store.refreshAfter401("t0")
+          val b = store.refreshAfter401("t0")
+          val c = store.refreshAfter401("t1")
+          "$a|$b|$c|${calls.get()}"
+      }
+      checkEqual("refresh 失敗後鎖已釋放，下次可重試", "ok|2") {
+          val calls = AtomicInteger(0)
+          val store = TokenStore("t0") { _ ->
+              if (calls.incrementAndGet() == 1) throw IllegalStateException("network") else "ok"
+          }
+          try { store.refreshAfter401("t0") } catch (e: IllegalStateException) { }
+          val r = store.refreshAfter401("t0")
+          "$r|${calls.get()}"
+      }
+      checkEqual("正在 refresh 的呼叫者被取消後鎖會釋放", "fast") {
+          val calls = AtomicInteger(0)
+          val store = TokenStore("t0") { _ ->
+              if (calls.incrementAndGet() == 1) { delay(10_000); "slow" } else "fast"
+          }
+          val job = launch(start = CoroutineStart.UNDISPATCHED) { store.refreshAfter401("t0") }
+          job.cancelAndJoin()
+          withTimeout(2_000) { store.refreshAfter401("t0") }
+      }
+
+- id: kotlin-coroutines-sync-testing-09
+  type: open
+  level: 2
+  priority: P0
+  tags: [runblocking, token, field]
+  prompt: |
+    交易所 App 的 access token 過期時，同一時間有很多請求收到 401。在 Android 的 OkHttp 上，你會怎麼設計 token 刷新，讓它只刷新一次？這類設計有哪些風險、怎麼測？
+  promptJa: |
+    取引所アプリで access token が期限切れになると、同時に多くのリクエストが 401 を受け取ります。Android の OkHttp 上で、token の更新を 1 回だけにするにはどう設計しますか？ この種の設計にはどんなリスクがあり、どうテストしますか？
+  keyPoints:
+    - 情境：多個並行請求同時收到 401，每個都刷新會刷新很多次；refresh token 若是一次性的，第二次還會失敗並讓使用者被登出
+    - 用 OkHttp 的 Authenticator 處理 401，Mutex 做 single-flight，比對「送出時的 token」與目前的 token
+    - 比對 token 而不是 expiresAt：不依賴手機的時鐘，也能處理伺服器提早撤銷
+    - runBlocking 只保留在 Authenticator 這個橋接點，加 withTimeout，並設定重試上限（priorResponse 計數）
+    - 風險：runBlocking 占用 OkHttp 執行緒、取消無法傳遞、外面再包 synchronized 會讓其他請求卡在鎖上、401 重試沒有上限會無限遞迴
+    - refresh token 也失效 → 清除憑證並導向登入，不重試
+    - 測試：N 個並行 401 只刷新一次、刷新失敗後可重試、取消後鎖釋放、持續 401 時在上限停止（MockWebServer）
+    - 在一個社交 App 的 iOS 版用 AsyncSemaphore 做 single-flight，Android 對應的做法是 Mutex
+  modelAnswer: |
+    問題是這樣的：畫面同時送出很多請求，token 過期時它們會同時收到 401。如果每個都去刷新，就會刷新很多次；refresh token 如果是一次性的，第二次還會失敗，使用者會被登出。所以我要的是 single-flight：同時只真的刷新一次，其他請求等結果、共用同一個新 token。在一個社交 App 的 iOS 版，我就是用 `AsyncSemaphore` 做這件事。
+
+    在 Android 的 OkHttp 上，我會用 `Authenticator`，它只在收到 401 時才被呼叫。裡面用 `Mutex` 把「比對送出請求時用的 token 和目前的 token、必要時才刷新」放在同一個鎖裡，這樣並行的 401 只會刷新一次。比對 token 而不是過期時間，因為不依賴手機的時鐘，也能處理伺服器提早撤銷。
+
+    因為 `Authenticator` 是阻塞的世界，要呼叫 suspend 的刷新函式，只能用 `runBlocking` 當橋。它有風險：占用 OkHttp 的執行緒、取消傳不進去，如果外面再包 `synchronized`，其他請求會全部卡在鎖上。所以我把 `runBlocking` 只留在這一個橋接點，加 `withTimeout`，並用 `priorResponse` 限制重試次數，避免伺服器一直回 401 造成無限重試。refresh token 也失效時，清除憑證、導向登入畫面。
+
+    測試上，用 MockWebServer 打出 N 個並行 401，驗證只刷新一次；再測刷新失敗後可以重試、取消後鎖會釋放、持續 401 時會在上限停下。
+  modelAnswerJa: |
+    問題はこうです。画面が同時に多くのリクエストを送ると、token の期限が切れたときにそれらが同時に 401 を受け取ります。それぞれが更新すると何度も更新してしまい、refresh token が一度きりの場合は 2 回目が失敗してユーザーがログアウトされてしまいます。そこで必要なのが single-flight、つまり同時には 1 回だけ実際に更新し、他のリクエストは結果を待って同じ新しい token を共有する方式です。あるソーシャルアプリの iOS 版では `AsyncSemaphore` でこれを実現しました。
+
+    Android の OkHttp では `Authenticator` を使います。401 を受け取ったときだけ呼ばれる仕組みです。中では `Mutex` を使い、「リクエスト送信時の token と現在の token の比較、必要な場合のみ更新」を同じロックの中で行うので、並行する 401 でも更新は 1 回になります。比較するのは有効期限ではなく token そのものです。端末の時計に依存せず、サーバー側での早期失効にも対応できるからです。
+
+    `Authenticator` はブロッキングの世界なので、suspend の更新関数を呼ぶには `runBlocking` で橋渡しするしかありません。これにはリスクがあります。OkHttp のスレッドを占有すること、キャンセルが伝わらないこと、外側をさらに `synchronized` で囲むと他のリクエストがすべてロック待ちになることです。そのため `runBlocking` はこの 1 か所だけに残し、`withTimeout` を付け、`priorResponse` でリトライ回数を制限して、サーバーが 401 を返し続けても無限にリトライしないようにします。refresh token も失効していた場合は、認証情報を消してログイン画面に戻します。
+
+    テストは MockWebServer で並行 401 を発生させ、更新が 1 回だけであること、更新失敗後に再試行できること、キャンセル後にロックが解放されること、401 が続く場合は上限で止まることを確認します。
+  followUps:
+    - 刷新到一半 App 被殺掉，怎麼保證 token 不會處於不一致的狀態？
+    - 為什麼用 Authenticator 而不是 Interceptor？
+    - 多個 OkHttpClient 實例共用同一個 TokenStore 要注意什麼？
+
+- id: kotlin-coroutines-sync-testing-10
+  type: flash
+  level: 2
+  priority: P1
+  tags: [limitedparallelism]
+  front: "`limitedParallelism(1)` 等於單執行緒嗎？可以拿來保護 Realm 嗎？"
+  back: |
+    不等於。它只保證**一次最多一個任務**（互斥，任務之間有 happens-before：前一個任務寫入的資料，後一個一定看得到），但可能每次換不同的執行緒。
+    有執行緒親和性的資源（thread affinity：只能在建立它的那條執行緒用，如 Realm、部分 SDK）要用專屬單執行緒 dispatcher（`Executors.newSingleThreadExecutor().asCoroutineDispatcher()`），用完 `close()`。

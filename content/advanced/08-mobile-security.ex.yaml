@@ -1,0 +1,199 @@
+- id: advanced-mobile-security-01
+  type: single
+  level: 3
+  priority: P0
+  tags: [biometric, keychain, keystore]
+  prompt: |
+    交易所 App 在出金前要求生物辨識。實作 A 是呼叫 `LAContext.evaluatePolicy`（或 Android 的 `BiometricPrompt`），在「成功」的回呼裡直接送出請求。實作 B 是把簽章用的金鑰放在 Secure Enclave（iOS 手機內的獨立安全晶片）或 Android Keystore，並設定「使用金鑰前必須通過生物辨識」。為什麼 B 比 A 安全？
+  options:
+    - "B 的畫面比較好看"
+    - "A 只依賴一個「成功」的回傳值，攻擊者在 root 或越獄的手機上，把那個回呼改寫成永遠成功，就能略過驗證；B 讓作業系統強制驗證通過才允許使用金鑰，沒有通過就拿不到簽章"
+    - "B 不需要用到使用者的生物辨識資料"
+    - "A 在 iOS 與 Android 都無法使用"
+  answer: 1
+  explain: |
+    如果驗證結果只是 App 裡的一個布林值（true／false），它就可以被改寫。比較安全的做法，是把敏感操作綁在一把「需要驗證才能使用」的金鑰上：iOS 用 `SecAccessControl`（條件 `.biometryCurrentSet`）或 Secure Enclave 的簽章金鑰；Android 用 `setUserAuthenticationRequired(true)` 的 Keystore 金鑰，並以 `BiometricPrompt.CryptoObject` 驗證。這樣沒通過驗證，簽章根本做不出來。
+    - 第一個選項錯誤：安全性和畫面無關。
+    - 第三個選項錯誤：B 同樣需要生物辨識，只是由作業系統把關。
+    - 第四個選項錯誤：A 是常見的寫法，兩個平台都能用，只是比較不安全。
+    `.biometryCurrentSet` 與 `setInvalidatedByBiometricEnrollment(true)` 會在手機新增指紋或臉部時讓金鑰失效，避免攻擊者偷到手機後加入自己的生物特徵。
+
+- id: advanced-mobile-security-02
+  type: multi
+  level: 2
+  priority: P0
+  tags: [pinning, network]
+  prompt: |
+    關於 certificate pinning（App 只信任事先指定的 server 公鑰），哪些敘述正確？（複選）
+  options:
+    - "應該固定公鑰（SPKI）的 hash，並預先加入備援 pin，這樣憑證更換時才不會讓全部使用者連不上"
+    - "在 root 或越獄的手機上，pinning 可以被 Frida、objection 等工具繞過，所以它是提高攻擊成本，不是保證"
+    - "有了 pinning，server 端就不需要做任何請求簽章或裝置驗證"
+    - "OkHttp 的 `CertificatePinner`、Android 的 Network Security Config `<pin-set>`、iOS 14 以上的 `NSPinnedDomains`，都是設定 pinning 的方式"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：pinning 的風險在營運面。沒有備援 pin 與輪替流程時，一次憑證更換，就可能讓還沒更新的 App 全部連不上。固定公鑰而不是整張憑證，是因為憑證每隔一段時間就會更新，公鑰可以保持不變。
+    - 第 2 項正確：攻擊者控制手機時，可以用 Frida（可以在執行中的 App 裡改寫函式行為的工具）關掉檢查。
+    - 第 3 項錯誤：pinning 主要防的是中間人攻擊（含使用者裝上的惡意憑證簽發機構），不能取代 server 端的請求簽章、裝置認證（Play Integrity、App Attest）與風險評分。交易所要靠多層防線（縱深防禦）。
+    - 第 4 項正確：這些是各平台常用的設定位置。
+
+- id: advanced-mobile-security-03
+  type: single
+  level: 2
+  priority: P0
+  tags: [play-integrity, attestation]
+  prompt: |
+    Android 端要用 Play Integrity API 確認請求來自正版 App 與合格的裝置。哪種用法正確？
+  options:
+    - "App 取得 token 後，在手機上解析判定結果，如果是 `MEETS_DEVICE_INTEGRITY` 就直接放行"
+    - "App 以綁定「這次請求」的 nonce（例如請求內容的 hash）取得 token，連同請求送到自己的 server；server 呼叫 Google 解碼，檢查 nonce、App 是否為商店版本與裝置完整性，再決定是否處理"
+    - "啟動時檢查一次，之後永遠信任這支手機"
+    - "只要 App 有簽章，就不需要 Play Integrity"
+  answer: 1
+  explain: |
+    - 第一個選項錯誤：在手機上解析的結果可以被竄改，判斷一定要在 server。
+    - 第二個選項正確：nonce 綁定這次請求的內容，避免 token 被拿去重複使用。
+    - 第三個選項錯誤：手機的狀態會改變（例如事後才 root），而且只檢查一次，攻擊者可以在檢查之後才動手腳。敏感操作（出金、改密碼）發生時才檢查比較有意義。
+    - 第四個選項錯誤：簽章只能證明 App 檔案來自誰，不能證明它是否被改過、是否跑在正常的裝置上。
+    檢查失敗時要有降級策略（例如要求額外驗證），避免誤判而封鎖正常的使用者。iOS 的對應是 App Attest：用 `DCAppAttestService` 產生金鑰並請 Apple 證明，之後每次敏感請求產生 assertion，由 server 驗證。
+
+- id: advanced-mobile-security-04
+  type: multi
+  level: 2
+  priority: P1
+  tags: [screenshot, clipboard]
+  prompt: |
+    關於截圖、錄影與剪貼簿，哪些敘述正確？（複選）
+  options:
+    - "Android 設定 `FLAG_SECURE` 可以阻擋截圖與螢幕錄影，並讓最近使用的 App 列表（Recents）的縮圖變黑"
+    - "iOS 無法阻止使用者截圖，只能用 `UIScreen.isCaptured` 偵測螢幕錄影或鏡像，並用 `userDidTakeScreenshotNotification` 在截圖後得到通知"
+    - "Android 13 起可以用 `ClipDescription.EXTRA_IS_SENSITIVE` 標記敏感的剪貼簿內容，讓系統的預覽隱藏它"
+    - "iOS 提供 API 可以完全禁止截圖"
+    - "剪貼簿的內容預設只有複製它的 App 能讀"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：`FLAG_SECURE` 讓整個視窗無法截圖或錄影，Recents 縮圖也會變黑。
+    - 第 2 項正確：iOS 沒有禁止截圖的 API，所以敏感畫面要設計成「被截到也無妨」，或在偵測到錄影時隱藏。iOS 17 起也有 `UITraitCollection` 的 `sceneCaptureState`，舊 API 在新版 SDK 上可能被標示為 deprecated，以實際使用的版本為準。進入背景時要用遮罩蓋住畫面，避免切換 App 的畫面洩漏餘額。
+    - 第 3 項正確：Android 13 起複製內容會顯示預覽，敏感內容可以用這個欄位標記，讓預覽隱藏。
+    - 第 4 項錯誤：iOS 沒有這樣的 API。
+    - 第 5 項錯誤：剪貼簿是系統共用的，前景的其他 App 都能讀（iOS 14 起會有提示，iOS 16 起要使用者允許貼上）。加密貨幣特有的風險是**地址被替換**，所以貼上地址後要分段顯示完整地址，讓使用者核對。
+
+- id: advanced-mobile-security-05
+  type: fill
+  level: 1
+  priority: P1
+  tags: [flag-secure]
+  prompt: |
+    Android：讓出金頁面無法被截圖或錄影。
+  codeLang: kotlin
+  code: |
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.____(WindowManager.LayoutParams.____)
+        setContentView(R.layout.activity_withdraw)
+    }
+  blanks:
+    - [addFlags]
+    - [FLAG_SECURE]
+  explain: |
+    `FLAG_SECURE` 讓這個視窗的內容無法被截圖、錄影，也不會出現在不安全的外接螢幕上，最近使用的 App 列表（Recents）的縮圖也會變成空白。也可以用 `window.setFlags(FLAG_SECURE, FLAG_SECURE)` 設定。
+    要記得它只保護這個視窗：通知的內容、無障礙服務、以及用另一支手機拍螢幕，都不在保護範圍內。
+
+- id: advanced-mobile-security-06
+  type: single
+  level: 3
+  priority: P1
+  tags: [root-detection, philosophy]
+  prompt: |
+    root 偵測可以被 Magisk 的隱藏功能輕易繞過。對交易所 App 來說，最務實的處理方式是？
+  options:
+    - "放棄偵測，因為一定會被繞過"
+    - "偵測到就強制關閉 App"
+    - "把偵測結果當作風險訊號，連同 Play Integrity 的判定一起回報給 server；由 server 的風控決定對高風險操作（出金、更換綁定裝置）要求額外驗證或降低限額，而不是只靠 App 封鎖"
+    - "把偵測邏輯寫得越複雜越好，直到無法被繞過"
+  answer: 2
+  explain: |
+    App 上的任何檢查，最終都能被「完全控制那支手機的人」繞過，它的價值在於提高攻擊成本、增加風險訊號。把決定權放在 server，才能彈性調整規則，也比較能降低誤判（例如使用自訂系統的開發者）造成的客訴。
+    - 第一個選項錯誤：放棄偵測就少了一個訊號，而且大部分的攻擊者並沒有那麼熟練。
+    - 第二個選項錯誤：強制關閉被繞過後就毫無防線，還會誤傷正常使用者。
+    - 第四個選項錯誤：不管多複雜都有人能繞過，只會增加維護成本。
+    這也是縱深防禦的想法：裝置完整性只是風險評分的其中一項，要搭配行為分析、裝置綁定與敏感操作的二次驗證。
+
+- id: advanced-mobile-security-07
+  type: order
+  level: 2
+  priority: P1
+  tags: [withdrawal, flow]
+  prompt: |
+    設計一個「出金到新地址」的安全流程，請把步驟依合理順序排列。
+  items:
+    - 使用者貼上或掃描新地址，App 把完整地址分段顯示，讓使用者核對（防止剪貼簿被替換）
+    - 觸發重新驗證：生物辨識（綁定金鑰）加 2FA（雙重驗證），並附上這次請求的完整性證明（以 nonce 綁定）
+    - server 驗證簽章、nonce 與裝置完整性，由風控決定是否放行，新地址進入冷卻期或需要額外確認
+    - 通知使用者（推播與 email），並提供取消的途徑
+    - 冷卻期結束且確認後才實際出金，全程留下稽核紀錄
+  explain: |
+    每一步對應一種威脅：分段核對防止地址被替換；重新驗證防止帳號 session 被盜用後直接出金；server 端判斷與冷卻期給受害者反應的時間；通知與稽核紀錄方便事後追查。
+    日本的交易所對出金目的地有審核要求（例如出金目的地址要先經過審核與核准，細節以各交易所的公告為準）。App 的責任是把流程做完整，並帶出足夠的訊號給 server。
+
+- id: advanced-mobile-security-08
+  type: single
+  level: 2
+  priority: P0
+  tags: [token-storage]
+  prompt: |
+    團隊在 code review 時，發現 Android App 把 access token 與 refresh token 以明文存在 SharedPreferences（一般的本機設定檔）裡。要改善，最合適的方向是？
+  options:
+    - "把 token 做 Base64 編碼再存"
+    - "用 R8 混淆 token 的欄位名稱"
+    - "在 Android Keystore 產生不可匯出的 AES 金鑰，用 AES-GCM（可以透過 Tink 函式庫）加密後存入 DataStore 或檔案；登出時刪除金鑰與資料，並評估是否需要綁定生物辨識"
+    - "把加密金鑰寫死在程式碼裡，再用 AES 加密 token"
+  answer: 2
+  explain: |
+    - 第一個選項錯誤：Base64 是編碼，不是加密，任何人都能還原。
+    - 第二個選項錯誤：混淆名稱只是換名字，不保護資料。
+    - 第三個選項正確：Keystore 的金鑰存放在安全硬體（TEE 或 StrongBox）裡，拿不出來；資料以 AES-GCM 加密，才符合 MASVS 的 STORAGE 類別。
+    - 第四個選項錯誤：寫死在程式碼裡的金鑰等於沒有金鑰，反編譯就能拿到。
+    一個即時行情 App 的 Android 端就是這個做法：用 Tink 的 AES-256-GCM 加密，主金鑰放在 Android Keystore。
+
+- id: advanced-mobile-security-09
+  type: open
+  level: 3
+  priority: P0
+  tags: [threat-model]
+  prompt: |
+    請以持牌交易所 App 為例，說明你的行動 App 威脅模型與主要防護。面試官接著問：「你在安全方面做過哪些實作？換成交易所 App 你會怎麼補強？」請說明你的回答。
+  promptJa: |
+    ライセンスを持つ暗号資産取引所のアプリを例に、モバイルアプリの脅威モデルと主な防御策を説明してください。続けて面接官から「セキュリティ面でどのような実装をしてきましたか。取引所アプリではどう強化しますか」と聞かれました。どう答えますか。
+  keyPoints:
+    - 前提：手機上的 App 不可信，限額與授權在 server，App 端負責提高攻擊成本與提供風險訊號
+    - 資產與威脅：憑證與 token、資產與出金、個資與 eKYC 影像；惡意程式、MITM、釣魚與 overlay、地址被替換、SIM swap、重新打包
+    - 防護：Keychain／Keystore 儲存、生物辨識綁定金鑰、TLS 加 pinning（含備援金鑰）、Play Integrity／App Attest、出金地址白名單加冷卻期加二次驗證、log 遮罩
+    - 對 root／越獄偵測與 pinning 的務實看法：可以被繞過，當風險訊號，不是單點防線
+    - 做過的實作：社交 App 的 Android 端有 root 偵測、Play Integrity 與網路環境檢查，iOS 端有越獄偵測；即時行情 App 的 Android 端用 Tink 加 Keystore 加密 cookie
+    - 換成交易所 App 的補強順序：秘密管理與輪替、Keystore／Keychain 加密儲存、生物辨識綁定金鑰、pinning（含備援金鑰）、環境偵測結果送 server 做風險判斷
+  modelAnswer: |
+    我的前提是手機上的 App 不可信，所以限額、授權與風控都在 server，App 端的目標是提高攻擊成本，並提供風險訊號。要保護的有三類：憑證與 token、資產與出金、個資與 eKYC 影像。主要威脅包括手機上的惡意程式、中間人攻擊、釣魚與 overlay、出金地址被替換、SIM swap 和重新打包。
+    防護上，token 放 Keychain 或 Keystore；出金這類敏感操作要重新驗證，而且生物辨識要綁定在金鑰上，不是只看一個成功的旗標；網路用 TLS 加 pinning，並放備援金鑰；用 Play Integrity 與 App Attest 把完整性證明綁定到請求，由 server 驗證；出金地址有白名單、冷卻期和二次驗證；log 一律遮罩。root 與越獄偵測、pinning 都能被繞過，所以我把它們當作風險訊號，不是唯一的防線。
+    我自己做過的部分：在一個社交 App，Android 端做過 root 偵測、Play Integrity 與網路環境檢查，iOS 端做過越獄偵測；在一個即時行情 App，Android 端用 Tink 的 AES-256-GCM 加密 cookie，主金鑰放在 Android Keystore。
+    換成交易所 App，我會依序補強：先把秘密管理與輪替做好，再用 Keystore 加 Tink、Keychain 加 Secure Enclave 做加密儲存，接著加上生物辨識綁定金鑰與 pinning（含備援金鑰），並把環境偵測的結果送到 server 做風險判斷。
+  modelAnswerJa: |
+    前提は、スマートフォン上のアプリは信頼できないということです。そのため、限度額・認可・リスク判定はサーバー側で行い、アプリ側の役割は攻撃コストを上げることとリスクシグナルを提供することです。保護対象は三種類あります。認証情報とトークン、資産と出金、個人情報と eKYC 画像です。主な脅威は、端末上のマルウェア、中間者攻撃、フィッシングとオーバーレイ、出金先アドレスのすり替え、SIM スワップ、再パッケージです。
+    防御としては、トークンは Keychain か Keystore に保存します。出金のような重要操作では再認証を求め、生体認証は単なる成功フラグではなく鍵に紐づけます。通信は TLS と pinning（バックアップ鍵付き）を使い、Play Integrity と App Attest の証明をリクエストに紐づけてサーバーで検証します。出金先アドレスにはホワイトリスト、クーリング期間、追加認証を設け、ログは常にマスクします。root／脱獄検知と pinning は回避可能なので、唯一の防御ではなくリスクシグナルとして扱います。
+    私自身の経験では、あるソーシャルアプリの Android で root 検知、Play Integrity、ネットワーク環境のチェックを、iOS で脱獄検知を実装しました。あるリアルタイム相場アプリの Android では、Tink の AES-256-GCM で cookie を暗号化し、マスターキーを Android Keystore に置きました。
+    取引所アプリでは、まずシークレットの管理とローテーションを整え、次に Keystore と Tink、Keychain と Secure Enclave による暗号化保存を行い、続いて生体認証に紐づく鍵と pinning（バックアップ鍵付き）を追加します。さらに、環境検知の結果をサーバーに送ってリスク判定に使います。
+  followUps:
+    - pinning 的備援金鑰與憑證輪替流程，你怎麼設計？
+    - 偵測到 root 之後，server 端應該限制哪些操作？
+    - SIM swap 對簡訊 2FA 的風險很大，你建議用什麼取代？
+  timeLimitSec: 150
+
+- id: advanced-mobile-security-10
+  type: flash
+  level: 2
+  priority: P1
+  tags: [keychain]
+  front: iOS Keychain 的 accessibility 怎麼選？為什麼常加 `ThisDeviceOnly`？
+  back: |
+    `WhenUnlocked`：手機解鎖時才可讀（預設值）。`AfterFirstUnlock`：開機後解鎖過一次，之後都可讀，背景任務需要讀取時使用。`WhenPasscodeSetThisDeviceOnly`：要設定螢幕密碼才能存取，最嚴格。
+    名稱尾巴有 `ThisDeviceOnly` 的選項，不會隨備份或 iCloud Keychain 遷移到其他裝置，避免憑證被帶走。需要跨裝置同步（`synchronizable`）的項目要明確評估風險，敏感憑證通常不同步。

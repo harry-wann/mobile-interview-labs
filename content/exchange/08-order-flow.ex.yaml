@@ -1,0 +1,679 @@
+- id: exchange-order-flow-01
+  type: single
+  level: 1
+  priority: P0
+  tags: [place-order, ack]
+  prompt: |
+    依這套交易所的 API 文件，`POST /v1/order/orders/place` 回傳 `{"status":"ok","data":"59378"}`。這代表什麼？
+  options:
+    - "訂單已經成交，`59378` 是成交編號"
+    - "訂單已被受理，並產生訂單 ID `59378`；成交、部分成交、取消，都要靠後續的查詢或私有 WebSocket 確認"
+    - "訂單已經進入 `filled` 狀態，只是畫面還沒更新"
+    - "只代表請求的格式正確，訂單不一定被建立"
+  answer: 1
+  explain: |
+    下單回應的 `data` 是訂單 ID，它是「伺服器受理了這張單」的證據，不是成交結果。畫面不能顯示「已成交」，而是先顯示「確認中」，再依後續的事件顯示 `submitted`、`partial-filled`、`filled` 等狀態。
+    - 第 1 項錯：`59378` 是訂單 ID，不是成交編號，而且此時還不知道有沒有成交。
+    - 第 3 項錯：下單當下訂單不一定成交，更不會直接進入 `filled`；限價單可能先掛在委託簿上等人來吃。
+    - 第 4 項錯：回應裡已經有訂單 ID，代表訂單被建立了。
+    同樣的道理，`submitcancel` 回傳 ok，只代表取消**請求**已經送出，文件明說實際結果要查詢訂單。
+
+- id: exchange-order-flow-02
+  type: single
+  level: 2
+  priority: P0
+  tags: [idempotency, client-order-id, timeout]
+  prompt: |
+    使用者按下買入，POST 下單請求在網路不穩時逾時，沒有收到回應。依這套 API 的 `client-order-id` 設計（API 文件：最長 64 字元、8 小時內必須唯一；參數表標為必填，但範例沒有帶、私有 WebSocket 標為選填，實際是否必填需確認），最正確的處理是？
+  options:
+    - "每次網路重試都產生新的 `client-order-id`，避免被伺服器判定重複"
+    - "先不重送，也不當作失敗；用未成交委託清單或委託歷史查詢，依 `client-order-id` 比對訂單是否已存在。確認不存在，才讓使用者決定要不要重送，重送時**重用同一個** `client-order-id`"
+    - "直接重送一次，反正 `client-order-id` 是唯一的，伺服器會自己處理"
+    - "顯示失敗並清掉草稿，使用者要重新輸入"
+  answer: 1
+  explain: |
+    逾時只代表沒收到回應，伺服器可能已經建立了訂單。`client-order-id` 要在「使用者按下按鈕、送出之前」就產生，並隨草稿保存；同一次意圖的所有重送都用同一個，才有冪等的效果（冪等的意思是同一個請求不管送幾次，效果都和送一次一樣）。
+    - 第 1 項錯：每次重試都換新的 id，伺服器就會把它們當成不同的訂單，等於每次都是新的下單，反而可能重複成交。
+    - 第 3 項錯：文件沒有說明用相同的 `client-order-id` 重複送出時，伺服器會怎麼處理（未證實），不能假設它會自己處理好。
+    - 第 4 項錯：訂單可能已經成立，直接顯示失敗，使用者會以為沒下單，結果其實已經成交。
+    API 文件沒有「以 client-order-id 查單筆訂單」的端點（本機核對），所以對帳用清單或歷史查詢，再依回傳資料裡的 `client-order-id` 比對。有幾個限制：文件寫明已取消的訂單只能查過去 2 小時，委託歷史查詢的 `states` 參數是必填；未成交清單的範例回傳的 `client-order-id` 是空字串，要先實測才能靠它比對。
+
+- id: exchange-order-flow-03
+  type: multi
+  level: 2
+  priority: P0
+  tags: [reducer, state-machine]
+  prompt: |
+    設計 App 端合併訂單事件的規則，哪些敘述正確？（複選）
+  options:
+    - "成交量用伺服器給的**累計值**；小於或等於目前值的事件，視為過期或重複，忽略"
+    - "終態（filled、canceled、partial-canceled）進入之後，晚到的 submitted 或重複的取消事件，都不能覆蓋它"
+    - "使用者按下取消後，畫面可以直接顯示 canceled，因為使用者的意圖已經確定"
+    - "取消事件比最後一筆成交事件先到時，晚到的成交要把訂單變成 partial-canceled，並更新成交量"
+    - "只要收到 `trade.clearing` 就不需要 `orders#` 頻道，因為成交通知已經包含全部狀態"
+  answer: [0, 1, 3]
+  explain: |
+    - 第 1 項正確：累計值不會因為重複的事件而加倍，過期的（比目前小）和重複的（相等）都可以直接忽略。
+    - 第 2 項正確：終態一旦進入就不會離開，晚到的舊事件不能把狀態改回去。
+    - 第 3 項錯：按下取消後只能顯示 `canceling`（取消中），要等伺服器的事件確認 `canceled` 或 `partial-canceled`，因為訂單可能在取消送到之前剛好成交。
+    - 第 4 項正確：這是文件警告的亂序情況，取消的通知先到，成交的通知後到。已經有成交量的訂單被取消，是 `partial-canceled`，晚到的成交要把成交量更新上去。
+    - 第 5 項錯：API 文件指出 `trade.clearing` **不保證順序**，順序有依賴時要使用 `orders#`。兩個頻道互補，合併規則要容忍亂序。
+
+- id: exchange-order-flow-04
+  type: predict
+  level: 2
+  priority: P1
+  tags: [monotonic, cumulative]
+  prompt: |
+    私有頻道送來的是**累計**成交量，但事件可能重複或亂序。下列程式依序印出什麼？
+  codeLang: swift
+  code: |
+    import Foundation
+
+    func D(_ s: String) -> Decimal { Decimal(string: s)! }
+
+    var filled = Decimal(0)
+    for total in ["0.2", "0.5", "0.3", "0.5", "0.7"] {
+        let t = D(total)
+        if t > filled {
+            filled = t
+            print("update", filled)
+        } else {
+            print("ignore", t)
+        }
+    }
+  answer: |
+    update 0.2 update 0.5 ignore 0.3 ignore 0.5 update 0.7
+  explain: |
+    累計值只增不減，所以只有比目前成交量大的值才會更新：
+    - `0.2` 比 0 大，更新；`0.5` 比 0.2 大，更新。
+    - `0.3` 比目前的 0.5 小，是過期的事件，忽略。
+    - 第二個 `0.5` 和目前的 0.5 相同，是重複的事件，忽略。
+    - `0.7` 比 0.5 大，更新。最後成交量是 0.7。
+    這個規則讓重複、亂序的事件不會破壞成交量。如果誤把這些值當成「增量」加起來，結果會是 2.2，而不是 0.7。
+
+- id: exchange-order-flow-05
+  type: single
+  level: 3
+  priority: P1
+  tags: [reorder, cancel-race]
+  prompt: |
+    一張限價買單（數量 1.0）的事件依序到達：`accepted`、`fill(累計 0.4)`、`canceled`、`fill(累計 0.2)`（晚到的過期事件）、`fill(累計 0.6)`。依「終態不可離開、累計量只增不減、取消之後才到的成交，狀態改成 partial-canceled」的規則，最終的狀態與成交量是？
+  options:
+    - "`canceled`，成交量 0.4"
+    - "`partial-canceled`，成交量 0.6"
+    - "`partial-filled`，成交量 0.6"
+    - "`filled`，成交量 1.0"
+  answer: 1
+  explain: |
+    一個事件一個事件走一遍：
+    - `accepted` → `submitted`；`fill(0.4)` → `partial-filled`（成交量 0.4）；`canceled` → 因為已經有成交量，變成 `partial-canceled`（0.4）。
+    - 晚到的 `fill(0.2)` 小於目前的 0.4，忽略。
+    - `fill(0.6)` 大於 0.4、而且小於委託量：成交量更新為 0.6，狀態維持 `partial-canceled`（終態不會回到 `partial-filled`）。這代表取消通知先於成交通知到達，正是文件警告的亂序。
+    其他選項：第 1 項忽略了最後一筆有效的成交；第 3 項讓終態回到了 `partial-filled`；第 4 項的 1.0 沒有任何事件支持，累計量最多只到 0.6。
+
+- id: exchange-order-flow-06
+  type: multi
+  level: 2
+  priority: P0
+  tags: [api, cancel, rate-limit]
+  prompt: |
+    依這套交易所的 API 文件，哪些敘述正確？（複選）
+  options:
+    - "`client-order-id` 在下單參數中最長 64 字元，且 8 小時內必須唯一"
+    - "需要簽名的 API，每個 API key 每秒 10 次；公開 API 每個 IP 每秒 10 次"
+    - "`/v1/order/orders/batchcancel` 一次最多取消 50 筆，`order-ids` 比 `client-order-ids` 更穩定"
+    - "對已經成交（filled）的訂單呼叫 `submitcancel` 會成功，並把訂單改成 canceled"
+    - "訂單查詢的 `field-amount` 是這次成交的增量"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：長度與唯一性期限是文件明寫的。但「是否必填」文件前後不一致（參數表標必填，範例沒帶、私有 WebSocket 標選填），需要確認。
+    - 第 2 項正確：簽名 API 的額度算在 API key 上，公開 API 的額度算在 IP 上，部分 API 另有更嚴格的限制。
+    - 第 3 項正確：文件建議使用 `order-ids`，原因是比 App 自己訂的編號穩定。
+    - 第 4 項錯：對終態的訂單取消，會得到 `order-orderstate-error`（Incorrect order state）。App 應該把它當成正常情況，刷新訂單後顯示「已成交」。
+    - 第 5 項錯：`field-amount` 是**累計**成交量（`field-cash-amount` 是累計成交金額），逐筆成交要看 `/matchresults`。
+
+- id: exchange-order-flow-07
+  type: code
+  level: 3
+  priority: P0
+  tags: [reducer, state-machine, decimal]
+  prompt: |
+    實作訂單事件的 reducer：`reduce(order, event) -> Order`（純函式：同樣的輸入一定得到同樣的輸出，沒有副作用）。
+
+    狀態：`pending`（本地已送出、尚未收到伺服器確認）、`submitted`、`partialFilled`、`canceling`、`filled`、`canceled`、`partialCanceled`、`rejected`。終態是 `filled`、`canceled`、`partialCanceled`、`rejected`。
+
+    事件與規則：
+    - `accepted`：只有 `pending` → `submitted`，其他狀態不變
+    - `rejected`：只有 `pending` → `rejected`，其他狀態不變
+    - `fill(cumulative)`：如果訂單是 `rejected`、或 `cumulative <= order.filled`、或 `cumulative > order.amount`，**整個事件忽略**。否則 `filled = cumulative`，並且：
+      - `cumulative == amount` → `filled`（任何非 rejected 的狀態都是）
+      - 否則：`pending／submitted／partialFilled` → `partialFilled`；`canceling` 維持 `canceling`；`canceled／partialCanceled` → `partialCanceled`
+    - `cancelRequested`（使用者按取消）：`pending／submitted／partialFilled` → `canceling`，其他不變
+    - `canceled`（伺服器確認取消）：`pending／submitted／partialFilled／canceling` → 若 `filled > 0` 為 `partialCanceled`，否則 `canceled`；終態不變
+  hints:
+    - "先處理「忽略」的條件，再更新 `filled`，最後決定狀態。"
+    - "終態不可離開；例外是 `canceled` 之後收到更大的累計成交量：未滿量時變成 `partialCanceled`，滿量時變成 `filled`。"
+  swift:
+    starter: |
+      import Foundation
+
+      enum OrderState: Equatable {
+          case pending, submitted, partialFilled, canceling, filled, canceled, partialCanceled, rejected
+      }
+
+      struct Order: Equatable {
+          let clientOrderId: String
+          let amount: Decimal
+          var filled: Decimal
+          var state: OrderState
+      }
+
+      enum OrderEvent {
+          case accepted
+          case rejected
+          case fill(cumulative: Decimal)
+          case cancelRequested
+          case canceled
+      }
+
+      func reduce(_ order: Order, _ event: OrderEvent) -> Order {
+          // TODO
+          return order
+      }
+    solution: |
+      import Foundation
+
+      enum OrderState: Equatable {
+          case pending, submitted, partialFilled, canceling, filled, canceled, partialCanceled, rejected
+      }
+
+      struct Order: Equatable {
+          let clientOrderId: String
+          let amount: Decimal
+          var filled: Decimal
+          var state: OrderState
+      }
+
+      enum OrderEvent {
+          case accepted
+          case rejected
+          case fill(cumulative: Decimal)
+          case cancelRequested
+          case canceled
+      }
+
+      func reduce(_ order: Order, _ event: OrderEvent) -> Order {
+          var o = order
+          switch event {
+          case .accepted:
+              if o.state == .pending { o.state = .submitted }
+          case .rejected:
+              if o.state == .pending { o.state = .rejected }
+          case .fill(let total):
+              guard o.state != .rejected, total > o.filled, total <= o.amount else { return o }
+              o.filled = total
+              if total == o.amount {
+                  o.state = .filled
+              } else {
+                  switch o.state {
+                  case .pending, .submitted, .partialFilled: o.state = .partialFilled
+                  case .canceled, .partialCanceled: o.state = .partialCanceled
+                  case .canceling, .filled, .rejected: break
+                  }
+              }
+          case .cancelRequested:
+              switch o.state {
+              case .pending, .submitted, .partialFilled: o.state = .canceling
+              default: break
+              }
+          case .canceled:
+              switch o.state {
+              case .pending, .submitted, .partialFilled, .canceling:
+                  o.state = o.filled > 0 ? .partialCanceled : .canceled
+              default: break
+              }
+          }
+          return o
+      }
+    tests: |
+      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+      func fresh() -> Order { Order(clientOrderId: "c1", amount: D("1"), filled: 0, state: .pending) }
+      func run(_ events: [OrderEvent], from order: Order = fresh()) -> Order {
+          events.reduce(order) { reduce($0, $1) }
+      }
+
+      check("正常流程：ack → 部分成交 → 全部成交") {
+          let a = run([.accepted])
+          let b = run([.accepted, .fill(cumulative: D("0.3"))])
+          let c = run([.accepted, .fill(cumulative: D("0.3")), .fill(cumulative: D("1"))])
+          return a.state == .submitted && b.state == .partialFilled && b.filled == D("0.3")
+              && c.state == .filled && c.filled == D("1")
+      }
+      check("累計成交量只增不減：重複與較小的值忽略") {
+          let o = run([.accepted, .fill(cumulative: D("0.5")), .fill(cumulative: D("0.3")), .fill(cumulative: D("0.5"))])
+          return o.filled == D("0.5") && o.state == .partialFilled
+      }
+      check("超過委託量的累計值無效，整個事件忽略") {
+          let o = run([.accepted, .fill(cumulative: D("1.5"))])
+          return o.filled == 0 && o.state == .submitted
+      }
+      check("終態不可離開") {
+          let filled = run([.accepted, .fill(cumulative: D("1"))])
+          let canceled = run([.accepted, .canceled])
+          return run([.accepted, .cancelRequested, .canceled, .rejected], from: filled) == filled
+              && run([.accepted, .cancelRequested, .rejected], from: canceled) == canceled
+              && canceled.state == .canceled
+      }
+      check("撤單競態 A：canceling 期間收到成交，仍是 canceling；確認取消後變 partialCanceled") {
+          let o1 = run([.accepted, .cancelRequested, .fill(cumulative: D("0.4"))])
+          let o2 = reduce(o1, .canceled)
+          return o1.state == .canceling && o1.filled == D("0.4")
+              && o2.state == .partialCanceled && o2.filled == D("0.4")
+      }
+      check("撤單競態 B：取消請求送出時其實已全部成交 → filled，晚到的取消事件被忽略") {
+          let o = run([.accepted, .cancelRequested, .fill(cumulative: D("1")), .canceled])
+          return o.state == .filled && o.filled == D("1")
+      }
+      check("事件亂序：取消先到、成交後到；成交先於 ack") {
+          let o1 = run([.accepted, .canceled, .fill(cumulative: D("0.4"))])
+          let o2 = run([.fill(cumulative: D("0.2")), .accepted])
+          return o1.state == .partialCanceled && o1.filled == D("0.4")
+              && o2.state == .partialFilled && o2.filled == D("0.2")
+      }
+      check("rejected 只能從 pending 進入，且之後不會變") {
+          let r = run([.rejected, .accepted, .fill(cumulative: D("0.5")), .cancelRequested, .canceled])
+          let s = run([.accepted, .rejected])
+          return r.state == .rejected && r.filled == 0 && s.state == .submitted
+      }
+  kotlin:
+    starter: |
+      import java.math.BigDecimal
+
+      enum class OrderState { PENDING, SUBMITTED, PARTIAL_FILLED, CANCELING, FILLED, CANCELED, PARTIAL_CANCELED, REJECTED }
+
+      data class Order(
+          val clientOrderId: String,
+          val amount: BigDecimal,
+          val filled: BigDecimal,
+          val state: OrderState
+      )
+
+      sealed class OrderEvent {
+          object Accepted : OrderEvent()
+          object Rejected : OrderEvent()
+          data class Fill(val cumulative: BigDecimal) : OrderEvent()
+          object CancelRequested : OrderEvent()
+          object Canceled : OrderEvent()
+      }
+
+      fun reduce(order: Order, event: OrderEvent): Order {
+          // TODO
+          return order
+      }
+    solution: |
+      import java.math.BigDecimal
+
+      enum class OrderState { PENDING, SUBMITTED, PARTIAL_FILLED, CANCELING, FILLED, CANCELED, PARTIAL_CANCELED, REJECTED }
+
+      data class Order(
+          val clientOrderId: String,
+          val amount: BigDecimal,
+          val filled: BigDecimal,
+          val state: OrderState
+      )
+
+      sealed class OrderEvent {
+          object Accepted : OrderEvent()
+          object Rejected : OrderEvent()
+          data class Fill(val cumulative: BigDecimal) : OrderEvent()
+          object CancelRequested : OrderEvent()
+          object Canceled : OrderEvent()
+      }
+
+      fun reduce(order: Order, event: OrderEvent): Order = when (event) {
+          OrderEvent.Accepted ->
+              if (order.state == OrderState.PENDING) order.copy(state = OrderState.SUBMITTED) else order
+          OrderEvent.Rejected ->
+              if (order.state == OrderState.PENDING) order.copy(state = OrderState.REJECTED) else order
+          is OrderEvent.Fill -> {
+              val total = event.cumulative
+              if (order.state == OrderState.REJECTED || total <= order.filled || total > order.amount) {
+                  order
+              } else if (total.compareTo(order.amount) == 0) {
+                  order.copy(filled = total, state = OrderState.FILLED)
+              } else {
+                  val next = when (order.state) {
+                      OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED -> OrderState.PARTIAL_FILLED
+                      OrderState.CANCELED, OrderState.PARTIAL_CANCELED -> OrderState.PARTIAL_CANCELED
+                      else -> order.state
+                  }
+                  order.copy(filled = total, state = next)
+              }
+          }
+          OrderEvent.CancelRequested -> when (order.state) {
+              OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED -> order.copy(state = OrderState.CANCELING)
+              else -> order
+          }
+          OrderEvent.Canceled -> when (order.state) {
+              OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED, OrderState.CANCELING ->
+                  order.copy(state = if (order.filled.signum() > 0) OrderState.PARTIAL_CANCELED else OrderState.CANCELED)
+              else -> order
+          }
+      }
+    tests: |
+      import java.math.BigDecimal
+
+      fun D(s: String) = BigDecimal(s)
+      fun fresh() = Order("c1", D("1"), BigDecimal.ZERO, OrderState.PENDING)
+      fun run(events: List<OrderEvent>, from: Order = fresh()): Order = events.fold(from) { o, e -> reduce(o, e) }
+      fun f(s: String) = OrderEvent.Fill(D(s))
+      fun same(a: Order, b: Order) = a.state == b.state && a.filled.compareTo(b.filled) == 0
+
+      check("正常流程：ack → 部分成交 → 全部成交") {
+          val a = run(listOf(OrderEvent.Accepted))
+          val b = run(listOf(OrderEvent.Accepted, f("0.3")))
+          val c = run(listOf(OrderEvent.Accepted, f("0.3"), f("1")))
+          a.state == OrderState.SUBMITTED && b.state == OrderState.PARTIAL_FILLED && b.filled.compareTo(D("0.3")) == 0 &&
+              c.state == OrderState.FILLED && c.filled.compareTo(D("1")) == 0
+      }
+      check("累計成交量只增不減：重複與較小的值忽略") {
+          val o = run(listOf(OrderEvent.Accepted, f("0.5"), f("0.3"), f("0.5")))
+          o.filled.compareTo(D("0.5")) == 0 && o.state == OrderState.PARTIAL_FILLED
+      }
+      check("超過委託量的累計值無效，整個事件忽略") {
+          val o = run(listOf(OrderEvent.Accepted, f("1.5")))
+          o.filled.signum() == 0 && o.state == OrderState.SUBMITTED
+      }
+      check("終態不可離開") {
+          val filled = run(listOf(OrderEvent.Accepted, f("1")))
+          val canceled = run(listOf(OrderEvent.Accepted, OrderEvent.Canceled))
+          same(run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, OrderEvent.Canceled, OrderEvent.Rejected), filled), filled) &&
+              same(run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, OrderEvent.Rejected), canceled), canceled) &&
+              canceled.state == OrderState.CANCELED
+      }
+      check("撤單競態 A：canceling 期間收到成交，仍是 canceling；確認取消後變 partialCanceled") {
+          val o1 = run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, f("0.4")))
+          val o2 = reduce(o1, OrderEvent.Canceled)
+          o1.state == OrderState.CANCELING && o1.filled.compareTo(D("0.4")) == 0 &&
+              o2.state == OrderState.PARTIAL_CANCELED && o2.filled.compareTo(D("0.4")) == 0
+      }
+      check("撤單競態 B：取消請求送出時其實已全部成交 → filled，晚到的取消事件被忽略") {
+          val o = run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, f("1"), OrderEvent.Canceled))
+          o.state == OrderState.FILLED && o.filled.compareTo(D("1")) == 0
+      }
+      check("事件亂序：取消先到、成交後到；成交先於 ack") {
+          val o1 = run(listOf(OrderEvent.Accepted, OrderEvent.Canceled, f("0.4")))
+          val o2 = run(listOf(f("0.2"), OrderEvent.Accepted))
+          o1.state == OrderState.PARTIAL_CANCELED && o1.filled.compareTo(D("0.4")) == 0 &&
+              o2.state == OrderState.PARTIAL_FILLED && o2.filled.compareTo(D("0.2")) == 0
+      }
+      check("rejected 只能從 pending 進入，且之後不會變") {
+          val r = run(listOf(OrderEvent.Rejected, OrderEvent.Accepted, f("0.5"), OrderEvent.CancelRequested, OrderEvent.Canceled))
+          val s = run(listOf(OrderEvent.Accepted, OrderEvent.Rejected))
+          r.state == OrderState.REJECTED && r.filled.signum() == 0 && s.state == OrderState.SUBMITTED
+      }
+
+- id: exchange-order-flow-08
+  type: code
+  level: 2
+  priority: P0
+  tags: [rate-limit, token-bucket, clock]
+  prompt: |
+    這套 API 的簽名請求，每個 API key 每秒 10 次。實作 App 端的 token bucket（令牌桶，限流用），**注入時鐘**（毫秒，由呼叫端傳入，不在函式裡讀現在的時間），全部用整數運算。
+
+    - `TokenBucket(capacity, refillPerSecond, startMs)`：一開始桶是滿的；每秒補充 `refillPerSecond` 個 token，補充的上限是 `capacity`
+    - `tryAcquire(nowMs)`：拿得到 1 個 token 就消耗並回傳 true，否則回傳 false（不消耗）
+    - `waitMs(nowMs)`：現在拿不到 token 時，還要等幾毫秒才有 1 個（**向上取整**）；拿得到時回傳 0；**不消耗** token
+    - 時鐘倒退（`nowMs` 小於上次的時間）時，不補充 token，也不能讓之後的補充算錯
+  hints:
+    - "用「千分之一個 token」（milli-token）當單位：每過 1 毫秒，補充 `refillPerSecond` 個 milli-token；取得 1 個 token 需要 1000 個 milli-token。"
+    - "記住最後一次補充的時間 `last`；`now < last` 時不更新 `last`。"
+  swift:
+    starter: |
+      struct TokenBucket {
+          init(capacity: Int, refillPerSecond: Int, startMs: Int64) {
+              // TODO
+          }
+
+          mutating func tryAcquire(nowMs: Int64) -> Bool {
+              // TODO
+              return true
+          }
+
+          mutating func waitMs(nowMs: Int64) -> Int64 {
+              // TODO
+              return 0
+          }
+      }
+    solution: |
+      struct TokenBucket {
+          private let capacityMilli: Int64
+          private let rate: Int64
+          private var level: Int64
+          private var last: Int64
+
+          init(capacity: Int, refillPerSecond: Int, startMs: Int64) {
+              capacityMilli = Int64(capacity) * 1000
+              rate = Int64(refillPerSecond)
+              level = capacityMilli
+              last = startMs
+          }
+
+          private mutating func refill(_ now: Int64) {
+              guard now > last else { return }
+              level = min(capacityMilli, level + (now - last) * rate)
+              last = now
+          }
+
+          mutating func tryAcquire(nowMs: Int64) -> Bool {
+              refill(nowMs)
+              guard level >= 1000 else { return false }
+              level -= 1000
+              return true
+          }
+
+          mutating func waitMs(nowMs: Int64) -> Int64 {
+              refill(nowMs)
+              guard level < 1000 else { return 0 }
+              let deficit = 1000 - level
+              return (deficit + rate - 1) / rate
+          }
+      }
+    tests: |
+      check("一開始是滿的：10 個可以立即取得，第 11 個失敗") {
+          var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
+          var ok = 0
+          for _ in 0..<10 { if b.tryAcquire(nowMs: 0) { ok += 1 } }
+          return ok == 10 && !b.tryAcquire(nowMs: 0)
+      }
+      check("每 100 毫秒補充 1 個") {
+          var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
+          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 0) }
+          let early = b.tryAcquire(nowMs: 99)
+          let onTime = b.tryAcquire(nowMs: 100)
+          return !early && onTime && !b.tryAcquire(nowMs: 100)
+      }
+      check("補充有上限（capacity）") {
+          var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
+          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 0) }
+          var ok = 0
+          for _ in 0..<20 { if b.tryAcquire(nowMs: 10_000) { ok += 1 } }
+          return ok == 10
+      }
+      check("waitMs：回傳還要等的毫秒數，且不消耗 token") {
+          var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
+          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 0) }
+          let w0 = b.waitMs(nowMs: 0)
+          let w60 = b.waitMs(nowMs: 60)
+          let w100 = b.waitMs(nowMs: 100)
+          return w0 == 100 && w60 == 40 && w100 == 0 && b.tryAcquire(nowMs: 100)
+      }
+      check("時鐘倒退：不補充，之後的補充仍以最後時間為準") {
+          var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 1000)
+          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 1000) }
+          let back = b.tryAcquire(nowMs: 500)
+          let later = b.tryAcquire(nowMs: 1100)
+          return !back && later
+      }
+      check("每秒 1 個、容量 1") {
+          var b = TokenBucket(capacity: 1, refillPerSecond: 1, startMs: 0)
+          let a = b.tryAcquire(nowMs: 0)
+          let early = b.tryAcquire(nowMs: 999)
+          let wait = b.waitMs(nowMs: 999)
+          let c = b.tryAcquire(nowMs: 1000)
+          return a && !early && wait == 1 && c
+      }
+      check("不能整除的速率：每秒 3 個，要等 334 毫秒（向上取整）") {
+          var b = TokenBucket(capacity: 3, refillPerSecond: 3, startMs: 0)
+          for _ in 0..<3 { _ = b.tryAcquire(nowMs: 0) }
+          let w = b.waitMs(nowMs: 0)
+          let early = b.tryAcquire(nowMs: 333)
+          let onTime = b.tryAcquire(nowMs: 334)
+          return w == 334 && !early && onTime
+      }
+  kotlin:
+    starter: |
+      class TokenBucket(capacity: Int, refillPerSecond: Int, startMs: Long) {
+          fun tryAcquire(nowMs: Long): Boolean {
+              // TODO
+              return true
+          }
+
+          fun waitMs(nowMs: Long): Long {
+              // TODO
+              return 0
+          }
+      }
+    solution: |
+      class TokenBucket(capacity: Int, refillPerSecond: Int, startMs: Long) {
+          private val capacityMilli = capacity.toLong() * 1000
+          private val rate = refillPerSecond.toLong()
+          private var level = capacityMilli
+          private var last = startMs
+
+          private fun refill(now: Long) {
+              if (now <= last) return
+              level = minOf(capacityMilli, level + (now - last) * rate)
+              last = now
+          }
+
+          fun tryAcquire(nowMs: Long): Boolean {
+              refill(nowMs)
+              if (level < 1000) return false
+              level -= 1000
+              return true
+          }
+
+          fun waitMs(nowMs: Long): Long {
+              refill(nowMs)
+              if (level >= 1000) return 0
+              val deficit = 1000 - level
+              return (deficit + rate - 1) / rate
+          }
+      }
+    tests: |
+      check("一開始是滿的：10 個可以立即取得，第 11 個失敗") {
+          val b = TokenBucket(10, 10, 0)
+          var ok = 0
+          repeat(10) { if (b.tryAcquire(0)) ok++ }
+          ok == 10 && !b.tryAcquire(0)
+      }
+      check("每 100 毫秒補充 1 個") {
+          val b = TokenBucket(10, 10, 0)
+          repeat(10) { b.tryAcquire(0) }
+          val early = b.tryAcquire(99)
+          val onTime = b.tryAcquire(100)
+          !early && onTime && !b.tryAcquire(100)
+      }
+      check("補充有上限（capacity）") {
+          val b = TokenBucket(10, 10, 0)
+          repeat(10) { b.tryAcquire(0) }
+          var ok = 0
+          repeat(20) { if (b.tryAcquire(10_000)) ok++ }
+          ok == 10
+      }
+      check("waitMs：回傳還要等的毫秒數，且不消耗 token") {
+          val b = TokenBucket(10, 10, 0)
+          repeat(10) { b.tryAcquire(0) }
+          val w0 = b.waitMs(0)
+          val w60 = b.waitMs(60)
+          val w100 = b.waitMs(100)
+          w0 == 100L && w60 == 40L && w100 == 0L && b.tryAcquire(100)
+      }
+      check("時鐘倒退：不補充，之後的補充仍以最後時間為準") {
+          val b = TokenBucket(10, 10, 1000)
+          repeat(10) { b.tryAcquire(1000) }
+          val back = b.tryAcquire(500)
+          val later = b.tryAcquire(1100)
+          !back && later
+      }
+      check("每秒 1 個、容量 1") {
+          val b = TokenBucket(1, 1, 0)
+          val a = b.tryAcquire(0)
+          val early = b.tryAcquire(999)
+          val wait = b.waitMs(999)
+          val c = b.tryAcquire(1000)
+          a && !early && wait == 1L && c
+      }
+      check("不能整除的速率：每秒 3 個，要等 334 毫秒（向上取整）") {
+          val b = TokenBucket(3, 3, 0)
+          repeat(3) { b.tryAcquire(0) }
+          val w = b.waitMs(0)
+          val early = b.tryAcquire(333)
+          val onTime = b.tryAcquire(334)
+          w == 334L && !early && onTime
+      }
+
+- id: exchange-order-flow-09
+  type: open
+  level: 2
+  priority: P0
+  tags: [order, reliability]
+  prompt: |
+    設計交易所 App 的下單流程，讓使用者不會「重複下單」，也不會「不知道成功沒有」。請涵蓋 client order id、逾時對帳、狀態合併、撤單和成交同時發生、限流，以及 App 被殺掉或進背景時的處理。
+  promptJa: |
+    取引所アプリの注文フローを、二重発注や「成功したか分からない」状態が起きないように設計してください。client order id、タイムアウト時の照合、状態のマージ、キャンセルと約定が同時に起きた場合、レート制限、アプリが終了またはバックグラウンドへ移行した場合の扱いも含めてください。
+  keyPoints:
+    - "按下按鈕、送出之前就產生 `client-order-id`（最長 64 字元、8 小時內唯一；是否必填待確認），隨草稿保存；所有重送用同一個；按鈕鎖定並顯示確認中，ViewModel 也用狀態擋住重複點擊"
+    - "逾時不重送：用未成交委託清單或歷史查詢，依 `client-order-id` 對帳（API 文件沒有以 client id 查單筆的端點；已取消的訂單只能查過去 2 小時，`states` 必填）；查不到才讓使用者決定"
+    - "下單回應只是受理（訂單 ID）；成交與取消靠私有 WebSocket 與查詢；REST 查詢是權威，WebSocket 是即時"
+    - "狀態合併寫成純函式 reducer：終態不可離開、累計成交量只增不減、容忍亂序（`trade.clearing` 不保證順序）"
+    - "撤單：先顯示 canceling，等伺服器確認；對終態的訂單取消會得到 `order-orderstate-error`，視為正常並刷新"
+    - "限流：token bucket（每秒 10 次，注入時鐘、整數運算），查詢優先用 WebSocket 推送，避免輪詢吃光額度"
+    - "App 被殺或進背景：未確認的下單要持久化（草稿加 client order id），回來後先對帳；回前景時重新抓快照並重新訂閱"
+    - "經驗連結：社交 App 的聊天用 UUID 當冪等鍵、伺服器 ack 後取代樂觀資料；內購在伺服器確認後才 finishTransaction"
+  modelAnswer: |
+    我會讓每一次下單意圖，在送出之前就有一個 `client-order-id`。API 文件規定最長 64 字元、8 小時內唯一，我用 UUID，隨草稿一起保存，所有重送都用同一個。按下按鈕後立刻鎖定並顯示確認中，ViewModel 裡也用狀態擋住重複點擊。
+
+    下單的回應只是受理，回傳訂單 ID，成交和取消要靠私有 WebSocket 和查詢確認。逾時我不會重送，而是用未成交委託清單或委託歷史查詢，依 `client-order-id` 對帳，因為文件沒有以 client id 查單筆的端點；查不到，才讓使用者決定是否重送。
+
+    狀態合併寫成純函式 reducer：終態不可離開，成交量用累計值而且只增不減，容忍亂序，因為文件說 `trade.clearing` 不保證順序。撤單先進入 canceling，等伺服器確認；對已成交的訂單取消會得到 `order-orderstate-error`，這是正常情況，刷新後顯示已成交。限流用 token bucket，額度是每個 API key 每秒 10 次，查詢優先用 WebSocket 推送。
+
+    App 被殺或進背景時，未確認的下單要持久化，回來後先對帳；回前景要重新抓快照並重新訂閱。我在一個社交 App 做過類似的設計：聊天訊息由 App 產生 UUID 當冪等鍵，伺服器 ack 後取代本地的樂觀資料；內購也是伺服器確認之後才結束交易。到交易所的下單流程，我會用同樣的思路來做。
+  modelAnswerJa: |
+    1 回の発注の意図ごとに、送信前の時点で `client-order-id` を用意します。API ドキュメントでは最大 64 文字、8 時間以内で一意とされているため、UUID を使い、下書きと一緒に保存して、再送はすべて同じ ID にします。ボタンを押したらすぐにロックして確認中と表示し、ViewModel でも状態で二重のタップを防ぎます。
+
+    発注のレスポンスは受理を表すだけで、注文 ID が返ります。約定やキャンセルは、プライベート WebSocket と照会で確認します。タイムアウトしても再送せず、未約定注文の一覧または注文履歴の検索から `client-order-id` で照合します。ドキュメントには、client id で 1 件を照会するエンドポイントがないためです。見つからなければ、再送するかどうかをユーザーに選んでもらいます。
+
+    状態のマージは、純粋関数の reducer にします。一度終端状態になったら他の状態に戻さず、約定数量は累計値で、増えることだけを認めます。順序が前後することも想定します。ドキュメントで `trade.clearing` は順序が保証されないとされているためです。取消はまず canceling にして、サーバーの確認を待ちます。約定済みの注文を取り消すと `order-orderstate-error` が返りますが、これは正常なケースなので、再取得して約定済みと表示します。レート制限は token bucket で、上限は API キーあたり毎秒 10 回です。照会はなるべく WebSocket の通知を使います。
+
+    アプリが終了したりバックグラウンドへ移行したりする場合に備えて、未確認の発注は端末に保存し、復帰後にまず照合します。フォアグラウンドに戻ったときは、最新の状態を取得し直して、再購読します。ソーシャルアプリでは、チャットのメッセージにアプリ側で UUID を生成して冪等キーとし、サーバーの ack 後に楽観的に表示していたデータを置き換えました。アプリ内課金も、サーバーで確認してから取引を終了させました。取引所の注文フローでも、同じ考え方で進めます。
+  followUps:
+    - "App 重新啟動後，怎麼知道「有一筆未確認的下單」？要存什麼？"
+    - "同一個使用者在兩台裝置同時下單，client order id 會衝突嗎？"
+    - "同時訂閱 `orders#` 和 `trade.clearing` 時，怎麼避免重複計算成交？"
+  timeLimitSec: 180
+
+- id: exchange-order-flow-10
+  type: flash
+  level: 1
+  priority: P0
+  tags: [order]
+  front: 訂單合併的規則，與下單冪等的重點
+  back: |
+    - 終態（filled／canceled／partial-canceled／rejected）**不可離開**。
+    - 成交量用**伺服器給的累計值**，只增不減；小於或等於目前值、或超過委託量的事件，忽略。
+    - 取消先顯示 **canceling**；取消之後才到的成交 → partial-canceled；取消時其實已經全部成交 → filled。
+    - 事件亂序要容忍（`trade.clearing` 不保證順序，要順序請用 `orders#`）。
+    - 冪等：`client-order-id`（最長 64、8 小時內唯一）送出之前就產生，重送用同一個；逾時先對帳再決定；限流每秒 10 次，用 token bucket（注入時鐘）。

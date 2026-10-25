@@ -1,0 +1,234 @@
+- id: kotlin-functions-dsl-delegation-01
+  type: predict
+  level: 2
+  priority: P1
+  tags: [extension, static-dispatch]
+  prompt: |
+    下列程式依序印出什麼？（4 行輸出）
+  codeLang: kotlin
+  code: |
+    open class Base
+    class Derived : Base()
+
+    fun Base.name() = "base-ext"
+    fun Derived.name() = "derived-ext"
+
+    class Greeter { fun hi() = "member" }
+    fun Greeter.hi() = "ext"
+    fun Greeter.hi(times: Int) = "ext-$times"
+
+    fun main() {
+        val b: Base = Derived()
+        println(b.name())
+        println(Derived().name())
+        println(Greeter().hi())
+        println(Greeter().hi(2))
+    }
+  answer: |
+    base-ext derived-ext member ext-2
+  explain: |
+    - 第 1 行 `base-ext`：extension 是 static dispatch（靜態分派），編譯時只看**變數宣告的型別**就決定呼叫哪一個。`b` 宣告成 `Base`，即使實際的物件是 `Derived`，呼叫的仍是 `Base.name()`，沒有多型（多型指的是：實際執行子類別覆寫過的版本）。
+    - 第 2 行 `derived-ext`：這次變數的型別本身就是 `Derived`，所以呼叫 `Derived.name()`。
+    - 第 3 行 `member`：同名同簽名（名稱和參數都一樣）時，成員永遠勝出，`Greeter.hi()` 的 extension 永遠不會被呼叫（編譯器只給警告）。
+    - 第 4 行 `ext-2`：簽名不同（多了參數）等於另一個函式，所以 `hi(2)` 會走 extension。
+    需要多型就用介面或成員函式，不要用 extension 去「覆寫」。
+
+- id: kotlin-functions-dsl-delegation-02
+  type: multi
+  level: 2
+  priority: P1
+  tags: [lazy, thread-safety]
+  prompt: |
+    關於 `lazy` 的 `LazyThreadSafetyMode`，哪些敘述正確？（複選）
+  options:
+    - "`SYNCHRONIZED`（預設）會加鎖，初始化器（傳給 `lazy` 的 lambda）最多只執行一次"
+    - "`PUBLICATION` 允許多個執行緒同時執行初始化器，但只有第一個寫入的結果會被採用"
+    - "`NONE` 不保證 thread-safety，只適合確定單一執行緒存取的情況"
+    - "初始化器丟出例外時，`lazy` 會快取這次失敗，之後每次存取都重新丟出同一個例外"
+    - "`PUBLICATION` 的所有存取者一定拿到同一個物件，所以初始化器可以有副作用"
+  answer: [0, 1, 2]
+  explain: |
+    - 第 1 項正確：預設模式用鎖，保證初始化器最多只執行一次，適合不確定會不會有多個執行緒存取的情況。
+    - 第 2 項正確：`PUBLICATION` 不加鎖，多個執行緒可能同時執行初始化器，只有第一個寫入的結果被採用，最後大家看到同一個值。
+    - 第 3 項正確：`NONE` 完全沒有鎖，用在只在主執行緒存取的 UI 輔助物件是合理的；如果跨執行緒使用，可能建立出多個實例。
+    - 第 4 項錯：`lazy` 在例外時**不快取失敗**，下次存取會重新執行初始化器（見下一題）。
+    - 第 5 項錯：`PUBLICATION` 雖然最後大家看到同一個值，但初始化器可能已經被執行了多次，所以初始化器不能有副作用（不要在裡面開連線、註冊 listener）。
+
+- id: kotlin-functions-dsl-delegation-03
+  type: predict
+  level: 2
+  priority: P1
+  tags: [lazy, exception]
+  prompt: |
+    下列程式依序印出什麼？（4 行輸出）
+  codeLang: kotlin
+  code: |
+    var n = 0
+    val v by lazy {
+        n++
+        if (n < 2) error("boom")
+        n
+    }
+
+    fun main() {
+        try { println(v) } catch (e: IllegalStateException) { println("fail") }
+        println(v)
+        println(v)
+        println(n)
+    }
+  answer: |
+    fail 2 2 2
+  explain: |
+    - 第 1 行 `fail`：第一次存取時，初始化器執行，`n` 變成 1，丟出例外，被 `catch` 接住印出 `fail`。
+    - 第 2 行 `2`：`lazy` 沒有記錄任何值，所以第二次存取會再執行一次初始化器。這次 `n` 變成 2，不丟例外，回傳 2，值被快取。
+    - 第 3 行 `2`：值已經被快取，不會重新執行初始化器。
+    - 第 4 行 `2`：因為沒有重跑，`n` 維持 2。
+    這個行為讓「初始化失敗後重試」很自然，但也代表如果初始化器很重（讀檔、建立連線）又持續失敗，每次存取都會再付一次成本。
+
+- id: kotlin-functions-dsl-delegation-04
+  type: predict
+  level: 3
+  priority: P0
+  tags: [bigdecimal, operator, rounding]
+  prompt: |
+    Kotlin 為 `BigDecimal` 提供了運算子。下列程式依序印出什麼？（5 行輸出）
+  codeLang: kotlin
+  code: |
+    import java.math.BigDecimal
+
+    fun main() {
+        println(BigDecimal("1") / BigDecimal("3"))
+        println(BigDecimal("1.00") / BigDecimal("3"))
+        println(BigDecimal("10") / BigDecimal("4"))
+        println(BigDecimal("1.0") == BigDecimal("1.00"))
+        println(BigDecimal("1.0") >= BigDecimal("1.00"))
+    }
+  answer: |
+    0 0.33 2 false true
+  explain: |
+    - 第 1 行 `0`：Kotlin 的 `BigDecimal` 的 `/` 等於 `divide(other, RoundingMode.HALF_EVEN)`，結果的 scale（小數點後有幾位）等於**被除數**的 scale。`1` 的 scale 是 0，所以結果只保留整數，`1 / 3` 得到 `0`；而且不丟 `ArithmeticException`，比直接呼叫 `divide(x)` 更隱蔽。
+    - 第 2 行 `0.33`：`1.00` 的 scale 是 2，所以保留兩位小數。
+    - 第 3 行 `2`：`10 / 4 = 2.5`，scale 0 要捨入到整數。HALF_EVEN（銀行家捨入）在剛好位於中間時，捨入到偶數那一邊，所以是 `2`，不是 `3`。
+    - 第 4 行 `false`：`==` 呼叫 `equals`，連 scale 一起比，`1.0` 和 `1.00` 的 scale 不同，所以不相等。
+    - 第 5 行 `true`：`>=` 呼叫 `compareTo`，只比數值大小，所以相等。
+    金額除法要寫成 `divide(x, scale, RoundingMode.XXX)`，把小數位數與捨入方向明確寫出來。
+
+- id: kotlin-functions-dsl-delegation-05
+  type: fill
+  level: 1
+  priority: P1
+  tags: [scope-functions]
+  prompt: |
+    第一行要設定物件後回傳**物件本身**；第二行要以物件為 receiver（區塊裡用 `this` 代表它）算出一個新值，回傳區塊最後一行的結果。
+  codeLang: kotlin
+  code: |
+    val req = OrderRequest().____ {
+        symbol = "btcjpy"
+        qty = BigDecimal("0.01")
+    }
+    val notional = req.____ { price * qty }
+  blanks:
+    - [apply]
+    - [run]
+  explain: |
+    - 第一格 `apply`：區塊內用 `this`，回傳物件本身，適合 builder 式的設定。`also` 也是回傳物件本身，但區塊內是 `it`，不能直接寫 `symbol = ...`，常用於 log 這類順便做的事。
+    - 第二格 `run`：區塊內用 `this`，回傳區塊最後一行的結果，所以可以直接寫 `price * qty`。`let` 雖然也回傳區塊結果，但區塊內是 `it`，要寫成 `it.price * it.qty`，不符合題目「用 `this`」的要求。
+
+- id: kotlin-functions-dsl-delegation-06
+  type: single
+  level: 2
+  priority: P1
+  tags: [dsl, dslmarker]
+  prompt: |
+    下列 DSL 若 `OrderBuilder` 與 `LegBuilder` 都沒有加 `@DslMarker` 標註，會發生什麼事？
+  codeLang: kotlin
+  code: |
+    order {
+        symbol = "btcjpy"
+        leg {
+            price = BigDecimal("100")
+            symbol = "oops"   // 在 leg 區塊裡寫了外層 builder 的屬性
+        }
+    }
+  options:
+    - "編譯失敗，因為 `LegBuilder` 沒有 `symbol`"
+    - "編譯通過，`symbol` 被隱含解析到外層 `OrderBuilder`（它的 receiver 也在作用域內），錯誤很難發現；加上 `@DslMarker` 才會禁止這種隱含存取"
+    - "編譯通過，`symbol` 會被當成 `LegBuilder` 新增的屬性"
+    - "執行時丟出 `ClassCastException`"
+  answer: 1
+  explain: |
+    巢狀的 lambda with receiver（lambda 裡直接用 `T` 的成員）會把所有外層的 receiver 都放進可用範圍，在內層找不到成員，就往外層找，所以 `symbol = "oops"` 默默地寫到外層的 `OrderBuilder`，錯誤很難發現。
+    - 第 1 項錯：因為會往外層找，所以編譯會通過，沒有錯誤可報。（加上 `@DslMarker` 之後，這一行才會編譯失敗。）
+    - 第 3 項錯：Kotlin 不會憑空替類別新增屬性。
+    - 第 4 項錯：這裡沒有任何型別轉換，不會有 `ClassCastException`。
+    在 builder 類別上都加上同一個 `@DslMarker` 標註後，區塊內只有最近的 receiver 能被隱含使用，要用外層的得明確寫 `this@order.symbol`，才不會寫錯地方。
+
+- id: kotlin-functions-dsl-delegation-07
+  type: predict
+  level: 3
+  priority: P1
+  tags: [delegation]
+  prompt: |
+    下列程式用 class delegation（`by`，把方法轉給被包的物件）。被包的物件在自己的方法裡呼叫自己的另一個方法，會有什麼結果？依序印出什麼？
+  codeLang: kotlin
+  code: |
+    interface Repo {
+        fun price(): Int
+        fun double(): Int
+    }
+    class Real : Repo {
+        override fun price() = 10
+        override fun double() = price() * 2
+    }
+    class Wrapper(r: Repo) : Repo by r {
+        override fun price() = 99
+    }
+
+    fun main() {
+        println(Wrapper(Real()).price())
+        println(Wrapper(Real()).double())
+    }
+  answer: |
+    99 20
+  explain: |
+    - 第 1 行 `99`：`Wrapper` 覆寫了 `price()`，所以直接呼叫的是 `Wrapper` 的版本。
+    - 第 2 行 `20`：`Wrapper` 沒有覆寫 `double()`，由編譯器產生的轉發方法直接交給被包的 `Real` 執行。`Real.double()` 裡面的 `price()` 是 `Real` 自己的 `this.price()`，它完全不知道外面有一層 `Wrapper`，所以是 `10 * 2 = 20`，不是 `99 * 2 = 198`。
+    這與繼承不同：如果 `Wrapper` 是繼承 `Real`，父類別裡呼叫的 `price()` 會走到子類別的覆寫。用 delegation 做快取或 decorator（包一層加功能）時，要確認被包的類別內部不依賴「自己的方法被覆寫」。
+
+- id: kotlin-functions-dsl-delegation-08
+  type: open
+  level: 2
+  priority: P1
+  tags: [code-review, style]
+  prompt: |
+    Code review 時看到同事把全專案的小工具都寫成 top-level extension（寫在檔案最外層的擴充函式，如 `Context.showError()`、`String.toPrice()`），又在同一段程式連續巢狀三層 `apply`／`let`。你會怎麼評論與制定團隊慣例？
+  promptJa: |
+    コードレビューで、プロジェクト全体のユーティリティがすべてトップレベルの extension として書かれ、さらに `apply`／`let` が三重にネストしているコードを見つけました。どうコメントし、チームの指針をどう決めますか？
+  keyPoints:
+    - extension 是靜態解析，沒有多型；需要被替換或 mock 的行為不該寫成 extension
+    - 依賴全域單例的 extension 難測，依賴改成參數或注入
+    - 命名空間汙染：用 `internal`、依領域分檔、避免 `String.toPrice()` 這類語意含糊的名稱
+    - scope function 的選用準則：設定物件用 `apply`、副作用用 `also`、nullable 轉換用 `let`，不要巢狀兩層以上
+    - "`x?.let { } ?: y` 在 lambda 回傳 null 時會誤走 else"
+    - 用 ktlint／detekt 規則固定下來，而不是每次在 review 口頭爭論
+  modelAnswer: |
+    我會先分兩件事。extension 本身沒問題，但它是靜態分派（編譯時只看變數宣告的型別決定呼叫誰，沒有多型），所以只放「純函式、不需要被替換」的東西，例如格式化、轉換。只要牽涉全域單例、Context，或需要在測試裡換成假的（mock）的行為，就改成注入的類別，不寫成 extension。
+
+    另外 top-level extension 會讓整個專案的自動完成清單都變雜亂，我會要求用 `internal`、依領域分檔，名稱要帶語意，`String.toPrice()` 這種含糊的我會要求改名，或改成明確的 parser。
+
+    scope function 我只給三條準則：設定物件用 `apply`、順便做事（例如 log）用 `also`、處理 nullable 用 `let`，區塊不要巢狀超過一層，因為 `this` 和 `it` 一多就看不出誰是誰。`x?.let { } ?: y` 也要小心 lambda 回傳 null 的情況，會誤走 `y`。
+
+    這些我會寫進團隊的 style guide，並用 detekt、ktlint 這類工具的規則自動檢查，review 時就不用靠口頭提醒。
+  followUps:
+    - extension 能不能用在需要 mock 的場景？怎麼測？
+    - "`apply` 和 `also` 你怎麼選？"
+
+- id: kotlin-functions-dsl-delegation-09
+  type: flash
+  level: 2
+  priority: P0
+  tags: [bigdecimal, operator]
+  front: Kotlin 裡 `BigDecimal("1") / BigDecimal("3")` 得到什麼？
+  back: |
+    `0`。運算子 `/` 等於 `divide(other, RoundingMode.HALF_EVEN)`，結果的 scale（小數點後有幾位）取**被除數**的 scale，`1` 的 scale 是 0，所以只剩 `0`，而且不丟例外。
+    金額除法要自己寫 `divide(x, scale, RoundingMode.XXX)`。順帶一提：`==` 連 scale 一起比（`1.0 == 1.00` 為 `false`），`>=`／`<=` 用 `compareTo`（只比數值）。
