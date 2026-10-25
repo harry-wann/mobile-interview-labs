@@ -77,13 +77,16 @@ App 內的開戶流程大致如下：
 // iOS：開始讀卡前先確認裝置支援，再建立讀取 session（需要 import CoreNFC）
 final class CardReader: NSObject, NFCTagReaderSessionDelegate {
     private var session: NFCTagReaderSession?
-    private let aid: Data   // 官方文件載明的應用程式識別碼（AID），這裡用變數代替
+    // 官方文件載明的應用程式識別碼（AID），這裡用變數代替
+    private let aid: Data
 
     init(aid: Data) { self.aid = aid }
 
     func start() {
-        guard NFCTagReaderSession.readingAvailable else { return }   // 不支援的機型回傳 false
-        // .iso14443 會輪詢 Type A 和 Type B 的卡片；マイナンバーカード屬於 Type B
+        // 不支援的機型回傳 false
+        guard NFCTagReaderSession.readingAvailable else { return }
+        // .iso14443 會輪詢 Type A 和 Type B 的卡片；マイナンバーカード屬於
+        // Type B
         session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self)
         session?.alertMessage = "請將卡片靠近 iPhone 上方"
         session?.begin()
@@ -91,11 +94,18 @@ final class CardReader: NSObject, NFCTagReaderSessionDelegate {
 
     func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
 
-    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
-        self.session = nil   // 使用者取消、逾時、讀取失敗都會到這裡
+    func tagReaderSession(
+        _ session: NFCTagReaderSession,
+        didInvalidateWithError error: Error
+    ) {
+        // 使用者取消、逾時、讀取失敗都會到這裡
+        self.session = nil
     }
 
-    func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
+    func tagReaderSession(
+        _ session: NFCTagReaderSession,
+        didDetect tags: [NFCTag]
+    ) {
         guard let first = tags.first, case .iso7816(let card) = first else {
             session.invalidate(errorMessage: "這不是支援的卡片")
             return
@@ -105,12 +115,19 @@ final class CardReader: NSObject, NFCTagReaderSessionDelegate {
                 session.invalidate(errorMessage: "連線失敗，請再試一次")
                 return
             }
-            // SELECT 指令：選擇卡片裡要使用的應用程式（expectedResponseLength 為 -1 代表不指定回應長度）
-            let select = NFCISO7816APDU(instructionClass: 0x00, instructionCode: 0xA4,
-                                        p1Parameter: 0x04, p2Parameter: 0x0C,
-                                        data: self.aid, expectedResponseLength: -1)
+            // SELECT 指令：選擇卡片裡要使用的應用程式（expectedResponseLength
+            // 為 -1 代表不指定回應長度）
+            let select = NFCISO7816APDU(
+                instructionClass: 0x00,
+                instructionCode: 0xA4,
+                p1Parameter: 0x04,
+                p2Parameter: 0x0C,
+                data: self.aid,
+                expectedResponseLength: -1
+            )
             card.sendCommand(apdu: select) { _, sw1, sw2, error in
-                if error == nil && sw1 == 0x90 && sw2 == 0x00 {     // 90 00 代表成功
+                // 90 00 代表成功
+                if error == nil && sw1 == 0x90 && sw2 == 0x00 {
                     session.alertMessage = "讀取中，請不要移動卡片"
                 } else {
                     session.invalidate(errorMessage: "讀取失敗，請再試一次")
@@ -124,19 +141,27 @@ final class CardReader: NSObject, NFCTagReaderSessionDelegate {
 ```kotlin
 // Android：用 reader mode 讀取 Type B 的卡片
 class CardReaderActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
-    private val nfcAdapter: NfcAdapter? by lazy { NfcAdapter.getDefaultAdapter(this) }
+    private val nfcAdapter: NfcAdapter? by lazy {
+        NfcAdapter.getDefaultAdapter(this)
+    }
 
     override fun onResume() {
         super.onResume()
         val adapter = nfcAdapter
         if (adapter == null || !adapter.isEnabled) {
-            showNfcUnavailable()    // 沒有 NFC，或使用者沒有開啟：導向替代方式或 Settings.ACTION_NFC_SETTINGS
+            // 沒有 NFC，或使用者沒有開啟：導向替代方式或
+            // Settings.ACTION_NFC_SETTINGS
+            showNfcUnavailable()
             return
         }
-        // FLAG_READER_NFC_B：只偵測 Type B；SKIP_NDEF_CHECK：不去讀 NDEF（NFC 標籤的資料格式），加快速度
+        // FLAG_READER_NFC_B：只偵測 Type B；SKIP_NDEF_CHECK：不去讀 NDEF（NFC
+        // 標籤的資料格式），加快速度
         adapter.enableReaderMode(
-            this, this,
-            NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK, null
+            this,
+            this,
+            NfcAdapter.FLAG_READER_NFC_B or
+                NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
+            null,
         )
     }
 
@@ -148,13 +173,16 @@ class CardReaderActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     // 偵測到卡片時被呼叫，這個回呼不在主執行緒
     override fun onTagDiscovered(tag: Tag) {
         val isoDep = IsoDep.get(tag) ?: return
-        isoDep.timeout = 5_000                       // 單一指令最多等 5 秒
+        // 單一指令最多等 5 秒
+        isoDep.timeout = 5_000
         try {
             isoDep.connect()
-            val response = isoDep.transceive(selectCommand)    // 阻塞呼叫：送出指令，等卡片回應
+            // 阻塞呼叫：送出指令，等卡片回應
+            val response = isoDep.transceive(selectCommand)
             // 回應最後兩個位元組是狀態碼，90 00 代表成功
         } catch (e: IOException) {
-            showReadFailed()                          // 卡片移開、逾時等
+            // 卡片移開、逾時等
+            showReadFailed()
         } finally {
             runCatching { isoDep.close() }
         }
@@ -184,18 +212,24 @@ class CardReaderActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
 ```swift
 // 把要讀取的資料切成一段一段，每一段就是一個 APDU 指令，一次送一個
-func chunkPlan(totalSize: Int, chunkSize: Int = 200) -> [(offset: Int, length: Int)] {
+func chunkPlan(
+    totalSize: Int,
+    chunkSize: Int = 200
+) -> [(offset: Int, length: Int)] {
     var plan: [(offset: Int, length: Int)] = []
     var offset = 0
     while offset < totalSize {
-        let length = min(chunkSize, totalSize - offset)   // 最後一段可能比較短
+        // 最後一段可能比較短
+        let length = min(chunkSize, totalSize - offset)
         plan.append((offset, length))
         offset += length
     }
     return plan
 }
+
 print(chunkPlan(totalSize: 450))
-// 輸出：[(offset: 0, length: 200), (offset: 200, length: 200), (offset: 400, length: 50)]
+// 輸出：[(offset: 0, length: 200), (offset: 200, length: 200), (offset: 400,
+// length: 50)]
 ```
 
 **替代路徑**：沒有 NFC 的裝置，或使用者不願意讀卡時，要提供其他方式與清楚的說明（依法規允許的其他確認方式，以官方為準），不要讓這些使用者卡在這一步。讀到的資料屬於個人資料，只在記憶體裡處理，立刻送到後端驗證；日誌（log）裡不要記錄 APDU 的內容和卡片密碼，也不要送進分析用的 SDK。
@@ -220,17 +254,23 @@ print(chunkPlan(totalSize: 450))
 - **離開流程時清除暫存**：回上一頁、切到背景、被來電中斷，都要清掉暫存的資料。
 
 ```swift
-// iOS：影像寫進 App 沙盒，指定「裝置鎖定時無法讀取」的檔案保護；上傳成功後立刻刪除
+// iOS：影像寫進 App 沙盒，指定「裝置鎖定時無法讀取」的檔案保護；
+// 上傳成功後立刻刪除
 try data.write(to: url, options: [.completeFileProtection])
 try FileManager.default.removeItem(at: url)
 
 // iOS 17 起：偵測畫面正在被錄影或投影，就隱藏敏感內容
-if view.traitCollection.sceneCaptureState == .active { view.isHidden = true }
+if view.traitCollection.sceneCaptureState == .active {
+    view.isHidden = true
+}
 ```
 
 ```kotlin
 // Android：這個視窗不能被截圖、錄影，在最近工作的縮圖也不會顯示內容
-window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+window.setFlags(
+    WindowManager.LayoutParams.FLAG_SECURE,
+    WindowManager.LayoutParams.FLAG_SECURE,
+)
 ```
 
 > [!TIP]
@@ -250,8 +290,10 @@ enum KycStatus: String, Decodable {
 
 struct AccountState: Decodable {
     let kycStatus: KycStatus
-    let canTrade: Bool        // 能不能交易，由伺服器決定
-    let canWithdraw: Bool     // 能不能出金，由伺服器決定
+    // 能不能交易，由伺服器決定
+    let canTrade: Bool
+    // 能不能出金，由伺服器決定
+    let canWithdraw: Bool
 }
 ```
 

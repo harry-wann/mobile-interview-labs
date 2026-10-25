@@ -40,10 +40,27 @@
           return result
       }
     tests: |
-      let typing = [Event(time: 0, value: "b"), Event(time: 100, value: "bt"), Event(time: 250, value: "btc")]
-      checkEqual("一次連續輸入只送最後一個", [Event(time: 550, value: "btc")]) { debounce(typing, wait: 300) }
-      let twoBursts = [Event(time: 0, value: "a"), Event(time: 100, value: "ab"), Event(time: 1000, value: "x")]
-      checkEqual("兩段輸入", [Event(time: 400, value: "ab"), Event(time: 1300, value: "x")]) { debounce(twoBursts, wait: 300) }
+      let typing = [
+          Event(time: 0, value: "b"),
+          Event(time: 100, value: "bt"),
+          Event(time: 250, value: "btc")
+      ]
+      checkEqual("一次連續輸入只送最後一個", [Event(time: 550, value: "btc")]) {
+          debounce(typing, wait: 300)
+      }
+
+      let twoBursts = [
+          Event(time: 0, value: "a"),
+          Event(time: 100, value: "ab"),
+          Event(time: 1000, value: "x")
+      ]
+      checkEqual(
+          "兩段輸入",
+          [Event(time: 400, value: "ab"), Event(time: 1300, value: "x")]
+      ) {
+          debounce(twoBursts, wait: 300)
+      }
+
       let boundary = [Event(time: 0, value: "a"), Event(time: 300, value: "b")]
       checkEqual("剛好等於 wait 不取消", 2) { debounce(boundary, wait: 300).count }
       checkEqual("空輸入", [Event]()) { debounce([], wait: 300) }
@@ -63,9 +80,15 @@
           }.map { Event(it.time + wait, it.value) }
     tests: |
       val typing = listOf(Event(0, "b"), Event(100, "bt"), Event(250, "btc"))
-      checkEqual("一次連續輸入只送最後一個", listOf(Event(550, "btc"))) { debounce(typing, 300) }
+      checkEqual("一次連續輸入只送最後一個", listOf(Event(550, "btc"))) {
+          debounce(typing, 300)
+      }
+
       val twoBursts = listOf(Event(0, "a"), Event(100, "ab"), Event(1000, "x"))
-      checkEqual("兩段輸入", listOf(Event(400, "ab"), Event(1300, "x"))) { debounce(twoBursts, 300) }
+      checkEqual("兩段輸入", listOf(Event(400, "ab"), Event(1300, "x"))) {
+          debounce(twoBursts, 300)
+      }
+
       val boundary = listOf(Event(0, "a"), Event(300, "b"))
       checkEqual("剛好等於 wait 不取消", 2) { debounce(boundary, 300).size }
       checkEqual("空輸入", emptyList<Event>()) { debounce(emptyList(), 300) }
@@ -101,12 +124,15 @@
       }
 
       func rollingHigh(_ trades: [Trade], window: Int) -> [Int] {
-          var deque: [Int] = []   // 存索引，價格遞減
-          var head = 0            // 用 head 指標代替 removeFirst，避免 O(n)
+          // 存索引，價格遞減
+          var deque: [Int] = []
+          // 用 head 指標代替 removeFirst，避免 O(n)
+          var head = 0
           var result: [Int] = []
           result.reserveCapacity(trades.count)
           for (i, trade) in trades.enumerated() {
-              while deque.count > head, trades[deque[deque.count - 1]].price <= trade.price {
+              while deque.count > head,
+                    trades[deque[deque.count - 1]].price <= trade.price {
                   deque.removeLast()
               }
               deque.append(i)
@@ -118,16 +144,32 @@
           return result
       }
     tests: |
-      let t = [Trade(time: 0, price: 100), Trade(time: 500, price: 105), Trade(time: 900, price: 102),
-               Trade(time: 1200, price: 101), Trade(time: 1600, price: 99)]
-      checkEqual("視窗 1000ms", [100, 105, 105, 105, 102]) { rollingHigh(t, window: 1000) }
-      checkEqual("視窗很小只看自己", [100, 105, 102, 101, 99]) { rollingHigh(t, window: 1) }
-      checkEqual("視窗很大就是累計最高", [100, 105, 105, 105, 105]) { rollingHigh(t, window: 100_000) }
+      let t = [
+          Trade(time: 0, price: 100),
+          Trade(time: 500, price: 105),
+          Trade(time: 900, price: 102),
+          Trade(time: 1200, price: 101),
+          Trade(time: 1600, price: 99)
+      ]
+      checkEqual("視窗 1000ms", [100, 105, 105, 105, 102]) {
+          rollingHigh(t, window: 1000)
+      }
+
+      checkEqual("視窗很小只看自己", [100, 105, 102, 101, 99]) {
+          rollingHigh(t, window: 1)
+      }
+
+      checkEqual("視窗很大就是累計最高", [100, 105, 105, 105, 105]) {
+          rollingHigh(t, window: 100_000)
+      }
+
       checkEqual("空輸入", [Int]()) { rollingHigh([], window: 1000) }
       let flat = (0..<5).map { Trade(time: $0 * 100, price: 50) }
       checkEqual("價格相同", [50, 50, 50, 50, 50]) { rollingHigh(flat, window: 250) }
       let big = (0..<200_000).map { Trade(time: $0, price: ($0 * 7919) % 1000) }
-      check("20 萬筆要在線性時間內完成") { rollingHigh(big, window: 5000).count == 200_000 }
+      check("20 萬筆要在線性時間內完成") {
+          rollingHigh(big, window: 5000).count == 200_000
+      }
   kotlin:
     starter: |
       data class Trade(val time: Long, val price: Int)
@@ -142,18 +184,38 @@
           val deque = ArrayDeque<Int>()   // 存索引，價格遞減
           val result = ArrayList<Int>(trades.size)
           for ((i, trade) in trades.withIndex()) {
-              while (deque.isNotEmpty() && trades[deque.last()].price <= trade.price) deque.removeLast()
+              while (
+                  deque.isNotEmpty() &&
+                  trades[deque.last()].price <= trade.price
+              ) deque.removeLast()
               deque.addLast(i)
-              while (trades[deque.first()].time <= trade.time - window) deque.removeFirst()
+              while (
+                  trades[deque.first()].time <= trade.time - window
+              ) deque.removeFirst()
               result.add(trades[deque.first()].price)
           }
           return result
       }
     tests: |
-      val t = listOf(Trade(0, 100), Trade(500, 105), Trade(900, 102), Trade(1200, 101), Trade(1600, 99))
-      checkEqual("視窗 1000ms", listOf(100, 105, 105, 105, 102)) { rollingHigh(t, 1000) }
-      checkEqual("視窗很小只看自己", listOf(100, 105, 102, 101, 99)) { rollingHigh(t, 1) }
-      checkEqual("視窗很大就是累計最高", listOf(100, 105, 105, 105, 105)) { rollingHigh(t, 100_000) }
+      val t = listOf(
+          Trade(0, 100),
+          Trade(500, 105),
+          Trade(900, 102),
+          Trade(1200, 101),
+          Trade(1600, 99),
+      )
+      checkEqual("視窗 1000ms", listOf(100, 105, 105, 105, 102)) {
+          rollingHigh(t, 1000)
+      }
+
+      checkEqual("視窗很小只看自己", listOf(100, 105, 102, 101, 99)) {
+          rollingHigh(t, 1)
+      }
+
+      checkEqual("視窗很大就是累計最高", listOf(100, 105, 105, 105, 105)) {
+          rollingHigh(t, 100_000)
+      }
+
       checkEqual("空輸入", emptyList<Int>()) { rollingHigh(emptyList(), 1000) }
       val flat = (0 until 5).map { Trade(it * 100L, 50) }
       checkEqual("價格相同", listOf(50, 50, 50, 50, 50)) { rollingHigh(flat, 250) }
@@ -230,7 +292,11 @@
           private var sum = 0.0
 
           fun add(price: Double): Double? {
-              if (count == period) sum -= buffer[index] else count++
+              if (count == period) {
+                  sum -= buffer[index]
+              } else {
+                  count++
+              }
               buffer[index] = price
               sum += price
               index = (index + 1) % period

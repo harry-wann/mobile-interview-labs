@@ -44,8 +44,10 @@ tags: [kline, ohlcv, timezone, ema, rsi, lightweight-charts, webview]
 
 ```swift
 let id: Int64 = 1_632_931_200
-print(Date(timeIntervalSince1970: TimeInterval(id)))          // 輸出：2021-09-29 16:00:00 +0000（秒，正確）
-print(Date(timeIntervalSince1970: TimeInterval(id / 1000)))   // 輸出：1970-01-19 21:35:31 +0000（誤當成毫秒，錯了）
+// 輸出：2021-09-29 16:00:00 +0000（秒，正確）
+print(Date(timeIntervalSince1970: TimeInterval(id)))
+// 輸出：1970-01-19 21:35:31 +0000（誤當成毫秒，錯了）
+print(Date(timeIntervalSince1970: TimeInterval(id / 1000)))
 ```
 
 還有幾個資料細節：
@@ -75,17 +77,28 @@ K 線起點（UTC 秒）= floorDiv(秒 + 偏移, 週期秒) × 週期秒 − 偏
 ```swift
 func floorDiv(_ a: Int64, _ b: Int64) -> Int64 {
     let q = a / b
-    return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q   // 有餘數而且結果是負的，再往下一格
+    // 有餘數而且結果是負的，再往下一格
+    return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q
 }
 
-print(-7 / 2, floorDiv(-7, 2))   // 輸出：-3 -4（一般除法往 0 取整，floorDiv 往負無限大取整）
+// 輸出：-3 -4（一般除法往 0 取整，floorDiv 往負無限大取整）
+print(-7 / 2, floorDiv(-7, 2))
 
-func bucketStart(tsMs: Int64, periodSec: Int64, originOffsetSec: Int64) -> Int64 {
+func bucketStart(
+    tsMs: Int64,
+    periodSec: Int64,
+    originOffsetSec: Int64
+) -> Int64 {
     let sec = floorDiv(tsMs, 1000)
-    return floorDiv(sec + originOffsetSec, periodSec) * periodSec - originOffsetSec
+    return floorDiv(
+        sec + originOffsetSec,
+        periodSec
+    ) * periodSec - originOffsetSec
 }
+
 // 1 分鐘 K，成交時間是 1632931259999 毫秒（59.999 秒）
-print(bucketStart(tsMs: 1_632_931_259_999, periodSec: 60, originOffsetSec: 0))   // 輸出：1632931200（還在這一分鐘內）
+// 輸出：1632931200（還在這一分鐘內）
+print(bucketStart(tsMs: 1_632_931_259_999, periodSec: 60, originOffsetSec: 0))
 ```
 
 Kotlin 用 `Math.floorDiv(a, b)`。為什麼不能直接用 `/`？因為偏移之後、或遇到負的時間，一般除法會往 0 取整，邊界會錯一格。
@@ -128,10 +141,12 @@ Kotlin 用 `Math.floorDiv(a, b)`。為什麼不能直接用 `/`？因為偏移�
 | JST 的 0 點 | 32,400 | `1632927600` | 9/29 15:00 |
 
 ```swift
-let t: Int64 = 1_632_945_600_000   // 2021-09-29 20:00:00 UTC（毫秒）
+// 2021-09-29 20:00:00 UTC（毫秒）
+let t: Int64 = 1_632_945_600_000
 for offset in [0, 28_800, 32_400] as [Int64] {
     print(bucketStart(tsMs: t, periodSec: 86_400, originOffsetSec: offset))
 }
+
 // 輸出（每行一個）：1632873600、1632931200、1632927600
 ```
 
@@ -180,13 +195,15 @@ func liveEMA(prevClosed: Double, price: Double, period: Int) -> Double {
 }
 
 // N = 9（k = 0.2），上一根已收盤的 EMA 是 100，這根連續三個 tick 的價格都是 110
-print(liveEMA(prevClosed: 100, price: 110, period: 9))   // 輸出：102.0（正確：每個 tick 都是 102）
+// 輸出：102.0（正確：每個 tick 都是 102）
+print(liveEMA(prevClosed: 100, price: 110, period: 9))
 
 // 錯誤做法：每個 tick 都把結果寫回 prev
 var wrong = 100.0
 for _ in 1...3 {
     wrong = liveEMA(prevClosed: wrong, price: 110, period: 9)
-    print(wrong)   // 輸出：102.0、103.6、104.88（越來越高，被 tick 次數放大）
+    // 輸出：102.0、103.6、104.88（越來越高，被 tick 次數放大）
+    print(wrong)
 }
 ```
 
@@ -212,23 +229,41 @@ for _ in 1...3 {
 另一個問題是慢回來的回應：使用者快速連點好幾個週期時，慢回來的舊週期回應，不能覆蓋新週期的畫面。做法是每個請求帶一個遞增的編號，回應回來時如果編號不是最新的就丟掉；或使用可以取消的任務。
 
 ```swift
-struct Candle { let id: Int64; let close: Double }
+struct Candle {
+    let id: Int64
+    let close: Double
+}
 
 // history：REST 回來的歷史（已由舊到新排序）；buffered：訂閱後暫存的推送
 func merge(history: [Candle], buffered: [Candle]) -> [Candle] {
-    guard let lastHistoryID = history.last?.id else { return buffered.sorted { $0.id < $1.id } }
+    guard let lastHistoryID = history.last?.id else {
+        return buffered.sorted { $0.id < $1.id }
+    }
     var byID = Dictionary(uniqueKeysWithValues: history.map { ($0.id, $0) })
-    for candle in buffered where candle.id >= lastHistoryID {   // 比歷史最後一根更舊的丟掉
-        byID[candle.id] = candle                                 // 相同 id 以推送為準
+    // 比歷史最後一根更舊的丟掉
+    for candle in buffered where candle.id >= lastHistoryID {
+        // 相同 id 以推送為準
+        byID[candle.id] = candle
     }
     return byID.values.sorted { $0.id < $1.id }
 }
 
-let history = [Candle(id: 60, close: 1), Candle(id: 120, close: 2), Candle(id: 180, close: 3)]
-let buffered = [Candle(id: 120, close: 99), Candle(id: 180, close: 30), Candle(id: 240, close: 4)]
-print(merge(history: history, buffered: buffered).map { "\($0.id):\($0.close)" })
+let history = [
+    Candle(id: 60, close: 1),
+    Candle(id: 120, close: 2),
+    Candle(id: 180, close: 3)
+]
+let buffered = [
+    Candle(id: 120, close: 99),
+    Candle(id: 180, close: 30),
+    Candle(id: 240, close: 4)
+]
+print(
+    merge(history: history, buffered: buffered).map { "\($0.id):\($0.close)" }
+)
 // 輸出：["60:1.0", "120:2.0", "180:30.0", "240:4.0"]
-// 120 比歷史最後一根（180）舊，推送的 99 被丟掉；180 以推送的 30 為準；240 是新的一根
+// 120 比歷史最後一根（180）舊，推送的 99 被丟掉；180 以推送的 30 為準；240
+// 是新的一根
 ```
 
 App 從背景回到前景時，也是同樣的情況：錯過的那幾根要用 REST 補回來，再從上次推送的那一根開始，依序推給圖表，才不會在中間留下洞。
@@ -252,16 +287,23 @@ func visibleRange(_ candles: [Candle], from: Int64, to: Int64) -> Range<Int> {
         var lo = 0, hi = candles.count
         while lo < hi {
             let mid = (lo + hi) / 2
-            if candles[mid].id < target { lo = mid + 1 } else { hi = mid }
+            if candles[mid].id < target {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
         }
         return lo
     }
     return lowerBound(from)..<lowerBound(to + 1)
 }
 
-let candles = (0..<10).map { Candle(id: Int64($0) * 60, close: 0) }   // id：0、60、120…540
-print(visibleRange(candles, from: 120, to: 300))     // 輸出：2..<6（id 為 120、180、240、300）
-print(visibleRange(candles, from: 1000, to: 2000))   // 輸出：10..<10（空範圍，沒有資料）
+// id：0、60、120…540
+let candles = (0..<10).map { Candle(id: Int64($0) * 60, close: 0) }
+// 輸出：2..<6（id 為 120、180、240、300）
+print(visibleRange(candles, from: 120, to: 300))
+// 輸出：10..<10（空範圍，沒有資料）
+print(visibleRange(candles, from: 1000, to: 2000))
 ```
 
 其他和效能、互動有關的細節：
@@ -294,7 +336,8 @@ Lightweight Charts 是 TradingView 提供的網頁圖表函式庫。資料流是
 let values: [Double] = [0.1 + 0.2, 2, 1e-7, .nan, -.infinity]
 print(values.map { "\($0)" }.joined(separator: " "))
 // 輸出：0.30000000000000004 2.0 1e-07 nan -inf
-// 0.30000000000000004 是 Double 能還原原值的最短文字；nan 和 -inf 是 JavaScript 不認得的字
+// 0.30000000000000004 是 Double 能還原原值的最短文字；nan 和 -inf 是
+// JavaScript 不認得的字
 ```
 
 比較好的做法：
@@ -306,8 +349,15 @@ print(values.map { "\($0)" }.joined(separator: " "))
 // iOS 14 起：參數以值傳遞，不經過字串拼接；bar 是下面 arguments 傳進去的變數
 webView.callAsyncJavaScript(
     "chart.update(bar)",
-    arguments: ["bar": ["time": 1_632_931_200, "open": 4_663_135, "high": 4_830_000,
-                        "low": 4_580_081, "close": 4_815_018]],
+    arguments: [
+        "bar": [
+            "time": 1_632_931_200,
+            "open": 4_663_135,
+            "high": 4_830_000,
+            "low": 4_580_081,
+            "close": 4_815_018
+        ]
+    ],
     in: nil,
     in: .page,
     completionHandler: nil

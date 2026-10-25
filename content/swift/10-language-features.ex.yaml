@@ -31,14 +31,30 @@
 
     @resultBuilder
     enum QueryBuilder {
-        static func buildExpression(_ item: URLQueryItem) -> [URLQueryItem] { [item] }
-        static func buildBlock(_ parts: [URLQueryItem]...) -> [URLQueryItem] { parts.flatMap { $0 } }
-        static func buildOptional(_ part: [URLQueryItem]?) -> [URLQueryItem] { part ?? [] }
-        static func buildEither(first: [URLQueryItem]) -> [URLQueryItem] { first }
-        static func buildEither(second: [URLQueryItem]) -> [URLQueryItem] { second }
+        static func buildExpression(_ item: URLQueryItem) -> [URLQueryItem] {
+            [item]
+        }
+
+        static func buildBlock(_ parts: [URLQueryItem]...) -> [URLQueryItem] {
+            parts.flatMap { $0 }
+        }
+
+        static func buildOptional(_ part: [URLQueryItem]?) -> [URLQueryItem] {
+            part ?? []
+        }
+
+        static func buildEither(first: [URLQueryItem]) -> [URLQueryItem] {
+            first
+        }
+
+        static func buildEither(second: [URLQueryItem]) -> [URLQueryItem] {
+            second
+        }
     }
 
-    func query(@QueryBuilder _ content: () -> [URLQueryItem]) -> [URLQueryItem] { content() }
+    func query(@QueryBuilder _ content: () -> [URLQueryItem]) -> [URLQueryItem] {
+        content()
+    }
 
     let precise = false
     let items = query {
@@ -71,9 +87,18 @@
   code: |
     struct Ticket: ~Copyable {
         let id: Int
-        consuming func submit() -> Int { id }
-        borrowing func peek() -> Int { id }
-        deinit { print("deinit", id) }
+
+        consuming func submit() -> Int {
+            id
+        }
+
+        borrowing func peek() -> Int {
+            id
+        }
+
+        deinit {
+            print("deinit", id)
+        }
     }
 
     func useTicket() {
@@ -178,8 +203,12 @@
               compare = { a, b in
                   let x = a[keyPath: keyPath]
                   let y = b[keyPath: keyPath]
-                  if x == y { return .orderedSame }
-                  return ((x < y) != descending) ? .orderedAscending : .orderedDescending
+                  if x == y {
+                      return .orderedSame
+                  }
+                  return ((x < y) != descending)
+                      ? .orderedAscending
+                      : .orderedDescending
               }
           }
       }
@@ -202,33 +231,49 @@
           let volume: Int
           let change: Double
       }
+
       let data = [
           Ticker(symbol: "ETH", volume: 50, change: -1.5),
           Ticker(symbol: "BTC", volume: 90, change: 0.5),
           Ticker(symbol: "XRP", volume: 50, change: 3.0),
           Ticker(symbol: "ADA", volume: 50, change: 0.0),
       ]
-      func symbols(_ xs: [Ticker]) -> [String] { xs.map { $0.symbol } }
+
+      func symbols(_ xs: [Ticker]) -> [String] {
+          xs.map { $0.symbol }
+      }
 
       checkEqual("單一 key 升序", ["ADA", "BTC", "ETH", "XRP"]) {
           symbols(sorted(data, using: [KeyOrder(\Ticker.symbol)]))
       }
+
       checkEqual("單一 key 降序", ["BTC", "ETH", "XRP", "ADA"]) {
           symbols(sorted(data, using: [KeyOrder(\Ticker.volume, descending: true)]))
       }
-      checkEqual("多個 key：成交量降序，同量再依代號升序", ["BTC", "ADA", "ETH", "XRP"]) {
-          symbols(sorted(data, using: [KeyOrder(\Ticker.volume, descending: true), KeyOrder(\Ticker.symbol)]))
+
+      checkEqual(
+          "多個 key：成交量降序，同量再依代號升序",
+          ["BTC", "ADA", "ETH", "XRP"]
+      ) {
+          symbols(sorted(data, using: [
+              KeyOrder(\Ticker.volume, descending: true),
+              KeyOrder(\Ticker.symbol)
+          ]))
       }
+
       checkEqual("全部相等時維持原本順序（穩定）", ["ETH", "XRP", "ADA"]) {
           let subset = data.filter { $0.volume == 50 }
           return symbols(sorted(subset, using: [KeyOrder(\Ticker.volume)]))
       }
+
       checkEqual("沒有排序條件時維持原順序", ["ETH", "BTC", "XRP", "ADA"]) {
           symbols(sorted(data, using: []))
       }
+
       checkEqual("Double 欄位降序", ["XRP", "BTC", "ADA", "ETH"]) {
           symbols(sorted(data, using: [KeyOrder(\Ticker.change, descending: true)]))
       }
+
       checkEqual("空陣列", 0) {
           sorted([Ticker](), using: [KeyOrder(\Ticker.symbol)]).count
       }

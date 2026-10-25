@@ -65,16 +65,21 @@ MCP（Model Context Protocol）是讓 AI 呼叫外部工具的標準協定。透
 
 ```text
 [好測試的 App]  依賴注入的 stub、啟動參數、元件 ID 命名規範、測試帳號，
-                加上固定的 TOTP（Time-based One-Time Password，兩步驟驗證用的 6 位數驗證碼）金鑰
+                加上固定的 TOTP（Time-based One-Time Password，
+                兩步驟驗證用的 6 位數驗證碼）金鑰
       │
-[確定性的測試]  單元測試／截圖比對（每個 PR）→ Maestro 關鍵流程（合併後）→ device farm 完整一輪（每天晚上）
+[確定性的測試]  單元測試／截圖比對（每個 PR）
+                → Maestro 關鍵流程（合併後）
+                → device farm 完整一輪（每天晚上）
       │                                          ▲
 [AI 層]                                          │ 發現的問題轉成固定測試
   ├─ 寫測試的助手：規則檔＋測試清單 → 產生草稿 → 故意改壞程式驗證 → PR review
-  ├─ 探索 agent（每天晚上）：透過 MCP 操作模擬器，依目標清單探索 → 異常報告（crash、版面、沒翻譯、卡頓）
+  ├─ 探索 agent（每天晚上）：透過 MCP 操作模擬器，依目標清單探索 →
+  │    異常報告（crash、版面、沒翻譯、卡頓）
   └─ 失敗分析：CI 失敗 → 分類＋建議 → 在 PR 留言
       │
-[指標]  新增的有效測試數、mutation score、時好時壞的比例、上線後逃過測試的 bug 數、失敗分析省下的時間
+[指標]  新增的有效測試數、mutation score、時好時壞的比例、
+        上線後逃過測試的 bug 數、失敗分析省下的時間
 ```
 
 重點是分層：最底下是「App 本身好不好測」，往上是「確定性的測試」，AI 是再往上的輔助層，最後用指標證明效果。
@@ -221,10 +226,13 @@ android/solution/testing/testing05-ai-testing/L03_FlakyRate.kt#fixed
 
 ```text
 ## 測試規則
-- 不能用 sleep、Thread.sleep、Task.sleep 等待結果；iOS 用 await 與 Clock，Android 用 runTest 與注入的 dispatcher。
+- 不能用 sleep、Thread.sleep、Task.sleep 等待結果；
+  iOS 用 await 與 Clock，Android 用 runTest 與注入的 dispatcher。
 - 不能用亂數或現在的時間；用固定的測試資料，時間從外面注入。
-- 每個測試至少要有一個會因為程式改壞而失敗的斷言，不要只檢查「不是 null」「大於 0」。
-- 找元件用 accessibilityIdentifier（iOS）或 testTag（Android），不要用畫面上的文字。
+- 每個測試至少要有一個會因為程式改壞而失敗的斷言，
+  不要只檢查「不是 null」「大於 0」。
+- 找元件用 accessibilityIdentifier（iOS）或 testTag（Android），
+  不要用畫面上的文字。
 - 新增測試後，更新 docs/test-inventory.md。
 ```
 

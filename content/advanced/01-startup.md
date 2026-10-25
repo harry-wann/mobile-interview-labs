@@ -62,7 +62,8 @@ Android 要自己標示「行情真的出來了」：
 class MarketActivity : ComponentActivity() {
     // 行情列表第一次有資料（快取的或即時的都算）畫出來之後呼叫
     private fun onFirstPricesShown() {
-        reportFullyDrawn()   // 系統記下 TTFD，logcat 也會多印一行 Fully drawn
+        // 系統記下 TTFD，logcat 也會多印一行 Fully drawn
+        reportFullyDrawn()
     }
 }
 ```
@@ -100,7 +101,8 @@ Google Play 的品質儀表板 Android vitals，對三種啟動各有一個「�
 @implementation PriceTracker
 + (void)load {
     // 在 main() 之前就會執行，而且每個實作 +load 的類別都會執行一次。
-    // 在這裡呼叫第三方函式庫（SDK，software development kit）的初始化，會直接加到啟動時間裡
+    // 在這裡呼叫第三方函式庫（SDK，software development kit）的初始化，
+    // 會直接加到啟動時間裡
     [AnalyticsSDK setup];
 }
 @end
@@ -125,12 +127,19 @@ Google Play 的品質儀表板 Android vitals，對三種啟動各有一個「�
 
 ```swift
 // 不好的做法：全部都在首幀之前同步做完
-func application(_ application: UIApplication,
-                 didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    Analytics.configure()                    // 分析 SDK
-    AdsSDK.start()                           // 廣告 SDK
-    RemoteConfig.fetchSynchronously()        // 同步等網路，網路慢就一直卡著
-    try? Database.openAndMigrate()           // 開啟本機資料庫，如果要升級資料表格式會很久
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions:
+        [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+    // 分析 SDK
+    Analytics.configure()
+    // 廣告 SDK
+    AdsSDK.start()
+    // 同步等網路，網路慢就一直卡著
+    RemoteConfig.fetchSynchronously()
+    // 開啟本機資料庫，如果要升級資料表格式會很久
+    try? Database.openAndMigrate()
     return true
 }
 ```
@@ -139,9 +148,13 @@ func application(_ application: UIApplication,
 
 ```swift
 // 好的做法：首幀之前只做必要的事，其餘等首畫面出現後再做
-func application(_ application: UIApplication,
-                 didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    CrashReporter.start()    // 當機回報要越早越好，否則啟動時的當機會漏掉
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions:
+        [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+    // 當機回報要越早越好，否則啟動時的當機會漏掉
+    CrashReporter.start()
     return true
 }
 
@@ -150,7 +163,8 @@ func startDeferredWork() {
     Task.detached(priority: .utility) {
         Analytics.configure()
         AdsSDK.start()
-        await RemoteConfig.fetch(timeout: 8)   // 網路的工作要設逾時，不能無限等
+        // 網路的工作要設逾時，不能無限等
+        await RemoteConfig.fetch(timeout: 8)
     }
 }
 ```
@@ -213,7 +227,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // 啟動畫面停留到「首畫面需要的本機資料」準備好為止。
-        // 不要把登入 API、遠端設定這類網路請求放進去，網路慢時使用者會一直卡在啟動畫面
+        // 不要把登入 API、遠端設定這類網路請求放進去，
+        // 網路慢時使用者會一直卡在啟動畫面
         splash.setKeepOnScreenCondition { !viewModel.cachedPricesLoaded.value }
     }
 }
@@ -267,7 +282,9 @@ func markLaunchStart() {
 
 // 行情列表第一次畫出價格時記下終點。Instruments 會顯示這一段花了多久
 func markMarketListShown() {
-    guard let state = launchState else { return }
+    guard let state = launchState else {
+        return
+    }
     signposter.endInterval("LaunchToMarketList", state)
     launchState = nil
 }
@@ -284,14 +301,20 @@ func markMarketListShown() {
 ```kotlin
 @RunWith(AndroidJUnit4::class)
 class StartupBenchmark {
-    @get:Rule val rule = MacrobenchmarkRule()
+    @get:Rule
+    val rule = MacrobenchmarkRule()
 
-    @Test fun coldStart() = rule.measureRepeated(
+    @Test
+    fun coldStart() = rule.measureRepeated(
         packageName = "jp.example.app",
-        metrics = listOf(StartupTimingMetric()),   // 回報 TTID，有呼叫 reportFullyDrawn 時也回報 TTFD
-        iterations = 10,                           // 重複 10 次
-        startupMode = StartupMode.COLD,            // 每次都先殺掉行程，確保是冷啟動
-        compilationMode = CompilationMode.Partial(), // 套用 Baseline Profile；改成 None() 可以比較差別
+        // 回報 TTID，有呼叫 reportFullyDrawn 時也回報 TTFD
+        metrics = listOf(StartupTimingMetric()),
+        // 重複 10 次
+        iterations = 10,
+        // 每次都先殺掉行程，確保是冷啟動
+        startupMode = StartupMode.COLD,
+        // 套用 Baseline Profile；改成 None() 可以比較差別
+        compilationMode = CompilationMode.Partial(),
     ) {
         pressHome()
         startActivityAndWait()

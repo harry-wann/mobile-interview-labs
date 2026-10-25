@@ -78,15 +78,21 @@ Android 的 `assetlinks.json`，以及 manifest 的設定：
     "target": {
       "namespace": "android_app",
       "package_name": "com.example.app",
-      "sha256_cert_fingerprints": ["AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"]
+      "sha256_cert_fingerprints": [
+        "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"
+      ]
     }
   }
 ]
 ```
 
 ```xml
-<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
-    <intent-filter android:autoVerify="true">   <!-- 要求系統在安裝時驗證這個網域 -->
+<activity
+    android:name=".MainActivity"
+    android:exported="true"
+    android:launchMode="singleTop">
+    <!-- 要求系統在安裝時驗證這個網域 -->
+    <intent-filter android:autoVerify="true">
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
@@ -105,8 +111,10 @@ Android 的 `assetlinks.json`，以及 manifest 的設定：
 Android 可以用指令查驗證狀態與重新驗證：
 
 ```bash
-adb shell pm get-app-links com.example.app                  # 查看每個網域的驗證狀態
-adb shell pm verify-app-links --re-verify com.example.app   # 要求系統重新驗證
+# 查看每個網域的驗證狀態
+adb shell pm get-app-links com.example.app
+# 要求系統重新驗證
+adb shell pm verify-app-links --re-verify com.example.app
 ```
 
 > [!TIP]
@@ -126,11 +134,16 @@ import SwiftUI
 
 struct RootView: View {
     let router: Router
+
     var body: some View {
         ContentView()
-            .onOpenURL { url in router.handle(url) }                      // 自訂 scheme 和 Universal Link（iOS 14 起）
+            // 自訂 scheme 和 Universal Link（iOS 14 起）
+            .onOpenURL { url in router.handle(url) }
             .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                if let url = activity.webpageURL { router.handle(url) }   // Universal Link
+                // Universal Link
+                if let url = activity.webpageURL {
+                    router.handle(url)
+                }
             }
     }
 }
@@ -140,24 +153,36 @@ struct RootView: View {
 import UIKit
 
 // UIKit：SceneDelegate 的三個入口
-func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
-           options connectionOptions: UIScene.ConnectionOptions) {
-    // 冷啟動：App 是被連結啟動的，連結放在 connectionOptions 裡，不會再走 continue
-    if let url = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb })?.webpageURL {
+func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+) {
+    // 冷啟動：App 是被連結啟動的，
+    // 連結放在 connectionOptions 裡，不會再走 continue
+    if let url = connectionOptions.userActivities.first(
+        where: { $0.activityType == NSUserActivityTypeBrowsingWeb }
+    )?.webpageURL {
         router.handle(url)
     }
 }
 
 func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
     // App 已經開著（背景或前景）：Universal Link 從這裡進來
-    if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let url = userActivity.webpageURL {
+    if userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+       let url = userActivity.webpageURL {
         router.handle(url)
     }
 }
 
-func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+func scene(
+    _ scene: UIScene,
+    openURLContexts URLContexts: Set<UIOpenURLContext>
+) {
     // 自訂 scheme（myapp://）從這裡進來
-    if let url = URLContexts.first?.url { router.handle(url) }
+    if let url = URLContexts.first?.url {
+        router.handle(url)
+    }
 }
 ```
 
@@ -167,18 +192,22 @@ func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>)
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handle(intent)                  // 冷啟動：App 是被這個連結啟動的
+        // 冷啟動：App 是被這個連結啟動的
+        handle(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        setIntent(intent)               // 讓之後取得的 intent 是新的這一個
-        handle(intent)                  // App 已經開著：新的連結從這裡進來
+        // 讓之後取得的 intent 是新的這一個
+        setIntent(intent)
+        // App 已經開著：新的連結從這裡進來
+        handle(intent)
     }
 
     private fun handle(intent: Intent) {
         val url = intent.data?.toString() ?: return
-        router.handle(url)              // 交給同一個 Router
+        // 交給同一個 Router
+        router.handle(url)
     }
 }
 ```
@@ -223,31 +252,65 @@ enum Route: Equatable {
     case home
     case ticker(String)
     case alert(String)
-    case login(resume: String)   // 未登入：先登入，登入後回到原本的連結
+    // 未登入：先登入，登入後回到原本的連結
+    case login(resume: String)
     case invalid
 }
 
-func route(for urlString: String, isLoggedIn: Bool, allowedHosts: Set<String>) -> Route {
+func route(
+    for urlString: String,
+    isLoggedIn: Bool,
+    allowedHosts: Set<String>
+) -> Route {
     guard let comps = URLComponents(string: urlString),
-          comps.scheme == "https",                                  // 只接受 https
+          // 只接受 https
+          comps.scheme == "https",
           let host = comps.host?.lowercased(),
-          allowedHosts.contains(host) else { return .invalid }       // host 不在白名單
+          // host 不在白名單
+          allowedHosts.contains(host)
+    else {
+        return .invalid
+    }
     // comps.path 已經解碼過，%2F 會變成 /，多出來的段落會讓下面的比對失敗
     let parts = comps.path.split(separator: "/").map(String.init)
     switch parts.count {
     case 0: return .home
-    case 2 where parts[0] == "ticker" && parts[1].range(of: "^[a-z0-9]{3,12}$", options: .regularExpression) != nil:
+    case 2 where parts[0] == "ticker"
+        && parts[1].range(
+            of: "^[a-z0-9]{3,12}$",
+            options: .regularExpression
+        ) != nil:
         return .ticker(parts[1])
-    case 2 where parts[0] == "alert" && parts[1].range(of: "^[A-Za-z0-9]{6,32}$", options: .regularExpression) != nil:
+    case 2 where parts[0] == "alert"
+        && parts[1].range(
+            of: "^[A-Za-z0-9]{6,32}$",
+            options: .regularExpression
+        ) != nil:
         return isLoggedIn ? .alert(parts[1]) : .login(resume: urlString)
-    default: return .invalid   // /withdraw、/order 之類沒有列出的路徑，一律無效
+    // /withdraw、/order 之類沒有列出的路徑，一律無效
+    default: return .invalid
     }
 }
 
 let hosts: Set<String> = ["www.example.com"]
-print(route(for: "https://www.example.com/ticker/btcjpy", isLoggedIn: false, allowedHosts: hosts))  // 輸出：ticker("btcjpy")
-print(route(for: "https://www.example.com/withdraw?amount=1&address=abc", isLoggedIn: true, allowedHosts: hosts))  // 輸出：invalid
-print(route(for: "https://evil.example.org/ticker/btcjpy", isLoggedIn: true, allowedHosts: hosts))  // 輸出：invalid
+// 輸出：ticker("btcjpy")
+print(route(
+    for: "https://www.example.com/ticker/btcjpy",
+    isLoggedIn: false,
+    allowedHosts: hosts
+))
+// 輸出：invalid
+print(route(
+    for: "https://www.example.com/withdraw?amount=1&address=abc",
+    isLoggedIn: true,
+    allowedHosts: hosts
+))
+// 輸出：invalid
+print(route(
+    for: "https://evil.example.org/ticker/btcjpy",
+    isLoggedIn: true,
+    allowedHosts: hosts
+))
 ```
 
 ```kotlin
@@ -257,26 +320,44 @@ sealed class Route {
     object Home : Route()
     data class Ticker(val symbol: String) : Route()
     data class Alert(val id: String) : Route()
-    data class Login(val resume: String) : Route()   // 未登入：先登入，登入後回到原本的連結
+    // 未登入：先登入，登入後回到原本的連結
+    data class Login(val resume: String) : Route()
     object Invalid : Route()
 }
 
 private val symbolRegex = Regex("^[a-z0-9]{3,12}$")
 private val alertIdRegex = Regex("^[A-Za-z0-9]{6,32}$")
 
-fun route(urlString: String, isLoggedIn: Boolean, allowedHosts: Set<String>): Route {
-    val uri = try { URI(urlString) } catch (e: Exception) { return Route.Invalid }
-    if (uri.scheme != "https") return Route.Invalid                 // 只接受 https
+fun route(
+    urlString: String,
+    isLoggedIn: Boolean,
+    allowedHosts: Set<String>,
+): Route {
+    val uri = try {
+        URI(urlString)
+    } catch (e: Exception) {
+        return Route.Invalid
+    }
+    // 只接受 https
+    if (uri.scheme != "https") {
+        return Route.Invalid
+    }
     val host = uri.host?.lowercase() ?: return Route.Invalid
-    if (host !in allowedHosts) return Route.Invalid                 // host 不在白名單
+    // host 不在白名單
+    if (host !in allowedHosts) {
+        return Route.Invalid
+    }
     // uri.path 已經解碼過，%2F 會變成 /
     val parts = (uri.path ?: "").split("/").filter { it.isNotEmpty() }
     return when {
         parts.isEmpty() -> Route.Home
-        parts.size == 2 && parts[0] == "ticker" && symbolRegex.matches(parts[1]) -> Route.Ticker(parts[1])
-        parts.size == 2 && parts[0] == "alert" && alertIdRegex.matches(parts[1]) ->
+        parts.size == 2 && parts[0] == "ticker" &&
+            symbolRegex.matches(parts[1]) -> Route.Ticker(parts[1])
+        parts.size == 2 && parts[0] == "alert" &&
+            alertIdRegex.matches(parts[1]) ->
             if (isLoggedIn) Route.Alert(parts[1]) else Route.Login(urlString)
-        else -> Route.Invalid       // /withdraw、/order 之類沒有列出的路徑，一律無效
+        // /withdraw、/order 之類沒有列出的路徑，一律無效
+        else -> Route.Invalid
     }
 }
 ```

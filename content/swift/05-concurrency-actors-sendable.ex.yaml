@@ -37,12 +37,15 @@
 
         func withdraw(_ n: Int) async -> Bool {
             guard balance >= n else { return false }
-            try? await Task.sleep(nanoseconds: 10_000_000)   // 模擬向 server 確認
+            // 模擬向 server 確認
+            try? await Task.sleep(nanoseconds: 10_000_000)
             balance -= n
             return true
         }
 
-        func current() -> Int { balance }
+        func current() -> Int {
+            balance
+        }
     }
 
     let acc = Account()
@@ -143,9 +146,17 @@
   code: |
     import Foundation
 
-    nonisolated func a() async -> Int32 { pthread_main_np() }
-    nonisolated(nonsending) func b() async -> Int32 { pthread_main_np() }
-    @concurrent func c() async -> Int32 { pthread_main_np() }
+    nonisolated func a() async -> Int32 {
+        pthread_main_np()
+    }
+
+    nonisolated(nonsending) func b() async -> Int32 {
+        pthread_main_np()
+    }
+
+    @concurrent func c() async -> Int32 {
+        pthread_main_np()
+    }
 
     @MainActor func run() async {
         let x = await a()
@@ -180,7 +191,10 @@
 
     actor PriceStore {
         let symbol: String
-        init(symbol: String) { self.symbol = symbol }
+
+        init(symbol: String) {
+            self.symbol = symbol
+        }
 
         ____ var label: String { "Store(\(symbol))" }
     }
@@ -216,15 +230,22 @@
               for key: Key,
               loader: @escaping @Sendable (Key) async throws -> Value
           ) async throws -> Value {
-              if let cached = storage[key] { return cached }
+              if let cached = storage[key] {
+                  return cached
+              }
               // TODO: await 期間其他呼叫者也會進來，造成重複載入
               let loaded = try await loader(key)
               storage[key] = loaded
               return loaded
           }
 
-          func invalidate(_ key: Key) { storage[key] = nil }
-          func cachedCount() -> Int { storage.count }
+          func invalidate(_ key: Key) {
+              storage[key] = nil
+          }
+
+          func cachedCount() -> Int {
+              storage.count
+          }
       }
     solution: |
       actor AsyncCache<Key: Hashable & Sendable, Value: Sendable> {
@@ -235,8 +256,12 @@
               for key: Key,
               loader: @escaping @Sendable (Key) async throws -> Value
           ) async throws -> Value {
-              if let cached = storage[key] { return cached }
-              if let running = inFlight[key] { return try await running.value }
+              if let cached = storage[key] {
+                  return cached
+              }
+              if let running = inFlight[key] {
+                  return try await running.value
+              }
 
               let task = Task { try await loader(key) }
               inFlight[key] = task
@@ -251,22 +276,35 @@
               }
           }
 
-          func invalidate(_ key: Key) { storage[key] = nil }
-          func cachedCount() -> Int { storage.count }
+          func invalidate(_ key: Key) {
+              storage[key] = nil
+          }
+
+          func cachedCount() -> Int {
+              storage.count
+          }
       }
     tests: |
       actor CallCounter {
           private(set) var count = 0
-          func hit() { count += 1 }
+
+          func hit() {
+              count += 1
+          }
       }
+
       struct LoadError: Error {}
 
-      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+      func sleepMs(_ ms: UInt64) async throws {
+          try await Task.sleep(nanoseconds: ms * 1_000_000)
+      }
 
       await checkAsync("同一個 key 的並行請求只載入一次") {
           let cache = AsyncCache<String, Int>()
           let counter = CallCounter()
-          let results = try await withThrowingTaskGroup(of: Int.self) { group -> [Int] in
+          let results = try await withThrowingTaskGroup(
+              of: Int.self
+          ) { group -> [Int] in
               for _ in 0..<10 {
                   group.addTask {
                       try await cache.value(for: "BTC") { _ in
@@ -276,32 +314,50 @@
                       }
                   }
               }
+
               var out: [Int] = []
-              for try await v in group { out.append(v) }
+              for try await v in group {
+                  out.append(v)
+              }
               return out
           }
+
           let loads = await counter.count
           return results.count == 10 && results.allSatisfy { $0 == 7 } && loads == 1
       }
+
       await checkAsync("載入完成後再次讀取直接命中快取") {
           let cache = AsyncCache<String, Int>()
           let counter = CallCounter()
           for _ in 0..<3 {
-              _ = try await cache.value(for: "ETH") { _ in await counter.hit(); return 1 }
+              _ = try await cache.value(for: "ETH") { _ in
+                  await counter.hit()
+                  return 1
+              }
           }
           let loads = await counter.count
           return loads == 1
       }
+
       await checkAsync("不同 key 各自載入") {
           let cache = AsyncCache<String, Int>()
           let counter = CallCounter()
-          async let a = cache.value(for: "A") { _ in await counter.hit(); try await sleepMs(20); return 1 }
-          async let b = cache.value(for: "B") { _ in await counter.hit(); try await sleepMs(20); return 2 }
+          async let a = cache.value(for: "A") { _ in
+              await counter.hit()
+              try await sleepMs(20)
+              return 1
+          }
+          async let b = cache.value(for: "B") { _ in
+              await counter.hit()
+              try await sleepMs(20)
+              return 2
+          }
           let (x, y) = try await (a, b)
           let loads = await counter.count
           let size = await cache.cachedCount()
           return x == 1 && y == 2 && loads == 2 && size == 2
       }
+
       await checkAsync("失敗不會被快取，下次可以重試") {
           let cache = AsyncCache<String, Int>()
           do {
@@ -312,6 +368,7 @@
           let size = await cache.cachedCount()
           return v == 5 && size == 1
       }
+
       await checkAsync("並行請求共用同一個失敗，之後仍可重試") {
           let cache = AsyncCache<String, Int>()
           let counter = CallCounter()
@@ -326,21 +383,34 @@
                               throw LoadError()
                           }
                           return false
-                      } catch { return true }
+                      } catch {
+                          return true
+                      }
                   }
               }
-              for await failed in group { if failed { failures += 1 } }
+              for await failed in group {
+                  if failed {
+                      failures += 1
+                  }
+              }
           }
           let loads = await counter.count
           let retry = try await cache.value(for: "F") { _ in 9 }
           return failures == 5 && loads == 1 && retry == 9
       }
+
       await checkAsync("invalidate 後重新載入") {
           let cache = AsyncCache<String, Int>()
           let counter = CallCounter()
-          _ = try await cache.value(for: "K") { _ in await counter.hit(); return 1 }
+          _ = try await cache.value(for: "K") { _ in
+              await counter.hit()
+              return 1
+          }
           await cache.invalidate("K")
-          _ = try await cache.value(for: "K") { _ in await counter.hit(); return 2 }
+          _ = try await cache.value(for: "K") { _ in
+              await counter.hit()
+              return 2
+          }
           let loads = await counter.count
           return loads == 2
       }

@@ -33,21 +33,35 @@ import SwiftUI
 
 final class CounterModel: ObservableObject {
     @Published var n = 0
-    init() { print("建立 CounterModel") }
+
+    init() {
+        print("建立 CounterModel")
+    }
 }
 
 struct Counter: View {
     @StateObject private var model = CounterModel()
-    var body: some View { Text("\(model.n)") }
+
+    var body: some View {
+        Text("\(model.n)")
+    }
 }
 
 struct Demo: View {
     let flag: Bool
+
     var body: some View {
         VStack {
-            if flag { Counter() } else { Counter() }   // 兩個分支＝兩個不同的 identity：每次切換都重置
-            Counter().opacity(flag ? 1 : 0.4)          // 同位置、同型別，只改參數＝同一個 identity：狀態保留
-            Counter().id(flag)                         // 明確指定 id：flag 一變就是另一個 identity，重置
+            // 兩個分支＝兩個不同的 identity：每次切換都重置
+            if flag {
+                Counter()
+            } else {
+                Counter()
+            }
+            // 同位置、同型別，只改參數＝同一個 identity：狀態保留
+            Counter().opacity(flag ? 1 : 0.4)
+            // 明確指定 id：flag 一變就是另一個 identity，重置
+            Counter().id(flag)
         }
     }
 }
@@ -75,8 +89,12 @@ struct Demo: View {
 ```swift
 struct OrderRow: View {
     let order: Order
-    @State private var note = ""          // 使用者在這一列打的備註
-    var body: some View { TextField("備註", text: $note) }
+    // 使用者在這一列打的備註
+    @State private var note = ""
+
+    var body: some View {
+        TextField("備註", text: $note)
+    }
 }
 
 // 錯誤：用 index 當 id
@@ -126,17 +144,21 @@ ForEach(orders) { order in OrderRow(order: order) }
 import SwiftUI
 
 struct Ticker: Equatable, Identifiable {
-    let id: String       // 幣種代號，例如 "btcjpy"
+    // 幣種代號，例如 "btcjpy"
+    let id: String
     let price: String
     let change: String
 }
 
 struct TickerRow: View, Equatable {
     let ticker: Ticker
-    let onTap: (String) -> Void   // closure 沒辦法比較，所以 == 裡不比它
+    // closure 沒辦法比較，所以 == 裡不比它
+    let onTap: (String) -> Void
 
     // 只比較 ticker：ticker 沒變，這一列的 body 就可以跳過
-    nonisolated static func == (l: Self, r: Self) -> Bool { l.ticker == r.ticker }
+    nonisolated static func == (l: Self, r: Self) -> Bool {
+        l.ticker == r.ticker
+    }
 
     var body: some View {
         HStack {
@@ -157,7 +179,8 @@ struct MarketList: View {
         ScrollView {
             LazyVStack {
                 ForEach(tickers) { t in
-                    TickerRow(ticker: t, onTap: onTap).equatable()   // 用上面定義的 == 來比較
+                    // 用上面定義的 == 來比較
+                    TickerRow(ticker: t, onTap: onTap).equatable()
                 }
             }
         }
@@ -182,7 +205,9 @@ struct MarketList: View {
 ```swift
 import SwiftUI
 
-enum Mode { case price, depth, trades }
+enum Mode {
+    case price, depth, trades
+}
 
 // 不推薦：用 AnyView 回傳不同的畫面
 func content(for mode: Mode) -> AnyView {
@@ -230,7 +255,8 @@ struct MarketView: View {
         List(vm.tickers) { ticker in
             Text(ticker.id)
         }
-        .task(id: selectedSymbol) {          // selectedSymbol 一變，舊的取消、新的重新開始
+        // selectedSymbol 一變，舊的取消、新的重新開始
+        .task(id: selectedSymbol) {
             await vm.load(selectedSymbol)
         }
     }
@@ -261,18 +287,30 @@ struct MarketView: View {
 // 每個幣種只留最新的一筆；到了固定間隔才送出，避免每個 tick 都更新畫面
 struct TickBatcher<Value> {
     let intervalMs: Int64
-    private var pending: [String: Value] = [:]   // 幣種 -> 最新的值
+    // 幣種 -> 最新的值
+    private var pending: [String: Value] = [:]
     private var lastFlush: Int64?
 
-    init(intervalMs: Int64) { self.intervalMs = intervalMs }
+    init(intervalMs: Int64) {
+        self.intervalMs = intervalMs
+    }
 
-    mutating func push(_ symbol: String, _ value: Value, now: Int64) -> [String: Value]? {
-        pending[symbol] = value                    // 同一個幣種，後來的蓋掉先來的
-        if let last = lastFlush, now - last < intervalMs { return nil }   // 還沒到間隔，先不送
+    mutating func push(
+        _ symbol: String,
+        _ value: Value,
+        now: Int64
+    ) -> [String: Value]? {
+        // 同一個幣種，後來的蓋掉先來的
+        pending[symbol] = value
+        // 還沒到間隔，先不送
+        if let last = lastFlush, now - last < intervalMs {
+            return nil
+        }
         let batch = pending
         pending = [:]
         lastFlush = now
-        return batch                               // 到了間隔，一次送出所有幣種的最新值
+        // 到了間隔，一次送出所有幣種的最新值
+        return batch
     }
 }
 ```

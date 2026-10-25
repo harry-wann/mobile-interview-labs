@@ -55,7 +55,8 @@
     print(s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)
 
     let unreserved = CharacterSet(
-        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+        charactersIn:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
     )
     print(s.addingPercentEncoding(withAllowedCharacters: unreserved)!)
     print("日".addingPercentEncoding(withAllowedCharacters: unreserved)!)
@@ -80,7 +81,10 @@
 
     func hmacBase64(_ stringToSign: String, secret: String) -> String {
         let key = SymmetricKey(data: Data(secret.utf8))
-        let mac = HMAC<____>.authenticationCode(for: Data(stringToSign.utf8), using: key)
+        let mac = HMAC<____>.authenticationCode(
+            for: Data(stringToSign.utf8),
+            using: key
+        )
         return Data(mac).____()
     }
   blanks:
@@ -159,8 +163,10 @@
 
       struct SignedRequest: Equatable {
           let stringToSign: String
-          let signature: String   // Base64，尚未 URL encode
-          let query: String       // 排序後的 query，結尾是 &Signature=<編碼後的簽名>
+          // Base64，尚未 URL encode
+          let signature: String
+          // 排序後的 query，結尾是 &Signature=<編碼後的簽名>
+          let query: String
       }
 
       func percentEncode(_ s: String) -> String {
@@ -209,7 +215,10 @@
           var calendar = Calendar(identifier: .gregorian)
           calendar.timeZone = TimeZone(identifier: "UTC")!
           let date = Date(timeIntervalSince1970: TimeInterval(epochMs / 1000))
-          let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+          let c = calendar.dateComponents(
+              [.year, .month, .day, .hour, .minute, .second],
+              from: date
+          )
           return String(format: "%04d-%02d-%02dT%02d:%02d:%02d",
                         c.year!, c.month!, c.day!, c.hour!, c.minute!, c.second!)
       }
@@ -225,17 +234,26 @@
           ]
           let m = method.uppercased()
           if m == "GET" {
-              for (k, v) in params { pairs.append((k, v)) }
+              for (k, v) in params {
+                  pairs.append((k, v))
+              }
           }
           pairs.sort { Array($0.0.utf8).lexicographicallyPrecedes(Array($1.0.utf8)) }
-          let canonical = pairs.map { "\(percentEncode($0.0))=\(percentEncode($0.1))" }.joined(separator: "&")
+          let canonical = pairs.map {
+              "\(percentEncode($0.0))=\(percentEncode($0.1))"
+          }.joined(separator: "&")
           let stringToSign = "\(m)\n\(host.lowercased())\n\(path)\n\(canonical)"
           let key = SymmetricKey(data: Data(secretKey.utf8))
-          let mac = HMAC<SHA256>.authenticationCode(for: Data(stringToSign.utf8), using: key)
+          let mac = HMAC<SHA256>.authenticationCode(
+              for: Data(stringToSign.utf8),
+              using: key
+          )
           let signature = Data(mac).base64EncodedString()
-          return SignedRequest(stringToSign: stringToSign,
-                               signature: signature,
-                               query: canonical + "&Signature=" + percentEncode(signature))
+          return SignedRequest(
+              stringToSign: stringToSign,
+              signature: signature,
+              query: canonical + "&Signature=" + percentEncode(signature)
+          )
       }
     tests: |
       let host = "api.example-exchange.com"
@@ -246,51 +264,82 @@
 
       check("percentEncode：unreserved 不編碼、空白 %20、保留字元大寫 hex") {
           percentEncode("") == "" && percentEncode("A-z_0.9~") == "A-z_0.9~"
-              && percentEncode("a b") == "a%20b" && percentEncode("+/=:*") == "%2B%2F%3D%3A%2A"
+              && percentEncode("a b") == "a%20b"
+              && percentEncode("+/=:*") == "%2B%2F%3D%3A%2A"
       }
+
       check("percentEncode：非 ASCII 先轉 UTF-8 再逐 byte 編碼") {
           percentEncode("日") == "%E6%97%A5" && percentEncode("é") == "%C3%A9"
       }
+
       check("formatTimestamp：UTC、24 小時制、忽略毫秒") {
           formatTimestamp(epochMs: 1494516006000) == "2017-05-11T15:20:06"
               && formatTimestamp(epochMs: 1494516006999) == "2017-05-11T15:20:06"
               && formatTimestamp(epochMs: 0) == "1970-01-01T00:00:00"
               && formatTimestamp(epochMs: 4102444799000) == "2099-12-31T23:59:59"
       }
-      check("GET：query 一起簽，Timestamp 的冒號編成 %3A，order-id 排在大寫開頭的參數之後") {
-          let r = signRequest(method: "GET", host: host, path: "/v1/order/orders",
-                              accessKeyId: ak, secretKey: sk, timestamp: ts, params: ["order-id": "1234567890"])
-          return r.stringToSign == "GET\napi.example-exchange.com\n/v1/order/orders\n\(base4)&order-id=1234567890"
+
+      check(
+          "GET：query 一起簽，Timestamp 的冒號編成 %3A，order-id 排在大寫開頭的參數之後"
+      ) {
+          let r = signRequest(
+              method: "GET",
+              host: host,
+              path: "/v1/order/orders",
+              accessKeyId: ak,
+              secretKey: sk,
+              timestamp: ts,
+              params: ["order-id": "1234567890"]
+          )
+          return r.stringToSign
+              == "GET\napi.example-exchange.com\n/v1/order/orders\n\(base4)&order-id=1234567890"
               && r.signature == "KLn4U/Au9BfxNEAqNebkXqZGpgjxOmyhMwOi+FmMfdg="
-              && r.query == "\(base4)&order-id=1234567890&Signature=KLn4U%2FAu9BfxNEAqNebkXqZGpgjxOmyhMwOi%2BFmMfdg%3D"
+              && r.query
+                  == "\(base4)&order-id=1234567890&Signature=KLn4U%2FAu9BfxNEAqNebkXqZGpgjxOmyhMwOi%2BFmMfdg%3D"
       }
+
       check("POST：只簽 4 個認證參數（忽略 params），host 轉小寫、method 轉大寫") {
-          let r = signRequest(method: "post", host: "API.Example-Exchange.com", path: "/v1/order/orders/place",
-                              accessKeyId: ak, secretKey: sk, timestamp: ts, params: ["symbol": "btcjpy", "amount": "1"])
-          return r.stringToSign == "POST\napi.example-exchange.com\n/v1/order/orders/place\n\(base4)"
+          let r = signRequest(
+              method: "post",
+              host: "API.Example-Exchange.com",
+              path: "/v1/order/orders/place",
+              accessKeyId: ak,
+              secretKey: sk,
+              timestamp: ts,
+              params: ["symbol": "btcjpy", "amount": "1"]
+          )
+          return r.stringToSign
+              == "POST\napi.example-exchange.com\n/v1/order/orders/place\n\(base4)"
               && r.signature == "zwVrzld/U+nC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM="
-              && r.query == "\(base4)&Signature=zwVrzld%2FU%2BnC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM%3D"
+              && r.query
+                  == "\(base4)&Signature=zwVrzld%2FU%2BnC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM%3D"
       }
+
       check("特殊字元：空白 %20、* → %2A、/ → %2F、~ 不編碼") {
           let r = signRequest(method: "GET", host: host, path: "/v1/account/accounts",
                               accessKeyId: ak, secretKey: sk, timestamp: ts,
                               params: ["symbol": "btc jpy", "note": "a~b-c_d.e*f/g"])
-          return r.stringToSign == "GET\napi.example-exchange.com\n/v1/account/accounts\n\(base4)&note=a~b-c_d.e%2Af%2Fg&symbol=btc%20jpy"
+          return r.stringToSign
+              == "GET\napi.example-exchange.com\n/v1/account/accounts\n\(base4)&note=a~b-c_d.e%2Af%2Fg&symbol=btc%20jpy"
               && r.signature == "vQgltpP9ItCkYjqTs2xwdKQSKchwSnAKRvDdsuTbSTk="
       }
+
       check("ASCII 排序（大寫在小寫之前）與非 ASCII 值") {
           let r = signRequest(method: "GET", host: host, path: "/v1/account/accounts",
                               accessKeyId: ak, secretKey: sk, timestamp: ts,
                               params: ["alpha": "2", "Zeta": "1", "memo": "日本 語"])
           return r.signature == "p+Ap28XMr9xE48g0EG+HAiomvVL0xi8P8a8i8dbC12w="
-              && r.query == "\(base4)&Zeta=1&alpha=2&memo=%E6%97%A5%E6%9C%AC%20%E8%AA%9E&Signature=p%2BAp28XMr9xE48g0EG%2BHAiomvVL0xi8P8a8i8dbC12w%3D"
+              && r.query
+                  == "\(base4)&Zeta=1&alpha=2&memo=%E6%97%A5%E6%9C%AC%20%E8%AA%9E&Signature=p%2BAp28XMr9xE48g0EG%2BHAiomvVL0xi8P8a8i8dbC12w%3D"
       }
   kotlin:
     starter: |
       data class SignedRequest(
           val stringToSign: String,
-          val signature: String,   // Base64，尚未 URL encode
-          val query: String        // 排序後的 query，結尾是 &Signature=<編碼後的簽名>
+          // Base64，尚未 URL encode
+          val signature: String,
+          // 排序後的 query，結尾是 &Signature=<編碼後的簽名>
+          val query: String
       )
 
       fun percentEncode(s: String): String {
@@ -320,7 +369,11 @@
       import javax.crypto.Mac
       import javax.crypto.spec.SecretKeySpec
 
-      data class SignedRequest(val stringToSign: String, val signature: String, val query: String)
+      data class SignedRequest(
+          val stringToSign: String,
+          val signature: String,
+          val query: String,
+      )
 
       private const val HEX = "0123456789ABCDEF"
 
@@ -328,7 +381,9 @@
           val sb = StringBuilder()
           for (b in s.toByteArray(Charsets.UTF_8)) {
               val c = b.toInt() and 0xFF
-              val unreserved = (c in 0x30..0x39) || (c in 0x41..0x5A) || (c in 0x61..0x7A) ||
+              val unreserved = (c in 0x30..0x39) ||
+                  (c in 0x41..0x5A) ||
+                  (c in 0x61..0x7A) ||
                   c == 0x2D || c == 0x2E || c == 0x5F || c == 0x7E
               if (unreserved) {
                   sb.append(c.toChar())
@@ -343,7 +398,9 @@
           DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.ROOT)
 
       fun formatTimestamp(epochMs: Long): String =
-          Instant.ofEpochMilli(epochMs).atOffset(ZoneOffset.UTC).format(timestampFormatter)
+          Instant.ofEpochMilli(epochMs)
+              .atOffset(ZoneOffset.UTC)
+              .format(timestampFormatter)
 
       fun signRequest(
           method: String, host: String, path: String,
@@ -357,14 +414,23 @@
               "Timestamp" to timestamp
           )
           val m = method.uppercase()
-          if (m == "GET") pairs.addAll(params.map { it.key to it.value })
+          if (m == "GET") {
+              pairs.addAll(params.map { it.key to it.value })
+          }
           pairs.sortWith { a, b -> a.first.compareTo(b.first) }
-          val canonical = pairs.joinToString("&") { "${percentEncode(it.first)}=${percentEncode(it.second)}" }
+          val canonical = pairs.joinToString("&") {
+              "${percentEncode(it.first)}=${percentEncode(it.second)}"
+          }
           val stringToSign = "$m\n${host.lowercase()}\n$path\n$canonical"
           val mac = Mac.getInstance("HmacSHA256")
           mac.init(SecretKeySpec(secretKey.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-          val signature = Base64.getEncoder().encodeToString(mac.doFinal(stringToSign.toByteArray(Charsets.UTF_8)))
-          return SignedRequest(stringToSign, signature, canonical + "&Signature=" + percentEncode(signature))
+          val signature = Base64.getEncoder()
+              .encodeToString(mac.doFinal(stringToSign.toByteArray(Charsets.UTF_8)))
+          return SignedRequest(
+              stringToSign,
+              signature,
+              canonical + "&Signature=" + percentEncode(signature),
+          )
       }
     tests: |
       val host = "api.example-exchange.com"
@@ -375,41 +441,71 @@
 
       check("percentEncode：unreserved 不編碼、空白 %20、保留字元大寫 hex") {
           percentEncode("") == "" && percentEncode("A-z_0.9~") == "A-z_0.9~" &&
-              percentEncode("a b") == "a%20b" && percentEncode("+/=:*") == "%2B%2F%3D%3A%2A"
+              percentEncode("a b") == "a%20b" &&
+              percentEncode("+/=:*") == "%2B%2F%3D%3A%2A"
       }
+
       check("percentEncode：非 ASCII 先轉 UTF-8 再逐 byte 編碼") {
           percentEncode("日") == "%E6%97%A5" && percentEncode("é") == "%C3%A9"
       }
+
       check("formatTimestamp：UTC、24 小時制、忽略毫秒") {
           formatTimestamp(1494516006000) == "2017-05-11T15:20:06" &&
               formatTimestamp(1494516006999) == "2017-05-11T15:20:06" &&
               formatTimestamp(0) == "1970-01-01T00:00:00" &&
               formatTimestamp(4102444799000) == "2099-12-31T23:59:59"
       }
-      check("GET：query 一起簽，Timestamp 的冒號編成 %3A，order-id 排在大寫開頭的參數之後") {
-          val r = signRequest("GET", host, "/v1/order/orders", ak, sk, ts, mapOf("order-id" to "1234567890"))
-          r.stringToSign == "GET\napi.example-exchange.com\n/v1/order/orders\n$base4&order-id=1234567890" &&
+
+      check(
+          "GET：query 一起簽，Timestamp 的冒號編成 %3A，order-id 排在大寫開頭的參數之後",
+      ) {
+          val r = signRequest(
+              "GET",
+              host,
+              "/v1/order/orders",
+              ak,
+              sk,
+              ts,
+              mapOf("order-id" to "1234567890"),
+          )
+          r.stringToSign ==
+              "GET\napi.example-exchange.com\n/v1/order/orders\n$base4&order-id=1234567890" &&
               r.signature == "KLn4U/Au9BfxNEAqNebkXqZGpgjxOmyhMwOi+FmMfdg=" &&
-              r.query == "$base4&order-id=1234567890&Signature=KLn4U%2FAu9BfxNEAqNebkXqZGpgjxOmyhMwOi%2BFmMfdg%3D"
+              r.query ==
+                  "$base4&order-id=1234567890&Signature=KLn4U%2FAu9BfxNEAqNebkXqZGpgjxOmyhMwOi%2BFmMfdg%3D"
       }
+
       check("POST：只簽 4 個認證參數（忽略 params），host 轉小寫、method 轉大寫") {
-          val r = signRequest("post", "API.Example-Exchange.com", "/v1/order/orders/place", ak, sk, ts,
-              mapOf("symbol" to "btcjpy", "amount" to "1"))
-          r.stringToSign == "POST\napi.example-exchange.com\n/v1/order/orders/place\n$base4" &&
+          val r = signRequest(
+              "post",
+              "API.Example-Exchange.com",
+              "/v1/order/orders/place",
+              ak,
+              sk,
+              ts,
+              mapOf("symbol" to "btcjpy", "amount" to "1"),
+          )
+          r.stringToSign ==
+              "POST\napi.example-exchange.com\n/v1/order/orders/place\n$base4" &&
               r.signature == "zwVrzld/U+nC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM=" &&
-              r.query == "$base4&Signature=zwVrzld%2FU%2BnC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM%3D"
+              r.query ==
+                  "$base4&Signature=zwVrzld%2FU%2BnC8m9CEzxGWbX7TMyGsK6AgtkPFEHCOXM%3D"
       }
+
       check("特殊字元：空白 %20、* → %2A、/ → %2F、~ 不編碼") {
           val r = signRequest("GET", host, "/v1/account/accounts", ak, sk, ts,
               mapOf("symbol" to "btc jpy", "note" to "a~b-c_d.e*f/g"))
-          r.stringToSign == "GET\napi.example-exchange.com\n/v1/account/accounts\n$base4&note=a~b-c_d.e%2Af%2Fg&symbol=btc%20jpy" &&
+          r.stringToSign ==
+              "GET\napi.example-exchange.com\n/v1/account/accounts\n$base4&note=a~b-c_d.e%2Af%2Fg&symbol=btc%20jpy" &&
               r.signature == "vQgltpP9ItCkYjqTs2xwdKQSKchwSnAKRvDdsuTbSTk="
       }
+
       check("ASCII 排序（大寫在小寫之前）與非 ASCII 值") {
           val r = signRequest("GET", host, "/v1/account/accounts", ak, sk, ts,
               mapOf("alpha" to "2", "Zeta" to "1", "memo" to "日本 語"))
           r.signature == "p+Ap28XMr9xE48g0EG+HAiomvVL0xi8P8a8i8dbC12w=" &&
-              r.query == "$base4&Zeta=1&alpha=2&memo=%E6%97%A5%E6%9C%AC%20%E8%AA%9E&Signature=p%2BAp28XMr9xE48g0EG%2BHAiomvVL0xi8P8a8i8dbC12w%3D"
+              r.query ==
+                  "$base4&Zeta=1&alpha=2&memo=%E6%97%A5%E6%9C%AC%20%E8%AA%9E&Signature=p%2BAp28XMr9xE48g0EG%2BHAiomvVL0xi8P8a8i8dbC12w%3D"
       }
 
 - id: exchange-api-signing-08

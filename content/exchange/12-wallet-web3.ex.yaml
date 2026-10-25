@@ -132,7 +132,9 @@
       }
 
       func decodeBase58Check(_ s: String) -> Base58Decoded? {
-          let alphabet = Array("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+          let alphabet = Array(
+              "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+          )
           var num: [UInt8] = []   // 小端的 base-256
           for ch in s {
               guard let idx = alphabet.firstIndex(of: ch) else { return nil }
@@ -160,35 +162,73 @@
           return Base58Decoded(version: Int(bytes[0]), payloadHex: hex)
       }
     tests: |
-      checkEqual("Bitcoin P2PKH（創世區塊地址）：版本 0", Base58Decoded(version: 0, payloadHex: "62e907b15cbf27d5425399ebf6f0fb50ebb88f18")) {
-          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") ?? Base58Decoded(version: -1, payloadHex: "")
+      checkEqual(
+          "Bitcoin P2PKH（創世區塊地址）：版本 0",
+          Base58Decoded(
+              version: 0,
+              payloadHex: "62e907b15cbf27d5425399ebf6f0fb50ebb88f18"
+          )
+      ) {
+          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+              ?? Base58Decoded(version: -1, payloadHex: "")
       }
-      checkEqual("P2SH：版本 5", Base58Decoded(version: 5, payloadHex: "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb")) {
-          decodeBase58Check("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy") ?? Base58Decoded(version: -1, payloadHex: "")
+
+      checkEqual(
+          "P2SH：版本 5",
+          Base58Decoded(
+              version: 5,
+              payloadHex: "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb"
+          )
+      ) {
+          decodeBase58Check("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy")
+              ?? Base58Decoded(version: -1, payloadHex: "")
       }
-      checkEqual("測試網地址：版本 111", Base58Decoded(version: 111, payloadHex: "243f1394f44554f4ce3fd68649c19adc483ce924")) {
-          decodeBase58Check("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn") ?? Base58Decoded(version: -1, payloadHex: "")
+
+      checkEqual(
+          "測試網地址：版本 111",
+          Base58Decoded(
+              version: 111,
+              payloadHex: "243f1394f44554f4ce3fd68649c19adc483ce924"
+          )
+      ) {
+          decodeBase58Check("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
+              ?? Base58Decoded(version: -1, payloadHex: "")
       }
+
       check("開頭的 1 要補回 0x00 byte") {
           decodeBase58Check("11111111111111111111BZbvjr")
-              == Base58Decoded(version: 0, payloadHex: "0000000000000000000000000000000000000001")
+              == Base58Decoded(
+                  version: 0,
+                  payloadHex: "0000000000000000000000000000000000000001"
+              )
       }
+
       check("版本大於 127 時不可為負；沒有 payload 的最短合法長度（5 byte）") {
           decodeBase58Check("8sXb2f1n7Zag8Gj3tCF747dZUT7mX")
-              == Base58Decoded(version: 128, payloadHex: "0102030405060708090a0b0c0d0e0f10")
-              && decodeBase58Check("1Wh4bh") == Base58Decoded(version: 0, payloadHex: "")
+              == Base58Decoded(
+                  version: 128,
+                  payloadHex: "0102030405060708090a0b0c0d0e0f10"
+              )
+              && decodeBase58Check("1Wh4bh")
+                  == Base58Decoded(version: 0, payloadHex: "")
       }
+
       check("校驗碼不符：改最後一個字元、交換兩個字元都無效") {
           decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb") == nil
               && decodeBase58Check("1A1z1PeP5QGefi2DMPTfTL5SLmv7DivfNa") == nil
       }
+
       check("非法字元：0、O、I、l；Bech32 地址也不是 Base58Check") {
           decodeBase58Check("0A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") == nil
               && decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNl") == nil
-              && decodeBase58Check("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") == nil
+              && decodeBase58Check("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+                  == nil
       }
+
       check("空字串或太短都無效") {
-          decodeBase58Check("") == nil && decodeBase58Check("1") == nil && decodeBase58Check("111") == nil
+          decodeBase58Check("") == nil &&
+              decodeBase58Check("1") == nil &&
+              decodeBase58Check("111") == nil
       }
   kotlin:
     starter: |
@@ -204,63 +244,97 @@
 
       data class Base58Decoded(val version: Int, val payloadHex: String)
 
-      private const val B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+      private const val B58_ALPHABET =
+          "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
       fun decodeBase58Check(s: String): Base58Decoded? {
           var n = BigInteger.ZERO
           val base = BigInteger.valueOf(58)
           for (c in s) {
               val idx = B58_ALPHABET.indexOf(c)
-              if (idx < 0) return null
+              if (idx < 0) {
+                  return null
+              }
               n = n.multiply(base).add(BigInteger.valueOf(idx.toLong()))
           }
           val magnitude: ByteArray = if (n.signum() == 0) {
               ByteArray(0)
           } else {
               val raw = n.toByteArray()
-              if (raw[0] == 0.toByte()) raw.copyOfRange(1, raw.size) else raw
+              if (raw[0] == 0.toByte()) {
+                  raw.copyOfRange(1, raw.size)
+              } else {
+                  raw
+              }
           }
           val zeros = s.takeWhile { it == '1' }.length
           val bytes = ByteArray(zeros) + magnitude
-          if (bytes.size < 5) return null
+          if (bytes.size < 5) {
+              return null
+          }
           val body = bytes.copyOfRange(0, bytes.size - 4)
           val sha = MessageDigest.getInstance("SHA-256")
           val checksum = sha.digest(sha.digest(body)).copyOfRange(0, 4)
-          if (!checksum.contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))) return null
+          if (
+              !checksum.contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))
+          ) {
+              return null
+          }
           val payload = bytes.copyOfRange(1, bytes.size - 4)
           val hex = payload.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
           return Base58Decoded(bytes[0].toInt() and 0xFF, hex)
       }
     tests: |
-      checkEqual("Bitcoin P2PKH（創世區塊地址）：版本 0", Base58Decoded(0, "62e907b15cbf27d5425399ebf6f0fb50ebb88f18")) {
-          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") ?: Base58Decoded(-1, "")
+      checkEqual(
+          "Bitcoin P2PKH（創世區塊地址）：版本 0",
+          Base58Decoded(0, "62e907b15cbf27d5425399ebf6f0fb50ebb88f18"),
+      ) {
+          decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+              ?: Base58Decoded(-1, "")
       }
-      checkEqual("P2SH：版本 5", Base58Decoded(5, "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb")) {
-          decodeBase58Check("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy") ?: Base58Decoded(-1, "")
+
+      checkEqual(
+          "P2SH：版本 5",
+          Base58Decoded(5, "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb"),
+      ) {
+          decodeBase58Check("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy")
+              ?: Base58Decoded(-1, "")
       }
-      checkEqual("測試網地址：版本 111", Base58Decoded(111, "243f1394f44554f4ce3fd68649c19adc483ce924")) {
-          decodeBase58Check("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn") ?: Base58Decoded(-1, "")
+
+      checkEqual(
+          "測試網地址：版本 111",
+          Base58Decoded(111, "243f1394f44554f4ce3fd68649c19adc483ce924"),
+      ) {
+          decodeBase58Check("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
+              ?: Base58Decoded(-1, "")
       }
+
       check("開頭的 1 要補回 0x00 byte") {
           decodeBase58Check("11111111111111111111BZbvjr") ==
               Base58Decoded(0, "0000000000000000000000000000000000000001")
       }
+
       check("版本大於 127 時不可為負；沒有 payload 的最短合法長度（5 byte）") {
           decodeBase58Check("8sXb2f1n7Zag8Gj3tCF747dZUT7mX") ==
               Base58Decoded(128, "0102030405060708090a0b0c0d0e0f10") &&
               decodeBase58Check("1Wh4bh") == Base58Decoded(0, "")
       }
+
       check("校驗碼不符：改最後一個字元、交換兩個字元都無效") {
           decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb") == null &&
               decodeBase58Check("1A1z1PeP5QGefi2DMPTfTL5SLmv7DivfNa") == null
       }
+
       check("非法字元：0、O、I、l；Bech32 地址也不是 Base58Check") {
           decodeBase58Check("0A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") == null &&
               decodeBase58Check("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNl") == null &&
               decodeBase58Check("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") == null
       }
+
       check("空字串或太短都無效") {
-          decodeBase58Check("") == null && decodeBase58Check("1") == null && decodeBase58Check("111") == null
+          decodeBase58Check("") == null &&
+              decodeBase58Check("1") == null &&
+              decodeBase58Check("111") == null
       }
 
 - id: exchange-wallet-web3-06
@@ -321,7 +395,11 @@
           var i = 0
           while i < u.count {
               if u[i] == 0x25 {
-                  guard i + 2 < u.count, let h = hex(u[i + 1]), let l = hex(u[i + 2]) else { return nil }
+                  guard i + 2 < u.count,
+                        let h = hex(u[i + 1]),
+                        let l = hex(u[i + 2]) else {
+                      return nil
+                  }
                   out.append(h * 16 + l)
                   i += 3
               } else {
@@ -335,36 +413,70 @@
       func isValidAmount(_ s: String) -> Bool {
           func digits(_ p: Substring) -> Bool {
               return !p.isEmpty && p.allSatisfy { ch in
-                  if let a = ch.asciiValue { return a >= 48 && a <= 57 }
+                  if let a = ch.asciiValue {
+                      return a >= 48 && a <= 57
+                  }
                   return false
               }
           }
           let parts = s.split(separator: ".", omittingEmptySubsequences: false)
-          if parts.count == 1 { return digits(parts[0]) }
-          if parts.count == 2 { return digits(parts[0]) && digits(parts[1]) && parts[1].count <= 8 }
+          if parts.count == 1 {
+              return digits(parts[0])
+          }
+          if parts.count == 2 {
+              return digits(parts[0]) && digits(parts[1]) && parts[1].count <= 8
+          }
           return false
       }
 
       func parseBip21(_ uri: String) -> PaymentRequest? {
           let scheme = "bitcoin:"
-          guard uri.count >= scheme.count, uri.prefix(scheme.count).lowercased() == scheme else { return nil }
+          guard uri.count >= scheme.count,
+                uri.prefix(scheme.count).lowercased() == scheme else {
+              return nil
+          }
           let rest = uri.dropFirst(scheme.count)
-          let parts = rest.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+          let parts = rest.split(
+              separator: "?",
+              maxSplits: 1,
+              omittingEmptySubsequences: false
+          )
           let address = String(parts[0])
-          guard !address.isEmpty, address.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
+          guard !address.isEmpty,
+                address.allSatisfy(
+                    { $0.isASCII && ($0.isLetter || $0.isNumber) }
+                ) else {
+              return nil
+          }
 
-          var result = PaymentRequest(address: address, amount: nil, label: nil, message: nil)
+          var result = PaymentRequest(
+              address: address,
+              amount: nil,
+              label: nil,
+              message: nil
+          )
           var seen = Set<String>()
           if parts.count == 2 {
-              for seg in parts[1].split(separator: "&", omittingEmptySubsequences: true) {
-                  let kv = seg.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+              for seg in parts[1]
+                  .split(separator: "&", omittingEmptySubsequences: true) {
+                  let kv = seg.split(
+                      separator: "=",
+                      maxSplits: 1,
+                      omittingEmptySubsequences: false
+                  )
                   let key = String(kv[0])
                   let raw = kv.count == 2 ? String(kv[1]) : ""
-                  if !seen.insert(key).inserted { return nil }
-                  if key.hasPrefix("req-") { return nil }
+                  if !seen.insert(key).inserted {
+                      return nil
+                  }
+                  if key.hasPrefix("req-") {
+                      return nil
+                  }
                   switch key {
                   case "amount":
-                      guard let d = percentDecode(raw), isValidAmount(d) else { return nil }
+                      guard let d = percentDecode(raw), isValidAmount(d) else {
+                          return nil
+                      }
                       result.amount = d
                   case "label":
                       guard let d = percentDecode(raw) else { return nil }
@@ -382,13 +494,35 @@
     tests: |
       let sample = "bitcoin:175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W"
 
-      checkEqual("只有地址", PaymentRequest(address: "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", amount: nil, label: nil, message: nil)) {
-          parseBip21(sample) ?? PaymentRequest(address: "", amount: nil, label: nil, message: nil)
-      }
-      checkEqual("BIP21 範例：amount、label、message", PaymentRequest(address: "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", amount: "20.3", label: "Luke-Jr", message: "Donation for project xyz")) {
-          parseBip21(sample + "?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz")
+      checkEqual(
+          "只有地址",
+          PaymentRequest(
+              address: "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W",
+              amount: nil,
+              label: nil,
+              message: nil
+          )
+      ) {
+          parseBip21(sample)
               ?? PaymentRequest(address: "", amount: nil, label: nil, message: nil)
       }
+
+      checkEqual(
+          "BIP21 範例：amount、label、message",
+          PaymentRequest(
+              address: "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W",
+              amount: "20.3",
+              label: "Luke-Jr",
+              message: "Donation for project xyz"
+          )
+      ) {
+          parseBip21(
+              sample +
+                  "?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz"
+          )
+              ?? PaymentRequest(address: "", amount: nil, label: nil, message: nil)
+      }
+
       check("scheme 不分大小寫；其他 scheme、空地址、含空白的地址都無效") {
           parseBip21("BITCOIN:abc?amount=1")?.amount == "1"
               && parseBip21("litecoin:abc") == nil
@@ -396,24 +530,51 @@
               && parseBip21("bitcoin:?amount=1") == nil
               && parseBip21("bitcoin:abc def") == nil
       }
+
       check("百分比解碼：UTF-8、+ 是字面加號、%31%30 解成 10") {
           let r = parseBip21("bitcoin:abc?label=%E6%97%A5%E6%9C%AC&message=a+b")
-          return r?.label == "日本" && r?.message == "a+b" && parseBip21("bitcoin:abc?amount=%31%30")?.amount == "10"
+          return r?.label == "日本" &&
+              r?.message == "a+b" &&
+              parseBip21("bitcoin:abc?amount=%31%30")?.amount == "10"
       }
+
       check("百分比編碼不合法或不是合法 UTF-8 → 無效") {
           parseBip21("bitcoin:abc?label=%G1") == nil
               && parseBip21("bitcoin:abc?label=%FF") == nil
               && parseBip21("bitcoin:abc?label=%E6%97") == nil
               && parseBip21("bitcoin:abc?label=%4") == nil
       }
+
       check("amount 不合法的寫法都無效；8 位小數合法") {
-          let bad = ["1e3", "-1", "1,5", "0.123456789", ".5", "1.", "", "1.2.3", "abc"]
-          let allNil = bad.allSatisfy { parseBip21("bitcoin:abc?amount=\($0)") == nil }
-          return allNil && parseBip21("bitcoin:abc?amount=0.12345678")?.amount == "0.12345678"
+          let bad = [
+              "1e3",
+              "-1",
+              "1,5",
+              "0.123456789",
+              ".5",
+              "1.",
+              "",
+              "1.2.3",
+              "abc"
+          ]
+          let allNil = bad.allSatisfy {
+              parseBip21("bitcoin:abc?amount=\($0)") == nil
+          }
+          return allNil &&
+              parseBip21("bitcoin:abc?amount=0.12345678")?.amount == "0.12345678"
       }
-      check("req- 參數無效、不認識的參數忽略、重複的 key 無效、空段落略過、沒有 = 的值為空字串") {
+
+      check(
+          "req- 參數無效、不認識的參數忽略、重複的 key 無效、空段落略過、沒有 = 的值為空字串"
+      ) {
           parseBip21("bitcoin:abc?amount=1&req-pay=x") == nil
-              && parseBip21("bitcoin:abc?amount=1&foo=bar&label=x") == PaymentRequest(address: "abc", amount: "1", label: "x", message: nil)
+              && parseBip21("bitcoin:abc?amount=1&foo=bar&label=x")
+                  == PaymentRequest(
+                      address: "abc",
+                      amount: "1",
+                      label: "x",
+                      message: nil
+                  )
               && parseBip21("bitcoin:abc?amount=1&amount=2") == nil
               && parseBip21("bitcoin:abc?&&amount=5&")?.amount == "5"
               && parseBip21("bitcoin:abc?label")?.label == ""
@@ -456,10 +617,14 @@
           var i = 0
           while (i < u.size) {
               if (u[i] == 0x25.toByte()) {
-                  if (i + 2 >= u.size) return null
+                  if (i + 2 >= u.size) {
+                      return null
+                  }
                   val h = hex(u[i + 1])
                   val l = hex(u[i + 2])
-                  if (h < 0 || l < 0) return null
+                  if (h < 0 || l < 0) {
+                      return null
+                  }
                   out.write(h * 16 + l)
                   i += 3
               } else {
@@ -490,11 +655,18 @@
 
       fun parseBip21(uri: String): PaymentRequest? {
           val scheme = "bitcoin:"
-          if (!uri.regionMatches(0, scheme, 0, scheme.length, ignoreCase = true)) return null
+          if (!uri.regionMatches(0, scheme, 0, scheme.length, ignoreCase = true)) {
+              return null
+          }
           val rest = uri.substring(scheme.length)
           val q = rest.indexOf('?')
           val address = if (q < 0) rest else rest.substring(0, q)
-          if (address.isEmpty() || !address.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }) return null
+          if (
+              address.isEmpty() ||
+              !address.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }
+          ) {
+              return null
+          }
 
           var amount: String? = null
           var label: String? = null
@@ -502,16 +674,24 @@
           val seen = HashSet<String>()
           if (q >= 0) {
               for (seg in rest.substring(q + 1).split('&')) {
-                  if (seg.isEmpty()) continue
+                  if (seg.isEmpty()) {
+                      continue
+                  }
                   val eq = seg.indexOf('=')
                   val key = if (eq < 0) seg else seg.substring(0, eq)
                   val raw = if (eq < 0) "" else seg.substring(eq + 1)
-                  if (!seen.add(key)) return null
-                  if (key.startsWith("req-")) return null
+                  if (!seen.add(key)) {
+                      return null
+                  }
+                  if (key.startsWith("req-")) {
+                      return null
+                  }
                   when (key) {
                       "amount" -> {
                           val d = percentDecode(raw) ?: return null
-                          if (!isValidAmount(d)) return null
+                          if (!isValidAmount(d)) {
+                              return null
+                          }
                           amount = d
                       }
                       "label" -> label = percentDecode(raw) ?: return null
@@ -525,12 +705,28 @@
       val sample = "bitcoin:175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W"
       val empty = PaymentRequest("", null, null, null)
 
-      checkEqual("只有地址", PaymentRequest("175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", null, null, null)) {
+      checkEqual(
+          "只有地址",
+          PaymentRequest("175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", null, null, null),
+      ) {
           parseBip21(sample) ?: empty
       }
-      checkEqual("BIP21 範例：amount、label、message", PaymentRequest("175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W", "20.3", "Luke-Jr", "Donation for project xyz")) {
-          parseBip21(sample + "?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz") ?: empty
+
+      checkEqual(
+          "BIP21 範例：amount、label、message",
+          PaymentRequest(
+              "175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W",
+              "20.3",
+              "Luke-Jr",
+              "Donation for project xyz",
+          ),
+      ) {
+          parseBip21(
+              sample +
+                  "?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz",
+          ) ?: empty
       }
+
       check("scheme 不分大小寫；其他 scheme、空地址、含空白的地址都無效") {
           parseBip21("BITCOIN:abc?amount=1")?.amount == "1" &&
               parseBip21("litecoin:abc") == null &&
@@ -538,24 +734,43 @@
               parseBip21("bitcoin:?amount=1") == null &&
               parseBip21("bitcoin:abc def") == null
       }
+
       check("百分比解碼：UTF-8、+ 是字面加號、%31%30 解成 10") {
           val r = parseBip21("bitcoin:abc?label=%E6%97%A5%E6%9C%AC&message=a+b")
-          r?.label == "日本" && r?.message == "a+b" && parseBip21("bitcoin:abc?amount=%31%30")?.amount == "10"
+          r?.label == "日本" &&
+              r?.message == "a+b" &&
+              parseBip21("bitcoin:abc?amount=%31%30")?.amount == "10"
       }
+
       check("百分比編碼不合法或不是合法 UTF-8 → 無效") {
           parseBip21("bitcoin:abc?label=%G1") == null &&
               parseBip21("bitcoin:abc?label=%FF") == null &&
               parseBip21("bitcoin:abc?label=%E6%97") == null &&
               parseBip21("bitcoin:abc?label=%4") == null
       }
+
       check("amount 不合法的寫法都無效；8 位小數合法") {
-          val bad = listOf("1e3", "-1", "1,5", "0.123456789", ".5", "1.", "", "1.2.3", "abc")
+          val bad = listOf(
+              "1e3",
+              "-1",
+              "1,5",
+              "0.123456789",
+              ".5",
+              "1.",
+              "",
+              "1.2.3",
+              "abc",
+          )
           bad.all { parseBip21("bitcoin:abc?amount=$it") == null } &&
               parseBip21("bitcoin:abc?amount=0.12345678")?.amount == "0.12345678"
       }
-      check("req- 參數無效、不認識的參數忽略、重複的 key 無效、空段落略過、沒有 = 的值為空字串") {
+
+      check(
+          "req- 參數無效、不認識的參數忽略、重複的 key 無效、空段落略過、沒有 = 的值為空字串",
+      ) {
           parseBip21("bitcoin:abc?amount=1&req-pay=x") == null &&
-              parseBip21("bitcoin:abc?amount=1&foo=bar&label=x") == PaymentRequest("abc", "1", "x", null) &&
+              parseBip21("bitcoin:abc?amount=1&foo=bar&label=x") ==
+                  PaymentRequest("abc", "1", "x", null) &&
               parseBip21("bitcoin:abc?amount=1&amount=2") == null &&
               parseBip21("bitcoin:abc?&&amount=5&")?.amount == "5" &&
               parseBip21("bitcoin:abc?label")?.label == ""

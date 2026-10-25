@@ -78,25 +78,33 @@ handler.postDelayed(object : Runnable {
 ```swift
 import BackgroundTasks
 
-// App 啟動時登記：識別碼要和 Info.plist 的 BGTaskSchedulerPermittedIdentifiers 一致
-BGTaskScheduler.shared.register(forTaskWithIdentifier: "jp.example.app.refresh", using: nil) { task in
+// App 啟動時登記：
+// 識別碼要和 Info.plist 的 BGTaskSchedulerPermittedIdentifiers 一致
+BGTaskScheduler.shared.register(
+    forTaskWithIdentifier: "jp.example.app.refresh",
+    using: nil
+) { task in
     guard let refresh = task as? BGAppRefreshTask else { return }
     handleRefresh(refresh)
 }
 
 func scheduleRefresh() {
     let request = BGAppRefreshTaskRequest(identifier: "jp.example.app.refresh")
-    request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)   // 最早 15 分鐘後；不代表 15 分鐘後就會執行
+    // 最早 15 分鐘後；不代表 15 分鐘後就會執行
+    request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
     try? BGTaskScheduler.shared.submit(request)
 }
 
 func handleRefresh(_ task: BGAppRefreshTask) {
-    scheduleRefresh()                                    // 先排下一次，不然只會執行這一次
+    // 先排下一次，不然只會執行這一次
+    scheduleRefresh()
     let work = Task {
         await syncPortfolio()
-        task.setTaskCompleted(success: true)             // 做完要告訴系統
+        // 做完要告訴系統
+        task.setTaskCompleted(success: true)
     }
-    task.expirationHandler = {                           // 時間到了系統會呼叫，要立刻收尾
+    // 時間到了系統會呼叫，要立刻收尾
+    task.expirationHandler = {
         work.cancel()
         task.setTaskCompleted(success: false)
     }
@@ -136,7 +144,10 @@ Doze 是什麼意思？想像手機放在桌上一整晚：靜止、沒充電、
 WorkManager 的用法如下，注意兩個重點：週期性工作最短 15 分鐘，以及 expedited work 是給「盡快要做完」的一次性工作：
 
 ```kotlin
-class PortfolioSyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+class PortfolioSyncWorker(
+    ctx: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         // 同步資產、補資料……
         return Result.success()
@@ -144,15 +155,25 @@ class PortfolioSyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
 }
 
 // 週期性工作：最短 15 分鐘，設定更短的值會被提高成 15 分鐘，而且不準時
-val periodic = PeriodicWorkRequestBuilder<PortfolioSyncWorker>(15, TimeUnit.MINUTES)
-    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-    .build()
+val periodic = PeriodicWorkRequestBuilder<PortfolioSyncWorker>(
+    15,
+    TimeUnit.MINUTES,
+).setConstraints(
+    Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build(),
+).build()
 WorkManager.getInstance(context)
-    .enqueueUniquePeriodicWork("portfolio-sync", ExistingPeriodicWorkPolicy.KEEP, periodic)
+    .enqueueUniquePeriodicWork(
+        "portfolio-sync",
+        ExistingPeriodicWorkPolicy.KEEP,
+        periodic,
+    )
 
 // 一次性、需要盡快做完的工作（例如收到推播後把資料存好）：expedited
 val urgent = OneTimeWorkRequestBuilder<PortfolioSyncWorker>()
-    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)   // 配額用完時退回一般工作
+    // 配額用完時退回一般工作
+    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
     .build()
 WorkManager.getInstance(context).enqueue(urgent)
 ```
@@ -185,14 +206,20 @@ APNs（Apple Push Notification service）是 Apple 的推播服務，FCM（Fireb
 
 ```swift
 // iOS：要先取得使用者同意，再註冊遠端推播
-UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+UNUserNotificationCenter.current().requestAuthorization(
+    options: [.alert, .sound, .badge]
+) { granted, _ in
     guard granted else { return }
-    DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+    DispatchQueue.main.async {
+        UIApplication.shared.registerForRemoteNotifications()
+    }
 }
 
 // AppDelegate：系統把 device token 交給你
-func application(_ application: UIApplication,
-                 didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+) {
     let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
     // 上傳 hex 給伺服器（登入後綁定帳號）
 }
@@ -239,7 +266,8 @@ apns-push-type: alert
 apns-priority: 10
 apns-collapse-id: price-alert-btcjpy
 
-# silent push（只喚醒 App，不顯示通知）：payload 要帶 "aps": { "content-available": 1 }
+# silent push（只喚醒 App，不顯示通知）：
+# payload 要帶 "aps": { "content-available": 1 }
 apns-push-type: background
 apns-priority: 5
 ```
@@ -333,11 +361,15 @@ override fun onMessageReceived(message: RemoteMessage) {
 ```kotlin
 // Android：建立價格提醒專用的 channel（Android 8 以上）
 val channel = NotificationChannel(
-    "price_alert",                                // channel 的 ID
-    "價格提醒",                                    // 使用者在系統設定看到的名稱
-    NotificationManager.IMPORTANCE_HIGH           // 高重要性：會有聲音與浮動通知
+    // channel 的 ID
+    "price_alert",
+    // 使用者在系統設定看到的名稱
+    "價格提醒",
+    // 高重要性：會有聲音與浮動通知
+    NotificationManager.IMPORTANCE_HIGH
 )
-getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+getSystemService(NotificationManager::class.java)
+    .createNotificationChannel(channel)
 
 // Android 13 以上：請求通知權限（在 Activity 裡呼叫）
 requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)

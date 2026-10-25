@@ -30,14 +30,21 @@ actor 是一種把自己的可變資料「圍起來」的型別。**從外部要
 
 ```swift
 actor OrderBook {
-    private var bids: [Decimal: Decimal] = [:]    // 價格 -> 數量
+    // 價格 -> 數量
+    private var bids: [Decimal: Decimal] = [:]
 
-    func update(price: Decimal, qty: Decimal) { bids[price] = qty }
-    func bestBid() -> Decimal? { bids.keys.max() }
+    func update(price: Decimal, qty: Decimal) {
+        bids[price] = qty
+    }
+
+    func bestBid() -> Decimal? {
+        bids.keys.max()
+    }
 }
 
 let book = OrderBook()
-await book.update(price: 100, qty: 1)   // 從 actor 外面呼叫要 await：如果 actor 正忙，就在這裡排隊等
+// 從 actor 外面呼叫要 await：如果 actor 正忙，就在這裡排隊等
+await book.update(price: 100, qty: 1)
 let best = await book.bestBid()
 ```
 
@@ -66,9 +73,12 @@ actor Account {
 
     // 有 bug 的版本：檢查和扣款之間隔了一個 await
     func withdrawBuggy(_ n: Int) async -> Bool {
-        guard balance >= n else { return false }                // 步驟 1：檢查餘額
-        try? await Task.sleep(nanoseconds: 10_000_000)          // 步驟 2：模擬向伺服器確認，這裡會暫停、讓出 actor
-        balance -= n                                            // 步驟 3：扣款
+        // 步驟 1：檢查餘額
+        guard balance >= n else { return false }
+        // 步驟 2：模擬向伺服器確認，這裡會暫停、讓出 actor
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        // 步驟 3：扣款
+        balance -= n
         return true
     }
 }
@@ -91,11 +101,21 @@ print(await a, await b, await account.balance)
 **修法一：在 `await` 之前就先改好狀態**（先保留額度），失敗了再補回去。
 
 ```swift
-func withdraw(_ n: Int, confirm: @Sendable () async throws -> Void) async -> Bool {
+func withdraw(
+    _ n: Int,
+    confirm: @Sendable () async throws -> Void
+) async -> Bool {
     guard balance >= n else { return false }
-    balance -= n                                  // 先扣掉（保留額度），再去 await
-    do { try await confirm(); return true }
-    catch { balance += n; return false }          // 確認失敗：把額度還回去
+    // 先扣掉（保留額度），再去 await
+    balance -= n
+    do {
+        try await confirm()
+        return true
+    } catch {
+        // 確認失敗：把額度還回去
+        balance += n
+        return false
+    }
 }
 ```
 
@@ -106,15 +126,24 @@ func withdraw(_ n: Int, confirm: @Sendable () async throws -> Void) async -> Boo
 ```swift
 actor PriceCache {
     private var cache: [String: Decimal] = [:]
-    private var inFlight: [String: Task<Decimal, Error>] = [:]    // 正在載入的工作
+    // 正在載入的工作
+    private var inFlight: [String: Task<Decimal, Error>] = [:]
 
     func price(for symbol: String) async throws -> Decimal {
-        if let cached = cache[symbol] { return cached }
-        if let running = inFlight[symbol] { return try await running.value }   // 已經有人在載入：等同一個結果
+        if let cached = cache[symbol] {
+            return cached
+        }
+        // 已經有人在載入：等同一個結果
+        if let running = inFlight[symbol] {
+            return try await running.value
+        }
 
         let task = Task { try await fetchPrice(symbol) }
-        inFlight[symbol] = task                  // 在 await 之前就登記，後面進來的呼叫才看得到
-        defer { inFlight[symbol] = nil }
+        // 在 await 之前就登記，後面進來的呼叫才看得到
+        inFlight[symbol] = task
+        defer {
+            inFlight[symbol] = nil
+        }
         let value = try await task.value
         cache[symbol] = value
         return value
@@ -138,10 +167,12 @@ import Foundation
 
 @globalActor
 actor ChatRoomActor {
-    static let shared = ChatRoomActor()    // global actor 必須提供的 shared 實例
+    // global actor 必須提供的 shared 實例
+    static let shared = ChatRoomActor()
 }
 
-@ChatRoomActor                              // 這個型別的所有成員，都在 ChatRoomActor 上排隊執行
+// 這個型別的所有成員，都在 ChatRoomActor 上排隊執行
+@ChatRoomActor
 final class ChatRoomStore {
     var unread = 0
 }
@@ -175,11 +206,18 @@ import Foundation
 
 final class LockedBox<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
-    private var value: Value          // 可變的，但只有在鎖裡才會被存取
-    init(_ value: Value) { self.value = value }
+    // 可變的，但只有在鎖裡才會被存取
+    private var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
 
     func withValue<R>(_ body: (inout Value) -> R) -> R {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
         return body(&value)
     }
 }
@@ -240,13 +278,22 @@ Xcode 26 的設定 `SWIFT_APPROACHABLE_CONCURRENCY` 是一組設定的開關，�
 ```swift
 import Foundation
 
-nonisolated func a() async -> Int32 { pthread_main_np() }
-nonisolated(nonsending) func b() async -> Int32 { pthread_main_np() }
-@concurrent func c() async -> Int32 { pthread_main_np() }
+nonisolated func a() async -> Int32 {
+    pthread_main_np()
+}
+
+nonisolated(nonsending) func b() async -> Int32 {
+    pthread_main_np()
+}
+
+@concurrent func c() async -> Int32 {
+    pthread_main_np()
+}
 
 @MainActor func run() async {
     print(await a(), await b(), await c())
 }
+
 await run()
 // 沒有啟用 NonisolatedNonsendingByDefault：輸出 0 1 0
 //   a：舊行為，離開呼叫者的 actor，所以不在主執行緒
@@ -258,7 +305,9 @@ await run()
 再看一個實務的例子：
 
 ```swift
-struct Candle: Sendable { var close: Decimal }
+struct Candle: Sendable {
+    var close: Decimal
+}
 
 @concurrent
 func parseCandles(_ data: Data) async throws -> [Candle] {

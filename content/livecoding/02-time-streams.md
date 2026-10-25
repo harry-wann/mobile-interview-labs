@@ -117,14 +117,18 @@ SMA（Simple Moving Average，簡單移動平均）是 K 線圖上最常見的�
 
 ```swift
 if count == period {
-    sum -= buffer[index]        // 緩衝區已滿：先減掉即將被覆蓋的最舊值
+    // 緩衝區已滿：先減掉即將被覆蓋的最舊值
+    sum -= buffer[index]
 } else {
     count += 1
 }
+
 buffer[index] = price
 sum += price
-index = (index + 1) % period    // 繞回開頭
-return count == period ? sum / Double(period) : nil   // 資料不足 period 筆時回傳 nil
+// 繞回開頭
+index = (index + 1) % period
+// 資料不足 period 筆時回傳 nil
+return count == period ? sum / Double(period) : nil
 ```
 
 兩個延伸：

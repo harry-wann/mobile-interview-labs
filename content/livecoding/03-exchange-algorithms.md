@@ -73,17 +73,23 @@ remaining > 0 的話，用自己的限價掛到自己那一側
 
 ```swift
 var lo = 0
-var hi = times.count              // 搜尋範圍是 [lo, hi)：包含 lo，不包含 hi
+// 搜尋範圍是 [lo, hi)：包含 lo，不包含 hi
+var hi = times.count
 while lo < hi {
-    let mid = lo + (hi - lo) / 2  // 寫成這樣比 (lo + hi) / 2 安全，不會因為相加而溢位
+    // 寫成這樣比 (lo + hi) / 2 安全，不會因為相加而溢位
+    let mid = lo + (hi - lo) / 2
     if times[mid] <= t {
-        lo = mid + 1              // mid 還不夠大，答案在右半邊
+        // mid 還不夠大，答案在右半邊
+        lo = mid + 1
     } else {
-        hi = mid                  // mid 已經大於 t，答案在左半邊（含 mid）
+        // mid 已經大於 t，答案在左半邊（含 mid）
+        hi = mid
     }
 }
+
 // 迴圈結束時 lo 就是「第一根 > t 的位置」
-return lo == 0 ? nil : lo - 1     // lo 是 0 代表 t 比第一根還早，找不到
+// lo 是 0 代表 t 比第一根還早，找不到
+return lo == 0 ? nil : lo - 1
 ```
 
 例子：`times = [10, 20, 20, 20, 30]`，找 `t = 20`。第一個大於 20 的是索引 4（30），答案是 4 − 1 = 3。
@@ -107,10 +113,14 @@ return lo == 0 ? nil : lo - 1     // lo 是 0 代表 t 比第一根還早，找�
 
 ```swift
 var t = previous.time + period
-while t < candle.time {          // 還沒追上下一根，就繼續補
+// 還沒追上下一根，就繼續補
+while t < candle.time {
     let c = previous.close
-    result.append(Candle(time: t, open: c, high: c, low: c, close: c, volume: 0))
-    t += period                  // 一定要前進，否則會無限迴圈
+    result.append(
+        Candle(time: t, open: c, high: c, low: c, close: c, volume: 0)
+    )
+    // 一定要前進，否則會無限迴圈
+    t += period
 }
 ```
 

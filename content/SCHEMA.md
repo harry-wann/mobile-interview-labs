@@ -12,11 +12,15 @@
 
 ```
 content/
-  sections.yaml                  # section 順序與標題（已建立，不要改 id）
-  plan/days.yaml                 # 7 日衝刺計畫（main 維護）
+  # section 順序與標題（已建立，不要改 id）
+  sections.yaml
+  # 7 日衝刺計畫（main 維護）
+  plan/days.yaml
   <section-dir>/
-    NN-<slug>.md                 # 單元筆記（NN = 01、02… 決定排序）
-    NN-<slug>.ex.yaml            # 該單元的練習題（同 basename + .ex.yaml）
+    # 單元筆記（NN = 01、02… 決定排序）
+    NN-<slug>.md
+    # 該單元的練習題（同 basename + .ex.yaml）
+    NN-<slug>.ex.yaml
 ```
 
 - 一個單元 = 一個 `.md` ＋ 一個同名 `.ex.yaml`。`.ex.yaml` 必須存在（至少 1 題）。
@@ -30,8 +34,10 @@ content/
 id: exchange-precision
 title: 精度與金額：Decimal、tick size 與捨入
 summary: 交易所 App 最常出事的地方：用 Double 算錢、數量捨入方向錯、顯示格式跟著 locale 亂跳。
-priority: P0          # P0 面試前一定要會；P1 很可能被問；P2 加分
-day: 4                # 對應 7 日計畫第幾天（1–7），可省略
+# P0 面試前一定要會；P1 很可能被問；P2 加分
+priority: P0
+# 對應 7 日計畫第幾天（1–7），可省略
+day: 4
 tags: [decimal, money, formatting]
 ---
 
@@ -132,7 +138,8 @@ tags: [decimal, money, formatting]
     - "`Double` 計算後用 `String(format: \"%.2f\")` 顯示"
     - "`Decimal`，捨入用 `NSDecimalRound` 並指定 `.down`"
     - "`Float` 以節省記憶體"
-  answer: 1          # single：0-based 索引
+  # single：0-based 索引
+  answer: 1
   explain: |
     ...
 ```
@@ -192,7 +199,8 @@ tags: [decimal, money, formatting]
   priority: P1
   prompt: |
     把下單流程依正確順序排列。
-  items:              # 依「正確順序」寫，前端會打亂
+  # 依「正確順序」寫，前端會打亂
+  items:
     - 產生 clientOrderId（UUID）並鎖定送出按鈕
     - 前端驗證 tick size／最小數量／餘額
     - 送出簽名 REST 請求
@@ -230,7 +238,12 @@ tags: [decimal, money, formatting]
           return r * tick
       }
     tests: |
-      checkEqual("1234.567 / 0.01", Decimal(string: "1234.56")!) { roundToTick(Decimal(string: "1234.567")!, tick: Decimal(string: "0.01")!) }
+      checkEqual("1234.567 / 0.01", Decimal(string: "1234.56")!) {
+          roundToTick(
+              Decimal(string: "1234.567")!,
+              tick: Decimal(string: "0.01")!
+          )
+      }
   kotlin:
     starter: |
       import java.math.BigDecimal
@@ -243,7 +256,10 @@ tags: [decimal, money, formatting]
       fun roundToTick(price: BigDecimal, tick: BigDecimal): BigDecimal =
           price.divide(tick, 0, RoundingMode.DOWN).multiply(tick)
     tests: |
-      checkEqual("1234.567 / 0.01", 0) { roundToTick(BigDecimal("1234.567"), BigDecimal("0.01")).compareTo(BigDecimal("1234.56")) }
+      checkEqual("1234.567 / 0.01", 0) {
+          roundToTick(BigDecimal("1234.567"), BigDecimal("0.01"))
+              .compareTo(BigDecimal("1234.56"))
+      }
 ```
 
 **Runner 合約**（`runner/prelude.swift`、`runner/prelude.kt` 已建立，內容作者要照這個寫 tests）：
@@ -281,7 +297,8 @@ tags: [decimal, money, formatting]
     即時 K 線用 SSE 還是 WebSocket？各在什麼情況下選？
   promptJa: |
     （可省略）日文版題目
-  keyPoints:              # 自評勾選用，4–8 點，每點一句話
+  # 自評勾選用，4–8 點，每點一句話
+  keyPoints:
     - 單向推送需求，SSE 走一般 HTTP、穿 proxy 容易
     - 兩段式握手：REST 取短效 token → 開 stream
     - 重連固定 1s 的不足 → 指數退避＋jitter
@@ -290,11 +307,14 @@ tags: [decimal, money, formatting]
     （Markdown，建議 150–400 字，可直接念出來的口語版本）
   modelAnswerJa: |
     （可省略）日文版
-  followUps:              # 面試官可能的追問
+  # 面試官可能的追問
+  followUps:
     - 背景斷線後怎麼補資料？
-  factsToConfirm:         # （可省略）只有作答者本人知道、要先填好的事實，例如「這個專案的使用者規模」
+  # （可省略）只有作答者本人知道、要先填好的事實，例如「這個專案的使用者規模」
+  factsToConfirm:
     - 你的上一個即時行情專案尖峰每秒幾則訊息？
-  timeLimitSec: 120       # 模擬面試計時，可省略（預設 120）
+  # 模擬面試計時，可省略（預設 120）
+  timeLimitSec: 120
 ```
 - 系統設計題的 `keyPoints` 要涵蓋：需求釐清、資料流、client 架構、邊界情況、效能、測試、監控。
 

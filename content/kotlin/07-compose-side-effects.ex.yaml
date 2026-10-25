@@ -42,7 +42,9 @@
 
     @Composable
     fun C(listState: LazyListState) {
-        val showTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+        val showTop by remember {
+            derivedStateOf { listState.firstVisibleItemIndex > 0 }
+        }
     }
 
     @Composable

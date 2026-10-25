@@ -31,21 +31,31 @@
 
     final class VM: ObservableObject {
         static var created: [String: Int] = [:]
-        init(_ tag: String) { VM.created[tag, default: 0] += 1 }
+
+        init(_ tag: String) {
+            VM.created[tag, default: 0] += 1
+        }
     }
 
     struct ChildA: View {
         @ObservedObject var vm = VM("A")
-        var body: some View { Text("A") }
+
+        var body: some View {
+            Text("A")
+        }
     }
 
     struct ChildB: View {
         @StateObject var vm = VM("B")
-        var body: some View { Text("B") }
+
+        var body: some View {
+            Text("B")
+        }
     }
 
     struct Parent: View {
         @State var tick = 0
+
         var body: some View {
             VStack {
                 Text("\(tick)")
@@ -93,7 +103,11 @@
 
     struct Parent: View {
         @State var v = 0
-        var body: some View { Child(value: v) }   // v 之後被更新為 1、再更新為 2
+
+        // v 之後被更新為 1、再更新為 2
+        var body: some View {
+            Child(value: v)
+        }
     }
   answer: |
     0 2
@@ -159,11 +173,22 @@
     import Observation
     import Combine
 
-    @Observable final class Model { var a = 0; var b = 0 }
-    final class Old: ObservableObject { @Published var a = 0; @Published var b = 0 }
+    @Observable final class Model {
+        var a = 0
+        var b = 0
+    }
+
+    final class Old: ObservableObject {
+        @Published var a = 0
+        @Published var b = 0
+    }
 
     let m = Model()
-    withObservationTracking { _ = m.a } onChange: { print("observable: a") }
+    withObservationTracking {
+        _ = m.a
+    } onChange: {
+        print("observable: a")
+    }
     m.b = 1
     m.a = 1
     m.a = 2
@@ -189,16 +214,24 @@
     iOS 17 以上使用 `@Observable` 的寫法：第一個空格填「讓子層能對 `@Observable` 物件使用 `$` 綁定」的 property wrapper，第二個空格填「父層擁有這個物件」用的 property wrapper。
   codeLang: swift
   code: |
-    @Observable final class Settings { var name = "" }
+    @Observable final class Settings {
+        var name = ""
+    }
 
     struct Editor: View {
         @____ var settings: Settings
-        var body: some View { TextField("name", text: $settings.name) }
+
+        var body: some View {
+            TextField("name", text: $settings.name)
+        }
     }
 
     struct Host: View {
         @____ private var settings = Settings()
-        var body: some View { Editor(settings: settings) }
+
+        var body: some View {
+            Editor(settings: settings)
+        }
     }
   blanks:
     - [Bindable]

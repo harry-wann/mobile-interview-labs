@@ -41,7 +41,9 @@ struct Clamped<Value: Comparable> {
     // wrappedValue：屬性本身的值，讀寫 lots 時走這裡
     var wrappedValue: Value {
         get { value }
-        set { value = min(max(newValue, range.lowerBound), range.upperBound) }
+        set {
+            value = min(max(newValue, range.lowerBound), range.upperBound)
+        }
     }
 
     // projectedValue：用 $ 前綴取得的附加資訊，這裡回傳允許的範圍
@@ -53,10 +55,12 @@ struct QuantityInput {
 }
 
 var input = QuantityInput()
-print(input.lots)    // 輸出：100（初始值 150 超過上限，被夾到 100）
+// 輸出：100（初始值 150 超過上限，被夾到 100）
+print(input.lots)
 input.lots = -5
-print(input.lots)    // 輸出：1
-print(input.$lots)   // 輸出：1...100（$ 取得 projectedValue）
+print(input.lots) // 輸出：1
+// 輸出：1...100（$ 取得 projectedValue）
+print(input.$lots)
 ```
 
 運作方式：編譯器會自動替 `lots` 產生一個叫 `_lots` 的底層屬性，用來存放 wrapper 本身；讀寫 `lots` 時，實際上是呼叫 wrapper 的 `wrappedValue`；加上 `$` 則取得 `projectedValue`。在 `init` 裡直接寫 `_lots = Clamped(wrappedValue: 5, 1...100)`，就是直接設定底層的 wrapper（SwiftUI 在 `init` 裡設定 `@State` 初始值時寫的 `_local = State(initialValue: value)`，就是這個用法）。
@@ -79,19 +83,36 @@ import Foundation
 
 @resultBuilder
 enum QueryBuilder {
-    static func buildExpression(_ item: URLQueryItem) -> [URLQueryItem] { [item] }
-    static func buildBlock(_ parts: [URLQueryItem]...) -> [URLQueryItem] { parts.flatMap { $0 } }
-    static func buildOptional(_ part: [URLQueryItem]?) -> [URLQueryItem] { part ?? [] }
-    static func buildEither(first: [URLQueryItem]) -> [URLQueryItem] { first }
-    static func buildEither(second: [URLQueryItem]) -> [URLQueryItem] { second }
+    static func buildExpression(_ item: URLQueryItem) -> [URLQueryItem] {
+        [item]
+    }
+
+    static func buildBlock(_ parts: [URLQueryItem]...) -> [URLQueryItem] {
+        parts.flatMap { $0 }
+    }
+
+    static func buildOptional(_ part: [URLQueryItem]?) -> [URLQueryItem] {
+        part ?? []
+    }
+
+    static func buildEither(first: [URLQueryItem]) -> [URLQueryItem] {
+        first
+    }
+
+    static func buildEither(second: [URLQueryItem]) -> [URLQueryItem] {
+        second
+    }
 }
 
-func query(@QueryBuilder _ content: () -> [URLQueryItem]) -> [URLQueryItem] { content() }
+func query(@QueryBuilder _ content: () -> [URLQueryItem]) -> [URLQueryItem] {
+    content()
+}
 
 let precise = false
 let items = query {
     URLQueryItem(name: "symbol", value: "btcjpy")
-    if precise {                                         // if / else 靠 buildEither
+    // if / else 靠 buildEither
+    if precise {
         URLQueryItem(name: "depth", value: "step0")
     } else {
         URLQueryItem(name: "depth", value: "step5")
@@ -121,7 +142,8 @@ import Testing
 
 @Test func roundsDown() {
     let price = 1234.567
-    // #expect 是 macro：失敗時會列出 price 的值與整個運算式的結果，不用自己寫訊息
+    // #expect 是 macro：失敗時會列出 price 的值與整個運算式的結果，
+    // 不用自己寫訊息
     #expect(price.rounded(.down) == 1234)
 }
 ```
@@ -149,20 +171,25 @@ struct Ticker {
     let symbol: String
     let volume: Int
 }
-let tickers = [Ticker(symbol: "BTC", volume: 90), Ticker(symbol: "ETH", volume: 50)]
+let tickers = [
+    Ticker(symbol: "BTC", volume: 90),
+    Ticker(symbol: "ETH", volume: 50)
+]
 
 // 用 [keyPath:] 取值
 let kp = \Ticker.volume
-print(tickers[0][keyPath: kp])     // 輸出：90
+print(tickers[0][keyPath: kp]) // 輸出：90
 
 // Swift 5.2 起，KeyPath 可以直接當作函式使用：(Ticker) -> String
-print(tickers.map(\.symbol))       // 輸出：["BTC", "ETH"]
+// 輸出：["BTC", "ETH"]
+print(tickers.map(\.symbol))
 
 // 通用工具：不管哪個欄位，只要可以比較，都能取最大的
 func maxElement<T, V: Comparable>(_ items: [T], by key: KeyPath<T, V>) -> T? {
     items.max { $0[keyPath: key] < $1[keyPath: key] }
 }
-print(maxElement(tickers, by: \.volume)?.symbol ?? "")   // 輸出：BTC
+// 輸出：BTC
+print(maxElement(tickers, by: \.volume)?.symbol ?? "")
 ```
 
 KeyPath 有幾種型別：`KeyPath`（唯讀）、`WritableKeyPath`（值型別的 `var`，可以寫入）、`ReferenceWritableKeyPath`（class 的 `var`），另外還有型別被抹掉的 `PartialKeyPath`、`AnyKeyPath`，很少用到。
@@ -179,11 +206,15 @@ KeyPath 有幾種型別：`KeyPath`（唯讀）、`WritableKeyPath`（值型別�
 typed throws（Swift 6.0，Xcode 16）讓你在函式簽名裡寫明錯誤的型別：`throws(NetworkError)`。這樣呼叫端的 `catch` 區塊裡，`error` 的型別就是 `NetworkError`，`switch` 可以窮舉所有 case（不用寫 `default`），新增 case 時編譯器會提醒你每個處理的地方。
 
 ```swift
-enum NetworkError: Error { case offline, badStatus(Int) }
+enum NetworkError: Error {
+    case offline, badStatus(Int)
+}
 
 // 簽名寫明只會丟 NetworkError
 func fetch(ok: Bool) throws(NetworkError) -> Int {
-    if ok { return 1 }
+    if ok {
+        return 1
+    }
     throw .badStatus(500)
 }
 
@@ -191,13 +222,14 @@ func run() {
     do {
         _ = try fetch(ok: false)
     } catch {
-        switch error {                      // error 的型別是 NetworkError，不需要 default
+        // error 的型別是 NetworkError，不需要 default
+        switch error {
         case .offline: print("offline")
         case .badStatus(let code): print("status", code)
         }
     }
 }
-run()   // 輸出：status 500
+run() // 輸出：status 500
 ```
 
 標準函式庫的 `map` 這類 API 也會把錯誤型別傳遞出去（實測：對一個 `throws(NetworkError)` 的函式做 `try ["x"].map(parse)`，`catch` 裡的 `error` 型別是 `NetworkError`）。
@@ -223,17 +255,30 @@ noncopyable 型別從 Swift 5.9 開始支援，在泛型與協定上的支援到
 struct SignedOrder: ~Copyable {
     let id: Int
 
-    borrowing func peek() -> Int { id }        // 借用：看一下，不影響
-    consuming func submit() -> Int { id }      // 消耗：送出之後這個值就沒了
-    deinit { print("deinit", id) }             // noncopyable 型別（包含 struct）也可以有 deinit
+    // 借用：看一下，不影響
+    borrowing func peek() -> Int {
+        id
+    }
+
+    // 消耗：送出之後這個值就沒了
+    consuming func submit() -> Int {
+        id
+    }
+
+    // noncopyable 型別（包含 struct）也可以有 deinit
+    deinit {
+        print("deinit", id)
+    }
 }
 
 func place() {
     let order = SignedOrder(id: 7)
-    print("peek", order.peek())      // 輸出：peek 7
-    let r = order.submit()           // 輸出：deinit 7（submit 結束時，被消耗的值就被銷毀）
-    print("submitted", r)            // 輸出：submitted 7
-    // order.submit()                // 編譯錯誤：'order' consumed more than once
+    print("peek", order.peek()) // 輸出：peek 7
+    // 輸出：deinit 7（submit 結束時，被消耗的值就被銷毀）
+    let r = order.submit()
+    print("submitted", r) // 輸出：submitted 7
+    // 編譯錯誤：'order' consumed more than once
+    // order.submit()
 }
 place()
 ```
@@ -250,10 +295,15 @@ place()
 `some Protocol` 叫做 opaque result type（不透明回傳型別，Swift 5.1）：由**函式的實作者**決定實際的型別，呼叫端只知道它遵守這個協定。同一個函式每次呼叫，回傳的都是**同一個**底層型別，所以編譯器可以做靜態最佳化。SwiftUI 的 `var body: some View` 就是這個。`any Protocol` 則是 existential type（存在型別，可以放任何遵守這個協定的值，執行時才知道實際是哪一個），型別可以不同，但有一些限制，而且有額外成本。
 
 ```swift
-func makeIdentifier() -> some Equatable { 42 }   // 呼叫端只知道它是 Equatable
+// 呼叫端只知道它是 Equatable
+func makeIdentifier() -> some Equatable {
+    42
+}
+
 let a = makeIdentifier()
 let b = makeIdentifier()
-print(a == b)    // 輸出：true（同一個函式，底層型別一致，可以比較）
+// 輸出：true（同一個函式，底層型別一致，可以比較）
+print(a == b)
 ```
 
 兩個不同函式各自回傳的 `some Equatable`，是不同的底層型別，不能互相比較。Swift 5.7 起可以搭配 primary associated type 寫成 `some Sequence<Int>`、`any Collection<Int>`（見協定與泛型單元）。

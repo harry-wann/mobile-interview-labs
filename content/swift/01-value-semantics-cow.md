@@ -22,18 +22,26 @@ tags: [struct, class, cow, arc, inout, exclusivity]
 最根本的差別是：**複製之後，兩個變數是不是同一個東西。**
 
 ```swift
-struct PointS { var x = 0 }
-final class PointC { var x = 0 }
+struct PointS {
+    var x = 0
+}
+
+final class PointC {
+    var x = 0
+}
 
 var s1 = PointS()
-var s2 = s1      // 複製出一份新的資料
+// 複製出一份新的資料
+var s2 = s1
 s2.x = 10
-print(s1.x)      // 0：s1 沒有被影響
+print(s1.x) // 0：s1 沒有被影響
 
 let c1 = PointC()
-let c2 = c1      // 只複製了「指向物件的參考」，c1 和 c2 指向同一個物件
+// 只複製了「指向物件的參考」，c1 和 c2 指向同一個物件
+let c2 = c1
 c2.x = 10
-print(c1.x)      // 10：改 c2 等於改 c1
+// 10：改 c2 等於改 c1
+print(c1.x)
 ```
 
 - **struct、enum 是值型別（value type）**：每個變數都有自己的一份資料，改了不會影響別人。`Array`、`Dictionary`、`String` 也都是值型別。
@@ -101,11 +109,14 @@ COW 是 copy-on-write 的縮寫，意思是「**先共用，等到真的要修�
 
 ```swift
 var a = [1, 2, 3]
-var b = a        // 很快：a 和 b 共用同一塊 storage
-b.append(4)      // storage 有兩個人在用，所以 b 先複製一份，再加入 4
-print(a)         // [1, 2, 3]
-print(b)         // [1, 2, 3, 4]
-b.append(5)      // b 已經有自己的 storage，直接修改，不會再複製
+// 很快：a 和 b 共用同一塊 storage
+var b = a
+// storage 有兩個人在用，所以 b 先複製一份，再加入 4
+b.append(4)
+print(a) // [1, 2, 3]
+print(b) // [1, 2, 3, 4]
+// b 已經有自己的 storage，直接修改，不會再複製
+b.append(5)
 ```
 
 對使用者來說，Array 的行為就是值型別：複製後各自獨立。但實際上只有在需要時才真的複製，同時兼顧安全與效能。`Dictionary`、`Set`、`String` 也是同樣的做法。
@@ -115,17 +126,24 @@ b.append(5)      // b 已經有自己的 storage，直接修改，不會再複�
 COW 是 `Array` 這些標準型別**自己寫出來的功能**，不是所有 struct 自動都有。如果你寫了一個 struct，裡面放了自己的 class：
 
 ```swift
-final class Storage { var items: [Int] = [] }
+final class Storage {
+    var items: [Int] = []
+}
 
 struct MyList {
     var storage = Storage()
-    mutating func append(_ x: Int) { storage.items.append(x) }
+
+    mutating func append(_ x: Int) {
+        storage.items.append(x)
+    }
 }
 
 var a = MyList()
-var b = a                // 複製 struct，但 storage 是 class，a 和 b 指向同一個 Storage
+// 複製 struct，但 storage 是 class，a 和 b 指向同一個 Storage
+var b = a
 b.append(1)
-print(a.storage.items)   // [1]：a 也被改到了
+// [1]：a 也被改到了
+print(a.storage.items)
 ```
 
 `MyList` 宣告成 struct，行為卻像 class，這是 code review 常抓到的問題。修正方法是自己實作 COW，面試有時會請你現場寫出來：
@@ -133,12 +151,18 @@ print(a.storage.items)   // [1]：a 也被改到了
 ```swift
 final class Storage<Element> {
     var items: [Element]
-    init(_ items: [Element]) { self.items = items }
+
+    init(_ items: [Element]) {
+        self.items = items
+    }
 }
 
 struct COWList<Element> {
     private var storage: Storage<Element>
-    init(_ items: [Element] = []) { storage = Storage(items) }
+
+    init(_ items: [Element] = []) {
+        storage = Storage(items)
+    }
 
     // 每次修改前先呼叫：如果 storage 還有別人在用，就先複製一份給自己
     private mutating func makeUnique() {
@@ -170,13 +194,16 @@ COW 只保證「沒有被共用時不複製」。只要修改的那一刻，還�
 ```swift
 final class PriceViewModel {
     private var _prices: [Decimal] = []
-    var prices: [Decimal] {          // 計算屬性：用 get／set 包住 _prices
+
+    // 計算屬性：用 get／set 包住 _prices
+    var prices: [Decimal] {
         get { _prices }
         set { _prices = newValue }
     }
 }
 
-vm.prices.append(p)   // 看起來只是加一筆，實際上每次都複製整個陣列
+// 看起來只是加一筆，實際上每次都複製整個陣列
+vm.prices.append(p)
 ```
 
 `vm.prices.append(p)` 實際上分成三步：
@@ -192,8 +219,10 @@ vm.prices.append(p)   // 看起來只是加一筆，實際上每次都複製整�
 **情況二：修改前先存了一份舊的**
 
 ```swift
-let snapshot = items   // snapshot 和 items 共用同一塊 storage
-items.append(x)        // storage 被共用，所以這次 append 要先複製整份
+// snapshot 和 items 共用同一塊 storage
+let snapshot = items
+// storage 被共用，所以這次 append 要先複製整份
+items.append(x)
 ```
 
 例如為了做 diff 或「復原」功能，每次修改前都保留一份舊資料，那每次修改都會複製。這時要確認這份複製真的必要，或改成只保留需要的部分。
@@ -201,8 +230,10 @@ items.append(x)        // storage 被共用，所以這次 append 要先複製�
 **情況三：一邊跑迴圈、一邊修改同一個陣列**
 
 ```swift
-for x in items {          // for-in 迴圈會持有 items 的一份
-    items.append(x * 2)   // 第一次 append 時 storage 被共用，複製整份
+// for-in 迴圈會持有 items 的一份
+for x in items {
+    // 第一次 append 時 storage 被共用，複製整份
+    items.append(x * 2)
 }
 ```
 
@@ -219,8 +250,9 @@ Swift 有一條記憶體安全規則，官方文件稱為 exclusive access to me
 
 ```swift
 var a = [1, 2]
-swap(&a[0], &a[1])   // 編譯錯誤：overlapping accesses to 'a'
-a.swapAt(0, 1)       // 正確寫法
+// 編譯錯誤：overlapping accesses to 'a'
+swap(&a[0], &a[1])
+a.swapAt(0, 1) // 正確寫法
 ```
 
 `swap` 要同時借走 `a[0]` 和 `a[1]` 來修改。對 Swift 來說，修改陣列的任何一個元素，都算是在修改整個陣列 `a`，所以等於同一個變數同時被借給兩個地方修改。
@@ -231,13 +263,16 @@ a.swapAt(0, 1)       // 正確寫法
 class Counter {
     var n = 0
     func bump(_ x: inout Int) {
-        n += 1      // 修改 self.n
-        x += 1      // 這裡的 x 其實也是 self.n
+        n += 1 // 修改 self.n
+        // 這裡的 x 其實也是 self.n
+        x += 1
     }
 }
 
 let c = Counter()
-c.bump(&c.n)   // 執行時 crash：Simultaneous accesses to ..., but modification requires exclusive access
+// 執行時 crash：Simultaneous accesses to ..., but modification requires
+// exclusive access
+c.bump(&c.n)
 ```
 
 `c.n` 被借給 `bump` 修改的期間，`bump` 裡面又直接修改 `n`，同一個變數同時被改兩次。class 的屬性可能從任何地方被存取，編譯器沒辦法事先判斷，所以改在執行時檢查。

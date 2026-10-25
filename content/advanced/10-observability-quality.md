@@ -47,9 +47,11 @@ let orderId = UUID().uuidString
 
 var request = URLRequest(url: URL(string: "https://api.example.com/orders")!)
 let requestId = UUID().uuidString
-request.setValue(requestId, forHTTPHeaderField: "X-Request-ID")   // 讓 server 也記錄同一個 ID，才能串起 App 與 server 的紀錄
+// 讓 server 也記錄同一個 ID，才能串起 App 與 server 的紀錄
+request.setValue(requestId, forHTTPHeaderField: "X-Request-ID")
 
-// requestId 不是敏感資料，可以公開；orderId 標成 private，在非除錯環境下不會以明文出現在 log
+// requestId 不是敏感資料，可以公開；
+// orderId 標成 private，在非除錯環境下不會以明文出現在 log
 logger.info("order submit requestId=\(requestId, privacy: .public) orderId=\(orderId, privacy: .private)")
 ```
 
@@ -59,9 +61,15 @@ class RequestIdInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val requestId = UUID.randomUUID().toString()
         val request = chain.request().newBuilder()
-            .header("X-Request-ID", requestId)        // server 也記錄同一個 ID
+            // server 也記錄同一個 ID
+            .header("X-Request-ID", requestId)
             .build()
-        Timber.d("%s %s requestId=%s", request.method, request.url.encodedPath, requestId)
+        Timber.d(
+            "%s %s requestId=%s",
+            request.method,
+            request.url.encodedPath,
+            requestId,
+        )
         return chain.proceed(request)
     }
 }
@@ -104,7 +112,8 @@ final class MetricsSubscriber: NSObject, MXMetricManagerSubscriber {
     // 約每天一次，收到聚合後的指標
     func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
-            // 可以取出啟動時間、記憶體等；通常整包 JSON 送到自己的後端，在看板上看趨勢
+            // 可以取出啟動時間、記憶體等；
+            // 通常整包 JSON 送到自己的後端，在看板上看趨勢
             let json = payload.jsonRepresentation()
             print("收到指標資料：\(json.count) bytes")
         }
@@ -171,8 +180,10 @@ func needsForceUpdate(current: String, minimum: String) -> Bool {
     current.compare(minimum, options: .numeric) == .orderedAscending
 }
 
-print(needsForceUpdate(current: "2.9.0", minimum: "2.10.0"))   // 輸出：true（2.9.0 比 2.10.0 舊）
-print(needsForceUpdate(current: "2.10.0", minimum: "2.9.0"))   // 輸出：false
+// 輸出：true（2.9.0 比 2.10.0 舊）
+print(needsForceUpdate(current: "2.9.0", minimum: "2.10.0"))
+// 輸出：false
+print(needsForceUpdate(current: "2.10.0", minimum: "2.9.0"))
 ```
 
 Android 除了自己比較版本，還可以用 Google Play 的 In-App Updates（應用程式內更新）：立即更新（IMMEDIATE，全螢幕、必須更新完才能繼續用）或彈性更新（FLEXIBLE，在背景下載、使用者決定何時重新啟動）。
@@ -181,12 +192,15 @@ Android 除了自己比較版本，還可以用 Google Play 的 In-App Updates�
 // 需要 com.google.android.play:app-update 函式庫
 val appUpdateManager = AppUpdateManagerFactory.create(context)
 appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
-    val canUpdate = info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
-        info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)
+    val canUpdate =
+        info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
+            info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)
     if (canUpdate) {
         // 啟動「立即更新」：全螢幕流程，更新完才能繼續使用
         appUpdateManager.startUpdateFlowForResult(
-            info, updateLauncher, AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build()
+            info,
+            updateLauncher,
+            AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
         )
     }
 }

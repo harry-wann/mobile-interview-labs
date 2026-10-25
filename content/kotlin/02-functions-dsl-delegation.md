@@ -29,9 +29,12 @@ class Derived : Base()
 fun Base.name() = "base-ext"
 fun Derived.name() = "derived-ext"
 
-val b: Base = Derived()   // 宣告的型別是 Base，實際的物件是 Derived
-println(b.name())         // 輸出：base-ext（編譯器只看宣告的型別 Base）
-println(Derived().name()) // 輸出：derived-ext
+// 宣告的型別是 Base，實際的物件是 Derived
+val b: Base = Derived()
+// 輸出：base-ext（編譯器只看宣告的型別 Base）
+println(b.name())
+// 輸出：derived-ext
+println(Derived().name())
 ```
 
 如果是成員函式（寫在類別裡面的 `open fun`），第一行會印出子類別的版本，這才是多型。所以「想用 extension 達到覆寫的效果」是行不通的，需要多型就用介面或成員函式。
@@ -42,11 +45,15 @@ println(Derived().name()) // 輸出：derived-ext
 
 ```kotlin
 class Greeter { fun hi() = "member" }
-fun Greeter.hi() = "ext"                 // 被成員蓋掉，永遠不會被呼叫
+
+// 被成員蓋掉，永遠不會被呼叫
+fun Greeter.hi() = "ext"
 fun Greeter.hi(times: Int) = "ext-$times"
 
-println(Greeter().hi())    // 輸出：member
-println(Greeter().hi(2))   // 輸出：ext-2
+// 輸出：member
+println(Greeter().hi())
+// 輸出：ext-2
+println(Greeter().hi(2))
 ```
 
 - extension 不能存取類別的 `private` 成員，因為它本質上是外面的函式。
@@ -73,12 +80,18 @@ println(Greeter().hi(2))   // 輸出：ext-2
 | `also` | `it` | 物件自己 | 順便做件事：log、驗證 |
 
 ```kotlin
-val req = OrderRequest().apply {     // apply：區塊內用 this，回傳 OrderRequest 本身
-    symbol = "btcjpy"                //   直接寫屬性名稱，等於 this.symbol
+// apply：區塊內用 this，回傳 OrderRequest 本身
+val req = OrderRequest().apply {
+    // 直接寫屬性名稱，等於 this.symbol
+    symbol = "btcjpy"
     qty = BigDecimal("0.01")
 }
-val notional = req.run { price * qty }   // run：區塊內用 this，回傳最後一行 price * qty 的結果
-req.also { println("下單：${it.symbol}") } // also：區塊內用 it，回傳 req 本身，適合 log
+
+// run：區塊內用 this，回傳最後一行 price * qty 的結果
+val notional = req.run { price * qty }
+
+// also：區塊內用 it，回傳 req 本身，適合 log
+req.also { println("下單：${it.symbol}") }
 ```
 
 選擇時我自己用三條簡單的準則：設定物件用 `apply`、順便做副作用（log）用 `also`、處理 nullable 用 `let`，並且**區塊不要巢狀超過一層**，因為 `this` 一多，看不出現在的 `this` 是哪個物件。
@@ -89,8 +102,11 @@ req.also { println("下單：${it.symbol}") } // also：區塊內用 it，回傳
 
 ```kotlin
 val x: String? = "a"
-val r = x?.let { null as String? } ?: "else"   // x 不是 null，但 let 區塊回傳 null
-println(r)   // 輸出：else（以為 x 不是 null 就不會走到 else，結果走到了）
+
+// x 不是 null，但 let 區塊回傳 null
+val r = x?.let { null as String? } ?: "else"
+// 輸出：else（以為 x 不是 null 就不會走到 else，結果走到了）
+println(r)
 ```
 
 需要明確的兩條路徑時，直接用 `if`。
@@ -101,9 +117,13 @@ println(r)   // 輸出：else（以為 x 不是 null 就不會走到 else，結�
 class Form { var name = "init" }
 
 var name = "local"
-val form = Form().apply { name = "BTC" }   // 這個 name 指的是外面的區域變數，不是 form.name
-println(form.name)   // 輸出：init（物件的屬性沒被改到）
-println(name)        // 輸出：BTC（被改的是區域變數）
+
+// 這個 name 指的是外面的區域變數，不是 form.name
+val form = Form().apply { name = "BTC" }
+// 輸出：init（物件的屬性沒被改到）
+println(form.name)
+// 輸出：BTC（被改的是區域變數）
+println(name)
 ```
 
 要設定物件的屬性，明確寫 `this.name = ...`。
@@ -116,17 +136,21 @@ println(name)        // 輸出：BTC（被改的是區域變數）
 lambda with receiver 是指型別寫成 `T.() -> Unit` 的 lambda：呼叫它的時候，裡面的 `this` 就是 `T`，所以可以直接寫 `T` 的成員，不用加前綴。DSL（Domain-Specific Language，領域專用語言）就是靠它做出來的：用 Kotlin 語法寫出像設定檔的結構。Gradle 的 `build.gradle.kts`、標準函式庫的 `buildString`、Compose 的 `LazyColumn { items(...) }` 都是這個機制。
 
 ```kotlin
-val s = buildString {      // buildString 的參數型別是 StringBuilder.() -> Unit
-    append("BTC")          // 這裡的 this 是 StringBuilder，所以直接呼叫 append
+// buildString 的參數型別是 StringBuilder.() -> Unit
+val s = buildString {
+    // 這裡的 this 是 StringBuilder，所以直接呼叫 append
+    append("BTC")
     append("/JPY")
 }
+
 println(s)   // 輸出：BTC/JPY
 ```
 
 自己做一個下單的 DSL 時，每一層都是一個 builder（用來一步步組出物件的輔助類別）：
 
 ```kotlin
-@DslMarker annotation class OrderDsl   // 自己定義一個標註，下面標在每個 builder 上
+// 自己定義一個標註，下面標在每個 builder 上
+@DslMarker annotation class OrderDsl
 
 class Leg(val price: BigDecimal, val qty: BigDecimal)
 class Order(val symbol: String, val legs: List<Leg>)
@@ -134,13 +158,18 @@ class Order(val symbol: String, val legs: List<Leg>)
 @OrderDsl class LegBuilder {
     var price = BigDecimal.ZERO
     var qty = BigDecimal.ZERO
+
     fun build() = Leg(price, qty)
 }
 
 @OrderDsl class OrderBuilder {
     var symbol = ""
     private val legs = mutableListOf<Leg>()
-    fun leg(block: LegBuilder.() -> Unit) { legs += LegBuilder().apply(block).build() }
+
+    fun leg(block: LegBuilder.() -> Unit) {
+        legs += LegBuilder().apply(block).build()
+    }
+
     fun build() = Order(symbol, legs.toList())
 }
 
@@ -151,7 +180,8 @@ val o = order {
     leg {
         price = BigDecimal("100")
         qty = BigDecimal("0.5")
-        // symbol = "oops"   // 編譯錯誤：不能在 leg 區塊裡隱含地使用外層 OrderBuilder 的 symbol
+        // 編譯錯誤：不能在 leg 區塊裡隱含地使用外層 OrderBuilder 的 symbol
+        // symbol = "oops"
     }
 }
 ```
@@ -174,16 +204,23 @@ interface Repo {
     fun price(): Int
     fun double(): Int
 }
+
 class Real : Repo {
     override fun price() = 10
-    override fun double() = price() * 2    // 這裡的 price() 是 Real 自己的 this.price()
-}
-class Wrapper(r: Repo) : Repo by r {
-    override fun price() = 99              // 只覆寫 price()
+
+    // 這裡的 price() 是 Real 自己的 this.price()
+    override fun double() = price() * 2
 }
 
-println(Wrapper(Real()).price())    // 輸出：99
-println(Wrapper(Real()).double())   // 輸出：20，不是 198
+class Wrapper(r: Repo) : Repo by r {
+    // 只覆寫 price()
+    override fun price() = 99
+}
+
+// 輸出：99
+println(Wrapper(Real()).price())
+// 輸出：20，不是 198
+println(Wrapper(Real()).double())
 ```
 
 陷阱就在第二行：`double()` 沒有被覆寫，編譯器產生的轉發方法直接交給 `Real` 去執行，而 `Real.double()` 裡面呼叫的 `price()` 是 `Real` 自己的，它完全不知道外面還有一層 `Wrapper`，所以用的是 `10`。這和繼承不同：如果 `Wrapper` 是繼承 `Real`，父類別裡呼叫的 `price()` 會走到子類別覆寫的版本。所以用 delegation 做快取或 decorator 時，要確認被包的類別內部沒有依賴「自己的方法被覆寫」。
@@ -192,12 +229,21 @@ println(Wrapper(Real()).double())   // 輸出：20，不是 198
 
 ```kotlin
 class PrefString(
-    private val store: MutableMap<String, String>,   // 範例用 Map 代替 SharedPreferences
+    // 範例用 Map 代替 SharedPreferences
+    private val store: MutableMap<String, String>,
     private val key: String,
     private val default: String
 ) : ReadWriteProperty<Any?, String> {
-    override fun getValue(thisRef: Any?, property: KProperty<*>): String = store[key] ?: default
-    override fun setValue(thisRef: Any?, property: KProperty<*>, value: String) { store[key] = value }
+    override fun getValue(thisRef: Any?, property: KProperty<*>): String =
+        store[key] ?: default
+
+    override fun setValue(
+        thisRef: Any?,
+        property: KProperty<*>,
+        value: String,
+    ) {
+        store[key] = value
+    }
 }
 
 class Prefs(store: MutableMap<String, String>) {
@@ -206,9 +252,13 @@ class Prefs(store: MutableMap<String, String>) {
 
 val store = mutableMapOf<String, String>()
 val p = Prefs(store)
-println(p.currency)   // 輸出：JPY（還沒存過，用預設值）
-p.currency = "USD"    // 實際上呼叫 setValue，寫進 store
-println(store)        // 輸出：{currency=USD}
+
+// 輸出：JPY（還沒存過，用預設值）
+println(p.currency)
+// 實際上呼叫 setValue，寫進 store
+p.currency = "USD"
+// 輸出：{currency=USD}
+println(store)
 ```
 
 自己寫委派類別時，`getValue`／`setValue` 前面要加 `operator`（像上面這樣實作 `ReadWriteProperty` 介面時，介面已經宣告成 operator，用 `override` 就好），這是 Kotlin 的約定：照名字寫，編譯器就會在讀寫屬性時呼叫它們（原因見第 6 個問題的 operator overloading）。要注意的是，每次存取委派屬性都會經過一次 `getValue`，在每秒執行很多次的地方（例如行情更新），用 `Delegates.observable` 會有額外成本。
@@ -236,14 +286,26 @@ println(store)        // 輸出：{currency=USD}
 var n = 0
 val v by lazy {
     n++
-    if (n < 2) error("boom")   // 第一次執行時丟例外
+    // 第一次執行時丟例外
+    if (n < 2) {
+        error("boom")
+    }
     n
 }
 
-try { println(v) } catch (e: IllegalStateException) { println("fail") }   // 輸出：fail
-println(v)   // 輸出：2（沒有記住失敗，重新執行初始化器，這次成功，結果被快取）
-println(v)   // 輸出：2（已經快取，不會重跑）
-println(n)   // 輸出：2
+// 輸出：fail
+try {
+    println(v)
+} catch (e: IllegalStateException) {
+    println("fail")
+}
+
+// 輸出：2（沒有記住失敗，重新執行初始化器，這次成功，結果被快取）
+println(v)
+// 輸出：2（已經快取，不會重跑）
+println(v)
+// 輸出：2
+println(n)
 ```
 
 這讓「失敗後重試」很自然，但如果初始化器很重（讀檔、建立連線）又一直失敗，每次存取都會再付一次成本。
@@ -261,16 +323,22 @@ println(n)   // 輸出：2
 data class Money(val amount: BigDecimal) {
     operator fun plus(other: Money) = Money(amount + other.amount)
 }
-println(Money(BigDecimal("1.5")) + Money(BigDecimal("2")))   // 輸出：Money(amount=3.5)
+
+// 輸出：Money(amount=3.5)
+println(Money(BigDecimal("1.5")) + Money(BigDecimal("2")))
 ```
 
 Kotlin 的標準函式庫替 `BigDecimal` 提供了 `+ - * / %`，寫起來很方便，但 **`/` 有一個很隱蔽的坑**：它等於 `divide(other, RoundingMode.HALF_EVEN)`，結果的 scale 會跟**被除數**一樣。scale 是 `BigDecimal` 小數點後有幾位數字，`1` 的 scale 是 0，`1.00` 的 scale 是 2。HALF_EVEN 是銀行家捨入：剛好在中間時（例如 2.5），捨入到偶數那一邊。
 
 ```kotlin
-println(BigDecimal("1") / BigDecimal("3"))      // 輸出：0（被除數 scale 是 0，結果只保留整數）
-println(BigDecimal("1.00") / BigDecimal("3"))   // 輸出：0.33（被除數 scale 是 2）
-println(BigDecimal("10") / BigDecimal("4"))     // 輸出：2（2.5 捨入到偶數的 2）
-println(BigDecimal("1").divide(BigDecimal("3"), 8, RoundingMode.HALF_EVEN))   // 輸出：0.33333333
+// 輸出：0（被除數 scale 是 0，結果只保留整數）
+println(BigDecimal("1") / BigDecimal("3"))
+// 輸出：0.33（被除數 scale 是 2）
+println(BigDecimal("1.00") / BigDecimal("3"))
+// 輸出：2（2.5 捨入到偶數的 2）
+println(BigDecimal("10") / BigDecimal("4"))
+// 輸出：0.33333333
+println(BigDecimal("1").divide(BigDecimal("3"), 8, RoundingMode.HALF_EVEN))
 ```
 
 這個坑更危險的地方是：它**不會丟例外**，只是默默給你一個錯的答案。直接呼叫沒有指定捨入的 `divide(x)`，遇到除不盡（例如 1 除以 3）至少會丟 `ArithmeticException`，馬上發現。所以金額的除法一律明確寫出小數位數和捨入方向：`divide(x, scale, RoundingMode.XXX)`。
@@ -278,8 +346,10 @@ println(BigDecimal("1").divide(BigDecimal("3"), 8, RoundingMode.HALF_EVEN))   //
 另一個容易混淆的地方是比較：`==` 呼叫 `equals`，會連 scale 一起比；`<`、`>=` 呼叫 `compareTo`，只比數值大小：
 
 ```kotlin
-println(BigDecimal("1.0") == BigDecimal("1.00"))   // 輸出：false（scale 不同）
-println(BigDecimal("1.0") >= BigDecimal("1.00"))   // 輸出：true（數值相同）
+// 輸出：false（scale 不同）
+println(BigDecimal("1.0") == BigDecimal("1.00"))
+// 輸出：true（數值相同）
+println(BigDecimal("1.0") >= BigDecimal("1.00"))
 ```
 
 > [!TIP]

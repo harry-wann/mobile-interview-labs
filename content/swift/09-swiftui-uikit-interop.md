@@ -71,29 +71,40 @@ SwiftUI 每一年都會新增很多 API，最低版本是 iOS 15 的專案要小
 import SwiftUI
 import UIKit
 
-struct Candle { let time: Int; let close: Double }
+struct Candle {
+    let time: Int
+    let close: Double
+}
 
 final class CandleChartView: UIView {
-    func update(_ candle: Candle) { /* 以 time 為 key 新增或取代這根 K 線 */ }
+    func update(_ candle: Candle) {
+        /* 以 time 為 key 新增或取代這根 K 線 */
+    }
 }
 
 struct ChartRepresentable: UIViewRepresentable {
     let candles: [Candle]
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIView(context: Context) -> CandleChartView { CandleChartView() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> CandleChartView {
+        CandleChartView()
+    }
 
     func updateUIView(_ view: CandleChartView, context: Context) {
         let coordinator = context.coordinator
         // 只推送上次之後的 K 線；比上次更早的時間點跳過
-        for candle in candles where candle.time >= (coordinator.lastPushedTime ?? Int.min) {
+        for candle in candles
+            where candle.time >= (coordinator.lastPushedTime ?? Int.min) {
             view.update(candle)
             coordinator.lastPushedTime = candle.time
         }
     }
 
     final class Coordinator {
-        var lastPushedTime: Int?     // 跨更新保存的狀態
+        var lastPushedTime: Int? // 跨更新保存的狀態
     }
 }
 ```
@@ -105,11 +116,14 @@ import SwiftUI
 import WebKit
 
 struct WebChart: UIViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.userContentController.add(context.coordinator, name: "delayWall")   // 註冊 handler
+        // 註冊 handler
+        config.userContentController.add(context.coordinator, name: "delayWall")
         return WKWebView(frame: .zero, configuration: config)
     }
 
@@ -117,11 +131,15 @@ struct WebChart: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         // view 離開畫面時移除 handler，避免互相持有而無法釋放
-        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "delayWall")
+        uiView.configuration.userContentController
+            .removeScriptMessageHandler(forName: "delayWall")
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler {
-        func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {}
+        func userContentController(
+            _ c: WKUserContentController,
+            didReceive m: WKScriptMessage
+        ) {}
     }
 }
 ```
@@ -142,35 +160,49 @@ struct WebChart: UIViewRepresentable {
 import SwiftUI
 import UIKit
 
-final class MarketViewModel: ObservableObject { @Published var title = "Market" }
+final class MarketViewModel: ObservableObject {
+    @Published var title = "Market"
+}
 
 struct MarketView: View {
-    @ObservedObject var viewModel: MarketViewModel      // 外面建立、傳進來，所以用 @ObservedObject
-    var body: some View { Text(viewModel.title) }
+    // 外面建立、傳進來，所以用 @ObservedObject
+    @ObservedObject var viewModel: MarketViewModel
+
+    var body: some View {
+        Text(viewModel.title)
+    }
 }
 
 final class MarketHostViewController: UIViewController {
     private let viewModel: MarketViewModel
-    private lazy var host = UIHostingController(rootView: MarketView(viewModel: viewModel))
+    private lazy var host = UIHostingController(
+        rootView: MarketView(viewModel: viewModel)
+    )
 
     init(viewModel: MarketViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
     }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        addChild(host)                                   // 步驟 1：先宣告 host 是我的子 view controller
+        // 步驟 1：先宣告 host 是我的子 view controller
+        addChild(host)
         host.view.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(host.view)                       // 步驟 2：把它的 view 加進來並設定約束
+        // 步驟 2：把它的 view 加進來並設定約束
+        view.addSubview(host.view)
         NSLayoutConstraint.activate([
             host.view.topAnchor.constraint(equalTo: view.topAnchor),
             host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
-        host.didMove(toParent: self)                     // 步驟 3：通知 host「加完了」
+        // 步驟 3：通知 host「加完了」
+        host.didMove(toParent: self)
     }
 }
 ```
@@ -200,14 +232,16 @@ FlowController 的做法：
 ```swift
 import UIKit
 
-final class MarketViewModel {}          // 示意用的 ViewModel
+// 示意用的 ViewModel
+final class MarketViewModel {}
 
 protocol MarketNavigator: AnyObject {
     func showOrder(symbol: String)
 }
 
 final class MarketViewController: UIViewController {
-    weak var navigator: MarketNavigator?          // 只認得協定，不知道下一個畫面是誰；weak 避免循環參考
+    // 只認得協定，不知道下一個畫面是誰；weak 避免循環參考
+    weak var navigator: MarketNavigator?
 
     static func create(viewModel: MarketViewModel) -> MarketViewController {
         // 實際專案會在這裡把 viewModel 設定好
@@ -215,7 +249,8 @@ final class MarketViewController: UIViewController {
     }
 
     func didTapRow(symbol: String) {
-        navigator?.showOrder(symbol: symbol)      // 只表達意圖
+        // 只表達意圖
+        navigator?.showOrder(symbol: symbol)
     }
 }
 
@@ -228,7 +263,8 @@ final class MarketFlowController: MarketNavigator {
 
     func start() {
         let vc = MarketViewController.create(viewModel: MarketViewModel())
-        vc.navigator = self                       // FlowController 把自己當成 navigator 交給 view controller
+        // FlowController 把自己當成 navigator 交給 view controller
+        vc.navigator = self
         navigationController.setViewControllers([vc], animated: false)
     }
 

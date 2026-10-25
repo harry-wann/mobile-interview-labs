@@ -37,8 +37,10 @@ fun PriceScreen(priceFlow: StateFlow<String>) {
     val price by priceFlow.collectAsState()
 
     Column {
-        Text("BTC/JPY")          // 標題，永遠不變
-        Text("價格：$price")      // 這一行用到 price
+        // 標題，永遠不變
+        Text("BTC/JPY")
+        // 這一行用到 price
+        Text("價格：$price")
     }
 }
 ```
@@ -52,14 +54,17 @@ fun PriceScreen(priceFlow: StateFlow<String>) {
 fun PriceScreen(priceFlow: StateFlow<String>) {
     Column {
         Text("BTC/JPY")
-        PriceText(priceFlow)       // 這裡只傳 Flow，沒有讀取 price
+        // 這裡只傳 Flow，沒有讀取 price
+        PriceText(priceFlow)
     }
 }
 
 @Composable
 fun PriceText(priceFlow: StateFlow<String>) {
-    val price by priceFlow.collectAsState()   // 讀取只發生在這個小函式裡
-    Text("價格：$price")                       // price 變了，只有 PriceText 重組
+    // 讀取只發生在這個小函式裡
+    val price by priceFlow.collectAsState()
+    // price 變了，只有 PriceText 重組
+    Text("價格：$price")
 }
 ```
 
@@ -98,16 +103,20 @@ frame 是指畫面更新一次的週期，一般螢幕每秒更新 60 次，也�
 
 ```kotlin
 var price by mutableStateOf("100")
-price = "100"   // 和舊值 equals，不會觸發重組
-price = "101"   // 不同，讀過 price 的 scope 被標記失效
+// 和舊值 equals，不會觸發重組
+price = "100"
+// 不同，讀過 price 的 scope 被標記失效
+price = "101"
 ```
 
 **(2) 重組發生在「下一個 frame」，不是寫入當下。** 所以在同一個事件處理裡連續寫入好幾次，只會重組一次：
 
 ```kotlin
 Button(onClick = {
-    count++      // 寫入，但還沒有重組
-    count++      // 再寫入，仍然沒有重組
+    // 寫入，但還沒有重組
+    count++
+    // 再寫入，仍然沒有重組
+    count++
 }) { Text("加 2") }
 // 下一個 frame 只重組一次，畫面直接顯示 +2
 ```
@@ -140,10 +149,12 @@ tickList.add(tick)
 **什麼是 stable？** Compose 要能放心地用 `equals` 判斷「參數有沒有變」，這個型別必須同時滿足三件事：`equals` 的結果一致；公開屬性改變時 Compose 會被通知；所有公開屬性的型別也都是 stable。編譯器會自己推斷：
 
 ```kotlin
-// stable：只有 val，而且型別都是 stable（基本型別、String、函式型別本來就是 stable）
+// stable：只有 val，而且型別都是 stable
+// （基本型別、String、函式型別本來就是 stable）
 data class Tick(val symbol: String, val price: Long)
 
-// unstable：List 是介面，執行時可能是會被改動的 ArrayList，編譯器無法保證它不會變
+// unstable：List 是介面，執行時可能是會被改動的 ArrayList，
+// 編譯器無法保證它不會變
 data class Board(val name: String, val ticks: List<Tick>)
 
 // unstable：有 var，值可以改，而且改了 Compose 不會被通知
@@ -160,8 +171,9 @@ class Config(var depth: Int)
 編譯器**不會驗證**這個承諾。說謊的後果是畫面該更新卻沒更新，而且很難找：
 
 ```kotlin
+// 說謊：depth 可以改，Compose 卻以為它不會變
 @Immutable
-class Config(var depth: Int)   // 說謊：depth 可以改，Compose 卻以為它不會變
+class Config(var depth: Int)
 
 // 使用者把 depth 從 5 改成 10，Config 還是同一個物件
 // Compose 以為參數沒變，跳過重組，畫面還是顯示 5
@@ -174,8 +186,10 @@ class Config(var depth: Int)   // 說謊：depth 可以改，Compose 卻以為�
 ```kotlin
 val a = listOf(1, 2, 3)
 val b = listOf(1, 2, 3)
-println(a == b)    // 輸出：true，`==` 是 equals，內容一樣就算相等
-println(a === b)   // 輸出：false，`===` 要求是同一個物件；a 和 b 是兩個不同的物件
+// 輸出：true，`==` 是 equals，內容一樣就算相等
+println(a == b)
+// 輸出：false，`===` 要求是同一個物件；a 和 b 是兩個不同的物件
+println(a === b)
 ```
 
 stable 的參數用 `equals` 比較，unstable 的參數在沒有 strong skipping 時乾脆不比較、一律當作有變。
@@ -207,9 +221,12 @@ stable 的參數用 `equals` 比較，unstable 的參數在沒有 strong skippin
 ```kotlin
 @Composable
 fun FavoriteList(allTicks: List<TickUi>, onClick: (String) -> Unit) {
-    // 每次 FavoriteList 重組，filter 都會產生一個新的 List 物件，就算內容完全一樣
+    // 每次 FavoriteList 重組，filter 都會產生一個新的 List 物件，
+    // 就算內容完全一樣
     val favorites = allTicks.filter { it.isFavorite }
-    TickList(favorites, onClick)   // List 被當成 unstable，用 === 比較，永遠不同 → TickList 重組
+
+    // List 被當成 unstable，用 === 比較，永遠不同 → TickList 重組
+    TickList(favorites, onClick)
 }
 
 @Composable
@@ -284,8 +301,10 @@ fun OrderForm(tickSize: BigDecimal, ticks: List<Tick>) {
 **`remember` 的 key 漏寫，是最常見的 bug。** 現象：使用者切換交易對之後，價格的小數位數還是上一個交易對的。
 
 ```kotlin
-val formatter = remember { PriceFormatter(tickSize) }           // 錯：只在第一次建立，tickSize 變了也不會重建
-val formatter = remember(tickSize) { PriceFormatter(tickSize) } // 對：tickSize 變了就重建
+// 錯：只在第一次建立，tickSize 變了也不會重建
+val formatter = remember { PriceFormatter(tickSize) }
+// 對：tickSize 變了就重建
+val formatter = remember(tickSize) { PriceFormatter(tickSize) }
 ```
 
 `remember { }` 的計算只在第一次進入畫面時執行。凡是會影響計算結果的輸入，都要當成 `remember` 的參數（key）傳進去。
@@ -305,7 +324,8 @@ val formatter = remember(tickSize) { PriceFormatter(tickSize) } // 對：tickSiz
 ```kotlin
 @Composable
 fun TickRow(tick: Tick) {
-    var expanded by remember { mutableStateOf(false) }   // 這一列有沒有展開
+    // 這一列有沒有展開
+    var expanded by remember { mutableStateOf(false) }
     // ...
 }
 ```

@@ -39,20 +39,38 @@ structured concurrency（結構化並行）的意思是：**每個 coroutine 都
 fun main() = runBlocking {
     // 規則一：父等子
     val job = launch {
-        launch { delay(100); println("child A done") }
-        launch { delay(200); println("child B done") }
-        println("parent body done")        // 父自己的程式先跑完，但父 Job 還不算完成
+        launch {
+            delay(100)
+            println("child A done")
+        }
+        launch {
+            delay(200)
+            println("child B done")
+        }
+
+        // 父自己的程式先跑完，但父 Job 還不算完成
+        println("parent body done")
     }
-    job.join()                             // 等到 A、B 都完成，父才算完成
+
+    // 等到 A、B 都完成，父才算完成
+    job.join()
     println("all done")
     // 輸出：parent body done、child A done、child B done、all done
 
     // 規則二：取消往下
     val parent = launch {
-        launch { try { delay(10_000) } finally { println("child cancelled") } }
+        launch {
+            try {
+                delay(10_000)
+            } finally {
+                println("child cancelled")
+            }
+        }
     }
     delay(50)
-    parent.cancelAndJoin()                 // 取消父，子也跟著被取消
+
+    // 取消父，子也跟著被取消
+    parent.cancelAndJoin()
     // 輸出：child cancelled
 }
 ```
@@ -65,15 +83,22 @@ class PortfolioViewModel(private val repo: PortfolioRepo) : ViewModel() {
     val state: StateFlow<UiState> = _state
 
     fun load() {
-        viewModelScope.launch {                              // 這個 coroutine 屬於 viewModelScope
+        // 這個 coroutine 屬於 viewModelScope
+        viewModelScope.launch {
             try {
-                coroutineScope {                             // 在裡面建立一個新的範圍
-                    val balance = async { repo.fetchBalance() }   // 兩個請求同時進行
+                // 在裡面建立一個新的範圍
+                coroutineScope {
+                    // 兩個請求同時進行
+                    val balance = async { repo.fetchBalance() }
                     val orders = async { repo.fetchOrders() }
-                    _state.value = UiState.Success(balance.await(), orders.await())
+                    _state.value = UiState.Success(
+                        balance.await(),
+                        orders.await(),
+                    )
                 }
             } catch (e: CancellationException) {
-                throw e                                      // 取消不是錯誤，要往外丟（第 4 題詳述）
+                // 取消不是錯誤，要往外丟（第 4 題詳述）
+                throw e
             } catch (e: IOException) {
                 _state.value = UiState.Error(e)
             }
@@ -102,18 +127,43 @@ class PortfolioViewModel(private val repo: PortfolioRepo) : ViewModel() {
 資產頁的例子：如果餘額和委託單是兩個互相獨立的區塊，委託單載入失敗，不應該讓餘額也跟著取消。這時就適合用 supervisor。
 
 ```kotlin
-val handler = CoroutineExceptionHandler { _, e -> println("handler ${e.message}") }
+val handler = CoroutineExceptionHandler { _, e ->
+    println("handler ${e.message}")
+}
 
 // 一般的 Job：一個子失敗，兄弟跟著被取消
 val scope = CoroutineScope(Job() + handler)
-scope.launch { delay(100); error("boom") }                       // 失敗
-scope.launch { try { delay(10_000) } finally { println("sibling cancelled") } }  // 被牽連，印出 sibling cancelled
+
+// 失敗
+scope.launch {
+    delay(100)
+    error("boom")
+}
+
+// 被牽連，印出 sibling cancelled
+scope.launch {
+    try {
+        delay(10_000)
+    } finally {
+        println("sibling cancelled")
+    }
+}
 // 之後這個 scope 也是取消狀態（scope.isActive 是 false），不能再用
 
 // SupervisorJob：一個子失敗，兄弟不受影響
 val sscope = CoroutineScope(SupervisorJob() + handler)
-sscope.launch { delay(100); error("boom2") }                     // 失敗，由 handler 印出 handler boom2
-sscope.launch { delay(300); println("sibling survives") }        // 照常執行
+
+// 失敗，由 handler 印出 handler boom2
+sscope.launch {
+    delay(100)
+    error("boom2")
+}
+
+// 照常執行
+sscope.launch {
+    delay(300)
+    println("sibling survives")
+}
 // sscope.isActive 仍然是 true
 ```
 
@@ -146,16 +196,22 @@ sscope.launch { delay(300); println("sibling survives") }        // 照常執行
 ```kotlin
 try {
     coroutineScope {
-        val d = async { error("x") }              // 子 async 失敗：存進 Deferred，同時取消父 coroutineScope
+        // 子 async 失敗：存進 Deferred，同時取消父 coroutineScope
+        val d = async { error("x") }
         try {
-            d.await()                             // 這裡接得到例外
+            // 這裡接得到例外
+            d.await()
         } catch (e: Exception) {
-            println("inner caught")               // 輸出：inner caught
+            // 輸出：inner caught
+            println("inner caught")
         }
-        println("inner done")                     // 輸出：inner done（println 不是 suspend 點，不會因取消而中斷）
+
+        // 輸出：inner done（println 不是 suspend 點，不會因取消而中斷）
+        println("inner done")
     }
 } catch (e: Exception) {
-    println("outer caught ${e.message}")          // 輸出：outer caught x（coroutineScope 帶著例外結束）
+    // 輸出：outer caught x（coroutineScope 帶著例外結束）
+    println("outer caught ${e.message}")
 }
 ```
 
@@ -164,7 +220,9 @@ try {
 **`CoroutineExceptionHandler` 什麼時候有效？** 它是「最後防線」，用來上報錯誤、顯示錯誤訊息，不是用來控制流程或「恢復」的。它只在**根 coroutine** 的 `launch` 有效（`supervisorScope` 的直接子也算）：
 
 ```kotlin
-val handler = CoroutineExceptionHandler { _, e -> println("handler ${e.message}") }
+val handler = CoroutineExceptionHandler { _, e ->
+    println("handler ${e.message}")
+}
 val scope = CoroutineScope(SupervisorJob() + handler)
 
 scope.launch { throw RuntimeException("one") }.join()
@@ -176,7 +234,8 @@ scope.launch { launch { throw RuntimeException("two") } }.join()
 
 val d = scope.async { throw RuntimeException("three") }
 runCatching { d.await() }
-// 沒有輸出：根 async 的例外存在 Deferred，await() 才丟出，不會呼叫 handler（這裡被 runCatching 接住）
+// 沒有輸出：根 async 的例外存在 Deferred，await() 才丟出，
+// 不會呼叫 handler（這裡被 runCatching 接住）
 ```
 
 所以真正需要處理的例外（例如網路失敗要顯示錯誤畫面），我會直接在 `launch { }` 的大括號裡面 try/catch。
@@ -193,11 +252,19 @@ runCatching { d.await() }
 ```kotlin
 val job = launch(Dispatchers.Default) {
     var count = 0L
-    while (isActive) { count++ }        // 每一圈檢查 isActive；寫成 while (true) 就永遠停不下來
-    println("stopped loop")             // 取消後會執行到這裡
+
+    // 每一圈檢查 isActive；寫成 while (true) 就永遠停不下來
+    while (isActive) {
+        count++
+    }
+
+    // 取消後會執行到這裡
+    println("stopped loop")
 }
 delay(50)
-job.cancelAndJoin()                     // 輸出：stopped loop
+
+// 輸出：stopped loop
+job.cancelAndJoin()
 ```
 
 在迴圈裡也可以呼叫 `ensureActive()`（已取消時直接丟出 `CancellationException`）或 `yield()`（檢查取消，順便讓出執行緒給別人）。如果呼叫的是會卡住執行緒的阻塞 API（`Thread.sleep`、舊式的 `InputStream.read`），它們也不會響應取消，要換成可取消的版本，或用 `runInterruptible` 包起來。
@@ -207,9 +274,13 @@ job.cancelAndJoin()                     // 輸出：stopped loop
 ```kotlin
 // 使用者已經離開畫面，這個 coroutine 被取消了
 val j = launch {
-    val data = runCatching { fetchSlow() }.getOrNull()   // 取消時被 runCatching 接住，data 是 null
-    println("update ui with $data")                      // 輸出：update ui with null
-}                                                        // 呼叫端把「被取消」當成「沒有資料」，照常往下走
+    // 取消時被 runCatching 接住，data 是 null
+    val data = runCatching { fetchSlow() }.getOrNull()
+
+    // 輸出：update ui with null
+    println("update ui with $data")
+}
+// 呼叫端把「被取消」當成「沒有資料」，照常往下走
 ```
 
 另一個常見的情況是 `catch (e: Exception)` 裡把例外 log 或上報給 Crashlytics，結果出現一堆「Job was cancelled」的雜訊。正確的做法是**先 rethrow `CancellationException`**，或只 catch 具體的例外型別（`IOException`、`HttpException`）：
@@ -219,7 +290,8 @@ suspend fun <T> safeCall(block: suspend () -> T): Result<T> =
     try {
         Result.success(block())
     } catch (e: CancellationException) {
-        throw e                    // 取消不是錯誤，一定要往外丟
+        // 取消不是錯誤，一定要往外丟
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -231,8 +303,10 @@ suspend fun <T> safeCall(block: suspend () -> T): Result<T> =
 try {
     api.subscribe().collect { handle(it) }
 } finally {
-    withContext(NonCancellable) {   // 不受取消影響
-        api.unsubscribe()           // 這個 suspend 呼叫才跑得完
+    // 不受取消影響
+    withContext(NonCancellable) {
+        // 這個 suspend 呼叫才跑得完
+        api.unsubscribe()
     }
 }
 ```
@@ -259,7 +333,8 @@ try {
 
 ```kotlin
 class PortfolioRepo(private val ioDispatcher: CoroutineDispatcher) {
-    suspend fun fetchBalance(): String = withContext(ioDispatcher) {   // 函式自己切到 IO
+    // 函式自己切到 IO
+    suspend fun fetchBalance(): String = withContext(ioDispatcher) {
         // 網路請求
         "1.5 BTC"
     }

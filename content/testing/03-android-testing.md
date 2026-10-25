@@ -27,12 +27,15 @@ fun retryWaitsBeforeSecondAttempt() = runTest {
     var attempts = 0
     val job = launch {
         attempts++
-        delay(5_000)          // 虛擬時間：不會真的等 5 秒
+        // 虛擬時間：不會真的等 5 秒
+        delay(5_000)
         attempts++
     }
-    runCurrent()              // 執行目前已經可以執行的工作：第一次 attempts++
+    // 執行目前已經可以執行的工作：第一次 attempts++
+    runCurrent()
     assertEquals(1, attempts)
-    advanceTimeBy(5_001)      // 把虛擬時鐘往前撥 5 秒多一點
+    // 把虛擬時鐘往前撥 5 秒多一點
+    advanceTimeBy(5_001)
     assertEquals(2, attempts)
     job.join()
 }
@@ -82,10 +85,12 @@ class PriceRepository(private val io: CoroutineDispatcher) {
 ```kotlin
 @Test
 fun emitsLoadingThenData() = runTest {
-    viewModel.state.test {                       // Turbine 提供的 test { }
+    // Turbine 提供的 test { }
+    viewModel.state.test {
         assertEquals(UiState.Loading, awaitItem())
         assertEquals(UiState.Data(price = 102), awaitItem())
-        cancelAndIgnoreRemainingEvents()        // StateFlow 不會自己結束，檢查完要取消
+        // StateFlow 不會自己結束，檢查完要取消
+        cancelAndIgnoreRemainingEvents()
     }
 }
 ```

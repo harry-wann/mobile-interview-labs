@@ -125,8 +125,14 @@
         .____(TokenAuthenticator(tokens))
         .____(
             CertificatePinner.Builder()
-                .add("api.example.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-                .add("api.example.com", "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")
+                .add(
+                    "api.example.com",
+                    "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                )
+                .add(
+                    "api.example.com",
+                    "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+                )
                 .build()
         )
         .build()
@@ -160,12 +166,17 @@
           private var token: String
           private let refresh: @Sendable () async throws -> String
 
-          init(initial: String, refresh: @escaping @Sendable () async throws -> String) {
+          init(
+              initial: String,
+              refresh: @escaping @Sendable () async throws -> String
+          ) {
               self.token = initial
               self.refresh = refresh
           }
 
-          func currentToken() -> String { token }
+          func currentToken() -> String {
+              token
+          }
 
           func refreshIfNeeded(failedToken: String) async throws -> String {
               // TODO: 目前每個呼叫者都各自刷新
@@ -180,16 +191,25 @@
           private var inFlight: Task<String, Error>?
           private let refresh: @Sendable () async throws -> String
 
-          init(initial: String, refresh: @escaping @Sendable () async throws -> String) {
+          init(
+              initial: String,
+              refresh: @escaping @Sendable () async throws -> String
+          ) {
               self.token = initial
               self.refresh = refresh
           }
 
-          func currentToken() -> String { token }
+          func currentToken() -> String {
+              token
+          }
 
           func refreshIfNeeded(failedToken: String) async throws -> String {
-              if token != failedToken { return token }
-              if let running = inFlight { return try await running.value }
+              if token != failedToken {
+                  return token
+              }
+              if let running = inFlight {
+                  return try await running.value
+              }
 
               let task = Task { [refresh] in try await refresh() }
               inFlight = task
@@ -207,10 +227,18 @@
     tests: |
       actor Counter {
           private(set) var value = 0
-          func next() -> Int { value += 1; return value }
+
+          func next() -> Int {
+              value += 1
+              return value
+          }
       }
+
       struct RefreshError: Error {}
-      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+      func sleepMs(_ ms: UInt64) async throws {
+          try await Task.sleep(nanoseconds: ms * 1_000_000)
+      }
 
       await checkAsync("並行 10 個呼叫只刷新一次，且都拿到新 token") {
           let calls = Counter()
@@ -219,30 +247,47 @@
               try await sleepMs(40)
               return "t\(n + 1)"
           }
-          let results = try await withThrowingTaskGroup(of: String.self) { group -> [String] in
-              for _ in 0..<10 { group.addTask { try await provider.refreshIfNeeded(failedToken: "t1") } }
+          let results = try await withThrowingTaskGroup(
+              of: String.self
+          ) { group -> [String] in
+              for _ in 0..<10 {
+                  group.addTask {
+                      try await provider.refreshIfNeeded(failedToken: "t1")
+                  }
+              }
               var out: [String] = []
-              for try await r in group { out.append(r) }
+              for try await r in group {
+                  out.append(r)
+              }
               return out
           }
           let n = await calls.value
           return n == 1 && results.count == 10 && results.allSatisfy { $0 == "t2" }
       }
+
       await checkAsync("token 已被更新過就不再刷新") {
           let calls = Counter()
-          let provider = TokenProvider(initial: "t1") { _ = await calls.next(); return "t2" }
+          let provider = TokenProvider(initial: "t1") {
+              _ = await calls.next()
+              return "t2"
+          }
           _ = try await provider.refreshIfNeeded(failedToken: "t1")
           let again = try await provider.refreshIfNeeded(failedToken: "t1")
           let n = await calls.value
           return again == "t2" && n == 1
       }
+
       await checkAsync("目前 token 與失敗 token 不同時直接回傳目前 token，不刷新") {
           let calls = Counter()
-          let provider = TokenProvider(initial: "t5") { _ = await calls.next(); return "t6" }
+          let provider = TokenProvider(initial: "t5") {
+              _ = await calls.next()
+              return "t6"
+          }
           let r = try await provider.refreshIfNeeded(failedToken: "t4")
           let n = await calls.value
           return r == "t5" && n == 0
       }
+
       await checkAsync("刷新失敗：呼叫者拿到錯誤，token 不變") {
           let provider = TokenProvider(initial: "t1") { throw RefreshError() }
           do {
@@ -252,17 +297,23 @@
               return await provider.currentToken() == "t1"
           }
       }
+
       await checkAsync("失敗之後可以再試並成功") {
           let calls = Counter()
           let provider = TokenProvider(initial: "t1") {
               let n = await calls.next()
-              if n == 1 { throw RefreshError() }
+              if n == 1 {
+                  throw RefreshError()
+              }
               return "t2"
           }
-          do { _ = try await provider.refreshIfNeeded(failedToken: "t1") } catch {}
+          do {
+              _ = try await provider.refreshIfNeeded(failedToken: "t1")
+          } catch {}
           let r = try await provider.refreshIfNeeded(failedToken: "t1")
           return r == "t2"
       }
+
       await checkAsync("連續過期：t2 失效後可再刷新成 t3") {
           let calls = Counter()
           let provider = TokenProvider(initial: "t1") {
@@ -275,7 +326,10 @@
       }
   kotlin:
     starter: |
-      class TokenProvider(initial: String, private val refresh: suspend () -> String) {
+      class TokenProvider(
+          initial: String,
+          private val refresh: suspend () -> String,
+      ) {
           @Volatile private var token: String = initial
 
           fun currentToken(): String = token
@@ -291,14 +345,19 @@
       import kotlinx.coroutines.sync.Mutex
       import kotlinx.coroutines.sync.withLock
 
-      class TokenProvider(initial: String, private val refresh: suspend () -> String) {
+      class TokenProvider(
+          initial: String,
+          private val refresh: suspend () -> String,
+      ) {
           private val mutex = Mutex()
           @Volatile private var token: String = initial
 
           fun currentToken(): String = token
 
           suspend fun refreshIfNeeded(failedToken: String): String = mutex.withLock {
-              if (token != failedToken) return@withLock token
+              if (token != failedToken) {
+                  return@withLock token
+              }
               val fresh = refresh()
               token = fresh
               fresh
@@ -325,19 +384,28 @@
           }
           calls.get() == 1 && results.size == 10 && results.all { it == "t2" }
       }
+
       check("token 已被更新過就不再刷新") {
           val calls = AtomicInteger(0)
-          val provider = TokenProvider("t1") { calls.incrementAndGet(); "t2" }
+          val provider = TokenProvider("t1") {
+              calls.incrementAndGet()
+              "t2"
+          }
           provider.refreshIfNeeded("t1")
           val again = provider.refreshIfNeeded("t1")
           again == "t2" && calls.get() == 1
       }
+
       check("目前 token 與失敗 token 不同時直接回傳目前 token，不刷新") {
           val calls = AtomicInteger(0)
-          val provider = TokenProvider("t5") { calls.incrementAndGet(); "t6" }
+          val provider = TokenProvider("t5") {
+              calls.incrementAndGet()
+              "t6"
+          }
           val r = provider.refreshIfNeeded("t4")
           r == "t5" && calls.get() == 0
       }
+
       check("刷新失敗：呼叫者拿到錯誤，token 不變") {
           val provider = TokenProvider("t1") { throw RefreshError() }
           val failed = try {
@@ -348,15 +416,21 @@
           }
           failed && provider.currentToken() == "t1"
       }
+
       check("失敗之後可以再試並成功") {
           val calls = AtomicInteger(0)
           val provider = TokenProvider("t1") {
-              if (calls.incrementAndGet() == 1) throw RefreshError()
+              if (calls.incrementAndGet() == 1) {
+                  throw RefreshError()
+              }
               "t2"
           }
-          try { provider.refreshIfNeeded("t1") } catch (e: RefreshError) { }
+          try {
+              provider.refreshIfNeeded("t1")
+          } catch (e: RefreshError) { }
           provider.refreshIfNeeded("t1") == "t2"
       }
+
       check("連續過期：t2 失效後可再刷新成 t3") {
           val calls = AtomicInteger(0)
           val provider = TokenProvider("t1") { "t${calls.incrementAndGet() + 1}" }

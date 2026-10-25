@@ -36,20 +36,36 @@
     struct Rep: UIViewRepresentable {
         let value: Int
 
-        func makeCoordinator() -> Coordinator { counts["makeCoordinator"]! += 1; return Coordinator() }
-        func makeUIView(context: Context) -> UIView { counts["make"]! += 1; return UIView() }
+        func makeCoordinator() -> Coordinator {
+            counts["makeCoordinator"]! += 1
+            return Coordinator()
+        }
+
+        func makeUIView(context: Context) -> UIView {
+            counts["make"]! += 1
+            return UIView()
+        }
+
         func updateUIView(_ view: UIView, context: Context) {}
-        static func dismantleUIView(_ view: UIView, coordinator: Coordinator) { counts["dismantle"]! += 1 }
+
+        static func dismantleUIView(_ view: UIView, coordinator: Coordinator) {
+            counts["dismantle"]! += 1
+        }
 
         final class Coordinator {}
     }
 
     struct Root: View {
-        @State var value = 0   // 之後被更新 3 次
-        @State var show = true // 最後變成 false
+        // 之後被更新 3 次
+        @State var value = 0
+        // 最後變成 false
+        @State var show = true
+
         var body: some View {
             VStack {
-                if show { Rep(value: value) }
+                if show {
+                    Rep(value: value)
+                }
                 Text("x")
             }
         }
@@ -139,7 +155,9 @@
   codeLang: swift
   code: |
     struct WebChart: UIViewRepresentable {
-        func ____(context: Context) -> Coordinator { Coordinator() }
+        func ____(context: Context) -> Coordinator {
+            Coordinator()
+        }
 
         func makeUIView(context: Context) -> WKWebView {
             let config = WKWebViewConfiguration()
@@ -150,11 +168,15 @@
         func updateUIView(_ uiView: WKWebView, context: Context) {}
 
         static func ____(_ uiView: WKWebView, coordinator: Coordinator) {
-            uiView.configuration.userContentController.removeScriptMessageHandler(forName: "delayWall")
+            uiView.configuration.userContentController
+                .removeScriptMessageHandler(forName: "delayWall")
         }
 
         final class Coordinator: NSObject, WKScriptMessageHandler {
-            func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {}
+            func userContentController(
+                _ c: WKUserContentController,
+                didReceive m: WKScriptMessage
+            ) {}
         }
     }
   blanks:

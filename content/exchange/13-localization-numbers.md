@@ -61,10 +61,14 @@ import java.math.RoundingMode
 import java.text.DecimalFormat
 
 val half = listOf(0.5, 1.5, 2.5)
-val df = DecimalFormat("0")                       // 取到整數
-println(half.map { df.format(it) })               // 輸出：[0, 2, 2]（預設 half-even：2.5 變成偶數 2）
-df.roundingMode = RoundingMode.HALF_UP            // 明確改成一般的四捨五入
-println(half.map { df.format(it) })               // 輸出：[1, 2, 3]
+// 取到整數
+val df = DecimalFormat("0")
+// 輸出：[0, 2, 2]（預設 half-even：2.5 變成偶數 2）
+println(half.map { df.format(it) })
+// 明確改成一般的四捨五入
+df.roundingMode = RoundingMode.HALF_UP
+// 輸出：[1, 2, 3]
+println(half.map { df.format(it) })
 ```
 
 顯示用的價格、漲跌幅，如果要和 Android 或網頁版一致，兩邊都要明確設定相同的捨入模式。實際下單的數量與價格，則依「精度與金額」單元的規則，用截斷。
@@ -89,10 +93,30 @@ println(half.map { df.format(it) })               // 輸出：[1, 2, 3]
 
 ```swift
 let value = 123_456_789
-print(value.formatted(.number.notation(.compactName).locale(Locale(identifier: "ja_JP"))))   // 輸出：1.2億
-print(value.formatted(.number.notation(.compactName).locale(Locale(identifier: "en_US"))))   // 輸出：123M
-print(9_999.formatted(.number.notation(.compactName).locale(Locale(identifier: "ja_JP"))))   // 輸出：9999（日文、中文在 10,000 以下不縮寫，也沒有千分位）
-print(9_999.formatted(.number.notation(.compactName).locale(Locale(identifier: "en_US"))))   // 輸出：10K
+// 輸出：1.2億
+print(
+    value.formatted(
+        .number.notation(.compactName).locale(Locale(identifier: "ja_JP"))
+    )
+)
+// 輸出：123M
+print(
+    value.formatted(
+        .number.notation(.compactName).locale(Locale(identifier: "en_US"))
+    )
+)
+// 輸出：9999（日文、中文在 10,000 以下不縮寫，也沒有千分位）
+print(
+    9_999.formatted(
+        .number.notation(.compactName).locale(Locale(identifier: "ja_JP"))
+    )
+)
+// 輸出：10K
+print(
+    9_999.formatted(
+        .number.notation(.compactName).locale(Locale(identifier: "en_US"))
+    )
+)
 ```
 
 另一個要小心的地方：`zh_Hant_HK`（香港繁體）在同樣的測試裡得到的是英文式的單位 `123M`，和 `zh_Hant_TW` 的 `1.2億` 不同，所以不能假設所有繁體中文 locale 都用萬、億。
@@ -127,14 +151,25 @@ print(9_999.formatted(.number.notation(.compactName).locale(Locale(identifier: "
 ```swift
 let f = DateFormatter()
 f.locale = Locale(identifier: "en_US_POSIX")
-f.calendar = Calendar(identifier: .gregorian)            // 西曆
-f.timeZone = TimeZone(identifier: "Asia/Tokyo")!          // 明確指定時區
-let date = f.calendar.date(from: DateComponents(timeZone: f.timeZone, year: 2024, month: 12, day: 31, hour: 12))!
+// 西曆
+f.calendar = Calendar(identifier: .gregorian)
+// 明確指定時區
+f.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+let date = f.calendar.date(
+    from: DateComponents(
+        timeZone: f.timeZone,
+        year: 2024,
+        month: 12,
+        day: 31,
+        hour: 12
+    )
+)!
 
 f.dateFormat = "yyyy-MM-dd"
 print(f.string(from: date))      // 輸出：2024-12-31
 f.dateFormat = "YYYY-MM-dd"
-print(f.string(from: date))      // 輸出：2025-12-31（12 月 31 日那一週屬於 2025 年的第 1 週，年份被算成下一年）
+// 輸出：2025-12-31（12 月 31 日那一週屬於 2025 年的第 1 週，年份被算成下一年）
+print(f.string(from: date))
 ```
 
 **二、曆法。** 使用者如果把 iOS 的日曆設為日本曆（和暦），用 `Locale.current` 的 `DateFormatter` 配固定格式 `yyyy-MM-dd`，會輸出令和年（本機實測 2025-12-29 得到 `0007-12-29`，令和 7 年）。所以與 API 交換的時間字串，一律固定 `en_US_POSIX`、西曆、明確時區；顯示給使用者時，才用本地化的日期範本。
@@ -198,9 +233,13 @@ import java.text.Normalizer
 // 先 NFKC 正規化（全形 → 半形），再用嚴格規則檢查，最後才轉成 BigDecimal
 fun parseAmount(input: String): BigDecimal? {
     val normalized = Normalizer.normalize(input.trim(), Normalizer.Form.NFKC)
-    if (!Regex("[0-9]+(\\.[0-9]+)?").matches(normalized)) return null   // 只允許數字與一個小數點
+    // 只允許數字與一個小數點
+    if (!Regex("[0-9]+(\\.[0-9]+)?").matches(normalized)) {
+        return null
+    }
     return BigDecimal(normalized)
 }
+
 // parseAmount("１２３．５")  輸出：123.5
 // parseAmount("1,234.5abc") 輸出：null（格式不合法，不要悄悄採用部分結果）
 // parseAmount("−5")         輸出：null
@@ -209,10 +248,21 @@ fun parseAmount(input: String): BigDecimal? {
 ```swift
 // Swift 版本
 func parseAmount(_ input: String) -> Decimal? {
-    let normalized = input.trimmingCharacters(in: .whitespaces).precomposedStringWithCompatibilityMapping   // NFKC
-    guard normalized.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
-    return Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
+    // NFKC
+    let normalized = input.trimmingCharacters(in: .whitespaces)
+        .precomposedStringWithCompatibilityMapping
+    guard normalized.range(
+        of: #"^[0-9]+(\.[0-9]+)?$"#,
+        options: .regularExpression
+    ) != nil else {
+        return nil
+    }
+    return Decimal(
+        string: normalized,
+        locale: Locale(identifier: "en_US_POSIX")
+    )
 }
+
 // parseAmount("１２３．５") 輸出：Optional(123.5)；parseAmount("1,234.5abc") 輸出：nil
 ```
 

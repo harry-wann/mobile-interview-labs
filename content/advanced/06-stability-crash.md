@@ -63,13 +63,16 @@ tags: [crash, crash-free, symbolication, dsym, mapping, anr, watchdog, oom, cras
 
 ```swift
 let prices: [Decimal] = []
-let first = prices[0]        // 陣列越界：執行時直接中止，例外類型 EXC_BREAKPOINT
-let amount = Int("abc")!     // 對 nil 強制解包：同樣直接中止
+// 陣列越界：執行時直接中止，例外類型 EXC_BREAKPOINT
+let first = prices[0]
+// 對 nil 強制解包：同樣直接中止
+let amount = Int("abc")!
 ```
 
 ```kotlin
 val order: Order? = null
-val id = order!!.id          // !! 的意思是「我保證不是 null」，保證落空就丟 NullPointerException
+// !! 的意思是「我保證不是 null」，保證落空就丟 NullPointerException
+val id = order!!.id
 ```
 
 iOS 與 Android 的這類錯誤有共通的預防方向：**少用強制解包（`!`、`!!`），改用 `guard let`、`?.`、預設值，或在資料解碼的那一層就處理好「欄位可能不存在」的情況**。第 5 題會把這個想法接到方法論。
@@ -139,18 +142,25 @@ dwarfdump --uuid MyApp.app.dSYM
 
 ```swift
 // iOS：啟動時在主執行緒同步等網路，網路慢的話，watchdog 會把 App 終止
-func application(_ application: UIApplication,
-                 didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    let data = try? Data(contentsOf: URL(string: "https://example.com/config.json")!)
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions options:
+        [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+    let data = try? Data(
+        contentsOf: URL(string: "https://example.com/config.json")!
+    )
     // 這一行會一直等到網路回應，期間主執行緒完全被佔住
     return true
 }
 ```
 
 ```kotlin
-// Android：按鈕的點擊事件在主執行緒執行，runBlocking 會讓主執行緒一直等到結果回來
+// Android：按鈕的點擊事件在主執行緒執行，
+// runBlocking 會讓主執行緒一直等到結果回來
 button.setOnClickListener {
-    val prices = runBlocking { api.fetchPrices() }   // 網路慢時，5 秒後就可能被判定為 ANR
+    // 網路慢時，5 秒後就可能被判定為 ANR
+    val prices = runBlocking { api.fetchPrices() }
     render(prices)
 }
 ```
@@ -184,10 +194,18 @@ import MetricKit
 final class MetricsSubscriber: NSObject, MXMetricManagerSubscriber {
     func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
-            guard let exits = payload.applicationExitMetrics else { continue }
+            guard let exits = payload.applicationExitMetrics else {
+                continue
+            }
             let foreground = exits.foregroundExitData
-            print("前景被記憶體上限終止：", foreground.cumulativeMemoryResourceLimitExitCount)
-            print("前景被 watchdog 終止：", foreground.cumulativeAppWatchdogExitCount)
+            print(
+                "前景被記憶體上限終止：",
+                foreground.cumulativeMemoryResourceLimitExitCount
+            )
+            print(
+                "前景被 watchdog 終止：",
+                foreground.cumulativeAppWatchdogExitCount
+            )
         }
     }
 }
@@ -198,9 +216,12 @@ final class MetricsSubscriber: NSObject, MXMetricManagerSubscriber {
 val am = context.getSystemService(ActivityManager::class.java)
 am.getHistoricalProcessExitReasons(context.packageName, 0, 5).forEach { info ->
     when (info.reason) {
-        ApplicationExitInfo.REASON_ANR -> Log.w("Exit", "ANR：${info.description}")
-        ApplicationExitInfo.REASON_LOW_MEMORY -> Log.w("Exit", "記憶體不足被系統終止")
-        ApplicationExitInfo.REASON_CRASH -> Log.w("Exit", "一般 crash")
+        ApplicationExitInfo.REASON_ANR ->
+            Log.w("Exit", "ANR：${info.description}")
+        ApplicationExitInfo.REASON_LOW_MEMORY ->
+            Log.w("Exit", "記憶體不足被系統終止")
+        ApplicationExitInfo.REASON_CRASH ->
+            Log.w("Exit", "一般 crash")
     }
 }
 ```
@@ -267,11 +288,14 @@ R8 在正式版做了三件事：
 android {
     buildTypes {
         release {
-            isMinifyEnabled = true        // 開啟 R8 的縮減與混淆
-            isShrinkResources = true      // 移除沒用到的資源
+            // 開啟 R8 的縮減與混淆
+            isMinifyEnabled = true
+            // 移除沒用到的資源
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"      // 自己寫的 keep 規則
+                // 自己寫的 keep 規則
+                "proguard-rules.pro"
             )
         }
     }

@@ -64,7 +64,10 @@ tags: [testing, strategy, pyramid]
 // 不好測：直接用單例打網路
 final class PriceAlertChecker {
     func shouldNotify(target: Decimal) async -> Bool {
-        guard let price = try? await APIClient.shared.fetchPrice() else { return false }   // 測試時會真的打網路
+        // 測試時會真的打網路
+        guard let price = try? await APIClient.shared.fetchPrice() else {
+            return false
+        }
         return price >= target
     }
 }
@@ -72,10 +75,15 @@ final class PriceAlertChecker {
 // 好測：外部的東西從外面傳進來
 final class PriceAlertChecker2 {
     private let fetchPrice: () async throws -> Decimal
-    init(fetchPrice: @escaping () async throws -> Decimal) { self.fetchPrice = fetchPrice }
+
+    init(fetchPrice: @escaping () async throws -> Decimal) {
+        self.fetchPrice = fetchPrice
+    }
 
     func shouldNotify(target: Decimal) async -> Bool {
-        guard let price = try? await fetchPrice() else { return false }
+        guard let price = try? await fetchPrice() else {
+            return false
+        }
         return price >= target
     }
 }
@@ -134,12 +142,17 @@ func testPriceNotOnTick() {
     app.launch()
     app.textFields["order.priceField"].typeText("15000500")
     app.buttons["order.confirmButton"].tap()
-    XCTAssertTrue(app.staticTexts["order.errorLabel"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+        app.staticTexts["order.errorLabel"].waitForExistence(timeout: 5)
+    )
 }
 
 // 單元測試：同一條規則，直接呼叫純函式
 func testPriceNotOnTick() {
-    XCTAssertEqual(OrderRules.validate(priceJPY: 15_000_500, amountSatoshi: 100_000), .priceNotOnTick)
+    XCTAssertEqual(
+        OrderRules.validate(priceJPY: 15_000_500, amountSatoshi: 100_000),
+        .priceNotOnTick
+    )
 }
 ```
 

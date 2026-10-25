@@ -79,7 +79,11 @@
     private val gate = ____(4)
 
     suspend fun fetchAll(ids: List<String>): List<Quote> = coroutineScope {
-        ids.map { id -> async { gate.____ { api.quote(id) } } }.awaitAll()
+        ids.map { id ->
+            async {
+                gate.____ { api.quote(id) }
+            }
+        }.awaitAll()
     }
   blanks:
     - [Semaphore]
@@ -121,7 +125,11 @@
 
     fun main() = runTest {
         val log = mutableListOf<String>()
-        launch { log += "A"; delay(100); log += "B" }
+        launch {
+            log += "A"
+            delay(100)
+            log += "B"
+        }
         log += "main"
         runCurrent()
         log += "t$currentTime"
@@ -226,44 +234,91 @@
 
       checkEqual("10 個並行 401 只 refresh 一次", 1) {
           val calls = AtomicInteger(0)
-          val store = TokenStore("t0") { _ -> val n = calls.incrementAndGet(); delay(30); "t$n" }
-          (1..10).map { async(Dispatchers.Default) { store.refreshAfter401("t0") } }.awaitAll()
+          val store = TokenStore("t0") { _ ->
+              val n = calls.incrementAndGet()
+              delay(30)
+              "t$n"
+          }
+
+          (1..10).map {
+              async(Dispatchers.Default) { store.refreshAfter401("t0") }
+          }.awaitAll()
+
           calls.get()
       }
+
       checkEqual("所有人拿到同一個新 token", setOf("t1")) {
           val calls = AtomicInteger(0)
-          val store = TokenStore("t0") { _ -> val n = calls.incrementAndGet(); delay(30); "t$n" }
-          (1..10).map { async(Dispatchers.Default) { store.refreshAfter401("t0") } }.awaitAll().toSet()
+          val store = TokenStore("t0") { _ ->
+              val n = calls.incrementAndGet()
+              delay(30)
+              "t$n"
+          }
+
+          (1..10).map {
+              async(Dispatchers.Default) { store.refreshAfter401("t0") }
+          }.awaitAll().toSet()
       }
+
       checkEqual("peek 取得最新 token", "t1") {
-          val store = TokenStore("t0") { _ -> delay(1); "t1" }
+          val store = TokenStore("t0") { _ ->
+              delay(1)
+              "t1"
+          }
+
           store.refreshAfter401("t0")
           store.peek()
       }
-      checkEqual("舊 token 的請求不再 refresh、新 token 失效才會 refresh", "t1|t1|t2|2") {
+
+      checkEqual(
+          "舊 token 的請求不再 refresh、新 token 失效才會 refresh",
+          "t1|t1|t2|2",
+      ) {
           val calls = AtomicInteger(0)
           val store = TokenStore("t0") { _ -> "t${calls.incrementAndGet()}" }
+
           val a = store.refreshAfter401("t0")
           val b = store.refreshAfter401("t0")
           val c = store.refreshAfter401("t1")
+
           "$a|$b|$c|${calls.get()}"
       }
+
       checkEqual("refresh 失敗後鎖已釋放，下次可重試", "ok|2") {
           val calls = AtomicInteger(0)
           val store = TokenStore("t0") { _ ->
-              if (calls.incrementAndGet() == 1) throw IllegalStateException("network") else "ok"
+              if (calls.incrementAndGet() == 1) {
+                  throw IllegalStateException("network")
+              } else {
+                  "ok"
+              }
           }
-          try { store.refreshAfter401("t0") } catch (e: IllegalStateException) { }
+
+          try {
+              store.refreshAfter401("t0")
+          } catch (e: IllegalStateException) {
+          }
           val r = store.refreshAfter401("t0")
+
           "$r|${calls.get()}"
       }
+
       checkEqual("正在 refresh 的呼叫者被取消後鎖會釋放", "fast") {
           val calls = AtomicInteger(0)
           val store = TokenStore("t0") { _ ->
-              if (calls.incrementAndGet() == 1) { delay(10_000); "slow" } else "fast"
+              if (calls.incrementAndGet() == 1) {
+                  delay(10_000)
+                  "slow"
+              } else {
+                  "fast"
+              }
           }
-          val job = launch(start = CoroutineStart.UNDISPATCHED) { store.refreshAfter401("t0") }
+
+          val job = launch(start = CoroutineStart.UNDISPATCHED) {
+              store.refreshAfter401("t0")
+          }
           job.cancelAndJoin()
+
           withTimeout(2_000) { store.refreshAfter401("t0") }
       }
 

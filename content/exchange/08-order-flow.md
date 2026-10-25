@@ -88,13 +88,16 @@ App 本地的狀態比文件多幾個：`pending`（本地已送出，還沒收�
 var filled = Decimal(0)
 for total in ["0.1", "0.4", "0.2", "0.4", "0.9"] {
     let t = Decimal(string: total)!
-    if t > filled {          // 比目前的累計量大，才是新的資料
+    // 比目前的累計量大，才是新的資料
+    if t > filled {
         filled = t
         print("update", filled)
-    } else {                 // 小於或等於目前的值：過期或重複，忽略
+    // 小於或等於目前的值：過期或重複，忽略
+    } else {
         print("ignore", t)
     }
 }
+
 // 輸出（每行一個）：update 0.1、update 0.4、ignore 0.2、ignore 0.4、update 0.9
 // 最終 filled = 0.9
 ```
@@ -136,19 +139,33 @@ for total in ["0.1", "0.4", "0.2", "0.4", "0.9"] {
 
 ```swift
 struct OrderDraft: Codable {
-    let clientOrderId: String   // 按下按鈕時產生，隨草稿保存；所有重送都用這一個
+    // 按下按鈕時產生，隨草稿保存；所有重送都用這一個
+    let clientOrderId: String
     let symbol: String
     let amount: Decimal
     let price: Decimal
 
-    static func make(symbol: String, amount: Decimal, price: Decimal) -> OrderDraft {
+    static func make(
+        symbol: String,
+        amount: Decimal,
+        price: Decimal
+    ) -> OrderDraft {
         // UUID 去掉 "-" 之後是 32 個字元，在 64 字元的上限內
-        OrderDraft(clientOrderId: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
-                   symbol: symbol, amount: amount, price: price)
+        OrderDraft(
+            clientOrderId: UUID()
+                .uuidString.replacingOccurrences(of: "-", with: ""),
+            symbol: symbol,
+            amount: amount,
+            price: price
+        )
     }
 }
 
-let draft = OrderDraft.make(symbol: "btcjpy", amount: Decimal(string: "0.01")!, price: Decimal(string: "4800000")!)
+let draft = OrderDraft.make(
+    symbol: "btcjpy",
+    amount: Decimal(string: "0.01")!,
+    price: Decimal(string: "4800000")!
+)
 print(draft.clientOrderId.count)   // 輸出：32
 ```
 
@@ -172,11 +189,13 @@ final class OrderViewModel {
     private(set) var phase: Phase = .editing
 
     func tapBuy(draft: OrderDraft) {
-        guard case .editing = phase else { return }   // 已經在送出中，忽略第二次、第三次點擊
+        // 已經在送出中，忽略第二次、第三次點擊
+        guard case .editing = phase else { return }
         phase = .submitting(draft)
         // ...保存草稿，送出請求
     }
 }
+
 // 連續呼叫 tapBuy 三次，只有第一次會送出請求
 ```
 
@@ -239,13 +258,20 @@ final class OrderViewModel {
 ```swift
 // 使用方式（示意）：取不到 token 就等，不要送出之後才被伺服器拒絕
 actor RateLimiter {
-    private var bucket = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
+    private var bucket = TokenBucket(
+        capacity: 10,
+        refillPerSecond: 10,
+        startMs: 0
+    )
 
     func acquire() async {
         while true {
             let now = Int64(Date().timeIntervalSince1970 * 1000)
-            if bucket.tryAcquire(nowMs: now) { return }
-            let wait = bucket.waitMs(nowMs: now)   // 還要等幾毫秒（向上取整），不消耗 token
+            if bucket.tryAcquire(nowMs: now) {
+                return
+            }
+            // 還要等幾毫秒（向上取整），不消耗 token
+            let wait = bucket.waitMs(nowMs: now)
             try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
         }
     }

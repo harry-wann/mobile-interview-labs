@@ -35,11 +35,14 @@ final class ChatViewModel {
 
     init() {
         onMessage = { text in
-            self.lastMessage = text   // closure 裡用到 self，closure 就會 strong 持有 self
+            // closure 裡用到 self，closure 就會 strong 持有 self
+            self.lastMessage = text
         }
     }
 
-    deinit { print("ChatViewModel 被釋放了") }
+    deinit {
+        print("ChatViewModel 被釋放了")
+    }
 }
 ```
 
@@ -51,7 +54,8 @@ final class ChatViewModel {
 
 ```swift
 onMessage = { [weak self] text in
-    self?.lastMessage = text   // self 已經被釋放的話，什麼都不做
+    // self 已經被釋放的話，什麼都不做
+    self?.lastMessage = text
 }
 ```
 
@@ -74,7 +78,8 @@ onMessage = { [weak self] text in
 
 ```swift
 final class OrderViewModel {
-    // formatter 只有 OrderViewModel 持有。ViewModel 被釋放時，formatter 和它的 closure 也一起消失，
+    // formatter 只有 OrderViewModel 持有。ViewModel 被釋放時，
+    // formatter 和它的 closure 也一起消失，
     // 所以這個 closure 執行時，self 一定還在
     lazy var formatter = PriceFormatter(onError: { [unowned self] error in
         self.showError(error)
@@ -97,11 +102,13 @@ closure 用到外面的變數時，會把它「捕獲」（capture）進來。Sw
 
 ```swift
 var x = 1
-let byRef = { print(x) }          // 捕獲的是變數 x 本身：closure 和外面共用同一個 x
-let byValue = { [x] in print(x) } // 寫在 [ ] 裡：捕獲的是建立 closure 這一刻 x 的值
+// 捕獲的是變數 x 本身：closure 和外面共用同一個 x
+let byRef = { print(x) }
+// 寫在 [ ] 裡：捕獲的是建立 closure 這一刻 x 的值
+let byValue = { [x] in print(x) }
 x = 2
-byRef()     // 2
-byValue()   // 1
+byRef() // 2
+byValue() // 1
 ```
 
 開頭的 `[ ]` 叫做 capture list，用來明確指定「這個變數要怎麼帶進去」。`[weak self]` 也是同一個機制：在建立 closure 的這一刻，用 weak 的方式帶走 self，而不是預設的 strong。
@@ -114,9 +121,12 @@ byValue()   // 1
 
 ```swift
 task = Task { [weak self] in
-    guard let self else { return }    // 從這裡開始 self 是 strong
-    for await price in stream {       // stream 不結束，這個迴圈就不結束
-        self.handle(price)            // self 在整個迴圈期間都被抓住，無法釋放
+    // 從這裡開始 self 是 strong
+    guard let self else { return }
+    // stream 不結束，這個迴圈就不結束
+    for await price in stream {
+        // self 在整個迴圈期間都被抓住，無法釋放
+        self.handle(price)
     }
 }
 ```
@@ -126,7 +136,8 @@ task = Task { [weak self] in
 ```swift
 task = Task { [weak self] in
     for await price in stream {
-        guard let self else { return }   // 每一輪才取出 self，這一輪結束就放開
+        // 每一輪才取出 self，這一輪結束就放開
+        guard let self else { return }
         self.handle(price)
     }
 }
@@ -143,9 +154,10 @@ task = Task { [weak self] in
 
 ```swift
 feed.sink { value in
-    self.last = value                 // closure 持有 self
+    self.last = value // closure 持有 self
 }
-.store(in: &cancellables)             // self 持有 cancellables，cancellables 持有這個訂閱，訂閱持有 closure
+// self 持有 cancellables，cancellables 持有這個訂閱，訂閱持有 closure
+.store(in: &cancellables)
 ```
 
 繞了一圈又回到 self。修法：`sink { [weak self] value in self?.last = value }`。
@@ -153,7 +165,8 @@ feed.sink { value in
 **(2) Combine 的 `assign(to:on:)`**
 
 ```swift
-feed.assign(to: \.last, on: self)     // assign 會 strong 持有 on 後面的物件
+// assign 會 strong 持有 on 後面的物件
+feed.assign(to: \.last, on: self)
     .store(in: &cancellables)
 ```
 
@@ -170,14 +183,19 @@ final class TickerStream {
     func start(_ stream: AsyncStream<Int>) {
         task = Task { [weak self] in
             for await tick in stream {
-                guard let self else { return }   // 每一輪才取出 self
+                // 每一輪才取出 self
+                guard let self else { return }
                 self.handle(tick)
             }
         }
     }
 
     func handle(_ tick: Int) {}
-    deinit { task?.cancel() }   // 沒有循環時，deinit 才會被執行到，才能取消 Task
+
+    // 沒有循環時，deinit 才會被執行到，才能取消 Task
+    deinit {
+        task?.cancel()
+    }
 }
 ```
 
@@ -222,11 +240,14 @@ struct ChartWebView: UIViewRepresentable {
     let html: String
     var onSubscribe: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onSubscribe: onSubscribe) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSubscribe: onSubscribe)
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.userContentController.add(context.coordinator, name: "delayWall")   // 註冊：會 strong 持有 coordinator
+        // 註冊：會 strong 持有 coordinator
+        config.userContentController.add(context.coordinator, name: "delayWall")
         let web = WKWebView(frame: .zero, configuration: config)
         web.loadHTMLString(html, baseURL: nil)
         return web
@@ -236,16 +257,22 @@ struct ChartWebView: UIViewRepresentable {
 
     // SwiftUI 移除這個 view 時呼叫：在這裡解除註冊
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "delayWall")
+        uiView.configuration.userContentController
+            .removeScriptMessageHandler(forName: "delayWall")
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler {
         let onSubscribe: () -> Void
-        init(onSubscribe: @escaping () -> Void) { self.onSubscribe = onSubscribe }
+
+        init(onSubscribe: @escaping () -> Void) {
+            self.onSubscribe = onSubscribe
+        }
 
         func userContentController(_ controller: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
-            if message.name == "delayWall" { onSubscribe() }
+            if message.name == "delayWall" {
+                onSubscribe()
+            }
         }
     }
 }
@@ -266,9 +293,12 @@ struct ChartWebView: UIViewRepresentable {
 ```swift
 func testChatViewModelIsReleased() {
     var vm: ChatViewModel? = ChatViewModel()
-    weak var weakVM = vm   // weak 參考不會讓計數 +1，只用來觀察
-    vm = nil               // 放掉唯一的 strong 參考
-    XCTAssertNil(weakVM)   // 如果還有 retain cycle，物件不會被釋放，weakVM 就不是 nil
+    // weak 參考不會讓計數 +1，只用來觀察
+    weak var weakVM = vm
+    // 放掉唯一的 strong 參考
+    vm = nil
+    // 如果還有 retain cycle，物件不會被釋放，weakVM 就不是 nil
+    XCTAssertNil(weakVM)
 }
 ```
 
@@ -282,12 +312,14 @@ func testChatViewModelIsReleased() {
 一般情況下你不需要管它。只有一種情況要注意：**在同一個函式裡跑一個很長的迴圈，而且迴圈裡呼叫了 Objective-C 寫成的 API**（例如 `UIImage`、`NSString`、`FileManager`）。這時迴圈還沒跑完，pool 不會被清空，暫存的物件會一直累積，記憶體用量衝得很高，嚴重時 App 會因為記憶體不足被系統終止。
 
 ```swift
-for url in imageURLs {            // 例如一次處理 1000 張圖片
+// 例如一次處理 1000 張圖片
+for url in imageURLs {
+    // 每處理完一張，就清空這一輪產生的暫存物件
     autoreleasepool {
         let image = UIImage(contentsOfFile: url.path)
         let thumbnail = makeThumbnail(image)
         save(thumbnail)
-    }                             // 每處理完一張，就清空這一輪產生的暫存物件
+    }
 }
 ```
 

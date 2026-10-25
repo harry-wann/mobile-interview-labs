@@ -41,7 +41,8 @@
   code: |
     @Composable
     fun SubmitCounter() {
-        var sent by mutableIntStateOf(0)      // 沒有 remember
+        // 沒有 remember
+        var sent by mutableIntStateOf(0)
         Column {
             Text("已送出：$sent 筆")
             Button(onClick = { sent++ }) { Text("送出") }
@@ -74,23 +75,35 @@
     // A：價格以 Long 傳進來，在表單裡顯示
     @Composable
     fun OrderForm(price: Long) {
-        Column { QtyField(); Text("即時價格：$price") }
+        Column {
+            QtyField()
+            Text("即時價格：$price")
+        }
     }
     // 呼叫端：OrderForm(price = priceState.value)
 
     // B：把 State 本身傳進來，交給小的 Composable 去讀
     @Composable
     fun OrderForm(price: State<Long>) {
-        Column { QtyField(); LivePrice(price) }
+        Column {
+            QtyField()
+            LivePrice(price)
+        }
     }
+
     @Composable
-    fun LivePrice(price: State<Long>) { Text("即時價格：${price.value}") }
+    fun LivePrice(price: State<Long>) {
+        Text("即時價格：${price.value}")
+    }
 
     // C：在 OrderForm 開頭先把價格讀成區域變數
     @Composable
     fun OrderForm(price: State<Long>) {
         val p = price.value
-        Column { QtyField(); Text("即時價格：$p") }
+        Column {
+            QtyField()
+            Text("即時價格：$p")
+        }
     }
   options:
     - "A：價格是普通的 `Long`，Compose 一定會跳過 `OrderForm` 的其他部分"
@@ -164,12 +177,16 @@
     }
 
     val structural = mutableStateOf(Tick("BTC", 100))
-    val referential = mutableStateOf(Tick("BTC", 100), referentialEqualityPolicy())
+    val referential = mutableStateOf(
+        Tick("BTC", 100),
+        referentialEqualityPolicy(),
+    )
     val never = mutableStateOf(Tick("BTC", 100), neverEqualPolicy())
     // 組合 Reader(structural, a)、Reader(referential, b)、Reader(never, c)
     // 三個計數（a、b、c）此時都是 1
 
-    structural.value = Tick("BTC", 100)    // 內容完全一樣的新物件
+    // 內容完全一樣的新物件
+    structural.value = Tick("BTC", 100)
     referential.value = Tick("BTC", 100)
     never.value = Tick("BTC", 100)
 
@@ -315,7 +332,9 @@
   codeLang: kotlin
   code: |
     // A
-    val showTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    val showTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 }
+    }
 
     // B
     val total by remember { derivedStateOf { price.value * qty.value } }
@@ -397,7 +416,8 @@
     補上兩處。第一處：用會跟著 Android lifecycle 的 API 收 `StateFlow<UiState>`，App 退到背景時停止收集。第二處：`tickFlow` 是一般的 `Flow<Long>`，沒有「目前值」，要用具名參數給第一個值來之前畫面顯示的初始值（先用 `null` 表示還沒有資料）。（見第 7 題）
   codeLang: kotlin
   code: |
-    // build.gradle.kts: implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    // build.gradle.kts:
+    // implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     val uiState by vm.uiState.____()
     val lastTick by vm.tickFlow.collectAsStateWithLifecycle(____ = null)
   blanks:

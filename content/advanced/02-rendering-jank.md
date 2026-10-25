@@ -151,31 +151,53 @@ Android 的 RecyclerView 會重複使用畫面外的項目（ViewHolder），每
 ```swift
 // iOS（iOS 15 以上）：收到一批變動的交易對之後，只重設這幾個 cell 的內容
 var snapshot = dataSource.snapshot()
-snapshot.reconfigureItems(changedRows)                   // 不重新建立 cell，成本比 reloadItems 低
-dataSource.apply(snapshot, animatingDifferences: false)  // 不要列表動畫，避免閃爍
+// 不重新建立 cell，成本比 reloadItems 低
+snapshot.reconfigureItems(changedRows)
+// 不要列表動畫，避免閃爍
+dataSource.apply(snapshot, animatingDifferences: false)
 ```
 
 ```kotlin
-// 節錄示意：TickUi 是畫面用的資料，TickVH 是 ViewHolder（含 bind、bindPrice 兩個方法）
+// 節錄示意：TickUi 是畫面用的資料，
+// TickVH 是 ViewHolder（含 bind、bindPrice 兩個方法）
 class TickAdapter : ListAdapter<TickUi, TickVH>(DIFF) {
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = TickVH.create(parent)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+        TickVH.create(parent)
 
     override fun onBindViewHolder(h: TickVH, pos: Int) = h.bind(getItem(pos))
 
     // 有 payload 時，只更新價格欄位；其他欄位不動
-    override fun onBindViewHolder(h: TickVH, pos: Int, payloads: MutableList<Any>) {
-        if (payloads.contains(PRICE)) h.bindPrice(getItem(pos)) else onBindViewHolder(h, pos)
+    override fun onBindViewHolder(
+        h: TickVH,
+        pos: Int,
+        payloads: MutableList<Any>,
+    ) {
+        if (payloads.contains(PRICE)) {
+            h.bindPrice(getItem(pos))
+        } else {
+            onBindViewHolder(h, pos)
+        }
     }
 
     companion object {
         private const val PRICE = "price"
         private val DIFF = object : DiffUtil.ItemCallback<TickUi>() {
-            override fun areItemsTheSame(a: TickUi, b: TickUi) = a.symbol == b.symbol  // 是不是同一檔
-            override fun areContentsTheSame(a: TickUi, b: TickUi) = a == b             // 內容有沒有變
-            // 只有價格字串不同、其他欄位都相同時，回傳 PRICE，onBindViewHolder 就只重綁價格；
+            // 是不是同一檔
+            override fun areItemsTheSame(a: TickUi, b: TickUi) =
+                a.symbol == b.symbol
+
+            // 內容有沒有變
+            override fun areContentsTheSame(a: TickUi, b: TickUi) = a == b
+
+            // 只有價格字串不同、其他欄位都相同時，回傳 PRICE，
+            // onBindViewHolder 就只重綁價格；
             // 其他欄位也變了就回傳 null，整列重綁
             override fun getChangePayload(a: TickUi, b: TickUi) =
-                if (a.copy(priceText = b.priceText) == b) PRICE else null
+                if (a.copy(priceText = b.priceText) == b) {
+                    PRICE
+                } else {
+                    null
+                }
         }
     }
 }

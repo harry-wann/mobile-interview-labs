@@ -42,24 +42,55 @@
       }
     tests: |
       func T(_ s: String, _ p: String) -> Tick { Tick(symbol: s, price: p) }
+
       checkEqual("空輸入", [Tick]()) { coalesce([]) }
-      checkEqual("沒有重複時原樣保留", [T("A", "1"), T("B", "1")]) { coalesce([T("A", "1"), T("B", "1")]) }
-      checkEqual("同 symbol 保留最後一筆，位置在首次出現處", [T("A", "2"), T("B", "1")]) {
+
+      checkEqual(
+          "沒有重複時原樣保留",
+          [T("A", "1"), T("B", "1")]
+      ) {
+          coalesce([T("A", "1"), T("B", "1")])
+      }
+
+      checkEqual(
+          "同 symbol 保留最後一筆，位置在首次出現處",
+          [T("A", "2"), T("B", "1")]
+      ) {
           coalesce([T("A", "1"), T("B", "1"), T("A", "2")])
       }
-      checkEqual("多個 symbol 交錯", [T("A", "3"), T("B", "2"), T("C", "1")]) {
+
+      checkEqual(
+          "多個 symbol 交錯",
+          [T("A", "3"), T("B", "2"), T("C", "1")]
+      ) {
           coalesce([T("A", "1"), T("B", "1"), T("C", "1"), T("B", "2"), T("A", "3")])
       }
-      checkEqual("全部同一個 symbol", [T("A", "9")]) { coalesce([T("A", "1"), T("A", "5"), T("A", "9")]) }
+
+      checkEqual(
+          "全部同一個 symbol",
+          [T("A", "9")]
+      ) {
+          coalesce([T("A", "1"), T("A", "5"), T("A", "9")])
+      }
+
       checkEqual("大量輸入：每個 symbol 只剩一筆且保留最後一筆", true) {
           var big: [Tick] = []
-          for round in 0..<100 { for i in 0..<100 { big.append(T("s\(i)", "\(round)")) } }
+          for round in 0..<100 {
+              for i in 0..<100 {
+                  big.append(T("s\(i)", "\(round)"))
+              }
+          }
           let out = coalesce(big)
           return out.count == 100 && out.allSatisfy { $0.price == "99" }
       }
+
       checkEqual("大量輸入：順序依首次出現", (0..<100).map { "s\($0)" }) {
           var big: [Tick] = []
-          for round in 0..<3 { for i in 0..<100 { big.append(T("s\(i)", "\(round)")) } }
+          for round in 0..<3 {
+              for i in 0..<100 {
+                  big.append(T("s\(i)", "\(round)"))
+              }
+          }
           return coalesce(big).map { $0.symbol }
       }
   kotlin:
@@ -75,29 +106,64 @@
 
       fun coalesce(updates: List<Tick>): List<Tick> {
           val latest = LinkedHashMap<String, Tick>()
-          for (u in updates) latest[u.symbol] = u
+          for (u in updates) {
+              latest[u.symbol] = u
+          }
           return latest.values.toList()
       }
     tests: |
       fun T(s: String, p: String) = Tick(s, p)
+
       checkEqual("空輸入", emptyList<Tick>()) { coalesce(emptyList()) }
-      checkEqual("沒有重複時原樣保留", listOf(T("A", "1"), T("B", "1"))) { coalesce(listOf(T("A", "1"), T("B", "1"))) }
-      checkEqual("同 symbol 保留最後一筆，位置在首次出現處", listOf(T("A", "2"), T("B", "1"))) {
+
+      checkEqual(
+          "沒有重複時原樣保留",
+          listOf(T("A", "1"), T("B", "1")),
+      ) {
+          coalesce(listOf(T("A", "1"), T("B", "1")))
+      }
+
+      checkEqual(
+          "同 symbol 保留最後一筆，位置在首次出現處",
+          listOf(T("A", "2"), T("B", "1")),
+      ) {
           coalesce(listOf(T("A", "1"), T("B", "1"), T("A", "2")))
       }
-      checkEqual("多個 symbol 交錯", listOf(T("A", "3"), T("B", "2"), T("C", "1"))) {
-          coalesce(listOf(T("A", "1"), T("B", "1"), T("C", "1"), T("B", "2"), T("A", "3")))
+
+      checkEqual(
+          "多個 symbol 交錯",
+          listOf(T("A", "3"), T("B", "2"), T("C", "1")),
+      ) {
+          coalesce(
+              listOf(T("A", "1"), T("B", "1"), T("C", "1"), T("B", "2"), T("A", "3"))
+          )
       }
-      checkEqual("全部同一個 symbol", listOf(T("A", "9"))) { coalesce(listOf(T("A", "1"), T("A", "5"), T("A", "9"))) }
+
+      checkEqual(
+          "全部同一個 symbol",
+          listOf(T("A", "9")),
+      ) {
+          coalesce(listOf(T("A", "1"), T("A", "5"), T("A", "9")))
+      }
+
       checkEqual("大量輸入：每個 symbol 只剩一筆且保留最後一筆", true) {
           val big = ArrayList<Tick>()
-          for (round in 0 until 100) for (i in 0 until 100) big.add(T("s$i", "$round"))
+          for (round in 0 until 100) {
+              for (i in 0 until 100) {
+                  big.add(T("s$i", "$round"))
+              }
+          }
           val out = coalesce(big)
           out.size == 100 && out.all { it.price == "99" }
       }
+
       checkEqual("大量輸入：順序依首次出現", (0 until 100).map { "s$it" }) {
           val big = ArrayList<Tick>()
-          for (round in 0 until 3) for (i in 0 until 100) big.add(T("s$i", "$round"))
+          for (round in 0 until 3) {
+              for (i in 0 until 100) {
+                  big.add(T("s$i", "$round"))
+              }
+          }
           coalesce(big).map { it.symbol }
       }
 

@@ -45,11 +45,14 @@
     import kotlinx.coroutines.*
 
     fun main() = runBlocking {
-        val handler = CoroutineExceptionHandler { _, e -> println("handler ${e.message}") }
+        val handler = CoroutineExceptionHandler { _, e ->
+            println("handler ${e.message}")
+        }
         val scope = CoroutineScope(SupervisorJob() + handler)
 
         scope.launch { throw RuntimeException("one") }.join()
         scope.launch { launch { throw RuntimeException("two") } }.join()
+
         val d = scope.async { throw RuntimeException("three") }
         runCatching { d.await() }
         println("end")
@@ -148,8 +151,10 @@
   codeLang: kotlin
   code: |
     suspend fun refreshAll() = coroutineScope {
-        launch(Job()) { uploadLog() }       // (A)
-        launch { syncPositions() }          // (B)
+        // (A)
+        launch(Job()) { uploadLog() }
+        // (B)
+        launch { syncPositions() }
     }
   options:
     - "(A)、(B) 都會被取消，`coroutineScope` 等兩者結束"
@@ -230,10 +235,12 @@
       }
     tests: |
       checkEqual("成功回傳 Ok", ApiResult.Ok(5)) { safeCall { 5 } }
+
       checkEqual("一般例外包成 Err", "boom") {
           val r = safeCall<Int> { throw IllegalStateException("boom") }
           (r as ApiResult.Err).cause.message
       }
+
       check("手動丟出 CancellationException 要原樣往外丟") {
           try {
               safeCall<Int> { throw CancellationException("stop") }
@@ -242,33 +249,52 @@
               true
           }
       }
+
       check("外部取消不能被轉成 Err") {
           var result: ApiResult<Int>? = null
           val job = launch(start = CoroutineStart.UNDISPATCHED) {
-              result = safeCall { delay(10_000); 1 }
+              result = safeCall {
+                  delay(10_000)
+                  1
+              }
           }
           job.cancelAndJoin()
           job.isCancelled && result == null
       }
+
       checkEqual("第三次成功", "ok@3") {
-          retry(5) { attempt -> if (attempt < 3) throw IllegalStateException("fail$attempt") else "ok@$attempt" }
+          retry(5) { attempt ->
+              if (attempt < 3) {
+                  throw IllegalStateException("fail$attempt")
+              } else {
+                  "ok@$attempt"
+              }
+          }
       }
+
       checkEqual("用盡次數後丟出最後一次例外", "fail3") {
           try {
-              retry<Unit>(3) { attempt -> throw IllegalStateException("fail$attempt") }
+              retry<Unit>(3) { attempt ->
+                  throw IllegalStateException("fail$attempt")
+              }
               "no exception"
           } catch (e: IllegalStateException) {
               e.message ?: ""
           }
       }
+
       checkEqual("CancellationException 不重試", 1) {
           var calls = 0
           try {
-              retry<Unit>(5) { calls++; throw CancellationException("stop") }
+              retry<Unit>(5) {
+                  calls++
+                  throw CancellationException("stop")
+              }
           } catch (e: CancellationException) {
           }
           calls
       }
+
       checkEqual("times 小於 1 丟 IllegalArgumentException", true) {
           try {
               retry<Int>(0) { 1 }

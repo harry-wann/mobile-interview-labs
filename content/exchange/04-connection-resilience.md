@@ -52,10 +52,14 @@ idle ──start──▶ connecting(n) ──opened──▶ connected(n, since
 // 連線狀態機的最小版本：只放最重要的幾個轉移
 enum ConnState: Equatable {
     case idle
-    case connecting(attempt: Int)                   // attempt：已經連續失敗幾次
-    case connected(attempt: Int, sinceMs: Int64)    // sinceMs：連上的時間
-    case waiting(attempt: Int, retryAtMs: Int64)    // retryAtMs：預定重試的時間
-    case offline                                    // 手機沒有網路
+    // attempt：已經連續失敗幾次
+    case connecting(attempt: Int)
+    // sinceMs：連上的時間
+    case connected(attempt: Int, sinceMs: Int64)
+    // retryAtMs：預定重試的時間
+    case waiting(attempt: Int, retryAtMs: Int64)
+    // 手機沒有網路
+    case offline
 }
 
 enum ConnEvent {
@@ -67,19 +71,25 @@ enum ConnEvent {
     case networkAvailable
 }
 
-enum ConnEffect: Equatable {                        // 只描述「要去做什麼」，不真的去做
+// 只描述「要去做什麼」，不真的去做
+enum ConnEffect: Equatable {
     case connect
     case scheduleRetry(delayMs: Int64)
     case cancelRetry
     case closeSocket
 }
 
-func delayMs(attempt: Int, random: Double) -> Int64 {   // 見下一個問題的退避公式
+// 見下一個問題的退避公式
+func delayMs(attempt: Int, random: Double) -> Int64 {
     let ceiling = min(Int64(8000), Int64(500) << Int64(min(attempt, 10)))
     return Int64(Double(ceiling) * random)
 }
 
-func reduce(_ state: ConnState, _ event: ConnEvent, random: Double) -> (ConnState, [ConnEffect]) {
+func reduce(
+    _ state: ConnState,
+    _ event: ConnEvent,
+    random: Double
+) -> (ConnState, [ConnEffect]) {
     switch (state, event) {
     case (.idle, .start):
         return (.connecting(attempt: 0), [.connect])
@@ -87,7 +97,10 @@ func reduce(_ state: ConnState, _ event: ConnEvent, random: Double) -> (ConnStat
         return (.connected(attempt: n, sinceMs: now), [])
     case (.connecting(let n), .closed(let now)):
         let delay = delayMs(attempt: n + 1, random: random)
-        return (.waiting(attempt: n + 1, retryAtMs: now + delay), [.scheduleRetry(delayMs: delay)])
+        return (
+            .waiting(attempt: n + 1, retryAtMs: now + delay),
+            [.scheduleRetry(delayMs: delay)]
+        )
     case (.waiting(let n, _), .retryTimerFired):
         return (.connecting(attempt: n), [.connect])
     case (_, .networkLost):
@@ -95,17 +108,24 @@ func reduce(_ state: ConnState, _ event: ConnEvent, random: Double) -> (ConnStat
     case (.offline, .networkAvailable):
         return (.connecting(attempt: 0), [.connect])
     default:
-        return (state, [])                          // 其他組合一律忽略
+        // 其他組合一律忽略
+        return (state, [])
     }
 }
 
 // 用一串事件測試，不需要真的連網路
 var state = ConnState.idle
-for event in [ConnEvent.start, .closed(nowMs: 100), .retryTimerFired, .networkLost] {
+for event in [
+    ConnEvent.start,
+    .closed(nowMs: 100),
+    .retryTimerFired,
+    .networkLost
+] {
     let (next, effects) = reduce(state, event, random: 0.5)
     print("\(event) → \(next)，要做的事：\(effects.map { "\($0)" })")
     state = next
 }
+
 // 輸出：
 // start → connecting(attempt: 0)，要做的事：["connect"]
 // closed(nowMs: 100) → waiting(attempt: 1, retryAtMs: 600)，要做的事：["scheduleRetry(delayMs: 500)"]
@@ -145,10 +165,16 @@ for event in [ConnEvent.start, .closed(nowMs: 100), .retryTimerFired, .networkLo
 ```swift
 // full jitter：延遲 = 0 到「這次的上限」之間的隨機值
 // 上限 = min(cap, base × 2^attempt)
-func delayMs(attempt: Int, baseMs: Int64 = 500, capMs: Int64 = 8000, random: Double) -> Int64 {
+func delayMs(
+    attempt: Int,
+    baseMs: Int64 = 500,
+    capMs: Int64 = 8000,
+    random: Double
+) -> Int64 {
     var ceiling = baseMs
     var i = 0
-    while i < attempt && ceiling < capMs {      // 一次翻一倍，到 cap 就停：attempt 再大也不會溢位
+    // 一次翻一倍，到 cap 就停：attempt 再大也不會溢位
+    while i < attempt && ceiling < capMs {
         ceiling = min(ceiling * 2, capMs)
         i += 1
     }
@@ -166,10 +192,16 @@ print(delay >= 0 && delay < 4000)
 ```
 
 ```kotlin
-fun delayMs(attempt: Int, baseMs: Long = 500, capMs: Long = 8000, random: Double): Long {
+fun delayMs(
+    attempt: Int,
+    baseMs: Long = 500,
+    capMs: Long = 8000,
+    random: Double,
+): Long {
     var ceiling = baseMs
     var i = 0
-    while (i < attempt && ceiling < capMs) {     // 一次翻一倍，到 cap 就停：attempt 再大也不會溢位
+    // 一次翻一倍，到 cap 就停：attempt 再大也不會溢位
+    while (i < attempt && ceiling < capMs) {
         ceiling = minOf(ceiling * 2, capMs)
         i++
     }
@@ -228,13 +260,17 @@ let monitor = NWPathMonitor()
 monitor.pathUpdateHandler = { path in
     if path.status == .satisfied {
         // 系統說有路可走：提示可以立刻重試。但不代表一定連得上伺服器
-        print("有網路路徑，Wi-Fi：\(path.usesInterfaceType(.wifi))，行動網路：\(path.usesInterfaceType(.cellular))")
+        print(
+            "有網路路徑，Wi-Fi：\(path.usesInterfaceType(.wifi))，行動網路：\(path.usesInterfaceType(.cellular))"
+        )
     } else {
         // 沒有網路路徑：暫停重試計時器，等恢復的通知
         print("沒有網路")
     }
 }
-monitor.start(queue: DispatchQueue(label: "net.monitor"))   // 在背景佇列收通知
+
+// 在背景佇列收通知
+monitor.start(queue: DispatchQueue(label: "net.monitor"))
 ```
 
 ```kotlin
@@ -243,19 +279,33 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 
-// 需要 ACCESS_NETWORK_STATE 權限；registerDefaultNetworkCallback 從 API 24 開始提供
-fun watchNetwork(context: Context, onUsable: (Boolean) -> Unit): ConnectivityManager.NetworkCallback {
+// 需要 ACCESS_NETWORK_STATE 權限；registerDefaultNetworkCallback 從 API 24
+// 開始提供
+fun watchNetwork(
+    context: Context,
+    onUsable: (Boolean) -> Unit,
+): ConnectivityManager.NetworkCallback {
     val cm = context.getSystemService(ConnectivityManager::class.java)
     val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-            // 系統確認過真的連得到網際網路，才當成可用（captive portal 之類的情況不會通過）
-            onUsable(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+        override fun onCapabilitiesChanged(
+            network: Network,
+            caps: NetworkCapabilities,
+        ) {
+            // 系統確認過真的連得到網際網路，才當成可用（captive portal
+            // 之類的情況不會通過）
+            onUsable(
+                caps.hasCapability(
+                    NetworkCapabilities.NET_CAPABILITY_VALIDATED,
+                ),
+            )
         }
 
-        override fun onLost(network: Network) = onUsable(false)   // 網路消失：暫停重試
+        // 網路消失：暫停重試
+        override fun onLost(network: Network) = onUsable(false)
     }
     cm.registerDefaultNetworkCallback(callback)
-    return callback   // 不再需要時，呼叫 cm.unregisterNetworkCallback(callback)
+    // 不再需要時，呼叫 cm.unregisterNetworkCallback(callback)
+    return callback
 }
 ```
 
@@ -278,14 +328,31 @@ import UIKit
 final class AppLifecycleObserver {
     private var tokens: [NSObjectProtocol] = []
 
-    init(onForeground: @escaping () -> Void, onBackground: @escaping () -> Void) {
+    init(
+        onForeground: @escaping () -> Void,
+        onBackground: @escaping () -> Void
+    ) {
         let center = NotificationCenter.default
         // 進背景：馬上主動斷線，不要等系統把 socket 關掉
-        tokens.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification,
-                                         object: nil, queue: .main) { _ in onBackground() })
+        tokens.append(
+            center.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                onBackground()
+            }
+        )
         // 回前景：重新連線、重新訂閱、補資料
-        tokens.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification,
-                                         object: nil, queue: .main) { _ in onForeground() })
+        tokens.append(
+            center.addObserver(
+                forName: UIApplication.willEnterForegroundNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                onForeground()
+            }
+        )
     }
 
     deinit { tokens.forEach { NotificationCenter.default.removeObserver($0) } }
@@ -298,9 +365,12 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 
 fun observeAppLifecycle(onForeground: () -> Unit, onBackground: () -> Unit) {
-    ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-        override fun onStart(owner: LifecycleOwner) = onForeground()    // 整個 App 回到前景
-        override fun onStop(owner: LifecycleOwner) = onBackground()     // 整個 App 進背景
+    ProcessLifecycleOwner.get()
+        .lifecycle.addObserver(object : DefaultLifecycleObserver {
+        // 整個 App 回到前景
+        override fun onStart(owner: LifecycleOwner) = onForeground()
+        // 整個 App 進背景
+        override fun onStop(owner: LifecycleOwner) = onBackground()
     })
 }
 ```
@@ -334,19 +404,23 @@ fun observeAppLifecycle(onForeground: () -> Unit, onBackground: () -> Unit) {
 import Foundation
 
 struct FreshnessTracker {
-    private(set) var lastDataAt: TimeInterval?     // 最後一次收到有效資料的時間（單調時鐘，單位：秒）
-    let staleAfter: TimeInterval = 5               // 超過 5 秒沒有新資料，就當成過期
+    // 最後一次收到有效資料的時間（單調時鐘，單位：秒）
+    private(set) var lastDataAt: TimeInterval?
+    // 超過 5 秒沒有新資料，就當成過期
+    let staleAfter: TimeInterval = 5
 
     mutating func didReceiveData(now: TimeInterval) { lastDataAt = now }
 
     func isStale(now: TimeInterval) -> Bool {
-        guard let last = lastDataAt else { return true }   // 從來沒收到過，也算過期
+        // 從來沒收到過，也算過期
+        guard let last = lastDataAt else { return true }
         return now - last >= staleAfter
     }
 }
 
 var tracker = FreshnessTracker()
-// now 傳入 ProcessInfo.processInfo.systemUptime：只會往前走，使用者改系統時間也不受影響
+// now 傳入 ProcessInfo.processInfo.systemUptime：只會往前走，
+// 使用者改系統時間也不受影響
 tracker.didReceiveData(now: 100)
 print(tracker.isStale(now: 103), tracker.isStale(now: 106))
 // 輸出：false true

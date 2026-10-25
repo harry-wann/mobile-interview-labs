@@ -82,15 +82,18 @@ func saveToken(_ token: Data, account: String) -> OSStatus {
         kSecAttrService as String: "jp.example.app.auth",
         kSecAttrAccount as String: account
     ]
-    SecItemDelete(base as CFDictionary)            // 先刪掉舊的，避免重複
+    // 先刪掉舊的，避免重複
+    SecItemDelete(base as CFDictionary)
     var add = base
     add[kSecValueData as String] = token
     // 開機後解鎖一次就能讀（背景可用），不進備份、不同步
-    add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    add[kSecAttrAccessible as String] =
+        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
     return SecItemAdd(add as CFDictionary, nil)
 }
 
-// 首次啟動時呼叫：UserDefaults 會隨 App 刪除，Keychain 不會，用它判斷是不是重新安裝
+// 首次啟動時呼叫：
+// UserDefaults 會隨 App 刪除，Keychain 不會，用它判斷是不是重新安裝
 func clearKeychainIfFreshInstall() {
     let key = "hasLaunchedBefore"
     if !UserDefaults.standard.bool(forKey: key) {
@@ -112,19 +115,29 @@ Keystore 的金鑰「進得去、拿不出來」：你只能請系統用這把�
 **Tink** 把這些細節包起來，提供安全的高階 API。最常用的是 **AEAD**（Authenticated Encryption with Associated Data：有驗證功能的加密）：用 AES-256-GCM 加密，同時能偵測密文有沒有被竄改。搭配 `AndroidKeysetManager` 的運作方式是：Tink 把一組加密用的金鑰（keyset）存在 SharedPreferences，這個 keyset 本身再由 Keystore 裡的 master key 加密，所以 keyset 檔案外流也沒用。`associatedData` 是額外綁定的資料（例如 cookie 的名稱），加密和解密時要給一樣的值，才能還原，避免有人把 A 用途的密文搬去 B 用途。
 
 ```kotlin
-AeadConfig.register()   // 註冊 Tink 的 AEAD 實作
+// 註冊 Tink 的 AEAD 實作
+AeadConfig.register()
 
 val keysetHandle = AndroidKeysetManager.Builder()
-    .withSharedPref(context, "keyset", "tink_prefs")                  // keyset 存在這個 SharedPreferences
-    .withKeyTemplate(KeyTemplates.get("AES256_GCM"))                 // 第一次建立時，產生 AES-256-GCM 的金鑰
-    .withMasterKeyUri("android-keystore://app_master_key")           // 用 Keystore 的 master key 加密 keyset
+    // keyset 存在這個 SharedPreferences
+    .withSharedPref(context, "keyset", "tink_prefs")
+    // 第一次建立時，產生 AES-256-GCM 的金鑰
+    .withKeyTemplate(KeyTemplates.get("AES256_GCM"))
+    // 用 Keystore 的 master key 加密 keyset
+    .withMasterKeyUri("android-keystore://app_master_key")
     .build()
     .keysetHandle
-val aead = keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
+val aead = keysetHandle.getPrimitive(
+    RegistryConfiguration.get(),
+    Aead::class.java,
+)
 
-val associatedData = "refresh_token".toByteArray()                   // 綁定用途
-val cipherText = aead.encrypt(plainText, associatedData)             // 加密後的 bytes 再存進 DataStore 或檔案
-val plain = aead.decrypt(cipherText, associatedData)                 // associatedData 不一樣就會丟出例外
+// 綁定用途
+val associatedData = "refresh_token".toByteArray()
+// 加密後的 bytes 再存進 DataStore 或檔案
+val cipherText = aead.encrypt(plainText, associatedData)
+// associatedData 不一樣就會丟出例外
+val plain = aead.decrypt(cipherText, associatedData)
 ```
 
 Jetpack 的 `EncryptedSharedPreferences` 已經被標為 deprecated（不建議再使用），新專案建議直接用 Tink 加 DataStore。Tink 新版以 `RegistryConfiguration` 取得 primitive，舊的 `getPrimitive(Class)` 寫法也已標為 deprecated。
@@ -153,7 +166,8 @@ Jetpack 的 `EncryptedSharedPreferences` 已經被標為 deprecated（不建議�
 val plain = try {
     aead.decrypt(cipherText, associatedData)
 } catch (e: GeneralSecurityException) {
-    clearLocalDataAndRequireLogin()    // 金鑰不在或密文損壞：清除資料，回到登入畫面
+    // 金鑰不在或密文損壞：清除資料，回到登入畫面
+    clearLocalDataAndRequireLogin()
     null
 }
 ```
@@ -181,20 +195,27 @@ val plain = try {
 import CryptoKit
 
 // iOS：在 Secure Enclave 內產生 P-256 簽章金鑰，私鑰不會出來
-guard SecureEnclave.isAvailable else { return }          // 模擬器或舊裝置沒有，要有降級方案
+// 模擬器或舊裝置沒有，要有降級方案
+guard SecureEnclave.isAvailable else { return }
 let key = try SecureEnclave.P256.Signing.PrivateKey()
-let signature = try key.signature(for: challenge)        // 簽章在晶片內完成
-let publicKey = key.publicKey                            // 公鑰傳給伺服器，之後用它驗證簽章
+// 簽章在晶片內完成
+let signature = try key.signature(for: challenge)
+// 公鑰傳給伺服器，之後用它驗證簽章
+let publicKey = key.publicKey
 ```
 
 ```kotlin
 // Android：優先用 StrongBox，沒有的話降級成一般 Keystore（TEE）
 fun createSigningKey(alias: String, useStrongBox: Boolean) {
     val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
-        .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))   // 即 P-256
+        // 即 P-256
+        .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
         .setDigests(KeyProperties.DIGEST_SHA256)
-    if (useStrongBox) builder.setIsStrongBoxBacked(true)
-    KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
+    if (useStrongBox) {
+        builder.setIsStrongBoxBacked(true)
+    }
+    KeyPairGenerator
+        .getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
         .apply { initialize(builder.build()) }
         .generateKeyPair()
 }
@@ -203,7 +224,8 @@ fun createSigningKeySafely(alias: String) {
     try {
         createSigningKey(alias, useStrongBox = true)
     } catch (e: StrongBoxUnavailableException) {
-        createSigningKey(alias, useStrongBox = false)       // 這支手機沒有 StrongBox
+        // 這支手機沒有 StrongBox
+        createSigningKey(alias, useStrongBox = false)
     }
 }
 ```
@@ -227,8 +249,10 @@ func saveWithBiometry(_ secret: Data, account: String) -> OSStatus {
     var error: Unmanaged<CFError>?
     guard let access = SecAccessControlCreateWithFlags(
         nil,
-        kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,    // 一定要有裝置密碼，且不進備份
-        .biometryCurrentSet,                                // 要求生物辨識；新增指紋或臉孔後會失效
+        // 一定要有裝置密碼，且不進備份
+        kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+        // 要求生物辨識；新增指紋或臉孔後會失效
+        .biometryCurrentSet,
         &error
     ) else { return errSecParam }
 
@@ -243,7 +267,8 @@ func saveWithBiometry(_ secret: Data, account: String) -> OSStatus {
 
 func readWithBiometry(account: String) -> Data? {
     let context = LAContext()
-    context.localizedReason = "確認身分以查看資產"            // 系統驗證畫面上顯示的說明
+    // 系統驗證畫面上顯示的說明
+    context.localizedReason = "確認身分以查看資產"
     let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrAccount as String: account,
@@ -269,7 +294,8 @@ val spec = KeyGenParameterSpec.Builder(
 )
     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-    .setUserAuthenticationRequired(true)     // API 30 起可用 setUserAuthenticationParameters 指定驗證方式與有效時間
+    // API 30 起可用 setUserAuthenticationParameters 指定驗證方式與有效時間
+    .setUserAuthenticationRequired(true)
     .build()
 KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
     .apply { init(spec) }
@@ -316,7 +342,8 @@ biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
 actor OrderStore {
     func orders() throws -> [OrderModel] {
         let realm = try Realm()
-        return realm.objects(OrderObject.self).map { OrderModel($0) }   // 轉成獨立的 struct
+        // 轉成獨立的 struct
+        return realm.objects(OrderObject.self).map { OrderModel($0) }
     }
 }
 ```
@@ -327,7 +354,8 @@ actor OrderStore {
 data class OrderEntity(
     @PrimaryKey val id: String,
     val symbol: String,
-    val price: String,        // 金額用字串或整數存，不用 Double，避免精度誤差
+    // 金額用字串或整數存，不用 Double，避免精度誤差
+    val price: String,
     val status: String
 )
 
@@ -374,13 +402,16 @@ abstract class AppDatabase : RoomDatabase()
 // 複雜變更：手寫 Migration
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE orders ADD COLUMN memo TEXT NOT NULL DEFAULT ''")
+        db.execSQL(
+            "ALTER TABLE orders ADD COLUMN memo TEXT NOT NULL DEFAULT ''",
+        )
     }
 }
 
 Room.databaseBuilder(context, AppDatabase::class.java, "app.db")
     .addMigrations(MIGRATION_1_2)
-    // 不要加 .fallbackToDestructiveMigration()：找不到 migration 時會刪光使用者的資料
+    // 不要加 .fallbackToDestructiveMigration()：
+    // 找不到 migration 時會刪光使用者的資料
     .build()
 ```
 
@@ -390,8 +421,11 @@ let config = Realm.Configuration(
     schemaVersion: 18,
     migrationBlock: { migration, oldSchemaVersion in
         if oldSchemaVersion < 18 {
-            migration.enumerateObjects(ofType: ChatRoomObject.className()) { _, newObject in
-                newObject?["isPinned"] = false        // 新欄位給預設值
+            migration.enumerateObjects(
+                ofType: ChatRoomObject.className()
+            ) { _, newObject in
+                // 新欄位給預設值
+                newObject?["isPinned"] = false
             }
         }
     }

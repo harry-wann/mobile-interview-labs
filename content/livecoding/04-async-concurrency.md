@@ -30,7 +30,8 @@ await withTaskGroup(of: (Int, R).self) { group in
     // 1. 先放 limit 個
     for _ in 0..<min(limit, items.count) {
         let index = next
-        group.addTask { (index, await transform(items[index])) }   // 帶著索引，之後才能放回原本的位置
+        // 帶著索引，之後才能放回原本的位置
+        group.addTask { (index, await transform(items[index])) }
         next += 1
     }
     // 2. 每完成一個，就補下一個進去
@@ -53,12 +54,18 @@ TaskGroup 的結果是「誰先完成誰先回來」，不是照輸入的順序�
 `Semaphore(limit)` 像是一個只有 limit 張的通行證。每個 coroutine 要先拿到通行證才能執行，執行完歸還，下一個才能拿。
 
 ```kotlin
-suspend fun <T, R> mapConcurrently(items: List<T>, limit: Int, transform: suspend (T) -> R): List<R> =
+suspend fun <T, R> mapConcurrently(
+    items: List<T>,
+    limit: Int,
+    transform: suspend (T) -> R,
+): List<R> =
     coroutineScope {
         val semaphore = Semaphore(limit)
         items.map { item ->
-            async { semaphore.withPermit { transform(item) } }   // 在 async 裡面拿通行證
-        }.awaitAll()                                             // awaitAll 會照原本的順序回傳
+            // 在 async 裡面拿通行證
+            async { semaphore.withPermit { transform(item) } }
+        // awaitAll 會照原本的順序回傳
+        }.awaitAll()
     }
 ```
 
@@ -112,9 +119,13 @@ actor 保證同一時間只有一段程式碼在存取它的資料。但有一�
 actor Config {
     var cached: String?
     func load() async -> String {
-        if let cached { return cached }
-        let value = await api.fetch()   // 等待 API 的期間，其他呼叫會進來
-        cached = value                  // 等到這裡才記錄，其他呼叫早就也去打 API 了
+        if let cached {
+            return cached
+        }
+        // 等待 API 的期間，其他呼叫會進來
+        let value = await api.fetch()
+        // 等到這裡才記錄，其他呼叫早就也去打 API 了
+        cached = value
         return value
     }
 }
@@ -129,18 +140,29 @@ actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
     private var values: [Key: Value] = [:]
     private var inFlight: [Key: Task<Value, Error>] = [:]
 
-    func value(for key: Key, load: @escaping @Sendable (Key) async throws -> Value) async throws -> Value {
-        if let cached = values[key] { return cached }                 // 已經有值
-        if let task = inFlight[key] { return try await task.value }  // 有人正在載入：等同一個結果
+    func value(
+        for key: Key,
+        load: @escaping @Sendable (Key) async throws -> Value
+    ) async throws -> Value {
+        // 已經有值
+        if let cached = values[key] {
+            return cached
+        }
+        // 有人正在載入：等同一個結果
+        if let task = inFlight[key] {
+            return try await task.value
+        }
         let task = Task { try await load(key) }
-        inFlight[key] = task            // 在 await 之前就記下來，後面進來的呼叫才看得到
+        // 在 await 之前就記下來，後面進來的呼叫才看得到
+        inFlight[key] = task
         do {
             let loaded = try await task.value
             values[key] = loaded
             inFlight[key] = nil
             return loaded
         } catch {
-            inFlight[key] = nil         // 失敗不要快取，下次呼叫重新載入
+            // 失敗不要快取，下次呼叫重新載入
+            inFlight[key] = nil
             throw error
         }
     }

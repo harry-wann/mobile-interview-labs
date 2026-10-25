@@ -47,12 +47,18 @@ Objective-C（以下簡稱 ObjC）是 Swift 出現之前 iOS 的主要語言。�
 @class OrderViewModel;
 
 @interface OrderController : NSObject
-@property (nonatomic, weak) id<OrderDelegate> delegate;       // 不持有 delegate，避免互相持有
-@property (nonatomic, copy) NSString *symbol;                  // 字串用 copy
-@property (nonatomic, strong) OrderViewModel *viewModel;       // 一般物件用 strong
-@property (nonatomic, assign) NSInteger lots;                  // 基本型別用 assign
-@property (nonatomic, copy) void (^onClose)(void);             // block 用 copy
-@property (nonatomic, readonly) NSString *title;               // 對外唯讀
+// 不持有 delegate，避免互相持有
+@property (nonatomic, weak) id<OrderDelegate> delegate;
+// 字串用 copy
+@property (nonatomic, copy) NSString *symbol;
+// 一般物件用 strong
+@property (nonatomic, strong) OrderViewModel *viewModel;
+// 基本型別用 assign
+@property (nonatomic, assign) NSInteger lots;
+// block 用 copy
+@property (nonatomic, copy) void (^onClose)(void);
+// 對外唯讀
+@property (nonatomic, readonly) NSString *title;
 @end
 ```
 
@@ -82,10 +88,14 @@ Objective-C（以下簡稱 ObjC）是 Swift 出現之前 iOS 的主要語言。�
 int main(void) {
     @autoreleasepool {
         Order *order = [Order new];
-        NSMutableString *m = [@"BTC" mutableCopy];   // 可變字串
-        order.strongSymbol = m;                       // strong：持有的就是 m 本身
-        order.copiedSymbol = m;                       // copy：複製了一份 "BTC"
-        [m appendString:@"/JPY"];                     // 修改 m
+        // 可變字串
+        NSMutableString *m = [@"BTC" mutableCopy];
+        // strong：持有的就是 m 本身
+        order.strongSymbol = m;
+        // copy：複製了一份 "BTC"
+        order.copiedSymbol = m;
+        // 修改 m
+        [m appendString:@"/JPY"];
         NSLog(@"%@ %@", order.strongSymbol, order.copiedSymbol);
         // 輸出：BTC/JPY BTC
     }
@@ -110,13 +120,15 @@ block 是 ObjC 版的 closure，宣告長得像函式指標：`void (^handler)(d
 
 ```objectivec
 int x = 1;
-void (^byValue)(void) = ^{ printf("%d ", x); };    // 捕獲建立當下的值
+// 捕獲建立當下的值
+void (^byValue)(void) = ^{ printf("%d ", x); };
 __block int y = 1;
-void (^byRef)(void) = ^{ printf("%d\n", y); };     // __block：和外部共用同一份
+// __block：和外部共用同一份
+void (^byRef)(void) = ^{ printf("%d\n", y); };
 x = 2;
 y = 2;
-byValue();   // 輸出：1
-byRef();     // 輸出：2
+byValue(); // 輸出：1
+byRef(); // 輸出：2
 ```
 
 Swift 的 closure 剛好相反：預設捕獲變數本身，要用 capture list（`[x]`）才是捕獲值（見 ARC 單元）。
@@ -127,7 +139,8 @@ Swift 的 closure 剛好相反：預設捕獲變數本身，要用 capture list�
 #import <Foundation/Foundation.h>
 
 @interface PriceListener : NSObject
-@property (nonatomic, copy) void (^handler)(double price);   // block 屬性用 copy
+// block 屬性用 copy
+@property (nonatomic, copy) void (^handler)(double price);
 - (void)start;
 - (void)step1;
 - (void)step2;
@@ -135,14 +148,20 @@ Swift 的 closure 剛好相反：預設捕獲變數本身，要用 capture list�
 
 @implementation PriceListener
 - (void)start {
-    __weak typeof(self) weakSelf = self;                  // 步驟 1：block 外面先拿一個 weak 參考
+    // 步驟 1：block 外面先拿一個 weak 參考
+    __weak typeof(self) weakSelf = self;
     self.handler = ^(double price) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;  // 步驟 2：block 一開始，轉成 strong
-        if (!strongSelf) { return; }                      // self 已經釋放就直接結束
+        // 步驟 2：block 一開始，轉成 strong
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        // self 已經釋放就直接結束
+        if (!strongSelf) {
+            return;
+        }
         [strongSelf step1];
         [strongSelf step2];
     };
 }
+
 - (void)step1 {}
 - (void)step2 {}
 @end
@@ -166,16 +185,23 @@ nullability 是在 ObjC 的宣告裡標註「這個指標可不可以是 `nil`�
 
 NS_ASSUME_NONNULL_BEGIN
 @interface Order : NSObject
-@property (nonatomic, copy) NSString *symbol;                      // Swift：String
-@property (nonatomic, copy, nullable) NSString *memo;              // Swift：String?
-@property (nonatomic, strong) NSArray<NSString *> *tags;           // Swift：[String]
-- (nullable NSDecimalNumber *)priceForSymbol:(NSString *)symbol;   // Swift：price(forSymbol:) -> NSDecimalNumber?
+// Swift：String
+@property (nonatomic, copy) NSString *symbol;
+// Swift：String?
+@property (nonatomic, copy, nullable) NSString *memo;
+// Swift：[String]
+@property (nonatomic, strong) NSArray<NSString *> *tags;
+// Swift：price(forSymbol:) -> NSDecimalNumber?
+- (nullable NSDecimalNumber *)priceForSymbol:(NSString *)symbol;
 @end
 NS_ASSUME_NONNULL_END
 
-@interface Legacy : NSObject          // 這個 header 沒有任何標註
-@property (nonatomic, copy) NSString *name;                        // Swift：String!
-@property (nonatomic, strong) NSArray *items;                      // Swift：[Any]!
+// 這個 header 沒有任何標註
+@interface Legacy : NSObject
+// Swift：String!
+@property (nonatomic, copy) NSString *name;
+// Swift：[Any]!
+@property (nonatomic, strong) NSArray *items;
 @end
 ```
 
@@ -200,16 +226,36 @@ NS_ASSUME_NONNULL_END
 import Foundation
 
 @objcMembers
-final class Quote: NSObject {          // 繼承 NSObject，ObjC 才看得到
-    var symbol: String                 // 會匯出成 NSString，並且是 copy
+// 繼承 NSObject，ObjC 才看得到
+final class Quote: NSObject {
+    // 會匯出成 NSString，並且是 copy
+    var symbol: String
     var price: Double
-    init(symbol: String, price: Double) { self.symbol = symbol; self.price = price }
-    func displayText() -> String { "\(symbol) \(price)" }
+
+    init(symbol: String, price: Double) {
+        self.symbol = symbol
+        self.price = price
+    }
+
+    func displayText() -> String {
+        "\(symbol) \(price)"
+    }
 }
 
-struct Tick { let price: Double }                 // struct：ObjC 看不到
-enum Side { case buy(Double), sell(Double) }      // 有關聯值的 enum：ObjC 看不到
-@objc enum OrderSide: Int { case buy, sell }      // 純整數的 enum：ObjC 看得到
+// struct：ObjC 看不到
+struct Tick {
+    let price: Double
+}
+
+// 有關聯值的 enum：ObjC 看不到
+enum Side {
+    case buy(Double), sell(Double)
+}
+
+// 純整數的 enum：ObjC 看得到
+@objc enum OrderSide: Int {
+    case buy, sell
+}
 ```
 
 Swift 專有的功能沒辦法暴露給 ObjC：泛型、有關聯值的 enum、struct、tuple（多個值組成的組合）、全域函式。要給 ObjC 用的資料，常見做法是用 class 包一層。
@@ -218,9 +264,11 @@ Swift 專有的功能沒辦法暴露給 ObjC：泛型、有關聯值的 enum、s
 
 ```swift
 // ObjC 宣告：- (void)fetchQuoteForSymbol:(NSString *)symbol
-//                     completion:(void (^)(NSDecimalNumber *_Nullable quote, NSError *_Nullable error))completion;
+//                     completion:(void (^)(NSDecimalNumber *_Nullable quote,
+//                                         NSError *_Nullable error))completion;
 func load(order: Order) async throws {
-    let quote = try await order.fetchQuote(forSymbol: "btcjpy")   // 自動匯入成 async throws
+    // 自動匯入成 async throws
+    let quote = try await order.fetchQuote(forSymbol: "btcjpy")
     print(quote)
 }
 ```
@@ -239,9 +287,11 @@ ObjC 呼叫方法的說法是「**傳訊息**」：`[obj doSomething]` 是把 `d
 
 ```objectivec
 Order *nothing = nil;
-NSLog(@"%@", nothing.strongSymbol);    // 輸出：(null)，沒有 crash
+// 輸出：(null)，沒有 crash
+NSLog(@"%@", nothing.strongSymbol);
 double d = [(NSNumber *)nothing doubleValue];
-NSLog(@"%f", d);                       // 輸出：0.000000
+// 輸出：0.000000
+NSLog(@"%f", d);
 ```
 
 **method swizzling（方法交換）** 是利用這個執行時機制，在執行期把兩個方法的實作對調。Firebase 等 SDK 就會用它來攔截系統事件，也有 App 的自建多語系系統用它攔截 `NSLocalizedString`。
@@ -254,24 +304,30 @@ NSLog(@"%f", d);                       // 輸出：0.000000
 - (void)hello;
 @end
 @implementation Greeter
-- (void)hello { printf("hello\n"); }
+- (void)hello {
+    printf("hello\n");
+}
 @end
 
 @interface Greeter (Swizzle)
 - (void)xo_hello;
 @end
 @implementation Greeter (Swizzle)
-+ (void)load {                                  // 程式啟動時執行
+// 程式啟動時執行
++ (void)load {
     static dispatch_once_t once;
-    dispatch_once(&once, ^{                     // 確保只交換一次
+    // 確保只交換一次
+    dispatch_once(&once, ^{
         Method original = class_getInstanceMethod(self, @selector(hello));
         Method swizzled = class_getInstanceMethod(self, @selector(xo_hello));
         method_exchangeImplementations(original, swizzled);
     });
 }
+
 - (void)xo_hello {
     printf("before\n");
-    [self xo_hello];       // 交換之後，這行實際執行的是原本的 hello
+    // 交換之後，這行實際執行的是原本的 hello
+    [self xo_hello];
     printf("after\n");
 }
 @end
@@ -302,8 +358,10 @@ let q = Quote()
 let token = q.observe(\.price, options: [.old, .new]) { _, change in
     print(change.oldValue ?? 0, "->", change.newValue ?? 0)
 }
-q.price = 100   // 輸出：0.0 -> 100.0
-q.price = 101   // 輸出：100.0 -> 101.0
+// 輸出：0.0 -> 100.0
+q.price = 100
+// 輸出：100.0 -> 101.0
+q.price = 101
 ```
 
 **category（分類）** 是 ObjC 替既有類別加方法的方式，包括系統類別，寫法是 `@interface Foo (Name)`。和它長得很像的是 **class extension（類別擴充）**，寫法是 `@interface Foo ()`，通常放在 `.m` 檔裡宣告私有屬性。Swift 的 extension 則兩者都不一樣：

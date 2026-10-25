@@ -148,12 +148,18 @@
       // ---- 已提供，請勿修改 ----
       func parseJSONObject(_ text: String) -> [String: Any]? {
           guard let data = text.data(using: .utf8),
-                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+                let obj = try? JSONSerialization.jsonObject(with: data)
+                    as? [String: Any] else {
+              return nil
+          }
           return obj
       }
 
       func integerValue(_ any: Any?) -> Int64? {
-          guard let n = any as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+          guard let n = any as? NSNumber,
+                CFGetTypeID(n) != CFBooleanGetTypeID() else {
+              return nil
+          }
           let d = n.doubleValue
           guard d == d.rounded(), abs(d) < 9.0e15 else { return nil }
           return n.int64Value
@@ -170,6 +176,7 @@
           case error(id: String?, code: String, message: String)
           case ignore
       }
+
       // ---- 以上已提供 ----
 
       func handleFrame(_ json: String) -> WSAction {
@@ -191,12 +198,18 @@
 
       func parseJSONObject(_ text: String) -> [String: Any]? {
           guard let data = text.data(using: .utf8),
-                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+                let obj = try? JSONSerialization.jsonObject(with: data)
+                    as? [String: Any] else {
+              return nil
+          }
           return obj
       }
 
       func integerValue(_ any: Any?) -> Int64? {
-          guard let n = any as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+          guard let n = any as? NSNumber,
+                CFGetTypeID(n) != CFBooleanGetTypeID() else {
+              return nil
+          }
           let d = n.doubleValue
           guard d == d.rounded(), abs(d) < 9.0e15 else { return nil }
           return n.int64Value
@@ -215,15 +228,21 @@
       }
 
       private func parseTopic(_ ch: String) -> WSAction? {
-          let parts = ch.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-          guard parts.count >= 3, parts[0] == "market", !parts[1].isEmpty else { return nil }
+          let parts = ch.split(separator: ".", omittingEmptySubsequences: false)
+              .map(String.init)
+          guard parts.count >= 3, parts[0] == "market", !parts[1].isEmpty else {
+              return nil
+          }
           let symbol = parts[1]
           let rest = Array(parts[2...])
           switch rest {
           case ["bbo"]: return .push(symbol: symbol, kind: "bbo", param: nil)
           case ["detail"]: return .push(symbol: symbol, kind: "detail", param: nil)
-          case ["trade", "detail"]: return .push(symbol: symbol, kind: "trade.detail", param: nil)
-          case _ where rest.count == 2 && (rest[0] == "kline" || rest[0] == "depth") && !rest[1].isEmpty:
+          case ["trade", "detail"]:
+              return .push(symbol: symbol, kind: "trade.detail", param: nil)
+          case _ where rest.count == 2 &&
+                  (rest[0] == "kline" || rest[0] == "depth") &&
+                  !rest[1].isEmpty:
               return .push(symbol: symbol, kind: rest[0], param: rest[1])
           default: return nil
           }
@@ -233,12 +252,17 @@
           guard let obj = parseJSONObject(json) else { return .ignore }
 
           if obj["ping"] != nil {
-              if let v = integerValue(obj["ping"]) { return .send("{\"pong\":\(v)}") }
+              if let v = integerValue(obj["ping"]) {
+                  return .send("{\"pong\":\(v)}")
+              }
               return .ignore
           }
-          if obj["pong"] != nil { return .ignore }
+          if obj["pong"] != nil {
+              return .ignore
+          }
           if stringValue(obj["action"]) == "ping",
-             let data = obj["data"] as? [String: Any], let ts = integerValue(data["ts"]) {
+             let data = obj["data"] as? [String: Any],
+             let ts = integerValue(data["ts"]) {
               return .send("{\"action\":\"pong\",\"data\":{\"ts\":\(ts)}}")
           }
 
@@ -250,11 +274,18 @@
                             message: stringValue(obj["err-msg"]) ?? "")
           }
           if status == "ok" {
-              if let t = stringValue(obj["subbed"]) { return .subscribed(id: id, topic: t) }
-              if let t = stringValue(obj["unsubbed"]) { return .unsubscribed(id: id, topic: t) }
-              if let t = stringValue(obj["rep"]) { return .reply(id: id, topic: t) }
+              if let t = stringValue(obj["subbed"]) {
+                  return .subscribed(id: id, topic: t)
+              }
+              if let t = stringValue(obj["unsubbed"]) {
+                  return .unsubscribed(id: id, topic: t)
+              }
+              if let t = stringValue(obj["rep"]) {
+                  return .reply(id: id, topic: t)
+              }
           }
-          if let ch = stringValue(obj["ch"]), obj["tick"] != nil || obj["data"] != nil,
+          if let ch = stringValue(obj["ch"]),
+             obj["tick"] != nil || obj["data"] != nil,
              let action = parseTopic(ch) {
               return action
           }
@@ -265,7 +296,8 @@
           guard (1...64).contains(s.count) else { return false }
           return s.unicodeScalars.allSatisfy { c in
               (c.value >= 48 && c.value <= 57) || (c.value >= 65 && c.value <= 90) ||
-              (c.value >= 97 && c.value <= 122) || c == "." || c == "_" || c == "#" || c == "-"
+              (c.value >= 97 && c.value <= 122) || c == "." || c == "_" || c == "#" ||
+              c == "-"
           }
       }
 
@@ -287,53 +319,92 @@
       checkEqual("伺服器 ping → 原值 pong", WSAction.send("{\"pong\":18212558000}")) {
           handleFrame("{\"ping\": 18212558000}")
       }
+
       check("ping 不是整數（字串、小數）→ ignore") {
-          handleFrame("{\"ping\":\"abc\"}") == .ignore && handleFrame("{\"ping\":1.5}") == .ignore
+          handleFrame("{\"ping\":\"abc\"}") == .ignore &&
+              handleFrame("{\"ping\":1.5}") == .ignore
       }
-      checkEqual("私有 WS 心跳", WSAction.send("{\"action\":\"pong\",\"data\":{\"ts\":1575537778295}}")) {
+
+      checkEqual(
+          "私有 WS 心跳",
+          WSAction.send("{\"action\":\"pong\",\"data\":{\"ts\":1575537778295}}")
+      ) {
           handleFrame("{\"action\":\"ping\",\"data\":{\"ts\":1575537778295}}")
       }
+
       check("pong、非 JSON、空物件都是 ignore") {
-          handleFrame("{\"pong\":1}") == .ignore && handleFrame("not json") == .ignore && handleFrame("{}") == .ignore
+          handleFrame("{\"pong\":1}") == .ignore &&
+              handleFrame("not json") == .ignore &&
+              handleFrame("{}") == .ignore
       }
+
       check("sub／unsub／req 的回覆（id 可有可無）") {
-          handleFrame("{\"id\":\"id1\",\"status\":\"ok\",\"subbed\":\"market.btcjpy.kline.1min\",\"ts\":1}")
+          handleFrame(
+              "{\"id\":\"id1\",\"status\":\"ok\",\"subbed\":\"market.btcjpy.kline.1min\",\"ts\":1}"
+          )
               == .subscribed(id: "id1", topic: "market.btcjpy.kline.1min")
-          && handleFrame("{\"status\":\"ok\",\"unsubbed\":\"market.btcjpy.trade.detail\",\"ts\":1}")
+          && handleFrame(
+              "{\"status\":\"ok\",\"unsubbed\":\"market.btcjpy.trade.detail\",\"ts\":1}"
+          )
               == .unsubscribed(id: nil, topic: "market.btcjpy.trade.detail")
-          && handleFrame("{\"status\":\"ok\",\"id\":\"id10\",\"rep\":\"market.btcjpy.kline.1min\",\"tick\":[]}")
+          && handleFrame(
+              "{\"status\":\"ok\",\"id\":\"id10\",\"rep\":\"market.btcjpy.kline.1min\",\"tick\":[]}"
+          )
               == .reply(id: "id10", topic: "market.btcjpy.kline.1min")
       }
+
       check("錯誤訊息：取 id、err-code、err-msg，缺欄位用預設") {
-          handleFrame("{\"id\":\"id3\",\"status\":\"error\",\"err-code\":\"bad-request\",\"err-msg\":\"invalid topic market.btcjpy.kline.3min\",\"ts\":1}")
-              == .error(id: "id3", code: "bad-request", message: "invalid topic market.btcjpy.kline.3min")
-          && handleFrame("{\"status\":\"error\"}") == .error(id: nil, code: "unknown", message: "")
+          handleFrame(
+              "{\"id\":\"id3\",\"status\":\"error\",\"err-code\":\"bad-request\",\"err-msg\":\"invalid topic market.btcjpy.kline.3min\",\"ts\":1}"
+          )
+              == .error(
+                  id: "id3",
+                  code: "bad-request",
+                  message: "invalid topic market.btcjpy.kline.3min"
+              )
+          && handleFrame("{\"status\":\"error\"}")
+              == .error(id: nil, code: "unknown", message: "")
       }
+
       check("推送依 ch 分派（kline、depth、bbo、trade.detail、detail）") {
-          handleFrame("{\"ch\":\"market.btcjpy.kline.1min\",\"ts\":1,\"tick\":{\"id\":1}}")
+          handleFrame(
+              "{\"ch\":\"market.btcjpy.kline.1min\",\"ts\":1,\"tick\":{\"id\":1}}"
+          )
               == .push(symbol: "btcjpy", kind: "kline", param: "1min")
-          && handleFrame("{\"ch\":\"market.ethjpy.depth.step0\",\"ts\":1,\"data\":{\"bids\":[],\"asks\":[]}}")
+          && handleFrame(
+              "{\"ch\":\"market.ethjpy.depth.step0\",\"ts\":1,\"data\":{\"bids\":[],\"asks\":[]}}"
+          )
               == .push(symbol: "ethjpy", kind: "depth", param: "step0")
           && handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1,\"tick\":{}}")
               == .push(symbol: "btcjpy", kind: "bbo", param: nil)
-          && handleFrame("{\"ch\":\"market.btcjpy.trade.detail\",\"ts\":1,\"tick\":{\"data\":[]}}")
+          && handleFrame(
+              "{\"ch\":\"market.btcjpy.trade.detail\",\"ts\":1,\"tick\":{\"data\":[]}}"
+          )
               == .push(symbol: "btcjpy", kind: "trade.detail", param: nil)
           && handleFrame("{\"ch\":\"market.btcjpy.detail\",\"ts\":1,\"tick\":{}}")
               == .push(symbol: "btcjpy", kind: "detail", param: nil)
       }
+
       check("未知或格式錯誤的 ch、沒有資料的推送、私有 push 都是 ignore") {
-          handleFrame("{\"ch\":\"market.btcjpy.kline\",\"ts\":1,\"tick\":{}}") == .ignore
-          && handleFrame("{\"ch\":\"foo.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") == .ignore
+          handleFrame("{\"ch\":\"market.btcjpy.kline\",\"ts\":1,\"tick\":{}}")
+              == .ignore
+          && handleFrame("{\"ch\":\"foo.btcjpy.bbo\",\"ts\":1,\"tick\":{}}")
+              == .ignore
           && handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1}") == .ignore
-          && handleFrame("{\"action\":\"push\",\"ch\":\"orders#btcjpy\",\"data\":{}}") == .ignore
+          && handleFrame("{\"action\":\"push\",\"ch\":\"orders#btcjpy\",\"data\":{}}")
+              == .ignore
       }
+
       check("makeSubscribe／makeUnsubscribe：格式與驗證") {
-          makeSubscribe(topic: "market.btcjpy.kline.1min", id: "id1") == "{\"sub\":\"market.btcjpy.kline.1min\",\"id\":\"id1\"}"
-          && makeSubscribe(topic: "market.btcjpy.bbo", id: "id2", freqMs: 2000) == "{\"sub\":\"market.btcjpy.bbo\",\"id\":\"id2\",\"freq-ms\":2000}"
+          makeSubscribe(topic: "market.btcjpy.kline.1min", id: "id1")
+              == "{\"sub\":\"market.btcjpy.kline.1min\",\"id\":\"id1\"}"
+          && makeSubscribe(topic: "market.btcjpy.bbo", id: "id2", freqMs: 2000)
+              == "{\"sub\":\"market.btcjpy.bbo\",\"id\":\"id2\",\"freq-ms\":2000}"
           && makeSubscribe(topic: "market.btcjpy.bbo", id: "id2", freqMs: 250) == nil
           && makeSubscribe(topic: "market.btcjpy.bbo\",\"x\":\"y", id: "id3") == nil
           && makeSubscribe(topic: "", id: "id4") == nil
-          && makeUnsubscribe(topic: "market.btcjpy.trade.detail", id: "id4") == "{\"unsub\":\"market.btcjpy.trade.detail\",\"id\":\"id4\"}"
+          && makeUnsubscribe(topic: "market.btcjpy.trade.detail", id: "id4")
+              == "{\"unsub\":\"market.btcjpy.trade.detail\",\"id\":\"id4\"}"
       }
   kotlin:
     starter: |
@@ -344,7 +415,9 @@
           fun parse(): Any? {
               val v = value()
               skipWs()
-              if (i != s.length) throw IllegalArgumentException("trailing characters")
+              if (i != s.length) {
+                  throw IllegalArgumentException("trailing characters")
+              }
               return v
           }
 
@@ -352,15 +425,26 @@
 
           private fun value(): Any? {
               skipWs()
-              if (i >= s.length) throw IllegalArgumentException("unexpected end")
+              if (i >= s.length) {
+                  throw IllegalArgumentException("unexpected end")
+              }
               val c = s[i]
               return when {
                   c == '{' -> obj()
                   c == '[' -> arr()
                   c == '"' -> str()
-                  s.startsWith("true", i) -> { i += 4; true }
-                  s.startsWith("false", i) -> { i += 5; false }
-                  s.startsWith("null", i) -> { i += 4; null }
+                  s.startsWith("true", i) -> {
+                      i += 4
+                      true
+                  }
+                  s.startsWith("false", i) -> {
+                      i += 5
+                      false
+                  }
+                  s.startsWith("null", i) -> {
+                      i += 4
+                      null
+                  }
                   c == '-' || c.isDigit() -> num()
                   else -> throw IllegalArgumentException("unexpected '$c'")
               }
@@ -370,18 +454,31 @@
               val m = LinkedHashMap<String, Any?>()
               i++
               skipWs()
-              if (i < s.length && s[i] == '}') { i++; return m }
+              if (i < s.length && s[i] == '}') {
+                  i++
+                  return m
+              }
               while (true) {
                   skipWs()
                   val k = str()
                   skipWs()
-                  if (i >= s.length || s[i] != ':') throw IllegalArgumentException("expected ':'")
+                  if (i >= s.length || s[i] != ':') {
+                      throw IllegalArgumentException("expected ':'")
+                  }
                   i++
                   m[k] = value()
                   skipWs()
-                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
-                  if (s[i] == ',') { i++; continue }
-                  if (s[i] == '}') { i++; return m }
+                  if (i >= s.length) {
+                      throw IllegalArgumentException("unexpected end")
+                  }
+                  if (s[i] == ',') {
+                      i++
+                      continue
+                  }
+                  if (s[i] == '}') {
+                      i++
+                      return m
+                  }
                   throw IllegalArgumentException("expected ',' or '}'")
               }
           }
@@ -390,19 +487,32 @@
               val l = ArrayList<Any?>()
               i++
               skipWs()
-              if (i < s.length && s[i] == ']') { i++; return l }
+              if (i < s.length && s[i] == ']') {
+                  i++
+                  return l
+              }
               while (true) {
                   l.add(value())
                   skipWs()
-                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
-                  if (s[i] == ',') { i++; continue }
-                  if (s[i] == ']') { i++; return l }
+                  if (i >= s.length) {
+                      throw IllegalArgumentException("unexpected end")
+                  }
+                  if (s[i] == ',') {
+                      i++
+                      continue
+                  }
+                  if (s[i] == ']') {
+                      i++
+                      return l
+                  }
                   throw IllegalArgumentException("expected ',' or ']'")
               }
           }
 
           private fun str(): String {
-              if (i >= s.length || s[i] != '"') throw IllegalArgumentException("expected string")
+              if (i >= s.length || s[i] != '"') {
+                  throw IllegalArgumentException("expected string")
+              }
               i++
               val sb = StringBuilder()
               while (i < s.length) {
@@ -410,7 +520,9 @@
                   when (c) {
                       '"' -> return sb.toString()
                       '\\' -> {
-                          if (i >= s.length) throw IllegalArgumentException("bad escape")
+                          if (i >= s.length) {
+                              throw IllegalArgumentException("bad escape")
+                          }
                           when (val e = s[i++]) {
                               '"', '\\', '/' -> sb.append(e)
                               'b' -> sb.append('\b')
@@ -419,7 +531,11 @@
                               'r' -> sb.append('\r')
                               't' -> sb.append('\t')
                               'u' -> {
-                                  if (i + 4 > s.length) throw IllegalArgumentException("bad unicode escape")
+                                  if (i + 4 > s.length) {
+                                      throw IllegalArgumentException(
+                                          "bad unicode escape",
+                                      )
+                                  }
                                   sb.append(s.substring(i, i + 4).toInt(16).toChar())
                                   i += 4
                               }
@@ -434,20 +550,36 @@
 
           private fun num(): Any {
               val start = i
-              if (s[i] == '-') i++
+              if (s[i] == '-') {
+                  i++
+              }
               while (i < s.length && (s[i].isDigit() || s[i] in ".eE+-")) i++
               val t = s.substring(start, i)
-              return if (t.any { it == '.' || it == 'e' || it == 'E' }) t.toDouble() else (t.toLongOrNull() ?: t.toDouble())
+              return if (t.any { it == '.' || it == 'e' || it == 'E' }) {
+                  t.toDouble()
+              } else {
+                  (t.toLongOrNull() ?: t.toDouble())
+              }
           }
       }
 
       @Suppress("UNCHECKED_CAST")
       fun parseJsonObject(text: String): Map<String, Any?>? =
-          try { MiniJson(text).parse() as? Map<String, Any?> } catch (e: Exception) { null }
+          try {
+              MiniJson(text).parse() as? Map<String, Any?>
+          } catch (e: Exception) {
+              null
+          }
 
       fun integerValue(v: Any?): Long? = when (v) {
           is Long -> v
-          is Double -> if (v == Math.floor(v) && Math.abs(v) < 9.0e15) v.toLong() else null
+          is Double -> {
+              if (v == Math.floor(v) && Math.abs(v) < 9.0e15) {
+                  v.toLong()
+              } else {
+                  null
+              }
+          }
           else -> null
       }
 
@@ -458,10 +590,19 @@
           data class Subscribed(val id: String?, val topic: String) : WSAction()
           data class Unsubscribed(val id: String?, val topic: String) : WSAction()
           data class Reply(val id: String?, val topic: String) : WSAction()
-          data class Push(val symbol: String, val kind: String, val param: String?) : WSAction()
-          data class Error(val id: String?, val code: String, val message: String) : WSAction()
+          data class Push(
+              val symbol: String,
+              val kind: String,
+              val param: String?,
+          ) : WSAction()
+          data class Error(
+              val id: String?,
+              val code: String,
+              val message: String,
+          ) : WSAction()
           object Ignore : WSAction()
       }
+
       // ---- 以上已提供 ----
 
       fun handleFrame(json: String): WSAction {
@@ -485,7 +626,9 @@
           fun parse(): Any? {
               val v = value()
               skipWs()
-              if (i != s.length) throw IllegalArgumentException("trailing characters")
+              if (i != s.length) {
+                  throw IllegalArgumentException("trailing characters")
+              }
               return v
           }
 
@@ -493,15 +636,26 @@
 
           private fun value(): Any? {
               skipWs()
-              if (i >= s.length) throw IllegalArgumentException("unexpected end")
+              if (i >= s.length) {
+                  throw IllegalArgumentException("unexpected end")
+              }
               val c = s[i]
               return when {
                   c == '{' -> obj()
                   c == '[' -> arr()
                   c == '"' -> str()
-                  s.startsWith("true", i) -> { i += 4; true }
-                  s.startsWith("false", i) -> { i += 5; false }
-                  s.startsWith("null", i) -> { i += 4; null }
+                  s.startsWith("true", i) -> {
+                      i += 4
+                      true
+                  }
+                  s.startsWith("false", i) -> {
+                      i += 5
+                      false
+                  }
+                  s.startsWith("null", i) -> {
+                      i += 4
+                      null
+                  }
                   c == '-' || c.isDigit() -> num()
                   else -> throw IllegalArgumentException("unexpected '$c'")
               }
@@ -511,18 +665,31 @@
               val m = LinkedHashMap<String, Any?>()
               i++
               skipWs()
-              if (i < s.length && s[i] == '}') { i++; return m }
+              if (i < s.length && s[i] == '}') {
+                  i++
+                  return m
+              }
               while (true) {
                   skipWs()
                   val k = str()
                   skipWs()
-                  if (i >= s.length || s[i] != ':') throw IllegalArgumentException("expected ':'")
+                  if (i >= s.length || s[i] != ':') {
+                      throw IllegalArgumentException("expected ':'")
+                  }
                   i++
                   m[k] = value()
                   skipWs()
-                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
-                  if (s[i] == ',') { i++; continue }
-                  if (s[i] == '}') { i++; return m }
+                  if (i >= s.length) {
+                      throw IllegalArgumentException("unexpected end")
+                  }
+                  if (s[i] == ',') {
+                      i++
+                      continue
+                  }
+                  if (s[i] == '}') {
+                      i++
+                      return m
+                  }
                   throw IllegalArgumentException("expected ',' or '}'")
               }
           }
@@ -531,19 +698,32 @@
               val l = ArrayList<Any?>()
               i++
               skipWs()
-              if (i < s.length && s[i] == ']') { i++; return l }
+              if (i < s.length && s[i] == ']') {
+                  i++
+                  return l
+              }
               while (true) {
                   l.add(value())
                   skipWs()
-                  if (i >= s.length) throw IllegalArgumentException("unexpected end")
-                  if (s[i] == ',') { i++; continue }
-                  if (s[i] == ']') { i++; return l }
+                  if (i >= s.length) {
+                      throw IllegalArgumentException("unexpected end")
+                  }
+                  if (s[i] == ',') {
+                      i++
+                      continue
+                  }
+                  if (s[i] == ']') {
+                      i++
+                      return l
+                  }
                   throw IllegalArgumentException("expected ',' or ']'")
               }
           }
 
           private fun str(): String {
-              if (i >= s.length || s[i] != '"') throw IllegalArgumentException("expected string")
+              if (i >= s.length || s[i] != '"') {
+                  throw IllegalArgumentException("expected string")
+              }
               i++
               val sb = StringBuilder()
               while (i < s.length) {
@@ -551,7 +731,9 @@
                   when (c) {
                       '"' -> return sb.toString()
                       '\\' -> {
-                          if (i >= s.length) throw IllegalArgumentException("bad escape")
+                          if (i >= s.length) {
+                              throw IllegalArgumentException("bad escape")
+                          }
                           when (val e = s[i++]) {
                               '"', '\\', '/' -> sb.append(e)
                               'b' -> sb.append('\b')
@@ -560,7 +742,11 @@
                               'r' -> sb.append('\r')
                               't' -> sb.append('\t')
                               'u' -> {
-                                  if (i + 4 > s.length) throw IllegalArgumentException("bad unicode escape")
+                                  if (i + 4 > s.length) {
+                                      throw IllegalArgumentException(
+                                          "bad unicode escape",
+                                      )
+                                  }
                                   sb.append(s.substring(i, i + 4).toInt(16).toChar())
                                   i += 4
                               }
@@ -575,20 +761,36 @@
 
           private fun num(): Any {
               val start = i
-              if (s[i] == '-') i++
+              if (s[i] == '-') {
+                  i++
+              }
               while (i < s.length && (s[i].isDigit() || s[i] in ".eE+-")) i++
               val t = s.substring(start, i)
-              return if (t.any { it == '.' || it == 'e' || it == 'E' }) t.toDouble() else (t.toLongOrNull() ?: t.toDouble())
+              return if (t.any { it == '.' || it == 'e' || it == 'E' }) {
+                  t.toDouble()
+              } else {
+                  (t.toLongOrNull() ?: t.toDouble())
+              }
           }
       }
 
       @Suppress("UNCHECKED_CAST")
       fun parseJsonObject(text: String): Map<String, Any?>? =
-          try { MiniJson(text).parse() as? Map<String, Any?> } catch (e: Exception) { null }
+          try {
+              MiniJson(text).parse() as? Map<String, Any?>
+          } catch (e: Exception) {
+              null
+          }
 
       fun integerValue(v: Any?): Long? = when (v) {
           is Long -> v
-          is Double -> if (v == Math.floor(v) && Math.abs(v) < 9.0e15) v.toLong() else null
+          is Double -> {
+              if (v == Math.floor(v) && Math.abs(v) < 9.0e15) {
+                  v.toLong()
+              } else {
+                  null
+              }
+          }
           else -> null
       }
 
@@ -599,21 +801,35 @@
           data class Subscribed(val id: String?, val topic: String) : WSAction()
           data class Unsubscribed(val id: String?, val topic: String) : WSAction()
           data class Reply(val id: String?, val topic: String) : WSAction()
-          data class Push(val symbol: String, val kind: String, val param: String?) : WSAction()
-          data class Error(val id: String?, val code: String, val message: String) : WSAction()
+          data class Push(
+              val symbol: String,
+              val kind: String,
+              val param: String?,
+          ) : WSAction()
+          data class Error(
+              val id: String?,
+              val code: String,
+              val message: String,
+          ) : WSAction()
           object Ignore : WSAction()
       }
 
       private fun parseTopic(ch: String): WSAction? {
           val parts = ch.split(".")
-          if (parts.size < 3 || parts[0] != "market" || parts[1].isEmpty()) return null
+          if (parts.size < 3 || parts[0] != "market" || parts[1].isEmpty()) {
+              return null
+          }
           val symbol = parts[1]
           val rest = parts.drop(2)
           return when {
               rest == listOf("bbo") -> WSAction.Push(symbol, "bbo", null)
               rest == listOf("detail") -> WSAction.Push(symbol, "detail", null)
-              rest == listOf("trade", "detail") -> WSAction.Push(symbol, "trade.detail", null)
-              rest.size == 2 && (rest[0] == "kline" || rest[0] == "depth") && rest[1].isNotEmpty() ->
+              rest == listOf("trade", "detail") -> {
+                  WSAction.Push(symbol, "trade.detail", null)
+              }
+              rest.size == 2 &&
+                  (rest[0] == "kline" || rest[0] == "depth") &&
+                  rest[1].isNotEmpty() ->
                   WSAction.Push(symbol, rest[0], rest[1])
               else -> null
           }
@@ -626,21 +842,31 @@
               val v = integerValue(obj["ping"]) ?: return WSAction.Ignore
               return WSAction.Send("{\"pong\":$v}")
           }
-          if (obj.containsKey("pong")) return WSAction.Ignore
+          if (obj.containsKey("pong")) {
+              return WSAction.Ignore
+          }
           if (stringValue(obj["action"]) == "ping") {
               val data = obj["data"] as? Map<*, *>
               val ts = integerValue(data?.get("ts"))
-              if (ts != null) return WSAction.Send("{\"action\":\"pong\",\"data\":{\"ts\":$ts}}")
+              if (ts != null) {
+                  return WSAction.Send("{\"action\":\"pong\",\"data\":{\"ts\":$ts}}")
+              }
           }
 
           val id = stringValue(obj["id"])
           val status = stringValue(obj["status"])
           if (status == "error") {
-              return WSAction.Error(id, stringValue(obj["err-code"]) ?: "unknown", stringValue(obj["err-msg"]) ?: "")
+              return WSAction.Error(
+                  id,
+                  stringValue(obj["err-code"]) ?: "unknown",
+                  stringValue(obj["err-msg"]) ?: "",
+              )
           }
           if (status == "ok") {
               stringValue(obj["subbed"])?.let { return WSAction.Subscribed(id, it) }
-              stringValue(obj["unsubbed"])?.let { return WSAction.Unsubscribed(id, it) }
+              stringValue(obj["unsubbed"])?.let {
+                  return WSAction.Unsubscribed(id, it)
+              }
               stringValue(obj["rep"])?.let { return WSAction.Reply(id, it) }
           }
           val ch = stringValue(obj["ch"])
@@ -653,70 +879,114 @@
       private val tokenRegex = Regex("^[A-Za-z0-9._#-]{1,64}$")
 
       fun makeSubscribe(topic: String, id: String, freqMs: Int? = null): String? {
-          if (!tokenRegex.matches(topic) || !tokenRegex.matches(id)) return null
+          if (!tokenRegex.matches(topic) || !tokenRegex.matches(id)) {
+              return null
+          }
           val sb = StringBuilder("{\"sub\":\"$topic\",\"id\":\"$id\"")
           if (freqMs != null) {
-              if (freqMs !in listOf(1000, 2000, 3000, 4000, 5000)) return null
+              if (freqMs !in listOf(1000, 2000, 3000, 4000, 5000)) {
+                  return null
+              }
               sb.append(",\"freq-ms\":$freqMs")
           }
           return sb.append("}").toString()
       }
 
       fun makeUnsubscribe(topic: String, id: String): String? {
-          if (!tokenRegex.matches(topic) || !tokenRegex.matches(id)) return null
+          if (!tokenRegex.matches(topic) || !tokenRegex.matches(id)) {
+              return null
+          }
           return "{\"unsub\":\"$topic\",\"id\":\"$id\"}"
       }
     tests: |
       checkEqual("伺服器 ping → 原值 pong", WSAction.Send("{\"pong\":18212558000}")) {
           handleFrame("{\"ping\": 18212558000}")
       }
+
       check("ping 不是整數（字串、小數）→ ignore") {
-          handleFrame("{\"ping\":\"abc\"}") == WSAction.Ignore && handleFrame("{\"ping\":1.5}") == WSAction.Ignore
+          handleFrame("{\"ping\":\"abc\"}") == WSAction.Ignore &&
+              handleFrame("{\"ping\":1.5}") == WSAction.Ignore
       }
-      checkEqual("私有 WS 心跳", WSAction.Send("{\"action\":\"pong\",\"data\":{\"ts\":1575537778295}}")) {
+
+      checkEqual(
+          "私有 WS 心跳",
+          WSAction.Send("{\"action\":\"pong\",\"data\":{\"ts\":1575537778295}}"),
+      ) {
           handleFrame("{\"action\":\"ping\",\"data\":{\"ts\":1575537778295}}")
       }
+
       check("pong、非 JSON、空物件都是 ignore") {
-          handleFrame("{\"pong\":1}") == WSAction.Ignore && handleFrame("not json") == WSAction.Ignore && handleFrame("{}") == WSAction.Ignore
+          handleFrame("{\"pong\":1}") == WSAction.Ignore &&
+              handleFrame("not json") == WSAction.Ignore &&
+              handleFrame("{}") == WSAction.Ignore
       }
+
       check("sub／unsub／req 的回覆（id 可有可無）") {
-          handleFrame("{\"id\":\"id1\",\"status\":\"ok\",\"subbed\":\"market.btcjpy.kline.1min\",\"ts\":1}") ==
+          handleFrame(
+              "{\"id\":\"id1\",\"status\":\"ok\",\"subbed\":\"market.btcjpy.kline.1min\",\"ts\":1}",
+          ) ==
               WSAction.Subscribed("id1", "market.btcjpy.kline.1min") &&
-          handleFrame("{\"status\":\"ok\",\"unsubbed\":\"market.btcjpy.trade.detail\",\"ts\":1}") ==
+          handleFrame(
+              "{\"status\":\"ok\",\"unsubbed\":\"market.btcjpy.trade.detail\",\"ts\":1}",
+          ) ==
               WSAction.Unsubscribed(null, "market.btcjpy.trade.detail") &&
-          handleFrame("{\"status\":\"ok\",\"id\":\"id10\",\"rep\":\"market.btcjpy.kline.1min\",\"tick\":[]}") ==
+          handleFrame(
+              "{\"status\":\"ok\",\"id\":\"id10\",\"rep\":\"market.btcjpy.kline.1min\",\"tick\":[]}",
+          ) ==
               WSAction.Reply("id10", "market.btcjpy.kline.1min")
       }
+
       check("錯誤訊息：取 id、err-code、err-msg，缺欄位用預設") {
-          handleFrame("{\"id\":\"id3\",\"status\":\"error\",\"err-code\":\"bad-request\",\"err-msg\":\"invalid topic market.btcjpy.kline.3min\",\"ts\":1}") ==
-              WSAction.Error("id3", "bad-request", "invalid topic market.btcjpy.kline.3min") &&
+          handleFrame(
+              "{\"id\":\"id3\",\"status\":\"error\",\"err-code\":\"bad-request\",\"err-msg\":\"invalid topic market.btcjpy.kline.3min\",\"ts\":1}",
+          ) ==
+              WSAction.Error(
+                  "id3",
+                  "bad-request",
+                  "invalid topic market.btcjpy.kline.3min",
+              ) &&
           handleFrame("{\"status\":\"error\"}") == WSAction.Error(null, "unknown", "")
       }
+
       check("推送依 ch 分派（kline、depth、bbo、trade.detail、detail）") {
-          handleFrame("{\"ch\":\"market.btcjpy.kline.1min\",\"ts\":1,\"tick\":{\"id\":1}}") ==
+          handleFrame(
+              "{\"ch\":\"market.btcjpy.kline.1min\",\"ts\":1,\"tick\":{\"id\":1}}",
+          ) ==
               WSAction.Push("btcjpy", "kline", "1min") &&
-          handleFrame("{\"ch\":\"market.ethjpy.depth.step0\",\"ts\":1,\"data\":{\"bids\":[],\"asks\":[]}}") ==
+          handleFrame(
+              "{\"ch\":\"market.ethjpy.depth.step0\",\"ts\":1,\"data\":{\"bids\":[],\"asks\":[]}}",
+          ) ==
               WSAction.Push("ethjpy", "depth", "step0") &&
           handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") ==
               WSAction.Push("btcjpy", "bbo", null) &&
-          handleFrame("{\"ch\":\"market.btcjpy.trade.detail\",\"ts\":1,\"tick\":{\"data\":[]}}") ==
+          handleFrame(
+              "{\"ch\":\"market.btcjpy.trade.detail\",\"ts\":1,\"tick\":{\"data\":[]}}",
+          ) ==
               WSAction.Push("btcjpy", "trade.detail", null) &&
           handleFrame("{\"ch\":\"market.btcjpy.detail\",\"ts\":1,\"tick\":{}}") ==
               WSAction.Push("btcjpy", "detail", null)
       }
+
       check("未知或格式錯誤的 ch、沒有資料的推送、私有 push 都是 ignore") {
-          handleFrame("{\"ch\":\"market.btcjpy.kline\",\"ts\":1,\"tick\":{}}") == WSAction.Ignore &&
-          handleFrame("{\"ch\":\"foo.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") == WSAction.Ignore &&
+          handleFrame("{\"ch\":\"market.btcjpy.kline\",\"ts\":1,\"tick\":{}}") ==
+              WSAction.Ignore &&
+          handleFrame("{\"ch\":\"foo.btcjpy.bbo\",\"ts\":1,\"tick\":{}}") ==
+              WSAction.Ignore &&
           handleFrame("{\"ch\":\"market.btcjpy.bbo\",\"ts\":1}") == WSAction.Ignore &&
-          handleFrame("{\"action\":\"push\",\"ch\":\"orders#btcjpy\",\"data\":{}}") == WSAction.Ignore
+          handleFrame("{\"action\":\"push\",\"ch\":\"orders#btcjpy\",\"data\":{}}") ==
+              WSAction.Ignore
       }
+
       check("makeSubscribe／makeUnsubscribe：格式與驗證") {
-          makeSubscribe("market.btcjpy.kline.1min", "id1") == "{\"sub\":\"market.btcjpy.kline.1min\",\"id\":\"id1\"}" &&
-          makeSubscribe("market.btcjpy.bbo", "id2", 2000) == "{\"sub\":\"market.btcjpy.bbo\",\"id\":\"id2\",\"freq-ms\":2000}" &&
+          makeSubscribe("market.btcjpy.kline.1min", "id1") ==
+              "{\"sub\":\"market.btcjpy.kline.1min\",\"id\":\"id1\"}" &&
+          makeSubscribe("market.btcjpy.bbo", "id2", 2000) ==
+              "{\"sub\":\"market.btcjpy.bbo\",\"id\":\"id2\",\"freq-ms\":2000}" &&
           makeSubscribe("market.btcjpy.bbo", "id2", 250) == null &&
           makeSubscribe("market.btcjpy.bbo\",\"x\":\"y", "id3") == null &&
           makeSubscribe("", "id4") == null &&
-          makeUnsubscribe("market.btcjpy.trade.detail", "id4") == "{\"unsub\":\"market.btcjpy.trade.detail\",\"id\":\"id4\"}"
+          makeUnsubscribe("market.btcjpy.trade.detail", "id4") ==
+              "{\"unsub\":\"market.btcjpy.trade.detail\",\"id\":\"id4\"}"
       }
 
 - id: exchange-ws-protocol-08

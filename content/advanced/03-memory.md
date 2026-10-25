@@ -55,20 +55,40 @@ tags: [memory, jetsam, lmk, retain-cycle, leak, bitmap, downsampling, leakcanary
 import ImageIO
 import UIKit
 
-func downsample(imageAt url: URL, maxPointSize: CGFloat, scale: CGFloat) -> UIImage? {
+func downsample(
+    imageAt url: URL,
+    maxPointSize: CGFloat,
+    scale: CGFloat
+) -> UIImage? {
     // 只建立圖片來源，這一步不會解碼像素
     let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-    guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
+    guard let source = CGImageSourceCreateWithURL(
+        url as CFURL,
+        sourceOptions
+    ) else {
+        return nil
+    }
 
-    // 最大邊長以「像素」計算：point 數乘上螢幕倍率（3x 螢幕上 1 point = 3 像素）
+    // 最大邊長以「像素」計算：
+    // point 數乘上螢幕倍率（3x 螢幕上 1 point = 3 像素）
     let maxPixelSize = maxPointSize * scale
     let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
-        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,      // 限制輸出圖片的最大邊長
-        kCGImageSourceCreateThumbnailWithTransform: true,       // 套用 EXIF（照片內建的資訊）裡的旋轉方向
-        kCGImageSourceShouldCacheImmediately: true,             // 建立縮圖時就解碼，在背景執行緒呼叫時，不會把解碼成本留給主執行緒
+        // 限制輸出圖片的最大邊長
+        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        // 套用 EXIF（照片內建的資訊）裡的旋轉方向
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        // 建立縮圖時就解碼，在背景執行緒呼叫時，
+        // 不會把解碼成本留給主執行緒
+        kCGImageSourceShouldCacheImmediately: true,
     ]
-    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+        source,
+        0,
+        options as CFDictionary
+    ) else {
+        return nil
+    }
     return UIImage(cgImage: cgImage)
 }
 ```
@@ -85,13 +105,23 @@ BitmapFactory.decodeFile(path, bounds)
 // 步驟 2：算出縮小的倍數（2 的次方），用縮小後的尺寸解碼
 fun calculateInSampleSize(w: Int, h: Int, reqW: Int, reqH: Int): Int {
     var sample = 1
-    while (w / (sample * 2) >= reqW && h / (sample * 2) >= reqH) sample *= 2
+    while (w / (sample * 2) >= reqW && h / (sample * 2) >= reqH) {
+        sample *= 2
+    }
     return sample
 }
+
 val options = BitmapFactory.Options().apply {
-    inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, 100, 100)
+    inSampleSize = calculateInSampleSize(
+        bounds.outWidth,
+        bounds.outHeight,
+        100,
+        100,
+    )
 }
-val bitmap = BitmapFactory.decodeFile(path, options)   // 縮成約 250 × 188 像素，記憶體不到 0.2 MB
+
+// 縮成約 250 × 188 像素，記憶體不到 0.2 MB
+val bitmap = BitmapFactory.decodeFile(path, options)
 ```
 
 Android 9（API 28）起也可以用 `ImageDecoder` 的 `setTargetSize`。Coil、Glide 這類圖片載入函式庫預設就會依 `ImageView` 的大小解碼，所以通常不需要自己寫。`Bitmap.Config.HARDWARE`（API 26 起）則會把像素資料放在 GPU（繪圖處理器）的記憶體，不占 Java heap。
@@ -111,8 +141,12 @@ final class Screen {
     var onTick: (() -> Void)?
     init(_ name: String) { self.name = name }
     deinit { print("deinit \(name)") }
-    func bindStrong() { onTick = { print(self.name) } }                          // closure 持有 self，self 又持有 closure
-    func bindWeak() { onTick = { [weak self] in print(self?.name ?? "gone") } }  // weak：closure 不持有 self
+
+    // closure 持有 self，self 又持有 closure
+    func bindStrong() { onTick = { print(self.name) } }
+
+    // weak：closure 不持有 self
+    func bindWeak() { onTick = { [weak self] in print(self?.name ?? "gone") } }
 }
 
 func run() {
@@ -162,7 +196,8 @@ class OrderFragment : Fragment(R.layout.fragment_order) {
 
     // 可為 null 的欄位 _binding，加上一個方便使用的 binding
     private var _binding: FragmentOrderBinding? = null
-    private val binding get() = _binding!!    // 只在 onViewCreated 到 onDestroyView 之間使用
+    // 只在 onViewCreated 到 onDestroyView 之間使用
+    private val binding get() = _binding!!
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = FragmentOrderBinding.bind(view)
@@ -171,7 +206,8 @@ class OrderFragment : Fragment(R.layout.fragment_order) {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        _binding = null    // 放掉 view 樹，GC 才能回收它
+        // 放掉 view 樹，GC 才能回收它
+        _binding = null
     }
 }
 ```
@@ -198,9 +234,12 @@ class OrderFragment : Fragment(R.layout.fragment_order) {
 ```swift
 func testOrderViewModelIsReleased() {
     var vm: OrderViewModel? = OrderViewModel()
-    weak var weakVM = vm   // weak 不會讓計數加 1，只用來觀察
-    vm = nil               // 放掉唯一的 strong 參考
-    XCTAssertNil(weakVM)   // 如果還有 retain cycle，物件不會被釋放，weakVM 就不是 nil
+    // weak 不會讓計數加 1，只用來觀察
+    weak var weakVM = vm
+    // 放掉唯一的 strong 參考
+    vm = nil
+    // 如果還有 retain cycle，物件不會被釋放，weakVM 就不是 nil
+    XCTAssertNil(weakVM)
 }
 ```
 
@@ -243,12 +282,16 @@ func testOrderViewModelIsReleased() {
 
 ```kotlin
 webView.webViewClient = object : WebViewClient() {
-    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+    override fun onRenderProcessGone(
+        view: WebView,
+        detail: RenderProcessGoneDetail,
+    ): Boolean {
         // 把壞掉的 WebView 從畫面移除並銷毀，再建立新的並重新載入圖表
         container.removeView(view)
         view.destroy()
         recreateChartWebView()
-        return true    // 回傳 true 表示「我已經處理了」，App 的行程才不會跟著被終止
+        // 回傳 true 表示「我已經處理了」，App 的行程才不會跟著被終止
+        return true
     }
 }
 ```

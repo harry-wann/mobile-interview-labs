@@ -72,10 +72,16 @@ import CryptoKit
 import Foundation
 
 func hmacBase64(_ stringToSign: String, secret: String) -> String {
-    let key = SymmetricKey(data: Data(secret.utf8))                  // Secret Key 轉成 UTF-8 的 byte
-    let mac = HMAC<SHA256>.authenticationCode(for: Data(stringToSign.utf8), using: key)
-    return Data(mac).base64EncodedString()                            // 算出的指紋轉成 Base64
+    // Secret Key 轉成 UTF-8 的 byte
+    let key = SymmetricKey(data: Data(secret.utf8))
+    let mac = HMAC<SHA256>.authenticationCode(
+        for: Data(stringToSign.utf8),
+        using: key
+    )
+    // 算出的指紋轉成 Base64
+    return Data(mac).base64EncodedString()
 }
+
 // hmacBase64(上面的簽名字串, secret: "test-secret-key-0001")
 // 輸出：KLn4U/Au9BfxNEAqNebkXqZGpgjxOmyhMwOi+FmMfdg=
 ```
@@ -88,8 +94,10 @@ import javax.crypto.spec.SecretKeySpec
 fun hmacBase64(stringToSign: String, secret: String): String {
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-    return Base64.getEncoder().encodeToString(mac.doFinal(stringToSign.toByteArray(Charsets.UTF_8)))
+    return Base64.getEncoder()
+        .encodeToString(mac.doFinal(stringToSign.toByteArray(Charsets.UTF_8)))
 }
+
 // 同樣的輸入，輸出也是 KLn4U/Au9BfxNEAqNebkXqZGpgjxOmyhMwOi+FmMfdg=
 ```
 
@@ -149,12 +157,16 @@ RFC 3986 是定義網址格式的標準文件。常見的陷阱：
 
 ```swift
 func percentEncode(_ s: String) -> String {
-    let hex = Array("0123456789ABCDEF")                   // 大寫的十六進位
+    // 大寫的十六進位
+    let hex = Array("0123456789ABCDEF")
     var out = ""
-    for b in s.utf8 {                                      // 逐個 UTF-8 byte 處理
+    // 逐個 UTF-8 byte 處理
+    for b in s.utf8 {
         switch b {
-        case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D, 0x2E, 0x5F, 0x7E:   // 0-9 A-Z a-z - . _ ~
-            out.unicodeScalars.append(UnicodeScalar(b))    // unreserved 字元不編碼
+        // 0-9 A-Z a-z - . _ ~
+        case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D, 0x2E, 0x5F, 0x7E:
+            // unreserved 字元不編碼
+            out.unicodeScalars.append(UnicodeScalar(b))
         default:
             out.append("%")
             out.append(hex[Int(b >> 4)])
@@ -163,6 +175,7 @@ func percentEncode(_ s: String) -> String {
     }
     return out
 }
+
 // percentEncode("tea & cake=1+1")  → tea%20%26%20cake%3D1%2B1
 // percentEncode("é")               → %C3%A9
 ```
@@ -179,25 +192,37 @@ Kotlin 的寫法相同：用 `s.toByteArray(Charsets.UTF_8)` 取得 byte，同�
 最常出錯的是用 `DateFormatter` 時沒有固定設定。同一個時間 `2017-05-11 15:20:06 UTC`，在不同設定下的結果：
 
 ```swift
-let date = Date(timeIntervalSince1970: 1_494_516_006)   // 2017-05-11 15:20:06 UTC
+// 2017-05-11 15:20:06 UTC
+let date = Date(timeIntervalSince1970: 1_494_516_006)
 
 // 使用者的手機設成日本曆（和曆）：年份變成「平成 29 年」的 29
 // DateFormatter 若沒有固定語言與曆法，輸出會是 0029-05-11T15:20:06
 // 佛曆則會輸出 2560-05-11T15:20:06
 
 let formatter = DateFormatter()
-formatter.locale = Locale(identifier: "en_US_POSIX")          // 固定的格式，不跟著語言設定
-formatter.calendar = Calendar(identifier: .gregorian)          // 固定用西曆
-formatter.timeZone = TimeZone(identifier: "UTC")               // 固定用 UTC
-formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"                 // HH 是 24 小時制
-print(formatter.string(from: date))                            // 輸出：2017-05-11T15:20:06
+// 固定的格式，不跟著語言設定
+formatter.locale = Locale(identifier: "en_US_POSIX")
+// 固定用西曆
+formatter.calendar = Calendar(identifier: .gregorian)
+// 固定用 UTC
+formatter.timeZone = TimeZone(identifier: "UTC")
+// HH 是 24 小時制
+formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+// 輸出：2017-05-11T15:20:06
+print(formatter.string(from: date))
 ```
 
 Android 用 `java.time`：
 
 ```kotlin
-val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.ROOT)  // Locale.ROOT：不跟著語言設定
-val ts = Instant.ofEpochMilli(1_494_516_006_999).atOffset(ZoneOffset.UTC).format(formatter)
+// Locale.ROOT：不跟著語言設定
+val formatter = DateTimeFormatter.ofPattern(
+    "yyyy-MM-dd'T'HH:mm:ss",
+    Locale.ROOT,
+)
+val ts = Instant.ofEpochMilli(1_494_516_006_999)
+    .atOffset(ZoneOffset.UTC)
+    .format(formatter)
 // 輸出：2017-05-11T15:20:06（毫秒被忽略）
 ```
 
@@ -225,24 +250,32 @@ val ts = Instant.ofEpochMilli(1_494_516_006_999).atOffset(ZoneOffset.UTC).format
 
 ```swift
 // 例子：手機比伺服器快 10 分鐘
-let t0: Int64 = 1_000_000_000_000            // 送出校時請求前的手機時間（毫秒）
-let t1: Int64 = 1_000_000_000_400            // 收到回應後的手機時間（花了 400 毫秒）
-let serverMs: Int64 = 999_999_400_200        // 伺服器回傳的時間
+// 送出校時請求前的手機時間（毫秒）
+let t0: Int64 = 1_000_000_000_000
+// 收到回應後的手機時間（花了 400 毫秒）
+let t1: Int64 = 1_000_000_000_400
+// 伺服器回傳的時間
+let serverMs: Int64 = 999_999_400_200
 let offset = serverMs - (t0 + t1) / 2
-print(offset)                                 // 輸出：-600000（要把手機的時間減掉 10 分鐘）
+// 輸出：-600000（要把手機的時間減掉 10 分鐘）
+print(offset)
 ```
 
 **經過的時間要用單調時鐘來量。** 單調時鐘（monotonic clock）是只會往前走、不受使用者調整系統時間影響的時鐘。校時之後，不要再用手機的系統時間相減，否則使用者在校時之後又改了系統時間，offset 就失效了。校時當下記錄「伺服器時間」和「單調時鐘的讀數」，之後用單調時鐘算經過了多久：
 
 ```swift
 struct ServerClock {
-    private let serverMsAtSync: Int64        // 校時當下的伺服器時間
-    private let uptimeAtSync: TimeInterval   // 校時當下的單調時鐘讀數（ProcessInfo.processInfo.systemUptime）
+    // 校時當下的伺服器時間
+    private let serverMsAtSync: Int64
+    // 校時當下的單調時鐘讀數（ProcessInfo.processInfo.systemUptime）
+    private let uptimeAtSync: TimeInterval
 
     func nowMs(uptime: TimeInterval) -> Int64 {
-        serverMsAtSync + Int64((uptime - uptimeAtSync) * 1000)   // 伺服器時間 ＋ 之後經過的時間
+        // 伺服器時間 ＋ 之後經過的時間
+        serverMsAtSync + Int64((uptime - uptimeAtSync) * 1000)
     }
 }
+
 // 校時當下伺服器時間 1555667124908、讀數 1000；讀數走到 1030.5 時
 // nowMs 的結果是 1555667155408（過了 30.5 秒）
 ```

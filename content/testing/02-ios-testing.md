@@ -40,8 +40,12 @@ struct PrecisionTests {
         ("0.123456789", "0.0001", "0.1234"),
     ])
     func floors(value: String, step: String, expected: String) {
-        let result = floorToStep(Decimal(string: value)!, step: Decimal(string: step)!)
-        #expect(result == Decimal(string: expected)!)   // 失敗時會印出 result 和 expected 的實際值
+        let result = floorToStep(
+            Decimal(string: value)!,
+            step: Decimal(string: step)!
+        )
+        // 失敗時會印出 result 和 expected 的實際值
+        #expect(result == Decimal(string: expected)!)
     }
 }
 ```
@@ -66,13 +70,15 @@ struct PrecisionTests {
 @MainActor
 @Test func mergesTicksIntoLatestPrice() async {
     let (stream, continuation) = AsyncStream.makeStream(of: Decimal.self)
-    let vm = PriceViewModel(prices: stream)       // 行情來源用可以手動送值的 stream 取代
+    // 行情來源用可以手動送值的 stream 取代
+    let vm = PriceViewModel(prices: stream)
 
     continuation.yield(100)
     continuation.yield(101)
     continuation.yield(102)
     continuation.finish()
-    await vm.consumeAll()                         // 等 ViewModel 處理完，不用 sleep
+    // 等 ViewModel 處理完，不用 sleep
+    await vm.consumeAll()
 
     #expect(vm.latestPrice == 102)
 }
@@ -95,9 +101,11 @@ UI 測試最大的問題是「時好時壞」（flaky）。讓它穩定的方法
 ```swift
 // UI 測試這一端
 let app = XCUIApplication()
-app.launchArguments = ["-uiTesting", "-startAt", "orderForm"]   // 告訴 App：用 stub、直接進到下單畫面
+// 告訴 App：用 stub、直接進到下單畫面
+app.launchArguments = ["-uiTesting", "-startAt", "orderForm"]
 app.launch()
-let buy = app.buttons["order.buyButton"]                       // 用 identifier 找按鈕
+// 用 identifier 找按鈕
+let buy = app.buttons["order.buyButton"]
 XCTAssertTrue(buy.waitForExistence(timeout: 5))
 buy.tap()
 ```
@@ -161,7 +169,8 @@ import Testing
 // 共用單例：平行執行時會互相干擾
 @Test func formatsYen() async {
     AppSettings.shared.currency = .jpy
-    await loadRates()                                   // 中間有 await，別的測試可能改掉 currency
+    // 中間有 await，別的測試可能改掉 currency
+    await loadRates()
     #expect(PriceFormatter().format(1_500_000) == "¥1,500,000")
 }
 
@@ -169,7 +178,9 @@ import Testing
 @Test func formatsYen() async {
     let settings = AppSettings(currency: .jpy)
     await loadRates()
-    #expect(PriceFormatter(settings: settings).format(1_500_000) == "¥1,500,000")
+    #expect(
+        PriceFormatter(settings: settings).format(1_500_000) == "¥1,500,000"
+    )
 }
 ```
 
@@ -253,7 +264,8 @@ XCTAssertEqual(app.staticTexts["order.btcPrice"].label, "¥15,000,000")
 
 // App 這一端（啟動時看參數）
 let args = ProcessInfo.processInfo.arguments
-let api: PriceAPI = args.contains("-uiTesting") ? StubPriceAPI() : LivePriceAPI()
+let api: PriceAPI =
+    args.contains("-uiTesting") ? StubPriceAPI() : LivePriceAPI()
 ```
 
 ```lab-solution
@@ -288,7 +300,14 @@ import XCTest
 
 func testOrderBookRow() {
     let view = OrderBookRowView(price: "15,000,000")
-    assertSnapshot(of: view, as: .image(precision: 0.99, perceptualPrecision: 0.98, layout: .fixed(width: 375, height: 44)))
+    assertSnapshot(
+        of: view,
+        as: .image(
+            precision: 0.99,
+            perceptualPrecision: 0.98,
+            layout: .fixed(width: 375, height: 44)
+        )
+    )
 }
 ```
 

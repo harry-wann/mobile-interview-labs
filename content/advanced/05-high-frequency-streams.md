@@ -78,20 +78,28 @@ tags: [market-data, coalescing, batching, backpressure, throttle, displaylink, c
 ```swift
 // Swift：只保留最新 1 筆的 AsyncStream
 // Tick 是一筆行情，包含 symbol（交易對代號）與 price（價格）
-let (stream, continuation) = AsyncStream.makeStream(of: Tick.self, bufferingPolicy: .bufferingNewest(1))
+let (stream, continuation) = AsyncStream.makeStream(
+    of: Tick.self,
+    bufferingPolicy: .bufferingNewest(1)
+)
 continuation.yield(Tick(symbol: "BTC", price: 1))
 continuation.yield(Tick(symbol: "BTC", price: 2))
 continuation.yield(Tick(symbol: "ETH", price: 9))
 continuation.finish()
-for await tick in stream { print(tick.symbol, tick.price) }
+for await tick in stream {
+    print(tick.symbol, tick.price)
+}
 // 輸出：ETH 9
 // BTC 的更新被 ETH 擠掉了，這不是我們要的
 ```
 
 ```kotlin
 // Kotlin：Flow 的 conflate 與 sample
-priceFlow.conflate()       // 下游處理太慢時，跳過中間的值，只處理最新的一筆
-priceFlow.sample(200)      // 每 200 毫秒取最新的一筆（在 kotlinx.coroutines 1.11 仍是預覽 API，要加 @OptIn(FlowPreview::class)）
+// 下游處理太慢時，跳過中間的值，只處理最新的一筆
+priceFlow.conflate()
+// 每 200 毫秒取最新的一筆
+// （在 kotlinx.coroutines 1.11 仍是預覽 API，要加 @OptIn(FlowPreview::class)）
+priceFlow.sample(200)
 // Combine 的對應工具是 throttle(for:scheduler:latest: true)
 ```
 
@@ -177,15 +185,25 @@ class TickBuffer {
 // 寫在畫面的類別（例如 PriceScreen）裡
 @MainActor
 func start() {
-    let link = CADisplayLink(target: WeakTarget(self), selector: #selector(WeakTarget.tick(_:)))
-    // 在 ProMotion（Apple 的高更新率螢幕）裝置上，把更新頻率限制在 30 到 60Hz（iOS 15 起）
-    link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
-    link.add(to: .main, forMode: .common)   // 一定要用 .common，不然捲動時計時器會停
+    let link = CADisplayLink(
+        target: WeakTarget(self),
+        selector: #selector(WeakTarget.tick(_:))
+    )
+    // 在 ProMotion（Apple 的高更新率螢幕）裝置上，
+    // 把更新頻率限制在 30 到 60Hz（iOS 15 起）
+    link.preferredFrameRateRange = CAFrameRateRange(
+        minimum: 30,
+        maximum: 60,
+        preferred: 60
+    )
+    // 一定要用 .common，不然捲動時計時器會停
+    link.add(to: .main, forMode: .common)
     self.link = link
 }
 
 func stop() {
-    link?.invalidate()   // 離開畫面一定要呼叫，否則計時器會一直跑
+    // 離開畫面一定要呼叫，否則計時器會一直跑
+    link?.invalidate()
     link = nil
 }
 ```
@@ -196,9 +214,12 @@ func stop() {
 ```swift
 @MainActor
 final class WeakTarget {
-    weak var owner: PriceScreen?       // weak：不會讓畫面物件無法釋放
+    // weak：不會讓畫面物件無法釋放
+    weak var owner: PriceScreen?
     init(_ owner: PriceScreen) { self.owner = owner }
-    @objc func tick(_ link: CADisplayLink) { owner?.onFrame() }   // 每格畫面呼叫，onFrame 裡取走緩衝區
+
+    // 每格畫面呼叫，onFrame 裡取走緩衝區
+    @objc func tick(_ link: CADisplayLink) { owner?.onFrame() }
 }
 ```
 
@@ -214,7 +235,9 @@ class FrameTicker(
 
     override fun doFrame(frameTimeNanos: Long) {
         val batch = buffer.drain()
-        if (batch.isNotEmpty()) onBatch(batch)
+        if (batch.isNotEmpty()) {
+            onBatch(batch)
+        }
         // postFrameCallback 只會觸發一次，要持續更新就在回呼裡再註冊下一次
         Choreographer.getInstance().postFrameCallback(this)
     }
@@ -234,11 +257,15 @@ Jetpack Compose 裡可以用 `withFrameNanos`（在 `LaunchedEffect` 的迴圈�
 
 ```swift
 func coalesce(_ updates: [Tick]) -> [Tick] {
-    var order: [String] = []                // 記錄交易對第一次出現的順序
-    var latest: [String: Tick] = [:]        // 每個交易對的最新值
+    // 記錄交易對第一次出現的順序
+    var order: [String] = []
+    // 每個交易對的最新值
+    var latest: [String: Tick] = [:]
     for u in updates {
         // updateValue 回傳舊值；舊值是 nil，代表這個交易對是第一次出現
-        if latest.updateValue(u, forKey: u.symbol) == nil { order.append(u.symbol) }
+        if latest.updateValue(u, forKey: u.symbol) == nil {
+            order.append(u.symbol)
+        }
     }
     return order.map { latest[$0]! }
 }
@@ -246,8 +273,11 @@ func coalesce(_ updates: [Tick]) -> [Tick] {
 
 ```kotlin
 fun coalesce(updates: List<Tick>): List<Tick> {
-    val latest = LinkedHashMap<String, Tick>()   // 覆蓋既有的 key，不會改變它第一次插入的位置
-    for (u in updates) latest[u.symbol] = u
+    // 覆蓋既有的 key，不會改變它第一次插入的位置
+    val latest = LinkedHashMap<String, Tick>()
+    for (u in updates) {
+        latest[u.symbol] = u
+    }
     return latest.values.toList()
 }
 ```

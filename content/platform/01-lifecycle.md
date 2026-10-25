@@ -54,9 +54,11 @@ SwiftUI 與 Jetpack Compose 沒有 `viewDidLoad` 或 `onCreate` 這種函式，�
 struct OrderView: View {
     var body: some View {
         OrderForm()
-            .onAppear { print("畫面出現") }       // 可能執行很多次：返回上一頁、切換 tab 都會再觸發
+            // 可能執行很多次：返回上一頁、切換 tab 都會再觸發
+            .onAppear { print("畫面出現") }
             .onDisappear { print("畫面消失") }
-            .task {                               // 畫面出現時開始，畫面消失時系統自動取消
+            // 畫面出現時開始，畫面消失時系統自動取消
+            .task {
                 await loadPrices()
             }
     }
@@ -101,9 +103,12 @@ struct TradeApp: App {
             // iOS 17 起也可以寫成 { _, newPhase in ... }
             .onChange(of: scenePhase) { newPhase in
                 switch newPhase {
-                case .active:     print("可以操作")           // 例如：重新抓行情快照
-                case .inactive:   print("看得到但不能操作")   // 例如：疊上遮罩，遮住餘額
-                case .background: print("進背景")             // 例如：斷開行情連線、存狀態
+                // 例如：重新抓行情快照
+                case .active:     print("可以操作")
+                // 例如：疊上遮罩，遮住餘額
+                case .inactive:   print("看得到但不能操作")
+                // 例如：斷開行情連線、存狀態
+                case .background: print("進背景")
                 @unknown default: break
                 }
             }
@@ -118,6 +123,7 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
     override fun onStart(owner: LifecycleOwner) {
         // 第一個畫面變成可見：整個 App 回到前景
     }
+
     override fun onStop(owner: LifecycleOwner) {
         // 最後一個畫面不可見：整個 App 進入背景
     }
@@ -126,7 +132,8 @@ class AppLifecycleObserver : DefaultLifecycleObserver {
 class TradeApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifecycleObserver())
+        ProcessLifecycleOwner.get().lifecycle
+            .addObserver(AppLifecycleObserver())
     }
 }
 ```
@@ -146,7 +153,8 @@ Android 把「會影響畫面長相的系統設定改變」稱為 configuration 
 
 ```text
 onPause → onStop → onSaveInstanceState → onDestroy
-   → onCreate（這次的 savedInstanceState 不是 null）→ onStart → onRestoreInstanceState → onResume
+   → onCreate（這次的 savedInstanceState 不是 null）
+   → onStart → onRestoreInstanceState → onResume
 ```
 
 `onSaveInstanceState` 是系統讓你把小量資料放進一個 Bundle（鍵值對的容器）的時機，重建後的 `onCreate` 會把這個 Bundle 交回來。API 28 之前，`onSaveInstanceState` 是在 `onStop` 之前呼叫，不是之後。
@@ -165,8 +173,10 @@ onPause → onStop → onSaveInstanceState → onDestroy
 ```kotlin
 @Composable
 fun OrderForm(vm: OrderViewModel = viewModel()) {
-    var memo by remember { mutableStateOf("") }               // 旋轉後會消失
-    var quantity by rememberSaveable { mutableStateOf("") }   // 旋轉後還在，被系統殺掉再回來也還在
+    // 旋轉後會消失
+    var memo by remember { mutableStateOf("") }
+    // 旋轉後還在，被系統殺掉再回來也還在
+    var quantity by rememberSaveable { mutableStateOf("") }
     // 更大的狀態（例如行情資料）放在 vm 裡，旋轉時 ViewModel 會保留
 }
 ```
@@ -204,7 +214,8 @@ class OrderViewModel @Inject constructor(
 ) : ViewModel() {
 
     // 使用者選的交易對：小量資料，放進 SavedStateHandle，process death 後會還原
-    val symbol: StateFlow<String> = savedStateHandle.getStateFlow("symbol", "btcjpy")
+    val symbol: StateFlow<String> =
+        savedStateHandle.getStateFlow("symbol", "btcjpy")
 
     fun selectSymbol(value: String) {
         savedStateHandle["symbol"] = value
@@ -317,14 +328,18 @@ iOS 進背景時要收尾，可以用 `beginBackgroundTask`：
 @MainActor
 func finishWorkBeforeSuspend() {
     var taskID = UIBackgroundTaskIdentifier.invalid
-    taskID = UIApplication.shared.beginBackgroundTask(withName: "flush-pending") {
+    taskID = UIApplication.shared.beginBackgroundTask(
+        withName: "flush-pending"
+    ) {
         // 時間到了系統會呼叫這裡，必須在這裡結束，否則 App 會被系統終止
         UIApplication.shared.endBackgroundTask(taskID)
         taskID = .invalid
     }
     Task {
-        await flushPendingRequests()                      // 約 30 秒內做完收尾工作（系統決定，不保證）
-        UIApplication.shared.endBackgroundTask(taskID)    // 做完要主動結束
+        // 約 30 秒內做完收尾工作（系統決定，不保證）
+        await flushPendingRequests()
+        // 做完要主動結束
+        UIApplication.shared.endBackgroundTask(taskID)
         taskID = .invalid
     }
 }

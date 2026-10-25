@@ -27,21 +27,26 @@ tags: [compose, architecture, udf, mvi, navigation, interop, state-hoisting]
 ```kotlin
 @Composable
 fun OrderScreen() {
-    var qty by rememberSaveable { mutableStateOf("") }      // 狀態在共同的上層
+    // 狀態在共同的上層
+    var qty by rememberSaveable { mutableStateOf("") }
 
     Column {
-        OrderForm(qty = qty, onQtyChange = { qty = it })    // 值往下傳，事件往上傳
+        // 值往下傳，事件往上傳
+        OrderForm(qty = qty, onQtyChange = { qty = it })
         Summary(qty = qty)
     }
 }
 
+// stateless：自己不保存 qty
 @Composable
-fun OrderForm(qty: String, onQtyChange: (String) -> Unit) {  // stateless：自己不保存 qty
+fun OrderForm(qty: String, onQtyChange: (String) -> Unit) {
     OutlinedTextField(value = qty, onValueChange = onQtyChange)
 }
 
 @Composable
-fun Summary(qty: String) { Text("預估金額：${estimate(qty)}") }
+fun Summary(qty: String) {
+    Text("預估金額：${estimate(qty)}")
+}
 ```
 
 好處是：單一真相來源（只有一份 `qty`）、`OrderForm` 可以重用、容易預覽與測試（直接傳一個值進去就好）。
@@ -67,8 +72,15 @@ fun Summary(qty: String) { Text("預估金額：${estimate(qty)}") }
 
 ```kotlin
 sealed interface OrderUiState {
-    data object Loading : OrderUiState                       // data object：Kotlin 1.9 起可用
-    data class Content(val qty: String, val estimate: String?, val submitting: Boolean) : OrderUiState
+    // data object：Kotlin 1.9 起可用
+    data object Loading : OrderUiState
+
+    data class Content(
+        val qty: String,
+        val estimate: String?,
+        val submitting: Boolean,
+    ) : OrderUiState
+
     data class Error(val message: String) : OrderUiState
 }
 
@@ -77,21 +89,31 @@ class OrderViewModel @Inject constructor(
     private val placeOrder: PlaceOrderUseCase,
 ) : ViewModel() {
     private val _state = MutableStateFlow<OrderUiState>(OrderUiState.Loading)
-    val state: StateFlow<OrderUiState> = _state.asStateFlow()     // 對外只暴露唯讀的 StateFlow
+    // 對外只暴露唯讀的 StateFlow
+    val state: StateFlow<OrderUiState> = _state.asStateFlow()
 
-    fun onQtyChange(q: String) = _state.update { s ->             // 事件往上：UI 呼叫這個函式
-        if (s is OrderUiState.Content) s.copy(qty = q) else s
+    // 事件往上：UI 呼叫這個函式
+    fun onQtyChange(q: String) = _state.update { s ->
+        if (s is OrderUiState.Content) {
+            s.copy(qty = q)
+        } else {
+            s
+        }
     }
 }
 
+// Route：負責取得 ViewModel
 @Composable
-fun OrderRoute(vm: OrderViewModel = hiltViewModel()) {          // Route：負責取得 ViewModel
-    val state by vm.state.collectAsStateWithLifecycle()         // 狀態往下：把 Flow 變成 State
+fun OrderRoute(vm: OrderViewModel = hiltViewModel()) {
+    // 狀態往下：把 Flow 變成 State
+    val state by vm.state.collectAsStateWithLifecycle()
     OrderScreen(state = state, onQtyChange = vm::onQtyChange)
 }
 
 @Composable
-fun OrderScreen(state: OrderUiState, onQtyChange: (String) -> Unit) { /* stateless，可預覽、可測 */ }
+fun OrderScreen(state: OrderUiState, onQtyChange: (String) -> Unit) {
+    /* stateless，可預覽、可測 */
+}
 ```
 
 把畫面拆成 `Route`（取得 ViewModel）和 `Screen`（stateless）很重要：`Screen` 不依賴 ViewModel，才能預覽、才能直接傳假資料測試。
@@ -129,15 +151,22 @@ fun reduce(state: OrderState, intent: OrderIntent): OrderState = when (intent) {
 以前的寫法是字串，參數要自己組字串、自己解析：`navController.navigate("detail/${order.id}")`，拼錯了到執行時才發現。新寫法（需要 kotlinx.serialization 的 Gradle plugin）：
 
 ```kotlin
-@Serializable object OrderList                           // 沒有參數的目的地
-@Serializable data class OrderDetail(val orderId: String)  // 有參數的目的地
+// 沒有參數的目的地
+@Serializable object OrderList
+
+// 有參數的目的地
+@Serializable data class OrderDetail(val orderId: String)
 
 NavHost(navController, startDestination = OrderList) {
     composable<OrderList> {
-        OrderListScreen(onClick = { id -> navController.navigate(OrderDetail(id)) })  // 直接傳物件
+        // 直接傳物件
+        OrderListScreen(onClick = { id ->
+            navController.navigate(OrderDetail(id))
+        })
     }
     composable<OrderDetail> { entry ->
-        val args: OrderDetail = entry.toRoute()          // 取回路由物件
+        // 取回路由物件
+        val args: OrderDetail = entry.toRoute()
         OrderDetailScreen(args.orderId)
     }
 }
@@ -175,12 +204,17 @@ NavHost(navController, startDestination = OrderList) {
 ```kotlin
 class ProfileFragment : Fragment() {
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?,
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
     ): View = ComposeView(requireContext()).apply {
         // 讓 Compose 的畫面跟著 Fragment 的 view lifecycle 釋放
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
         setContent {
-            MaterialTheme {                  // XML 的 theme 不會自動套用到 Compose，要自己提供
+            // XML 的 theme 不會自動套用到 Compose，要自己提供
+            MaterialTheme {
                 ProfileRoute()
             }
         }
@@ -200,8 +234,10 @@ class ProfileFragment : Fragment() {
 @Composable
 fun WebChart(url: String) {
     AndroidView(
-        factory = { context -> WebView(context) },     // 只在建立時執行一次
-        update = { webView -> webView.loadUrl(url) },  // 它讀到的 State 變了才會再執行
+        // 只在建立時執行一次
+        factory = { context -> WebView(context) },
+        // 它讀到的 State 變了才會再執行
+        update = { webView -> webView.loadUrl(url) },
     )
 }
 ```
@@ -225,7 +261,8 @@ fun WebChart(url: String) {
 4. **全部畫面都完成後**，再評估是否把導航從 Navigation Component 換成 Navigation Compose。
 
 ```kotlin
-// Compose 畫面接 Paging 3 的資料：ViewModel 暴露的 feed 是 Flow<PagingData<Post>>
+// Compose 畫面接 Paging 3 的資料：
+// ViewModel 暴露的 feed 是 Flow<PagingData<Post>>
 val posts = viewModel.feed.collectAsLazyPagingItems()
 LazyColumn {
     items(count = posts.itemCount, key = posts.itemKey { it.id }) { index ->

@@ -49,8 +49,14 @@
     final class Screen {
         let name: String
         var onTap: (() -> Void)?
-        init(_ name: String) { self.name = name }
-        deinit { print("deinit", name) }
+
+        init(_ name: String) {
+            self.name = name
+        }
+
+        deinit {
+            print("deinit", name)
+        }
     }
 
     do {
@@ -86,7 +92,9 @@
     下列程式依序印出什麼？
   codeLang: swift
   code: |
-    final class Counter { var n = 0 }
+    final class Counter {
+        var n = 0
+    }
 
     var c = Counter()
     let byRef = { print(c.n) }
@@ -125,7 +133,10 @@
         }
 
         func handle(_ price: String) {}
-        deinit { task?.cancel() }
+
+        deinit {
+            task?.cancel()
+        }
     }
   options:
     - "Task 的 closure 允許省略 `self.`，所以沒有任何提醒就 strong 持有了 self；只要 stream 不結束，`for await` 迴圈就不結束，Task 一直抓著 self，`deinit` 永遠不會執行，裡面的 `cancel()` 也就永遠執行不到。修法：`[weak self]`，並在每次迴圈裡才 `guard let self`；再由畫面的生命週期負責取消（例如 SwiftUI 的 `.task`）"
@@ -201,13 +212,18 @@
           }
 
           func forEach(_ body: (Observer) -> Void) {
-              for o in observers { body(o) }
+              for o in observers {
+                  body(o)
+              }
           }
       }
     solution: |
       final class WeakBox<T: AnyObject> {
           weak var value: T?
-          init(_ value: T) { self.value = value }
+
+          init(_ value: T) {
+              self.value = value
+          }
       }
 
       final class Broadcaster<Observer: AnyObject> {
@@ -232,7 +248,9 @@
           func forEach(_ body: (Observer) -> Void) {
               prune()
               for box in boxes {
-                  if let o = box.value { body(o) }
+                  if let o = box.value {
+                      body(o)
+                  }
               }
           }
 
@@ -241,46 +259,58 @@
           }
       }
     tests: |
-      final class Probe { var hits = 0 }
+      final class Probe {
+          var hits = 0
+      }
 
       check("存活的觀察者會被呼叫") {
           let b = Broadcaster<Probe>()
           let p1 = Probe(), p2 = Probe()
-          b.add(p1); b.add(p2)
+          b.add(p1)
+          b.add(p2)
           b.forEach { $0.hits += 1 }
           return p1.hits == 1 && p2.hits == 1 && b.liveCount == 2
       }
+
       check("同一個物件重複加入只算一次") {
           let b = Broadcaster<Probe>()
           let p = Probe()
-          b.add(p); b.add(p)
+          b.add(p)
+          b.add(p)
           return b.liveCount == 1
       }
+
       check("remove 依物件身分移除") {
           let b = Broadcaster<Probe>()
           let p1 = Probe(), p2 = Probe()
-          b.add(p1); b.add(p2)
+          b.add(p1)
+          b.add(p2)
           b.remove(p1)
           var seen: [Probe] = []
           b.forEach { seen.append($0) }
           return seen.count == 1 && seen[0] === p2
       }
+
       var probe: Probe? = Probe()
       weak var weakProbe = probe
       let registry = Broadcaster<Probe>()
       registry.add(probe!)
       probe = nil
+
       check("註冊表不會延長觀察者壽命") { weakProbe == nil }
+
       check("釋放後 liveCount 歸零且不再被呼叫") {
           var calls = 0
           registry.forEach { _ in calls += 1 }
           return registry.liveCount == 0 && calls == 0
       }
+
       check("釋放一個、保留一個") {
           let b = Broadcaster<Probe>()
           let keep = Probe()
           var gone: Probe? = Probe()
-          b.add(keep); b.add(gone!)
+          b.add(keep)
+          b.add(gone!)
           gone = nil
           var calls = 0
           b.forEach { _ in calls += 1 }

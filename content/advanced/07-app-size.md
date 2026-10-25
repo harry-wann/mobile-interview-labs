@@ -65,9 +65,13 @@ bundletool get-size total --apks=app.apks
 **手段四：編譯器設定。** 在 Xcode 的 Build Settings 裡：
 
 ```text
-SWIFT_OPTIMIZATION_LEVEL = -Osize   # 編譯最佳化目標設為「縮小程式碼大小」，可能比 -O 稍慢，要量測
-DEAD_CODE_STRIPPING = YES           # 連結時移除沒被用到的程式碼
-STRIP_INSTALLED_PRODUCT = YES       # 從 App 裡移除除錯用的符號資訊（dSYM 這份符號檔要另外保存，才看得懂 crash 報告）
+# 編譯最佳化目標設為「縮小程式碼大小」，可能比 -O 稍慢，要量測
+SWIFT_OPTIMIZATION_LEVEL = -Osize
+# 連結時移除沒被用到的程式碼
+DEAD_CODE_STRIPPING = YES
+# 從 App 裡移除除錯用的符號資訊
+# （dSYM 這份符號檔要另外保存，才看得懂 crash 報告）
+STRIP_INSTALLED_PRODUCT = YES
 ```
 
 `-Osize` 會讓編譯器優先縮小程式碼，而不是追求最快，所以改完要量一下效能，確認每秒更新很多次的畫面（例如行情列表）沒有變慢。
@@ -96,16 +100,20 @@ R8 的 full mode 比預設的更積極，從 Android Gradle Plugin（AGP，建�
 ```kotlin
 android {
     defaultConfig {
-        // 只打包這兩種 CPU 架構的原生函式庫（arm64-v8a：64 位元 ARM；armeabi-v7a：32 位元 ARM）
+        // 只打包這兩種 CPU 架構的原生函式庫
+        // （arm64-v8a：64 位元 ARM；armeabi-v7a：32 位元 ARM）
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
     buildTypes {
         release {
-            isMinifyEnabled = true        // 開啟 R8：縮減、混淆、最佳化
-            isShrinkResources = true      // 移除沒被引用的資源（要先開 isMinifyEnabled）
+            // 開啟 R8：縮減、混淆、最佳化
+            isMinifyEnabled = true
+            // 移除沒被引用的資源（要先開 isMinifyEnabled）
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"      // 自己寫的 keep 規則
+                // 自己寫的 keep 規則
+                "proguard-rules.pro"
             )
         }
     }

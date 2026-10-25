@@ -61,9 +61,14 @@ WebSocket（每秒 200~400 則）
 先看 iOS 的 `AsyncStream`（Swift 的非同步資料流，可以用 `for await` 一筆一筆讀）。`bufferingNewest(1)` 的意思是：緩衝區最多放 1 筆，消費者還沒來取時，新的資料會把舊的擠掉。
 
 ```swift
-struct Ticker: Sendable { let symbol: String; let price: Int }
+struct Ticker: Sendable {
+    let symbol: String
+    let price: Int
+}
 
-let stream = AsyncStream<Ticker>(bufferingPolicy: .bufferingNewest(1)) { continuation in
+let stream = AsyncStream<Ticker>(
+    bufferingPolicy: .bufferingNewest(1)
+) { continuation in
     // 模擬生產者：連續送出 5 筆，這段時間沒有任何人在讀
     for price in 100...104 {
         continuation.yield(Ticker(symbol: "BTC_JPY", price: price))
@@ -72,7 +77,8 @@ let stream = AsyncStream<Ticker>(bufferingPolicy: .bufferingNewest(1)) { continu
 }
 
 for await ticker in stream {
-    print(ticker.price)   // 輸出：104（100 到 103 在緩衝區裡被擠掉了）
+    // 輸出：104（100 到 103 在緩衝區裡被擠掉了）
+    print(ticker.price)
 }
 ```
 
@@ -80,8 +86,10 @@ for await ticker in stream {
 
 ```swift
 actor TickerStore {
-    private var latest: [String: Ticker] = [:]   // 每個交易對的最新報價
-    private var dirty: Set<String> = []          // 上次畫面取走之後，哪些交易對有變動
+    // 每個交易對的最新報價
+    private var latest: [String: Ticker] = [:]
+    // 上次畫面取走之後，哪些交易對有變動
+    private var dirty: Set<String> = []
 
     // WebSocket 每收到一則就呼叫：只改記憶體，不碰畫面
     func apply(_ ticker: Ticker) {
@@ -98,7 +106,8 @@ actor TickerStore {
 }
 
 // 依序呼叫 apply：BTC 100、ETH 50、BTC 101、BTC 102
-// 第一次 takeChanges() 的結果：BTC_JPY=102、ETH_JPY=50（BTC 中間的 100、101 被合併掉了）
+// 第一次 takeChanges() 的結果：BTC_JPY=102、ETH_JPY=50（BTC 中間的 100、101
+// 被合併掉了）
 // 第二次 takeChanges() 的結果：空陣列（沒有新變動，畫面什麼都不用做）
 ```
 
@@ -108,8 +117,13 @@ Combine 是 Apple 的資料流框架，`throttle` 可以限制送出的頻率。
 
 ```swift
 tickerPublisher
-    .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
-    .sink { ticker in render(ticker) }   // 每 100 毫秒最多收到一次，而且一定是最新的
+    .throttle(
+        for: .milliseconds(100),
+        scheduler: DispatchQueue.main,
+        latest: true
+    )
+    // 每 100 毫秒最多收到一次，而且一定是最新的
+    .sink { ticker in render(ticker) }
 ```
 
 Android 的 Flow 是 Kotlin Coroutines 的非同步資料流，對應的工具是：
@@ -118,10 +132,12 @@ Android 的 Flow 是 Kotlin Coroutines 的非同步資料流，對應的工具�
 // conflate：消費者處理得慢時，丟掉中間的值，只留最新的一筆
 tickerFlow
     .conflate()
-    .collect { ticker -> render(ticker) }   // render 比較慢也沒關係，不會把資料堆積起來
+    // render 比較慢也沒關係，不會把資料堆積起來
+    .collect { ticker -> render(ticker) }
 
 // sample：固定每 100 毫秒，取這段期間內最新的一筆
-// sample 在 kotlinx.coroutines 1.11 仍是預覽版功能（FlowPreview），要加 @OptIn 標註
+// sample 在 kotlinx.coroutines 1.11 仍是預覽版功能（FlowPreview），要加 @OptIn
+// 標註
 @OptIn(FlowPreview::class)
 val uiTickers = tickerFlow.sample(100)
 ```
@@ -154,20 +170,26 @@ final class TickerRefresher {
     func start() {
         let link = CADisplayLink(target: self, selector: #selector(tick))
         // 每秒大約 10 次就好，不需要 60 或 120 次
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 8, maximum: 15, preferred: 10)
+        link.preferredFrameRateRange = CAFrameRateRange(
+            minimum: 8,
+            maximum: 15,
+            preferred: 10
+        )
         // .common：使用者捲動列表時，計時器也不會被暫停
         link.add(to: .main, forMode: .common)
         displayLink = link
     }
 
     func stop() {
-        displayLink?.invalidate()   // 一定要呼叫，CADisplayLink 會強參考 target
+        // 一定要呼叫，CADisplayLink 會強參考 target
+        displayLink?.invalidate()
         displayLink = nil
     }
 
     @objc private func tick() {
         Task {
-            let changes = await store.takeChanges()   // 取出自上次以來有變動的交易對
+            // 取出自上次以來有變動的交易對
+            let changes = await store.takeChanges()
             // 把 changes 套用到列表（見下一題）
         }
     }
@@ -182,12 +204,15 @@ final class TickerRefresher {
 Android 的 `Choreographer` 是系統在每一格畫面開始前呼叫你的機制，用 `postFrameCallback` 註冊。但在 Jetpack Compose（Android 的宣告式 UI 框架）或 ViewModel 裡，更常見的做法是直接用 Flow 的 `sample()`：
 
 ```kotlin
-// ViewModel 裡：背景每一則都套用到 tickerStore，畫面每 100 毫秒才收到一次最新的整份資料
+// ViewModel 裡：背景每一則都套用到 tickerStore，畫面每 100
+// 毫秒才收到一次最新的整份資料
+// Flow<Map<String, Ticker>>
 @OptIn(FlowPreview::class)
-val rows: StateFlow<List<TickerRow>> = tickerStore.snapshots   // Flow<Map<String, Ticker>>
+val rows: StateFlow<List<TickerRow>> = tickerStore.snapshots
     .sample(100)
     .map { snapshot -> snapshot.values.map(::toRow) }
-    .flowOn(Dispatchers.Default)   // 轉換在背景執行緒做，不佔用主執行緒
+    // 轉換在背景執行緒做，不佔用主執行緒
+    .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 ```
 
@@ -203,12 +228,19 @@ val rows: StateFlow<List<TickerRow>> = tickerStore.snapshots   // Flow<Map<Strin
 
 ```swift
 var throttle = ThrottleLatest<Int>(intervalMs: 100)
-throttle.offer(1); throttle.offer(2)   // 2 蓋掉 1
-print(throttle.tick(nowMs: 0))         // 輸出：Optional(2)（第一次，立刻送出最新的）
-throttle.offer(3); throttle.offer(4)
-print(throttle.tick(nowMs: 50))        // 輸出：nil（距離上次送出才 50 毫秒，待送的 4 保留）
-print(throttle.tick(nowMs: 100))       // 輸出：Optional(4)（滿 100 毫秒，送出最新的）
-print(throttle.tick(nowMs: 200))       // 輸出：nil（沒有新的值，不重複送出）
+// 2 蓋掉 1
+throttle.offer(1)
+throttle.offer(2)
+// 輸出：Optional(2)（第一次，立刻送出最新的）
+print(throttle.tick(nowMs: 0))
+throttle.offer(3)
+throttle.offer(4)
+// 輸出：nil（距離上次送出才 50 毫秒，待送的 4 保留）
+print(throttle.tick(nowMs: 50))
+// 輸出：Optional(4)（滿 100 毫秒，送出最新的）
+print(throttle.tick(nowMs: 100))
+// 輸出：nil（沒有新的值，不重複送出）
+print(throttle.tick(nowMs: 200))
 ```
 
 > [!TIP]
@@ -224,8 +256,10 @@ print(throttle.tick(nowMs: 200))       // 輸出：nil（沒有新的值，不�
 
 ```swift
 var snapshot = dataSource.snapshot()
-snapshot.reconfigureItems(changedSymbols)   // changedSymbols：只有價格變動的交易對代號
-dataSource.apply(snapshot, animatingDifferences: false)   // 價格跳動不需要列的位移動畫
+// changedSymbols：只有價格變動的交易對代號
+snapshot.reconfigureItems(changedSymbols)
+// 價格跳動不需要列的位移動畫
+dataSource.apply(snapshot, animatingDifferences: false)
 ```
 
 這裡有個重點：**項目的識別要用交易對代號（字串），不要用包含價格的整個 struct。** 如果識別是整個 struct，價格一變，data source 就會當成「刪掉舊的一列、新增一列」，而不是「同一列的內容變了」。cell 設定內容的程式，再用代號到最新狀態裡讀價格。
@@ -237,14 +271,19 @@ dataSource.apply(snapshot, animatingDifferences: false)   // 價格跳動不需�
 ```kotlin
 class TickerDiff : DiffUtil.ItemCallback<TickerRow>() {
     // 是不是同一檔交易對（同一列）
-    override fun areItemsTheSame(old: TickerRow, new: TickerRow) = old.symbol == new.symbol
+    override fun areItemsTheSame(old: TickerRow, new: TickerRow) = old.symbol ==
+        new.symbol
 
     // 同一列的內容有沒有變
     override fun areContentsTheSame(old: TickerRow, new: TickerRow) = old == new
 
     // 變了的話，告訴 adapter「只有價格變了」
     override fun getChangePayload(old: TickerRow, new: TickerRow): Any? =
-        if (old.priceText != new.priceText) PRICE_CHANGED else null
+        if (old.priceText != new.priceText) {
+            PRICE_CHANGED
+        } else {
+            null
+        }
 }
 
 // onBindViewHolder(holder, position, payloads) 裡：
@@ -270,18 +309,25 @@ enum PriceDirection { case up, down, flat }
 // old 是「上次畫在畫面上的價格」，第一次顯示時沒有舊值
 func direction(old: Decimal?, new: Decimal) -> PriceDirection {
     guard let old else { return .flat }
-    if new > old { return .up }
-    if new < old { return .down }
+    if new > old {
+        return .up
+    }
+    if new < old {
+        return .down
+    }
     return .flat
 }
 
 // 只在畫面真的更新時呼叫，不是每收到一則推播就呼叫
 func flash(_ label: UILabel, direction: PriceDirection, style: FlashStyle) {
     // 持平，或使用者在系統設定開了「減少動態效果」：不做動畫
-    guard direction != .flat, !UIAccessibility.isReduceMotionEnabled else { return }
+    guard direction != .flat, !UIAccessibility.isReduceMotionEnabled else {
+        return
+    }
     // 漲跌的顏色由使用者設定決定（style.upColor／style.downColor）
     label.backgroundColor = direction == .up ? style.upColor : style.downColor
-    UIView.animate(withDuration: 0.25) { label.backgroundColor = .clear }   // 250 毫秒淡出
+    // 250 毫秒淡出
+    UIView.animate(withDuration: 0.25) { label.backgroundColor = .clear }
 }
 ```
 
@@ -323,8 +369,10 @@ func flash(_ label: UILabel, direction: PriceDirection, style: FlashStyle) {
 // 在背景算好，畫面只指派
 struct TickerRowModel: Equatable, Sendable {
     let symbol: String
-    let priceText: String      // 例如 "10,234,567"
-    let changeText: String     // 例如 "+1.23%"
+    // 例如 "10,234,567"
+    let priceText: String
+    // 例如 "+1.23%"
+    let changeText: String
     let direction: PriceDirection
 }
 ```

@@ -53,13 +53,18 @@ tags: [compose, performance, lazycolumn, baseline-profile, recomposition, market
 ```kotlin
 @Composable
 fun TickRow(tick: TickUi) {
-    val flash = remember { Animatable(0f) }          // Animatable：Compose 的動畫值容器，value 是 State
-    LaunchedEffect(tick.priceText) {                 // 價格文字一變，就播一次閃色動畫
+    // Animatable：Compose 的動畫值容器，value 是 State
+    val flash = remember { Animatable(0f) }
+
+    // 價格文字一變，就播一次閃色動畫
+    LaunchedEffect(tick.priceText) {
         flash.snapTo(1f)
-        flash.animateTo(0f, tween(400))              // 400 毫秒內從 1 漸變到 0
+        // 400 毫秒內從 1 漸變到 0
+        flash.animateTo(0f, tween(400))
     }
 
-    Row(Modifier.background(Color.Green.copy(alpha = flash.value * 0.3f))) {  // 在這裡讀取 flash.value
+    // 在這裡讀取 flash.value
+    Row(Modifier.background(Color.Green.copy(alpha = flash.value * 0.3f))) {
         Text(tick.symbol)
         Text(tick.priceText)
     }
@@ -72,7 +77,8 @@ fun TickRow(tick: TickUi) {
 
 ```kotlin
 Row(
-    Modifier.drawBehind {                                    // lambda：裡面的讀取發生在 Drawing 階段
+    // lambda：裡面的讀取發生在 Drawing 階段
+    Modifier.drawBehind {
         drawRect(Color.Green.copy(alpha = flash.value * 0.3f))
     }
 ) {
@@ -105,7 +111,8 @@ Row(
 
 ```kotlin
 LazyColumn {
-    items(watchlist) { tick -> TickRow(tick) }     // 沒有 key：Compose 用「位置」識別項目
+    // 沒有 key：Compose 用「位置」識別項目
+    items(watchlist) { tick -> TickRow(tick) }
 }
 ```
 
@@ -115,8 +122,10 @@ LazyColumn {
 LazyColumn {
     items(
         items = watchlist,
-        key = { it.symbol },            // 以幣種代號識別
-        contentType = { "tick" },       // 這一種項目的種類
+        // 以幣種代號識別
+        key = { it.symbol },
+        // 這一種項目的種類
+        contentType = { "tick" },
     ) { tick -> TickRow(tick) }
 }
 ```
@@ -144,7 +153,8 @@ LazyColumn {
 
 ```kotlin
 data class MarketUiState(
-    val ticks: ImmutableList<TickUi> = persistentListOf(),   // persistentListOf：建立空的 ImmutableList
+    // persistentListOf：建立空的 ImmutableList
+    val ticks: ImmutableList<TickUi> = persistentListOf(),
 )
 
 // ViewModel 或資料層：在背景把一般的 List 轉成 ImmutableList
@@ -173,13 +183,18 @@ val uiState: Flow<MarketUiState> = repo.ticks.map { list ->
 **(1) 資料層降低更新頻率。** WebSocket 每收到一筆訊息就更新畫面，一定卡。做法是在背景依幣種代號合併，每個幣種只保留最新一筆，然後固定週期（例如 100 到 250 毫秒）輸出一批：
 
 ```kotlin
-class MarketRepository(private val socket: TickerSocket, scope: CoroutineScope) {
+class MarketRepository(
+    private val socket: TickerSocket,
+    scope: CoroutineScope,
+) {
     private val latest = MutableStateFlow<Map<String, TickUi>>(emptyMap())
 
     init {
         scope.launch(Dispatchers.Default) {
-            socket.ticks.collect { tick ->                       // 每筆 WebSocket 訊息
-                latest.update { it + (tick.symbol to tick.toUi()) }   // 只保留每個幣種最新的一筆，不動畫面
+            // 每筆 WebSocket 訊息
+            socket.ticks.collect { tick ->
+                // 只保留每個幣種最新的一筆，不動畫面
+                latest.update { it + (tick.symbol to tick.toUi()) }
             }
         }
     }
@@ -190,7 +205,8 @@ class MarketRepository(private val socket: TickerSocket, scope: CoroutineScope) 
             emit(latest.value.values.toList())
             delay(200)
         }
-    }.distinctUntilChanged()                                     // 內容完全沒變就不往下送
+    // 內容完全沒變就不往下送
+    }.distinctUntilChanged()
 }
 ```
 
@@ -236,7 +252,8 @@ class BaselineProfileGenerator {
     @Test
     fun generate() = rule.collect(packageName = "com.example.exchange") {
         pressHome()
-        startActivityAndWait()          // 冷啟動 App
+        // 冷啟動 App
+        startActivityAndWait()
         // 接著再加上關鍵流程：進入行情列表、捲動
     }
 }

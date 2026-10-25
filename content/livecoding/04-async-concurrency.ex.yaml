@@ -54,9 +54,16 @@
       actor Tracker {
           var current = 0
           var peak = 0
-          func enter() { current += 1; peak = max(peak, current) }
-          func leave() { current -= 1 }
+          func enter() {
+              current += 1
+              peak = max(peak, current)
+          }
+
+          func leave() {
+              current -= 1
+          }
       }
+
       let tracker = Tracker()
       let results = await mapConcurrently(Array(0..<10), limit: 3) { x in
           await tracker.enter()
@@ -64,6 +71,7 @@
           await tracker.leave()
           return x * 2
       }
+
       checkEqual("結果順序與輸入相同", Array(0..<10).map { $0 * 2 }) { results }
       let peak = await tracker.peak
       check("同時執行數不超過 limit") { peak <= 3 }
@@ -72,7 +80,11 @@
       checkEqual("空輸入", [Int]()) { empty }
   kotlin:
     starter: |
-      suspend fun <T, R> mapConcurrently(items: List<T>, limit: Int, transform: suspend (T) -> R): List<R> {
+      suspend fun <T, R> mapConcurrently(
+          items: List<T>,
+          limit: Int,
+          transform: suspend (T) -> R,
+      ): List<R> {
           // TODO: 目前是一個一個做
           return items.map { transform(it) }
       }
@@ -83,7 +95,11 @@
       import kotlinx.coroutines.sync.Semaphore
       import kotlinx.coroutines.sync.withPermit
 
-      suspend fun <T, R> mapConcurrently(items: List<T>, limit: Int, transform: suspend (T) -> R): List<R> =
+      suspend fun <T, R> mapConcurrently(
+          items: List<T>,
+          limit: Int,
+          transform: suspend (T) -> R,
+      ): List<R> =
           coroutineScope {
               val semaphore = Semaphore(limit)
               items.map { item ->
@@ -101,10 +117,13 @@
           current--
           x * 2
       }
+
       checkEqual("結果順序與輸入相同", (0 until 10).map { it * 2 }) { results }
       check("同時執行數不超過 limit") { peak <= 3 }
       check("確實有並行（峰值 ≥ 2）") { peak >= 2 }
-      checkEqual("空輸入", emptyList<Int>()) { mapConcurrently(emptyList<Int>(), 3) { it } }
+      checkEqual("空輸入", emptyList<Int>()) {
+          mapConcurrently(emptyList<Int>(), 3) { it }
+      }
 
 - id: livecoding-async-02
   type: code
@@ -158,32 +177,62 @@
       }
     tests: |
       enum NetError: Error, Equatable { case timeout(Int), unauthorized }
-      final class Log { var delays: [Int] = []; var calls = 0 }
-      let retryable: (Error) -> Bool = { if case NetError.timeout = $0 { return true } else { return false } }
+      final class Log {
+          var delays: [Int] = []
+          var calls = 0
+      }
+
+      let retryable: (Error) -> Bool = {
+          if case NetError.timeout = $0 {
+              return true
+          } else {
+              return false
+          }
+      }
 
       let ok = Log()
-      let value = try? await retry(maxAttempts: 5, baseDelay: 100, shouldRetry: retryable, sleep: { ok.delays.append($0) }) { () async throws -> String in
+      let value = try? await retry(
+          maxAttempts: 5,
+          baseDelay: 100,
+          shouldRetry: retryable,
+          sleep: { ok.delays.append($0) }
+      ) { () async throws -> String in
           ok.calls += 1
-          if ok.calls < 3 { throw NetError.timeout(ok.calls) }
+          if ok.calls < 3 {
+              throw NetError.timeout(ok.calls)
+          }
           return "done"
       }
+
       checkEqual("第 3 次成功", "done") { value }
       checkEqual("退避間隔 100、200", [100, 200]) { ok.delays }
 
       let fail = Log()
       var lastError: NetError?
       do {
-          _ = try await retry(maxAttempts: 3, baseDelay: 100, shouldRetry: retryable, sleep: { fail.delays.append($0) }) { () async throws -> String in
+          _ = try await retry(
+              maxAttempts: 3,
+              baseDelay: 100,
+              shouldRetry: retryable,
+              sleep: { fail.delays.append($0) }
+          ) { () async throws -> String in
               fail.calls += 1
               throw NetError.timeout(fail.calls)
           }
-      } catch let e as NetError { lastError = e } catch {}
+      } catch let e as NetError {
+          lastError = e
+      } catch {}
       checkEqual("全部失敗丟出最後一次的錯誤", NetError.timeout(3)) { lastError }
       checkEqual("最多嘗試 3 次", 3) { fail.calls }
 
       let auth = Log()
       do {
-          _ = try await retry(maxAttempts: 5, baseDelay: 100, shouldRetry: retryable, sleep: { auth.delays.append($0) }) { () async throws -> String in
+          _ = try await retry(
+              maxAttempts: 5,
+              baseDelay: 100,
+              shouldRetry: retryable,
+              sleep: { auth.delays.append($0) }
+          ) { () async throws -> String in
               auth.calls += 1
               throw NetError.unauthorized
           }
@@ -214,8 +263,12 @@
               try {
                   return operation()
               } catch (e: Throwable) {
-                  if (e is kotlinx.coroutines.CancellationException) throw e
-                  if (!shouldRetry(e) || attempt == maxAttempts) throw e
+                  if (e is kotlinx.coroutines.CancellationException) {
+                      throw e
+                  }
+                  if (!shouldRetry(e) || attempt == maxAttempts) {
+                      throw e
+                  }
                   sleep(delay)
                   delay *= 2
               }
@@ -232,12 +285,15 @@
       val value = try {
           retry(5, 100, retryable, { okDelays += it }) {
               okCalls++
-              if (okCalls < 3) throw Timeout(okCalls)
+              if (okCalls < 3) {
+                  throw Timeout(okCalls)
+              }
               "done"
           }
       } catch (e: Exception) {
           "丟出例外：${e.message}"
       }
+
       checkEqual("第 3 次成功", "done") { value }
       checkEqual("退避間隔 100、200", listOf(100L, 200L)) { okDelays }
 
@@ -251,6 +307,7 @@
       } catch (e: Timeout) {
           e.attempt
       }
+
       checkEqual("全部失敗丟出最後一次的錯誤", 3) { lastAttempt }
       checkEqual("最多嘗試 3 次", 3) { failCalls }
 
@@ -263,6 +320,7 @@
           }
       } catch (e: Unauthorized) {
       }
+
       check("不可重試的錯誤不重試") { authCalls == 1 && authDelays.isEmpty() }
 
 - id: livecoding-async-03
@@ -287,8 +345,13 @@
       actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
           private var values: [Key: Value] = [:]
 
-          func value(for key: Key, load: @escaping @Sendable (Key) async throws -> Value) async throws -> Value {
-              if let cached = values[key] { return cached }
+          func value(
+              for key: Key,
+              load: @escaping @Sendable (Key) async throws -> Value
+          ) async throws -> Value {
+              if let cached = values[key] {
+                  return cached
+              }
               // TODO: 同時的請求應該共用同一次載入
               let loaded = try await load(key)
               values[key] = loaded
@@ -300,9 +363,16 @@
           private var values: [Key: Value] = [:]
           private var inFlight: [Key: Task<Value, Error>] = [:]
 
-          func value(for key: Key, load: @escaping @Sendable (Key) async throws -> Value) async throws -> Value {
-              if let cached = values[key] { return cached }
-              if let task = inFlight[key] { return try await task.value }
+          func value(
+              for key: Key,
+              load: @escaping @Sendable (Key) async throws -> Value
+          ) async throws -> Value {
+              if let cached = values[key] {
+                  return cached
+              }
+              if let task = inFlight[key] {
+                  return try await task.value
+              }
               let task = Task { try await load(key) }
               inFlight[key] = task
               do {
@@ -317,7 +387,13 @@
           }
       }
     tests: |
-      actor Counter { var n = 0; func inc() { n += 1 } }
+      actor Counter {
+          var n = 0
+          func inc() {
+              n += 1
+          }
+      }
+
       enum LoadError: Error { case boom }
       let loads = Counter()
       let cache = SingleFlightCache<String, String>()
@@ -332,21 +408,45 @@
               }
           }
           var all: [String] = []
-          for await r in group { all.append(r) }
+          for await r in group {
+              all.append(r)
+          }
           return all
       }
+
       await checkEqualAsync("10 個同時請求只載入 1 次", 1) { await loads.n }
-      checkEqual("大家拿到同一個結果", Array(repeating: "config-btc", count: 10)) { results }
-      let again = try? await cache.value(for: "btc") { _ in await loads.inc(); return "x" }
-      await checkAsync("已快取不再載入") { await loads.n == 1 && again == "config-btc" }
+      checkEqual("大家拿到同一個結果", Array(repeating: "config-btc", count: 10)) {
+          results
+      }
+
+      let again = try? await cache.value(for: "btc") { _ in
+          await loads.inc()
+          return "x"
+      }
+
+      await checkAsync("已快取不再載入") {
+          await loads.n == 1 && again == "config-btc"
+      }
 
       let failures = Counter()
       var failedOnce = false
       do {
-          _ = try await cache.value(for: "eth") { _ in await failures.inc(); throw LoadError.boom }
-      } catch { failedOnce = true }
-      let retried = try? await cache.value(for: "eth") { key in await failures.inc(); return "config-\(key)" }
-      await checkAsync("失敗不快取，下次重新載入") { await failures.n == 2 && failedOnce && retried == "config-eth" }
+          _ = try await cache.value(for: "eth") { _ in
+              await failures.inc()
+              throw LoadError.boom
+          }
+      } catch {
+          failedOnce = true
+      }
+
+      let retried = try? await cache.value(for: "eth") { key in
+          await failures.inc()
+          return "config-\(key)"
+      }
+
+      await checkAsync("失敗不快取，下次重新載入") {
+          await failures.n == 2 && failedOnce && retried == "config-eth"
+      }
   kotlin:
     starter: |
       class SingleFlightCache<K, V> {
@@ -379,7 +479,9 @@
                       isOwner = true
                   }
               }
-              if (!isOwner) return deferred.await()
+              if (!isOwner) {
+                  return deferred.await()
+              }
               return try {
                   val loaded = load(key)
                   mutex.withLock {
@@ -413,20 +515,35 @@
               }
           }.awaitAll()
       }
+
       checkEqual("10 個同時請求只載入 1 次", 1) { loads }
       checkEqual("大家拿到同一個結果", List(10) { "config-btc" }) { results }
-      val again = cache.get("btc") { loads++; "x" }
+      val again = cache.get("btc") {
+          loads++
+          "x"
+      }
+
       check("已快取不再載入") { loads == 1 && again == "config-btc" }
 
       var failures = 0
       val failedOnce = try {
-          cache.get("eth") { failures++; throw IllegalStateException("boom") }
+          cache.get("eth") {
+              failures++
+              throw IllegalStateException("boom")
+          }
           false
       } catch (e: IllegalStateException) {
           true
       }
-      val retried = cache.get("eth") { key -> failures++; "config-$key" }
-      check("失敗不快取，下次重新載入") { failures == 2 && failedOnce && retried == "config-eth" }
+
+      val retried = cache.get("eth") { key ->
+          failures++
+          "config-$key"
+      }
+
+      check("失敗不快取，下次重新載入") {
+          failures == 2 && failedOnce && retried == "config-eth"
+      }
 
 - id: livecoding-async-04
   type: predict
@@ -442,9 +559,12 @@
         var fetchCount = 0
 
         func load() async -> String {
-            if let cached { return cached }
+            if let cached {
+                return cached
+            }
             fetchCount += 1
-            try? await Task.sleep(nanoseconds: 50_000_000)  // 模擬 API
+            // 模擬 API
+            try? await Task.sleep(nanoseconds: 50_000_000)
             cached = "v1"
             return "v1"
         }
@@ -452,9 +572,12 @@
 
     let config = Config()
     await withTaskGroup(of: String.self) { group in
-        for _ in 0..<3 { group.addTask { await config.load() } }
+        for _ in 0..<3 {
+            group.addTask { await config.load() }
+        }
         for await _ in group {}
     }
+
     print(await config.fetchCount)
   answer: |
     3

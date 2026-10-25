@@ -44,14 +44,24 @@
     下列程式依序印出什麼？（5 行輸出）
   codeLang: swift
   code: |
-    final class Box { var value: [Int]; init(_ v: [Int]) { value = v } }
+    final class Box {
+        var value: [Int]
+
+        init(_ v: [Int]) {
+            value = v
+        }
+    }
 
     struct Wrapper {
         private var box = Box([1, 2, 3])
+
         var values: [Int] { box.value }
         var id: ObjectIdentifier { ObjectIdentifier(box) }
+
         mutating func append(_ x: Int) {
-            if !isKnownUniquelyReferenced(&box) { box = Box(box.value) }
+            if !isKnownUniquelyReferenced(&box) {
+                box = Box(box.value)
+            }
             box.value.append(x)
         }
     }
@@ -59,9 +69,11 @@
     var a = Wrapper()
     var b = a
     print(a.id == b.id)
+
     b.append(4)
     print(a.id == b.id)
     print(a.values.count, b.values.count)
+
     a.append(9)
     let idBefore = a.id
     a.append(10)
@@ -143,13 +155,18 @@
     starter: |
       final class Storage<Element> {
           var items: [Element]
-          init(_ items: [Element]) { self.items = items }
+
+          init(_ items: [Element]) {
+              self.items = items
+          }
       }
 
       struct COWList<Element> {
           private var storage: Storage<Element>
 
-          init(_ items: [Element] = []) { storage = Storage(items) }
+          init(_ items: [Element] = []) {
+              storage = Storage(items)
+          }
 
           var count: Int { storage.items.count }
           var storageID: ObjectIdentifier { ObjectIdentifier(storage) }
@@ -167,13 +184,18 @@
     solution: |
       final class Storage<Element> {
           var items: [Element]
-          init(_ items: [Element]) { self.items = items }
+
+          init(_ items: [Element]) {
+              self.items = items
+          }
       }
 
       struct COWList<Element> {
           private var storage: Storage<Element>
 
-          init(_ items: [Element] = []) { storage = Storage(items) }
+          init(_ items: [Element] = []) {
+              storage = Storage(items)
+          }
 
           var count: Int { storage.items.count }
           var storageID: ObjectIdentifier { ObjectIdentifier(storage) }
@@ -204,6 +226,7 @@
           b.append(4)
           return a.count == 3 && b.count == 4
       }
+
       check("唯一持有時 append 不換 storage") {
           var a = COWList([1, 2, 3])
           let before = a.storageID
@@ -211,6 +234,7 @@
           a.append(5)
           return a.storageID == before && a.count == 5
       }
+
       check("共用時寫入，被寫的那份換新 storage，另一份保持原 storage") {
           let a = COWList([1, 2, 3])
           var b = a
@@ -218,12 +242,14 @@
           b.append(4)
           return a.storageID == shared && b.storageID != shared
       }
+
       check("subscript setter 也遵守 COW") {
           let a = COWList([1, 2, 3])
           var b = a
           b[0] = 99
           return a[0] == 1 && b[0] == 99
       }
+
       check("讀取不會觸發複製") {
           let a = COWList([1, 2, 3])
           let b = a
@@ -231,6 +257,7 @@
           _ = b.count
           return a.storageID == b.storageID
       }
+
       check("複製出來的新 storage 之後可以繼續就地修改") {
           let a = COWList([1])
           var b = a

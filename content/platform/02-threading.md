@@ -41,20 +41,26 @@ Android 的 `Handler` 是把工作排進某個 Looper 的 MessageQueue 的工具
 ```swift
 // iOS：重工作在背景，只把更新畫面的部分丟回主執行緒
 DispatchQueue.global(qos: .userInitiated).async {
-    let book = decodeOrderBook(raw)        // 解碼、排序：在背景執行緒做
-    DispatchQueue.main.async {             // 排進主執行緒的佇列，輪到時執行
-        self.render(book)                  // 只有更新畫面在主執行緒
+    // 解碼、排序：在背景執行緒做
+    let book = decodeOrderBook(raw)
+    // 排進主執行緒的佇列，輪到時執行
+    DispatchQueue.main.async {
+        // 只有更新畫面在主執行緒
+        self.render(book)
     }
 }
 ```
 
 ```kotlin
 // Android：協程版本（Handler 版本的寫法是 mainHandler.post { render(book) }）
-lifecycleScope.launch {                                        // 預設在主執行緒開始
-    val book = withContext(Dispatchers.Default) {              // 切到背景做 CPU 運算
+// 預設在主執行緒開始
+lifecycleScope.launch {
+    // 切到背景做 CPU 運算
+    val book = withContext(Dispatchers.Default) {
         decodeOrderBook(raw)
     }
-    render(book)                                               // 回到主執行緒更新畫面
+    // 回到主執行緒更新畫面
+    render(book)
 }
 ```
 
@@ -96,7 +102,8 @@ final class FrameMonitor {
     }
 
     @objc private func tick(_ link: CADisplayLink) {
-        let budget = link.targetTimestamp - link.timestamp        // 這一格該有的時間：120 Hz 約 0.0083 秒
+        // 這一格該有的時間：120 Hz 約 0.0083 秒
+        let budget = link.targetTimestamp - link.timestamp
         if last != 0, link.timestamp - last > budget * 1.5 {
             print("掉格：這一格花了 \((link.timestamp - last) * 1000) ms")
         }
@@ -106,18 +113,25 @@ final class FrameMonitor {
 ```
 
 ```kotlin
-// Android：Choreographer 在每個 VSYNC 呼叫 doFrame（以下以 60 Hz 為例，超過約 20 ms 就算掉格）
-Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-    private var last = 0L
-    override fun doFrame(frameTimeNanos: Long) {
-        if (last != 0L) {
-            val ms = (frameTimeNanos - last) / 1_000_000.0
-            if (ms > 20) Log.w("Jank", "掉格：這一格花了 $ms ms")
+// Android：Choreographer 在每個 VSYNC 呼叫 doFrame
+// （以下以 60 Hz 為例，超過約 20 ms 就算掉格）
+Choreographer.getInstance().postFrameCallback(
+    object : Choreographer.FrameCallback {
+        private var last = 0L
+
+        override fun doFrame(frameTimeNanos: Long) {
+            if (last != 0L) {
+                val ms = (frameTimeNanos - last) / 1_000_000.0
+                if (ms > 20) {
+                    Log.w("Jank", "掉格：這一格花了 $ms ms")
+                }
+            }
+            last = frameTimeNanos
+            // 再登記下一格
+            Choreographer.getInstance().postFrameCallback(this)
         }
-        last = frameTimeNanos
-        Choreographer.getInstance().postFrameCallback(this)    // 再登記下一格
     }
-})
+)
 ```
 
 > [!TIP]
@@ -158,10 +172,12 @@ class TradeApplication : Application() {
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()
-                    .detectDiskReads()      // 主執行緒讀檔
-                    .detectDiskWrites()     // 主執行緒寫檔
-                    .detectNetwork()        // 主執行緒打網路
-                    .penaltyLog()           // 違規時寫進 Logcat
+                    .detectDiskReads() // 主執行緒讀檔
+                    .detectDiskWrites() // 主執行緒寫檔
+                    // 主執行緒打網路
+                    .detectNetwork()
+                    // 違規時寫進 Logcat
+                    .penaltyLog()
                     .build()
             )
         }
@@ -192,8 +208,10 @@ Main Thread Checker: UI API called on a background thread: -[UIView setBackgroun
 ```swift
 let queue = DispatchQueue(label: "serial")
 queue.async {
-    queue.sync {            // 目前的任務正在這個佇列上，sync 要等佇列有空，但佇列要等目前的任務做完
-        print("永遠到不了")   // 死鎖（新版系統常會直接偵測到並 crash）
+    // 目前的任務正在這個佇列上，sync 要等佇列有空，但佇列要等目前的任務做完
+    queue.sync {
+        // 死鎖（新版系統常會直接偵測到並 crash）
+        print("永遠到不了")
     }
 }
 ```
@@ -207,13 +225,16 @@ import Foundation
 
 let q = DispatchQueue(label: "q", attributes: .concurrent)
 q.async { print("1") }
-q.async(flags: .barrier) { print("2") }   // 等 1 做完才執行，3 要等它做完
+// 等 1 做完才執行，3 要等它做完
+q.async(flags: .barrier) { print("2") }
 q.async { print("3") }
-q.sync(flags: .barrier) {}                // 等前面全部做完才返回
+// 等前面全部做完才返回
+q.sync(flags: .barrier) {}
 
-let s = DispatchQueue(label: "s")         // serial queue
+let s = DispatchQueue(label: "s") // serial queue
 s.async { print("A") }
-s.sync { print("B") }                     // 排在 A 後面；sync 會讓目前的執行緒等它做完
+// 排在 A 後面；sync 會讓目前的執行緒等它做完
+s.sync { print("B") }
 print("C")
 // 輸出：1 2 3 A B C
 ```
@@ -242,10 +263,12 @@ Swift concurrency（async/await）有自己的一組執行緒，數量大約等�
 
 ```kotlin
 suspend fun parse(raw: ByteArray): Depth =
-    withContext(Dispatchers.Default) { decode(raw) }        // 解碼是 CPU 運算：Default
+    // 解碼是 CPU 運算：Default
+    withContext(Dispatchers.Default) { decode(raw) }
 
 suspend fun save(order: Order) =
-    withContext(Dispatchers.IO) { dao.insert(order) }       // 寫資料庫會等待磁碟：IO
+    // 寫資料庫會等待磁碟：IO
+    withContext(Dispatchers.IO) { dao.insert(order) }
 ```
 
 **`runBlocking` 是什麼？** 它會讓「呼叫它的那條執行緒」停下來，一直等到裡面的協程跑完，是把 suspend 函式變成普通呼叫的橋梁。問題在於「停下來」的是誰：
@@ -273,13 +296,25 @@ suspend fun save(order: Order) =
 3. **固定頻率交給畫面（主執行緒）**：每 100 到 250 毫秒取一次字典的內容（快照，也就是某一刻的完整資料），更新畫面一次。
 
 ```swift
-// iOS：actor 保證字典一次只被一條執行緒存取；ViewModel 在主執行緒，每 200 ms 取一次
-struct Ticker { let symbol: String; let price: Decimal }
+// iOS：actor 保證字典一次只被一條執行緒存取；
+// ViewModel 在主執行緒，每 200 ms 取一次
+struct Ticker {
+    let symbol: String
+    let price: Decimal
+}
 
 actor TickerStore {
-    private var latest: [String: Ticker] = [:]              // 每檔只保留最新一筆
-    func update(_ t: Ticker) { latest[t.symbol] = t }       // 解碼後在背景呼叫
-    func snapshot() -> [Ticker] { latest.values.sorted { $0.symbol < $1.symbol } }
+    // 每檔只保留最新一筆
+    private var latest: [String: Ticker] = [:]
+
+    // 解碼後在背景呼叫
+    func update(_ t: Ticker) {
+        latest[t.symbol] = t
+    }
+
+    func snapshot() -> [Ticker] {
+        latest.values.sorted { $0.symbol < $1.symbol }
+    }
 }
 
 @MainActor
@@ -288,10 +323,13 @@ final class TickerListViewModel: ObservableObject {
     private let store = TickerStore()
 
     func startRefreshing() {
-        Task {                                                    // 繼承 @MainActor，在主執行緒執行
+        // 繼承 @MainActor，在主執行緒執行
+        Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 200_000_000)   // 等 200 ms
-                rows = await store.snapshot()                     // 拿到整份快照，只更新畫面一次
+                // 等 200 ms
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                // 拿到整份快照，只更新畫面一次
+                rows = await store.snapshot()
             }
         }
     }
@@ -301,21 +339,29 @@ final class TickerListViewModel: ObservableObject {
 ```kotlin
 // Android：背景合併，每 200 ms 發出一份快照
 class TickerViewModel(feed: Flow<Ticker>) : ViewModel() {
-    private val latest = ConcurrentHashMap<String, Ticker>()    // 每檔只保留最新一筆
+    // 每檔只保留最新一筆
+    private val latest = ConcurrentHashMap<String, Ticker>()
 
     init {
-        feed.onEach { latest[it.symbol] = it }                  // 只更新字典，不碰畫面
-            .flowOn(Dispatchers.Default)                        // 解碼和合併在背景
+        // 只更新字典，不碰畫面
+        feed.onEach { latest[it.symbol] = it }
+            // 解碼和合併在背景
+            .flowOn(Dispatchers.Default)
             .launchIn(viewModelScope)
     }
 
     val rows: StateFlow<List<Ticker>> = flow {
         while (true) {
-            delay(200)                                          // 固定頻率
+            // 固定頻率
+            delay(200)
             emit(latest.values.sortedBy { it.symbol })
         }
     }.flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList(),
+        )
 }
 ```
 

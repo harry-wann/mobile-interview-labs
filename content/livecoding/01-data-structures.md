@@ -72,12 +72,14 @@ LRU 是 Least Recently Used 的縮寫，意思是「容量滿了，就丟掉最�
 
 ```swift
 // 核心的兩個串列操作（完整實作見練習題）
-private func unlink(_ node: Node) {          // 把節點從原本的位置拿出來
+// 把節點從原本的位置拿出來
+private func unlink(_ node: Node) {
     node.prev?.next = node.next
     node.next?.prev = node.prev
 }
 
-private func insertAfterHead(_ node: Node) { // 放到最前面（最近使用）
+// 放到最前面（最近使用）
+private func insertAfterHead(_ node: Node) {
     node.next = head.next
     node.prev = head
     head.next?.prev = node
@@ -115,7 +117,8 @@ volumes
         // 成交量不同：大的在前；成交量相同：代號字母順序在前
         lhs.value != rhs.value ? lhs.value > rhs.value : lhs.key < rhs.key
     }
-    .prefix(k)       // k 大於筆數時，prefix 會回傳全部，不會 crash
+    // k 大於筆數時，prefix 會回傳全部，不會 crash
+    .prefix(k)
     .map(\.key)
 ```
 

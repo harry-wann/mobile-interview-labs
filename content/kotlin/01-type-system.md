@@ -25,14 +25,22 @@ Kotlin 的 null safety 只能保護「Kotlin 自己寫的程式碼」。Java 的
 先複習：Kotlin 把 `String`（絕對不是 null）和 `String?`（可能是 null）分成兩種型別，編譯器強迫你處理 `String?`。但 Java 只有一個 `String`，它可能是 null 也可能不是。如果 Java 端沒有用 `@Nullable` 或 `@NonNull` 標註，Kotlin 就不知道該怎麼辦，只好把它標成 `String!`。這個 `!` 只會出現在 IDE 的提示和錯誤訊息裡，你不能自己在程式碼裡寫，意思是「我不知道，你自己決定要當 `String` 還是 `String?`」。
 
 ```kotlin
-// Java SDK 端：public String getNickname() { ... }，沒有任何標註，實際上可能回傳 null
-val n = sdk.nickname            // 推斷出的型別是 String!（platform type），編譯器不攔你
-println(n.length)               // 如果 nickname 實際是 null，NPE 在「這一行」才爆
+// Java SDK 端：public String getNickname() { ... }，
+// 沒有任何標註，實際上可能回傳 null
 
-val safe: String? = sdk.nickname   // 在邊界處明確宣告成可為 null
-println(safe?.length ?: 0)         // 輸出 0：null 時用預設值
+// 推斷出的型別是 String!（platform type），編譯器不攔你
+val n = sdk.nickname
 
-val strict: String = sdk.nickname  // 指派給非 null 型別：編譯器在這裡插入檢查，null 就立刻丟例外
+// 如果 nickname 實際是 null，NPE 在「這一行」才爆
+println(n.length)
+
+// 在邊界處明確宣告成可為 null
+val safe: String? = sdk.nickname
+// 輸出 0：null 時用預設值
+println(safe?.length ?: 0)
+
+// 指派給非 null 型別：編譯器在這裡插入檢查，null 就立刻丟例外
+val strict: String = sdk.nickname
 ```
 
 為什麼 NPE 離來源很遠？因為 `val n = sdk.nickname` 這行不會出錯，你把 `n` 傳進三層函式、存進 ViewModel，最後在畫面上呼叫 `n.length` 才爆，要往回追好幾個地方才找得到是 SDK 回了 null。
@@ -50,9 +58,14 @@ class Session { var token: String? = null }
 
 fun printLength(s: Session) {
     if (s.token != null) {
-        // println(s.token.length)  // 編譯錯誤：token 是 var，檢查完之後可能被別的執行緒改掉
-        val t = s.token ?: return   // 先存成區域變數，這個區域變數不會被別人改
-        println(t.length)           // t 已經確定是 String，可以使用
+        // 編譯錯誤：token 是 var，檢查完之後可能被別的執行緒改掉
+        // println(s.token.length)
+
+        // 先存成區域變數，這個區域變數不會被別人改
+        val t = s.token ?: return
+
+        // t 已經確定是 String，可以使用
+        println(t.length)
     }
 }
 ```
@@ -69,10 +82,16 @@ fun printLength(s: Session) {
 先看一個具體例子。標準函式庫的 `List` 宣告成 `List<out E>`，`out` 的意思是「這個型別只會把 E 拿出來給你，不會讓你放進去」：
 
 ```kotlin
-fun printAll(items: List<Any>) { for (i in items) println(i) }
+fun printAll(items: List<Any>) {
+    for (i in items) {
+        println(i)
+    }
+}
 
 val names: List<String> = listOf("BTC", "ETH")
-printAll(names)   // 可以：List<String> 能當 List<Any> 傳進去。輸出：BTC、ETH
+
+// 可以：List<String> 能當 List<Any> 傳進去。輸出：BTC、ETH
+printAll(names)
 ```
 
 這樣做安全，是因為 `List` 只能讀，沒有 `add` 可以呼叫，不可能有人透過 `List<Any>` 把一個 `Int` 塞進原本只該放 `String` 的清單。這種「只讀所以可以放寬」叫 covariant（共變），用 `out` 標記，典型例子有 `List<out E>`、`Flow<out T>`。
@@ -81,7 +100,9 @@ printAll(names)   // 可以：List<String> 能當 List<Any> 傳進去。輸出�
 
 ```kotlin
 val ints: MutableList<Int> = mutableListOf(1, 2)
-val nums: MutableList<Number> = ints   // 編譯錯誤：型別不符
+
+// 編譯錯誤：型別不符
+val nums: MutableList<Number> = ints
 // 如果這行被允許，就能 nums.add(1.5)，ints 裡面就混進一個 Double，
 // 之後 ints[2] 當 Int 取出來就會出錯。
 ```
@@ -96,8 +117,10 @@ interface Sink<in T> { fun accept(item: T) }
 val numberSink: Sink<Number> = object : Sink<Number> {
     override fun accept(item: Number) = println(item)
 }
-val intSink: Sink<Int> = numberSink   // 可以：能處理任何 Number 的，一定也能處理 Int
-intSink.accept(5)                     // 輸出：5
+
+// 可以：能處理任何 Number 的，一定也能處理 Int
+val intSink: Sink<Int> = numberSink
+intSink.accept(5)   // 輸出：5
 ```
 
 標準函式庫裡的例子是 `Comparable<in T>`：能比較任何 `Number` 的比較器，當然也能拿來比較 `Int`。
@@ -112,8 +135,13 @@ intSink.accept(5)                     // 輸出：5
 **宣告處與使用處。** 上面的 `out`／`in` 寫在類別宣告上，叫 declaration-site variance。如果某個類別本身沒有標（像 `MutableList`），你也可以只在「用的那一行」限制它，叫 use-site projection（使用處投影）：
 
 ```kotlin
-fun firstOf(list: MutableList<out Number>): Number = list[0]   // 在這個函式裡只讀，所以接受 MutableList<Int>
-fun fillOne(list: MutableList<in Int>) { list.add(1) }         // 在這個函式裡只寫，所以接受 MutableList<Number>
+// 在這個函式裡只讀，所以接受 MutableList<Int>
+fun firstOf(list: MutableList<out Number>): Number = list[0]
+
+// 在這個函式裡只寫，所以接受 MutableList<Number>
+fun fillOne(list: MutableList<in Int>) {
+    list.add(1)
+}
 ```
 
 Java 有一個對應的口訣 PECS（Producer Extends, Consumer Super）：只讀的用 `? extends T`（對應 Kotlin 的 `out T`），只寫的用 `? super T`（對應 `in T`）。要注意的是，Java 介面在 Kotlin 裡預設是 invariant，例如 `java.util.Comparator<T>`，所以 `Comparator<Number>` 不能直接當 `Comparator<Int>` 用，要在使用處寫 `Comparator<in Int>`。
@@ -131,25 +159,34 @@ Java 有一個對應的口訣 PECS（Producer Extends, Consumer Super）：只�
 
 ```kotlin
 fun findFirstBtc(symbols: List<String>): String? {
-    symbols.forEach {                 // forEach 是 inline 函式
-        if (it == "BTC") return it    // non-local return：直接結束 findFirstBtc
+    // forEach 是 inline 函式
+    symbols.forEach {
+        // non-local return：直接結束 findFirstBtc
+        if (it == "BTC") {
+            return it
+        }
     }
     return null
 }
+
 println(findFirstBtc(listOf("ETH", "BTC")))   // 輸出：BTC
 ```
 
 **`reified`：讓泛型的 `T` 在執行時還看得到。** 泛型有一個限制叫 type erasure（型別擦除）：`List<String>` 和 `List<Int>` 在編譯完之後，執行時都只是 `List`，`T` 到底是什麼型別已經不見了。所以一般的泛型函式裡，不能寫 `x is T`。`inline` 函式因為會把內容貼到呼叫處，那裡的 `T` 是明確的型別，所以可以搭配 `reified` 讓 `T` 在函式內當成真正的型別使用：
 
 ```kotlin
-inline fun <reified T> Any?.asOrNull(): T? = this as? T   // reified：這裡的 as? 是真的會檢查
+// reified：這裡的 as? 是真的會檢查
+inline fun <reified T> Any?.asOrNull(): T? = this as? T
 
 val x: Any = "BTC"
 println(x.asOrNull<String>())   // 輸出：BTC
-println(x.asOrNull<Int>())      // 輸出：null，因為 x 不是 Int
+// 輸出：null，因為 x 不是 Int
+println(x.asOrNull<Int>())
 
-fun <T> Any?.unsafeAs(): T? = this as? T   // 沒有 reified：編譯器只會警告「unchecked cast」，不會真的檢查
-// 函式內部不檢查，所以不會回傳 null；例外出現在呼叫端真的把結果當 Int 用的地方，
+// 沒有 reified：編譯器只會警告「unchecked cast」，不會真的檢查
+fun <T> Any?.unsafeAs(): T? = this as? T
+// 函式內部不檢查，所以不會回傳 null；
+// 例外出現在呼叫端真的把結果當 Int 用的地方，
 // 例如 val n: Int? = x.unsafeAs<Int>() 這一行就會丟 ClassCastException
 ```
 
@@ -159,12 +196,15 @@ JSON 解析函式庫的 `fromJson<T>()` 就是用這個機制：呼叫端寫 `fr
 
 ```kotlin
 inline fun runLater(crossinline block: () -> Unit) {
-    Thread { block() }.start()   // block 被放進 Runnable，在另一個執行緒執行
+    // block 被放進 Runnable，在另一個執行緒執行
+    Thread { block() }.start()
 }
+
 fun f() {
     runLater {
         println("hi")
-        // return   // 編譯錯誤：'return' is prohibited here
+        // 編譯錯誤：'return' is prohibited here
+        // return
     }
 }
 ```
@@ -173,9 +213,11 @@ fun f() {
 
 ```kotlin
 var pending: (() -> Unit)? = null
+
 inline fun track(noinline onDone: () -> Unit, action: () -> Unit) {
     action()
-    pending = onDone   // 存起來需要真的物件，所以 onDone 要標 noinline
+    // 存起來需要真的物件，所以 onDone 要標 noinline
+    pending = onDone
 }
 ```
 
@@ -193,13 +235,17 @@ value class 是用來「包一個值，讓它在編譯時變成獨立型別」�
 ```kotlin
 @JvmInline
 value class OrderId(val raw: String)
+
 @JvmInline
 value class Symbol(val raw: String)
 
-fun cancel(orderId: OrderId, symbol: Symbol) = println("cancel ${orderId.raw} ${symbol.raw}")
+fun cancel(orderId: OrderId, symbol: Symbol) =
+    println("cancel ${orderId.raw} ${symbol.raw}")
 
-cancel(OrderId("o-1"), Symbol("BTC_JPY"))   // 輸出：cancel o-1 BTC_JPY
-// cancel(Symbol("BTC_JPY"), OrderId("o-1")) // 編譯錯誤：argument type mismatch
+// 輸出：cancel o-1 BTC_JPY
+cancel(OrderId("o-1"), Symbol("BTC_JPY"))
+// 編譯錯誤：argument type mismatch
+// cancel(Symbol("BTC_JPY"), OrderId("o-1"))
 ```
 
 和普通的 class 比，value class 的好處是：編譯器盡量在執行時把它還原成底層的值（這裡就是 `String`），不用每個都建立一個 `OrderId` 物件，所以通常比包一層 class 省記憶體。
@@ -225,26 +271,43 @@ cancel(OrderId("o-1"), Symbol("BTC_JPY"))   // 輸出：cancel o-1 BTC_JPY
 
 ```kotlin
 enum class Status { NEW, PARTIALLY_FILLED, FILLED, REJECTED }
-data class Order(val status: Status, val filledQty: BigDecimal?, val rejectReason: String?)
+
+data class Order(
+    val status: Status,
+    val filledQty: BigDecimal?,
+    val rejectReason: String?,
+)
 ```
 
 這個寫法允許「`FILLED` 但 `filledQty` 是 null」、「`NEW` 卻有 `rejectReason`」這些不合理的組合，每個使用的地方都要自己檢查 null。用 sealed 把每個狀態需要的資料綁在一起：
 
 ```kotlin
 sealed interface OrderState {
-    data object New : OrderState                                         // 沒有附帶資料的狀態用 data object
-    data class PartiallyFilled(val filledQty: BigDecimal) : OrderState   // 部分成交：一定有已成交量
+    // 沒有附帶資料的狀態用 data object
+    data object New : OrderState
+
+    // 部分成交：一定有已成交量
+    data class PartiallyFilled(val filledQty: BigDecimal) : OrderState
+
     data object Filled : OrderState
-    data class Rejected(val reason: String) : OrderState                 // 被拒絕：一定有原因
+
+    // 被拒絕：一定有原因
+    data class Rejected(val reason: String) : OrderState
 }
 
-fun label(s: OrderState): String = when (s) {   // 沒有 else：每個子型別都要寫到
+// 沒有 else：每個子型別都要寫到
+fun label(s: OrderState): String = when (s) {
     OrderState.New -> "已送出"
-    is OrderState.PartiallyFilled -> "部分成交 ${s.filledQty}"   // 這裡 s 自動變成 PartiallyFilled，可以直接讀 filledQty
+
+    // 這裡 s 自動變成 PartiallyFilled，可以直接讀 filledQty
+    is OrderState.PartiallyFilled -> "部分成交 ${s.filledQty}"
+
     OrderState.Filled -> "全部成交"
     is OrderState.Rejected -> "被拒絕：${s.reason}"
 }
-println(label(OrderState.Rejected("餘額不足")))   // 輸出：被拒絕：餘額不足
+
+// 輸出：被拒絕：餘額不足
+println(label(OrderState.Rejected("餘額不足")))
 ```
 
 現在「已成交卻沒有成交量」的組合根本寫不出來。`data object` 是 Kotlin 1.9 起的正式寫法，專門給「只有一個實例、沒有資料」的狀態使用。
@@ -268,20 +331,30 @@ data class 會根據**主建構子**（class 名稱後面括號裡的屬性）�
 import java.math.BigDecimal
 
 data class Quote(val symbol: String, val price: BigDecimal) {
-    var seen: Int = 0   // 宣告在 body 裡，不在主建構子的括號內
+    // 宣告在 body 裡，不在主建構子的括號內
+    var seen: Int = 0
 }
+
 data class Blob(val bytes: ByteArray)
 
 val a = Quote("BTC", BigDecimal("1.0"))
 val b = Quote("BTC", BigDecimal("1.00"))
-println(a == b)                          // false：BigDecimal.equals 連小數位數都比
-println(a.price.compareTo(b.price) == 0) // true：要比數值大小，用 compareTo
+
+// false：BigDecimal.equals 連小數位數都比
+println(a == b)
+// true：要比數值大小，用 compareTo
+println(a.price.compareTo(b.price) == 0)
 
 a.seen = 3
 val c = a.copy()
-println(c.seen)                          // 0：body 裡的屬性不會被 copy 帶過去
-println(a == c)                          // true：seen 不參與 equals，但兩個物件的狀態其實不同
-println(Blob(byteArrayOf(1)) == Blob(byteArrayOf(1)))   // false：ByteArray 比的是「是不是同一個物件」
+
+// 0：body 裡的屬性不會被 copy 帶過去
+println(c.seen)
+// true：seen 不參與 equals，但兩個物件的狀態其實不同
+println(a == c)
+
+// false：ByteArray 比的是「是不是同一個物件」
+println(Blob(byteArrayOf(1)) == Blob(byteArrayOf(1)))
 ```
 
 逐項說明：

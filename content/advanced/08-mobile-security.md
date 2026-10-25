@@ -82,19 +82,33 @@ tags: [security, masvs, keychain, keystore, biometric, pinning, play-integrity, 
 
 ```kotlin
 // 在 Keystore 內產生 AES 金鑰；金鑰不能被匯出，使用前必須通過生物辨識
-val keyGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+val keyGen = KeyGenerator.getInstance(
+    KeyProperties.KEY_ALGORITHM_AES,
+    "AndroidKeyStore",
+)
 keyGen.init(
-    KeyGenParameterSpec.Builder("token_key", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+    KeyGenParameterSpec.Builder(
+        "token_key",
+        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+    )
         .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
         .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-        .setUserAuthenticationRequired(true)          // 每次使用前都要通過驗證
-        .setInvalidatedByBiometricEnrollment(true)    // 新增指紋或臉部時，這把金鑰失效
+        // 每次使用前都要通過驗證
+        .setUserAuthenticationRequired(true)
+        // 新增指紋或臉部時，這把金鑰失效
+        .setInvalidatedByBiometricEnrollment(true)
         .build()
 )
 val secretKey = keyGen.generateKey()
-val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, secretKey) }
-// 驗證時把 cipher 交給 BiometricPrompt，使用者通過驗證後，才能用這個 cipher 加密：
-// biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
+val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+    init(Cipher.ENCRYPT_MODE, secretKey)
+}
+// 驗證時把 cipher 交給 BiometricPrompt，
+// 使用者通過驗證後，才能用這個 cipher 加密：
+// biometricPrompt.authenticate(
+//     promptInfo,
+//     BiometricPrompt.CryptoObject(cipher)
+// )
 ```
 
 **iOS：** 把資料存進 Keychain 時，附上 `SecAccessControl`，條件設為 `.biometryCurrentSet`（現在登錄的指紋或臉部組合改變，就失效）；讀取時系統會自己跳出 Face ID 或 Touch ID，驗證通過才給資料。要做簽章的話，可以用 Secure Enclave（手機內的獨立安全晶片）產生 P-256 金鑰（一種橢圓曲線加密的金鑰規格），私鑰永遠不離開晶片。
@@ -106,14 +120,20 @@ import Foundation
 let tokenData = Data("refresh-token".utf8)
 // 條件：手機要有設定螢幕密碼、金鑰只在這台裝置有效、且要通過目前登錄的生物辨識
 let access = SecAccessControlCreateWithFlags(
-    nil, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, [.biometryCurrentSet], nil)!
+    nil,
+    kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+    [.biometryCurrentSet],
+    nil
+)!
 let query: [String: Any] = [
     kSecClass as String: kSecClassGenericPassword,
     kSecAttrAccount as String: "refresh_token",
     kSecValueData as String: tokenData,
-    kSecAttrAccessControl as String: access,   // 之後讀取這筆資料，系統會要求生物辨識
+    // 之後讀取這筆資料，系統會要求生物辨識
+    kSecAttrAccessControl as String: access,
 ]
-let status = SecItemAdd(query as CFDictionary, nil)   // 回傳 errSecSuccess 表示儲存成功
+// 回傳 errSecSuccess 表示儲存成功
+let status = SecItemAdd(query as CFDictionary, nil)
 ```
 
 交易所的出金、改密碼這類敏感操作，應該搭配這個機制：請求要由這把金鑰簽章，server 驗證簽章。
@@ -136,14 +156,23 @@ let status = SecItemAdd(query as CFDictionary, nil)   // 回傳 errSecSuccess �
 ```kotlin
 // OkHttp：同一個網域放兩個 pin，第二個是備援金鑰（hash 為示意）
 val pinner = CertificatePinner.Builder()
-    .add("api.example.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")  // 目前使用的公鑰
-    .add("api.example.com", "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")  // 備援公鑰
+    // 目前使用的公鑰
+    .add(
+        "api.example.com",
+        "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    )
+    // 備援公鑰
+    .add(
+        "api.example.com",
+        "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+    )
     .build()
 val client = OkHttpClient.Builder().certificatePinner(pinner).build()
 ```
 
 ```text
-<!-- Android 的 Network Security Config（res/xml/network_security_config.xml） -->
+<!-- Android 的 Network Security Config
+     （res/xml/network_security_config.xml） -->
 <network-security-config>
     <domain-config>
         <domain includeSubdomains="true">api.example.com</domain>
@@ -177,7 +206,8 @@ val client = OkHttpClient.Builder().certificatePinner(pinner).build()
 ```kotlin
 // 取得 token，然後原封不動送到自己的 server，由 server 向 Google 解碼與判斷
 val integrityManager = IntegrityManagerFactory.create(context)
-val request = IntegrityTokenRequest.builder().setNonce(nonce).build()   // nonce 綁定這次請求
+// nonce 綁定這次請求
+val request = IntegrityTokenRequest.builder().setNonce(nonce).build()
 integrityManager.requestIntegrityToken(request)
     .addOnSuccessListener { response -> sendToServer(response.token()) }
 ```
@@ -190,9 +220,14 @@ import CryptoKit
 
 func attest(serverChallenge: Data) async throws {
     let service = DCAppAttestService.shared
-    guard service.isSupported else { return }          // 模擬器與部分裝置不支援
-    let keyId = try await service.generateKey()        // 在安全硬體內產生金鑰
-    let hash = Data(SHA256.hash(data: serverChallenge))   // 把 server 給的一次性挑戰值做 hash
+    // 模擬器與部分裝置不支援
+    guard service.isSupported else {
+        return
+    }
+    // 在安全硬體內產生金鑰
+    let keyId = try await service.generateKey()
+    // 把 server 給的一次性挑戰值做 hash
+    let hash = Data(SHA256.hash(data: serverChallenge))
     let attestation = try await service.attestKey(keyId, clientDataHash: hash)
     // 把 keyId 與 attestation 送給 server，由 server 驗證 Apple 簽發的憑證鏈
     _ = attestation
@@ -229,11 +264,15 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
 ```swift
 // 偵測螢幕錄影或鏡像：偵測到就用遮罩蓋住敏感內容
-let privacyCover = UIView()    // 實際使用時是蓋在畫面最上層的遮罩 view
+// 實際使用時是蓋在畫面最上層的遮罩 view
+let privacyCover = UIView()
 NotificationCenter.default.addObserver(
-    forName: UIScreen.capturedDidChangeNotification, object: nil, queue: .main
+    forName: UIScreen.capturedDidChangeNotification,
+    object: nil,
+    queue: .main
 ) { _ in
-    privacyCover.isHidden = !UIScreen.main.isCaptured   // isCaptured 為 true：正在被錄影或鏡像
+    // isCaptured 為 true：正在被錄影或鏡像
+    privacyCover.isHidden = !UIScreen.main.isCaptured
 }
 ```
 

@@ -21,7 +21,12 @@
 
     fun main() {
         val ms = Greeter::class.java.declaredMethods
-        println(ms.filter { it.name == "hi" }.map { it.parameterCount }.sorted().joinToString(" "))
+        println(
+            ms.filter { it.name == "hi" }
+                .map { it.parameterCount }
+                .sorted()
+                .joinToString(" ")
+        )
         println(ms.any { it.name == "create" && Modifier.isStatic(it.modifiers) })
         println(ms.any { it.name == "other" })
     }
@@ -46,15 +51,29 @@
 
     fun main() {
         val a = mutableListOf(1, 2, 3)
-        for (x in a) { if (x == 2) a.remove(x) }
+        for (x in a) {
+            if (x == 2) {
+                a.remove(x)
+            }
+        }
         println(a.joinToString(" "))
 
         val b = mutableListOf(1, 2, 3, 4)
-        val r = runCatching { for (x in b) { if (x == 2) b.remove(x) } }
+        val r = runCatching {
+            for (x in b) {
+                if (x == 2) {
+                    b.remove(x)
+                }
+            }
+        }
         println(r.exceptionOrNull()?.javaClass?.simpleName)
 
         val m = ConcurrentHashMap(mapOf(1 to "a", 2 to "b", 3 to "c"))
-        for (k in m.keys) { if (k == 2) m.remove(k) }
+        for (k in m.keys) {
+            if (k == 2) {
+                m.remove(k)
+            }
+        }
         println(m.keys.sorted().joinToString(" "))
     }
   answer: |
@@ -82,7 +101,12 @@
         println(hm.size)
 
         val chm = ConcurrentHashMap<String, Int?>()
-        println(runCatching { chm["a"] = null }.exceptionOrNull()?.javaClass?.simpleName)
+        println(
+            runCatching { chm["a"] = null }
+                .exceptionOrNull()
+                ?.javaClass
+                ?.simpleName
+        )
         println(chm.containsKey("a"))
     }
   answer: |
@@ -161,7 +185,10 @@
     讓 Java 呼叫端可以：只傳 `baseUrl` 就建立 `Client`；把 `default()` 當成 `Client` 上的 static 方法呼叫（不用經過 `Companion`）；直接讀 `Client.TAG` 欄位。補上註解名稱（不含 `@`）。
   codeLang: kotlin
   code: |
-    class Client @____ constructor(val baseUrl: String, val timeoutMs: Long = 10_000) {
+    class Client @____ constructor(
+        val baseUrl: String,
+        val timeoutMs: Long = 10_000,
+    ) {
         companion object {
             @____ fun default() = Client("https://api.example.com")
             @____ val TAG = "Client"

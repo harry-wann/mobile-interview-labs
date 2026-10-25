@@ -178,7 +178,11 @@
               // TODO
           }
 
-          mutating func apply(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) -> ApplyResult {
+          mutating func apply(
+              seq: Int64,
+              bids: [PriceLevel],
+              asks: [PriceLevel]
+          ) -> ApplyResult {
               // TODO
               return .applied
           }
@@ -206,10 +210,12 @@
 
           var isValid: Bool { lastSeq != nil }
           var bids: [PriceLevel] {
-              bidMap.map { PriceLevel(price: $0.key, qty: $0.value) }.sorted { $0.price > $1.price }
+              bidMap.map { PriceLevel(price: $0.key, qty: $0.value) }
+                  .sorted { $0.price > $1.price }
           }
           var asks: [PriceLevel] {
-              askMap.map { PriceLevel(price: $0.key, qty: $0.value) }.sorted { $0.price < $1.price }
+              askMap.map { PriceLevel(price: $0.key, qty: $0.value) }
+                  .sorted { $0.price < $1.price }
           }
           var bestBid: PriceLevel? { bids.first }
           var bestAsk: PriceLevel? { asks.first }
@@ -217,20 +223,34 @@
           mutating func reset(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) {
               bidMap = [:]
               askMap = [:]
-              for l in bids where l.qty > 0 { bidMap[l.price] = l.qty }
-              for l in asks where l.qty > 0 { askMap[l.price] = l.qty }
+              for l in bids where l.qty > 0 {
+                  bidMap[l.price] = l.qty
+              }
+              for l in asks where l.qty > 0 {
+                  askMap[l.price] = l.qty
+              }
               lastSeq = seq
           }
 
-          mutating func apply(seq: Int64, bids: [PriceLevel], asks: [PriceLevel]) -> ApplyResult {
+          mutating func apply(
+              seq: Int64,
+              bids: [PriceLevel],
+              asks: [PriceLevel]
+          ) -> ApplyResult {
               guard let last = lastSeq else { return .needsSnapshot }
-              if seq <= last { return .stale }
+              if seq <= last {
+                  return .stale
+              }
               if seq != last + 1 {
                   lastSeq = nil
                   return .gap(expected: last + 1, got: seq)
               }
-              for l in bids { bidMap[l.price] = l.qty > 0 ? l.qty : nil }
-              for l in asks { askMap[l.price] = l.qty > 0 ? l.qty : nil }
+              for l in bids {
+                  bidMap[l.price] = l.qty > 0 ? l.qty : nil
+              }
+              for l in asks {
+                  askMap[l.price] = l.qty > 0 ? l.qty : nil
+              }
               lastSeq = seq
               if let bb = bestBid, let ba = bestAsk, bb.price >= ba.price {
                   lastSeq = nil
@@ -241,11 +261,17 @@
       }
     tests: |
       func D(_ s: String) -> Decimal { Decimal(string: s)! }
-      func L(_ p: String, _ q: String) -> PriceLevel { PriceLevel(price: D(p), qty: D(q)) }
+      func L(_ p: String, _ q: String) -> PriceLevel {
+          PriceLevel(price: D(p), qty: D(q))
+      }
+
       func snapshotBook() -> OrderBook {
           var b = OrderBook()
-          b.reset(seq: 10, bids: [L("98", "3"), L("100", "1"), L("99", "2"), L("97", "0")],
-                  asks: [L("102", "2"), L("101", "1")])
+          b.reset(
+              seq: 10,
+              bids: [L("98", "3"), L("100", "1"), L("99", "2"), L("97", "0")],
+              asks: [L("102", "2"), L("101", "1")]
+          )
           return b
       }
 
@@ -256,25 +282,34 @@
               && b.asks == [L("101", "1"), L("102", "2")]
               && b.bestBid == L("100", "1") && b.bestAsk == L("101", "1")
       }
+
       check("seq 連續：新增與更新價位") {
           var b = snapshotBook()
-          let r = b.apply(seq: 11, bids: [L("99", "5"), L("99.5", "1")], asks: [L("101", "0.5")])
+          let r = b.apply(
+              seq: 11,
+              bids: [L("99", "5"), L("99.5", "1")],
+              asks: [L("101", "0.5")]
+          )
           return r == .applied
               && b.bids == [L("100", "1"), L("99.5", "1"), L("99", "5"), L("98", "3")]
               && b.asks == [L("101", "0.5"), L("102", "2")]
       }
+
       check("數量為 0 代表刪除，100.0 與 100 是同一檔") {
           var b = snapshotBook()
           let r = b.apply(seq: 11, bids: [L("100.0", "0")], asks: [])
           return r == .applied && b.bestBid == L("99", "2") && b.bids.count == 2
       }
+
       check("重複或過期的 seq → stale，簿不變，之後仍可接續") {
           var b = snapshotBook()
           let r1 = b.apply(seq: 10, bids: [L("100", "9")], asks: [])
           let r2 = b.apply(seq: 5, bids: [L("100", "9")], asks: [])
           let r3 = b.apply(seq: 11, bids: [L("100", "2")], asks: [])
-          return r1 == .stale && r2 == .stale && r3 == .applied && b.bestBid == L("100", "2")
+          return r1 == .stale && r2 == .stale && r3 == .applied &&
+              b.bestBid == L("100", "2")
       }
+
       check("缺口 → gap，簿失效；失效後即使 seq 正確也要先 reset") {
           var b = snapshotBook()
           let r1 = b.apply(seq: 12, bids: [L("100", "9")], asks: [])
@@ -283,15 +318,19 @@
           return r1 == .gap(expected: 11, got: 12) && !valid1 && r2 == .needsSnapshot
               && b.bestBid == L("100", "1")
       }
+
       check("還沒有快照就收到增量 → needsSnapshot") {
           var b = OrderBook()
-          return b.apply(seq: 1, bids: [L("100", "1")], asks: []) == .needsSnapshot && b.bids.isEmpty
+          return b.apply(seq: 1, bids: [L("100", "1")], asks: []) == .needsSnapshot &&
+              b.bids.isEmpty
       }
+
       check("交叉簿（最佳買價 >= 最佳賣價）→ crossed，簿失效") {
           var b = snapshotBook()
           let r = b.apply(seq: 11, bids: [L("101.5", "1")], asks: [])
           return r == .crossed && !b.isValid
       }
+
       check("重新同步：reset 後從新的 seq 繼續") {
           var b = snapshotBook()
           _ = b.apply(seq: 20, bids: [], asks: [])
@@ -324,7 +363,11 @@
               // TODO
           }
 
-          fun apply(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>): ApplyResult {
+          fun apply(
+              seq: Long,
+              bids: List<PriceLevel>,
+              asks: List<PriceLevel>,
+          ): ApplyResult {
               // TODO
               return ApplyResult.Applied
           }
@@ -344,15 +387,25 @@
       }
 
       class OrderBook {
-          private val bidMap = TreeMap<BigDecimal, BigDecimal>(Comparator.reverseOrder())
+          private val bidMap = TreeMap<BigDecimal, BigDecimal>(
+              Comparator.reverseOrder(),
+          )
           private val askMap = TreeMap<BigDecimal, BigDecimal>()
           private var lastSeq: Long? = null
 
           val isValid: Boolean get() = lastSeq != null
-          val bids: List<PriceLevel> get() = bidMap.map { PriceLevel(it.key, it.value) }
-          val asks: List<PriceLevel> get() = askMap.map { PriceLevel(it.key, it.value) }
-          val bestBid: PriceLevel? get() = bidMap.firstEntry()?.let { PriceLevel(it.key, it.value) }
-          val bestAsk: PriceLevel? get() = askMap.firstEntry()?.let { PriceLevel(it.key, it.value) }
+          val bids: List<PriceLevel> get() = bidMap.map {
+              PriceLevel(it.key, it.value)
+          }
+          val asks: List<PriceLevel> get() = askMap.map {
+              PriceLevel(it.key, it.value)
+          }
+          val bestBid: PriceLevel? get() = bidMap.firstEntry()?.let {
+              PriceLevel(it.key, it.value)
+          }
+          val bestAsk: PriceLevel? get() = askMap.firstEntry()?.let {
+              PriceLevel(it.key, it.value)
+          }
 
           fun reset(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>) {
               bidMap.clear()
@@ -362,15 +415,29 @@
               lastSeq = seq
           }
 
-          fun apply(seq: Long, bids: List<PriceLevel>, asks: List<PriceLevel>): ApplyResult {
+          fun apply(
+              seq: Long,
+              bids: List<PriceLevel>,
+              asks: List<PriceLevel>,
+          ): ApplyResult {
               val last = lastSeq ?: return ApplyResult.NeedsSnapshot
-              if (seq <= last) return ApplyResult.Stale
+              if (seq <= last) {
+                  return ApplyResult.Stale
+              }
               if (seq != last + 1) {
                   lastSeq = null
                   return ApplyResult.Gap(last + 1, seq)
               }
-              for (l in bids) if (l.qty.signum() > 0) bidMap[l.price] = l.qty else bidMap.remove(l.price)
-              for (l in asks) if (l.qty.signum() > 0) askMap[l.price] = l.qty else askMap.remove(l.price)
+              for (l in bids) if (l.qty.signum() > 0) {
+                  bidMap[l.price] = l.qty
+              } else {
+                  bidMap.remove(l.price)
+              }
+              for (l in asks) if (l.qty.signum() > 0) {
+                  askMap[l.price] = l.qty
+              } else {
+                  askMap.remove(l.price)
+              }
               lastSeq = seq
               val bb = bestBid
               val ba = bestAsk
@@ -385,53 +452,89 @@
       import java.math.BigDecimal
 
       fun L(p: String, q: String) = PriceLevel(BigDecimal(p), BigDecimal(q))
-      fun txt(ls: List<PriceLevel>) = ls.map { it.price.stripTrailingZeros().toPlainString() + "@" + it.qty.stripTrailingZeros().toPlainString() }
-      fun txt1(l: PriceLevel?) = l?.let { it.price.stripTrailingZeros().toPlainString() + "@" + it.qty.stripTrailingZeros().toPlainString() }
+      fun txt(ls: List<PriceLevel>) = ls.map {
+          it.price.stripTrailingZeros()
+              .toPlainString() + "@" + it.qty.stripTrailingZeros()
+              .toPlainString()
+      }
+
+      fun txt1(l: PriceLevel?) = l?.let {
+          it.price.stripTrailingZeros()
+              .toPlainString() + "@" + it.qty.stripTrailingZeros()
+              .toPlainString()
+      }
+
       fun snapshotBook(): OrderBook {
           val b = OrderBook()
-          b.reset(10, listOf(L("98", "3"), L("100", "1"), L("99", "2"), L("97", "0")), listOf(L("102", "2"), L("101", "1")))
+          b.reset(
+              10,
+              listOf(L("98", "3"), L("100", "1"), L("99", "2"), L("97", "0")),
+              listOf(L("102", "2"), L("101", "1")),
+          )
           return b
       }
 
       check("快照：買方由高到低、賣方由低到高、忽略數量為 0 的檔位") {
           val b = snapshotBook()
-          b.isValid && txt(b.bids) == listOf("100@1", "99@2", "98@3") && txt(b.asks) == listOf("101@1", "102@2") &&
+          b.isValid &&
+              txt(b.bids) == listOf("100@1", "99@2", "98@3") &&
+              txt(b.asks) == listOf("101@1", "102@2") &&
               txt1(b.bestBid) == "100@1" && txt1(b.bestAsk) == "101@1"
       }
+
       check("seq 連續：新增與更新價位") {
           val b = snapshotBook()
-          val r = b.apply(11, listOf(L("99", "5"), L("99.5", "1")), listOf(L("101", "0.5")))
-          r == ApplyResult.Applied && txt(b.bids) == listOf("100@1", "99.5@1", "99@5", "98@3") &&
+          val r = b.apply(
+              11,
+              listOf(L("99", "5"), L("99.5", "1")),
+              listOf(L("101", "0.5")),
+          )
+          r == ApplyResult.Applied &&
+              txt(b.bids) == listOf("100@1", "99.5@1", "99@5", "98@3") &&
               txt(b.asks) == listOf("101@0.5", "102@2")
       }
+
       check("數量為 0 代表刪除，100.0 與 100 是同一檔") {
           val b = snapshotBook()
           val r = b.apply(11, listOf(L("100.0", "0")), emptyList())
           r == ApplyResult.Applied && txt1(b.bestBid) == "99@2" && b.bids.size == 2
       }
+
       check("重複或過期的 seq → stale，簿不變，之後仍可接續") {
           val b = snapshotBook()
           val r1 = b.apply(10, listOf(L("100", "9")), emptyList())
           val r2 = b.apply(5, listOf(L("100", "9")), emptyList())
           val r3 = b.apply(11, listOf(L("100", "2")), emptyList())
-          r1 == ApplyResult.Stale && r2 == ApplyResult.Stale && r3 == ApplyResult.Applied && txt1(b.bestBid) == "100@2"
+          r1 == ApplyResult.Stale &&
+              r2 == ApplyResult.Stale &&
+              r3 == ApplyResult.Applied &&
+              txt1(b.bestBid) == "100@2"
       }
+
       check("缺口 → gap，簿失效；失效後即使 seq 正確也要先 reset") {
           val b = snapshotBook()
           val r1 = b.apply(12, listOf(L("100", "9")), emptyList())
           val valid1 = b.isValid
           val r2 = b.apply(11, listOf(L("100", "9")), emptyList())
-          r1 == ApplyResult.Gap(11, 12) && !valid1 && r2 == ApplyResult.NeedsSnapshot && txt1(b.bestBid) == "100@1"
+          r1 == ApplyResult.Gap(11, 12) &&
+              !valid1 &&
+              r2 == ApplyResult.NeedsSnapshot &&
+              txt1(b.bestBid) == "100@1"
       }
+
       check("還沒有快照就收到增量 → needsSnapshot") {
           val b = OrderBook()
-          b.apply(1, listOf(L("100", "1")), emptyList()) == ApplyResult.NeedsSnapshot && b.bids.isEmpty()
+          b.apply(1, listOf(L("100", "1")), emptyList()) ==
+              ApplyResult.NeedsSnapshot &&
+              b.bids.isEmpty()
       }
+
       check("交叉簿（最佳買價 >= 最佳賣價）→ crossed，簿失效") {
           val b = snapshotBook()
           val r = b.apply(11, listOf(L("101.5", "1")), emptyList())
           r == ApplyResult.Crossed && !b.isValid
       }
+
       check("重新同步：reset 後從新的 seq 繼續") {
           val b = snapshotBook()
           b.apply(20, emptyList(), emptyList())
@@ -465,7 +568,11 @@
 
       enum Side { case bid, ask }
 
-      func aggregate(_ levels: [PriceLevel], step: Decimal, side: Side) -> [PriceLevel] {
+      func aggregate(
+          _ levels: [PriceLevel],
+          step: Decimal,
+          side: Side
+      ) -> [PriceLevel] {
           // TODO
           return levels
       }
@@ -484,7 +591,11 @@
 
       enum Side { case bid, ask }
 
-      func aggregate(_ levels: [PriceLevel], step: Decimal, side: Side) -> [PriceLevel] {
+      func aggregate(
+          _ levels: [PriceLevel],
+          step: Decimal,
+          side: Side
+      ) -> [PriceLevel] {
           var buckets: [Decimal: Decimal] = [:]
           for l in levels where l.qty > 0 {
               var price = l.price
@@ -497,39 +608,80 @@
               buckets[price, default: 0] += l.qty
           }
           let out = buckets.map { PriceLevel(price: $0.key, qty: $0.value) }
-          return out.sorted { side == .bid ? $0.price > $1.price : $0.price < $1.price }
+          return out.sorted {
+              side == .bid ? $0.price > $1.price : $0.price < $1.price
+          }
       }
 
       func cumulative(_ levels: [PriceLevel]) -> [Decimal] {
           var running: Decimal = 0
-          return levels.map { running += $0.qty; return running }
+          return levels.map {
+              running += $0.qty
+              return running
+          }
       }
     tests: |
       func D(_ s: String) -> Decimal { Decimal(string: s)! }
-      func L(_ p: String, _ q: String) -> PriceLevel { PriceLevel(price: D(p), qty: D(q)) }
+      func L(_ p: String, _ q: String) -> PriceLevel {
+          PriceLevel(price: D(p), qty: D(q))
+      }
 
       checkEqual("買方往下取整並合併", [L("100", "3"), L("99", "3")]) {
-          aggregate([L("100.7", "1"), L("100.2", "2"), L("99.9", "3")], step: D("1"), side: .bid)
+          aggregate(
+              [L("100.7", "1"), L("100.2", "2"), L("99.9", "3")],
+              step: D("1"),
+              side: .bid
+          )
       }
+
       checkEqual("賣方往上取整並合併", [L("101", "7")]) {
-          aggregate([L("100.1", "1"), L("100.9", "2"), L("101.0", "4")], step: D("1"), side: .ask)
+          aggregate(
+              [L("100.1", "1"), L("100.9", "2"), L("101.0", "4")],
+              step: D("1"),
+              side: .ask
+          )
       }
+
       checkEqual("step 為 0.5（買方）", [L("100.5", "2"), L("100", "2")]) {
-          aggregate([L("100.74", "1"), L("100.50", "1"), L("100.49", "2")], step: D("0.5"), side: .bid)
+          aggregate(
+              [L("100.74", "1"), L("100.50", "1"), L("100.49", "2")],
+              step: D("0.5"),
+              side: .bid
+          )
       }
-      checkEqual("step 為 10（賣方），已對齊的價位不往上多跳一檔", [L("110", "3"), L("120", "3")]) {
-          aggregate([L("101", "1"), L("110", "2"), L("111", "3")], step: D("10"), side: .ask)
+
+      checkEqual(
+          "step 為 10（賣方），已對齊的價位不往上多跳一檔",
+          [L("110", "3"), L("120", "3")]
+      ) {
+          aggregate(
+              [L("101", "1"), L("110", "2"), L("111", "3")],
+              step: D("10"),
+              side: .ask
+          )
       }
+
       checkEqual("step <= 0：不聚合，只排序", [L("100", "2"), L("99", "1")]) {
           aggregate([L("99", "1"), L("100", "2")], step: D("0"), side: .bid)
       }
-      checkEqual("數量 <= 0 的檔位忽略；輸入未排序時輸出依方向排序", [L("102", "1"), L("101", "2")]) {
-          aggregate([L("101", "2"), L("103", "0"), L("102", "1")], step: D("1"), side: .ask).reversed()
+
+      checkEqual(
+          "數量 <= 0 的檔位忽略；輸入未排序時輸出依方向排序",
+          [L("102", "1"), L("101", "2")]
+      ) {
+          aggregate(
+              [L("101", "2"), L("103", "0"), L("102", "1")],
+              step: D("1"),
+              side: .ask
+          )
+              .reversed()
       }
+
       checkEqual("空輸入", 0) { aggregate([], step: D("1"), side: .bid).count }
       checkEqual("累計數量", [D("1"), D("3"), D("3.5")]) {
           cumulative([L("100", "1"), L("99", "2"), L("98", "0.5")])
       }
+
       checkEqual("累計：空陣列", 0) { cumulative([]).count }
   kotlin:
     starter: |
@@ -539,7 +691,11 @@
 
       enum class Side { BID, ASK }
 
-      fun aggregate(levels: List<PriceLevel>, step: BigDecimal, side: Side): List<PriceLevel> {
+      fun aggregate(
+          levels: List<PriceLevel>,
+          step: BigDecimal,
+          side: Side,
+      ): List<PriceLevel> {
           // TODO
           return levels
       }
@@ -557,12 +713,22 @@
 
       enum class Side { BID, ASK }
 
-      fun aggregate(levels: List<PriceLevel>, step: BigDecimal, side: Side): List<PriceLevel> {
+      fun aggregate(
+          levels: List<PriceLevel>,
+          step: BigDecimal,
+          side: Side,
+      ): List<PriceLevel> {
           val buckets = TreeMap<BigDecimal, BigDecimal>()
           for (l in levels) {
-              if (l.qty.signum() <= 0) continue
+              if (l.qty.signum() <= 0) {
+                  continue
+              }
               val price = if (step.signum() > 0) {
-                  val mode = if (side == Side.BID) RoundingMode.FLOOR else RoundingMode.CEILING
+                  val mode = if (side == Side.BID) {
+                      RoundingMode.FLOOR
+                  } else {
+                      RoundingMode.CEILING
+                  }
                   l.price.divide(step, 0, mode).multiply(step)
               } else l.price
               buckets.merge(price, l.qty) { a, b -> a.add(b) }
@@ -573,37 +739,99 @@
 
       fun cumulative(levels: List<PriceLevel>): List<BigDecimal> {
           var running = BigDecimal.ZERO
-          return levels.map { running = running.add(it.qty); running }
+          return levels.map {
+              running = running.add(it.qty)
+              running
+          }
       }
     tests: |
       import java.math.BigDecimal
 
       fun L(p: String, q: String) = PriceLevel(BigDecimal(p), BigDecimal(q))
-      fun txt(ls: List<PriceLevel>) = ls.map { it.price.stripTrailingZeros().toPlainString() + "@" + it.qty.stripTrailingZeros().toPlainString() }
-      fun plain(ds: List<BigDecimal>) = ds.map { it.stripTrailingZeros().toPlainString() }
+      fun txt(ls: List<PriceLevel>) = ls.map {
+          it.price.stripTrailingZeros()
+              .toPlainString() + "@" + it.qty.stripTrailingZeros()
+              .toPlainString()
+      }
+
+      fun plain(ds: List<BigDecimal>) = ds.map {
+          it.stripTrailingZeros().toPlainString()
+      }
 
       checkEqual("買方往下取整並合併", listOf("100@3", "99@3")) {
-          txt(aggregate(listOf(L("100.7", "1"), L("100.2", "2"), L("99.9", "3")), BigDecimal("1"), Side.BID))
+          txt(
+              aggregate(
+                  listOf(L("100.7", "1"), L("100.2", "2"), L("99.9", "3")),
+                  BigDecimal("1"),
+                  Side.BID,
+              ),
+          )
       }
+
       checkEqual("賣方往上取整並合併", listOf("101@7")) {
-          txt(aggregate(listOf(L("100.1", "1"), L("100.9", "2"), L("101.0", "4")), BigDecimal("1"), Side.ASK))
+          txt(
+              aggregate(
+                  listOf(L("100.1", "1"), L("100.9", "2"), L("101.0", "4")),
+                  BigDecimal("1"),
+                  Side.ASK,
+              ),
+          )
       }
+
       checkEqual("step 為 0.5（買方）", listOf("100.5@2", "100@2")) {
-          txt(aggregate(listOf(L("100.74", "1"), L("100.50", "1"), L("100.49", "2")), BigDecimal("0.5"), Side.BID))
+          txt(
+              aggregate(
+                  listOf(L("100.74", "1"), L("100.50", "1"), L("100.49", "2")),
+                  BigDecimal("0.5"),
+                  Side.BID,
+              ),
+          )
       }
-      checkEqual("step 為 10（賣方），已對齊的價位不往上多跳一檔", listOf("110@3", "120@3")) {
-          txt(aggregate(listOf(L("101", "1"), L("110", "2"), L("111", "3")), BigDecimal("10"), Side.ASK))
+
+      checkEqual(
+          "step 為 10（賣方），已對齊的價位不往上多跳一檔",
+          listOf("110@3", "120@3"),
+      ) {
+          txt(
+              aggregate(
+                  listOf(L("101", "1"), L("110", "2"), L("111", "3")),
+                  BigDecimal("10"),
+                  Side.ASK,
+              ),
+          )
       }
+
       checkEqual("step <= 0：不聚合，只排序", listOf("100@2", "99@1")) {
-          txt(aggregate(listOf(L("99", "1"), L("100", "2")), BigDecimal("0"), Side.BID))
+          txt(
+              aggregate(
+                  listOf(L("99", "1"), L("100", "2")),
+                  BigDecimal("0"),
+                  Side.BID,
+              ),
+          )
       }
-      checkEqual("數量 <= 0 的檔位忽略；輸入未排序時輸出依方向排序", listOf("101@2", "102@1")) {
-          txt(aggregate(listOf(L("101", "2"), L("103", "0"), L("102", "1")), BigDecimal("1"), Side.ASK))
+
+      checkEqual(
+          "數量 <= 0 的檔位忽略；輸入未排序時輸出依方向排序",
+          listOf("101@2", "102@1"),
+      ) {
+          txt(
+              aggregate(
+                  listOf(L("101", "2"), L("103", "0"), L("102", "1")),
+                  BigDecimal("1"),
+                  Side.ASK,
+              ),
+          )
       }
-      checkEqual("空輸入", 0) { aggregate(emptyList(), BigDecimal("1"), Side.BID).size }
+
+      checkEqual("空輸入", 0) {
+          aggregate(emptyList(), BigDecimal("1"), Side.BID).size
+      }
+
       checkEqual("累計數量", listOf("1", "3", "3.5")) {
           plain(cumulative(listOf(L("100", "1"), L("99", "2"), L("98", "0.5"))))
       }
+
       checkEqual("累計：空陣列", 0) { cumulative(emptyList()).size }
 
 - id: exchange-order-book-09

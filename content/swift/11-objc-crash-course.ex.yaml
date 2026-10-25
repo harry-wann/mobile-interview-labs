@@ -153,7 +153,9 @@
     - (void)hello;
     @end
     @implementation Greeter
-    - (void)hello { printf("hello\n"); }
+    - (void)hello {
+        printf("hello\n");
+    }
     @end
 
     @interface Greeter (Swizzle)
@@ -165,6 +167,7 @@
         Method swizzled = class_getInstanceMethod(self, @selector(xo_hello));
         method_exchangeImplementations(original, swizzled);
     }
+
     - (void)xo_hello {
         printf("before\n");
         [self xo_hello];

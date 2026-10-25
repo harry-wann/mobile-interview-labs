@@ -126,7 +126,8 @@
       checkEqual("更新既有 key 不增加數量", ["btc", "xrp"]) { c.keysByRecency }
       checkEqual("更新後的值", 10) { c.get("btc") }
       let one = LRUCache<Int, String>(capacity: 1)
-      one.put(1, "a"); one.put(2, "b")
+      one.put(1, "a")
+      one.put(2, "b")
       check("容量 1") { one.get(1) == nil && one.get(2) == "b" }
   kotlin:
     starter: |
@@ -225,10 +226,14 @@
       check("超過容量淘汰最久沒用的 eth") { c.get("eth") == null }
       checkEqual("淘汰後的順序", listOf("xrp", "btc")) { c.keysByRecency() }
       c.put("btc", 10)
-      checkEqual("更新既有 key 不增加數量", listOf("btc", "xrp")) { c.keysByRecency() }
+      checkEqual("更新既有 key 不增加數量", listOf("btc", "xrp")) {
+          c.keysByRecency()
+      }
+
       checkEqual("更新後的值", 10) { c.get("btc") }
       val one = LRUCache<Int, String>(1)
-      one.put(1, "a"); one.put(2, "b")
+      one.put(1, "a")
+      one.put(2, "b")
       check("容量 1") { one.get(1) == null && one.get(2) == "b" }
 
 - id: livecoding-ds-02
@@ -261,7 +266,13 @@
               .map(\.key)
       }
     tests: |
-      let v: [String: Double] = ["btc": 900, "eth": 700, "xrp": 700, "sol": 100, "doge": 800]
+      let v: [String: Double] = [
+          "btc": 900,
+          "eth": 700,
+          "xrp": 700,
+          "sol": 100,
+          "doge": 800
+      ]
       checkEqual("前 3 名", ["btc", "doge", "eth"]) { topSymbols(v, k: 3) }
       checkEqual("同量依字母", ["eth", "xrp"]) { Array(topSymbols(v, k: 5)[2...3]) }
       checkEqual("k 大於數量", 5) { topSymbols(v, k: 10).count }
@@ -274,16 +285,30 @@
       }
     solution: |
       fun topSymbols(volumes: Map<String, Double>, k: Int): List<String> {
-          if (k <= 0) return emptyList()
+          if (k <= 0) {
+              return emptyList()
+          }
           return volumes.entries
-              .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+              .sortedWith(
+                  compareByDescending<Map.Entry<String, Double>> { it.value }
+                      .thenBy { it.key },
+              )
               .take(k)
               .map { it.key }
       }
     tests: |
-      val v = mapOf("btc" to 900.0, "eth" to 700.0, "xrp" to 700.0, "sol" to 100.0, "doge" to 800.0)
+      val v = mapOf(
+          "btc" to 900.0,
+          "eth" to 700.0,
+          "xrp" to 700.0,
+          "sol" to 100.0,
+          "doge" to 800.0,
+      )
       checkEqual("前 3 名", listOf("btc", "doge", "eth")) { topSymbols(v, 3) }
-      checkEqual("同量依字母", listOf("eth", "xrp")) { topSymbols(v, 5).subList(2, 4) }
+      checkEqual("同量依字母", listOf("eth", "xrp")) {
+          topSymbols(v, 5).subList(2, 4)
+      }
+
       checkEqual("k 大於數量", 5) { topSymbols(v, 10).size }
       checkEqual("k 為 0", emptyList<String>()) { topSymbols(v, 0) }
       checkEqual("空 Map", emptyList<String>()) { topSymbols(emptyMap(), 3) }
@@ -304,22 +329,34 @@
     - 遇到起點大於 `cursor` 的區間，就代表 `cursor ... 起點-1` 是缺口。
   swift:
     starter: |
-      func missingRanges(loaded: [ClosedRange<Int>], request: ClosedRange<Int>) -> [ClosedRange<Int>] {
+      func missingRanges(
+          loaded: [ClosedRange<Int>],
+          request: ClosedRange<Int>
+      ) -> [ClosedRange<Int>] {
           // TODO
           return [request]
       }
     solution: |
-      func missingRanges(loaded: [ClosedRange<Int>], request: ClosedRange<Int>) -> [ClosedRange<Int>] {
+      func missingRanges(
+          loaded: [ClosedRange<Int>],
+          request: ClosedRange<Int>
+      ) -> [ClosedRange<Int>] {
           var gaps: [ClosedRange<Int>] = []
           var cursor = request.lowerBound
           for range in loaded.sorted(by: { $0.lowerBound < $1.lowerBound }) {
-              if range.upperBound < cursor { continue }
-              if range.lowerBound > request.upperBound { break }
+              if range.upperBound < cursor {
+                  continue
+              }
+              if range.lowerBound > request.upperBound {
+                  break
+              }
               if range.lowerBound > cursor {
                   gaps.append(cursor...min(range.lowerBound - 1, request.upperBound))
               }
               cursor = max(cursor, range.upperBound + 1)
-              if cursor > request.upperBound { break }
+              if cursor > request.upperBound {
+                  break
+              }
           }
           if cursor <= request.upperBound {
               gaps.append(cursor...request.upperBound)
@@ -327,12 +364,29 @@
           return gaps
       }
     tests: |
-      checkEqual("沒有已載入", [0...99]) { missingRanges(loaded: [], request: 0...99) }
-      checkEqual("完全涵蓋", [ClosedRange<Int>]()) { missingRanges(loaded: [0...200], request: 10...20) }
-      checkEqual("中間缺一段", [11...19]) { missingRanges(loaded: [0...10, 20...30], request: 0...30) }
-      checkEqual("重疊且未排序", [41...50]) { missingRanges(loaded: [20...40, 0...25], request: 0...50) }
-      checkEqual("相鄰視為連續", [ClosedRange<Int>]()) { missingRanges(loaded: [4...6, 1...3], request: 1...6) }
-      checkEqual("頭尾都缺", [0...4, 16...20]) { missingRanges(loaded: [5...15, 100...200], request: 0...20) }
+      checkEqual("沒有已載入", [0...99]) {
+          missingRanges(loaded: [], request: 0...99)
+      }
+
+      checkEqual("完全涵蓋", [ClosedRange<Int>]()) {
+          missingRanges(loaded: [0...200], request: 10...20)
+      }
+
+      checkEqual("中間缺一段", [11...19]) {
+          missingRanges(loaded: [0...10, 20...30], request: 0...30)
+      }
+
+      checkEqual("重疊且未排序", [41...50]) {
+          missingRanges(loaded: [20...40, 0...25], request: 0...50)
+      }
+
+      checkEqual("相鄰視為連續", [ClosedRange<Int>]()) {
+          missingRanges(loaded: [4...6, 1...3], request: 1...6)
+      }
+
+      checkEqual("頭尾都缺", [0...4, 16...20]) {
+          missingRanges(loaded: [5...15, 100...200], request: 0...20)
+      }
   kotlin:
     starter: |
       fun missingRanges(loaded: List<IntRange>, request: IntRange): List<IntRange> {
@@ -343,24 +397,46 @@
           val gaps = mutableListOf<IntRange>()
           var cursor = request.first
           for (range in loaded.sortedBy { it.first }) {
-              if (range.last < cursor) continue
-              if (range.first > request.last) break
+              if (range.last < cursor) {
+                  continue
+              }
+              if (range.first > request.last) {
+                  break
+              }
               if (range.first > cursor) {
                   gaps.add(cursor..minOf(range.first - 1, request.last))
               }
               cursor = maxOf(cursor, range.last + 1)
-              if (cursor > request.last) break
+              if (cursor > request.last) {
+                  break
+              }
           }
-          if (cursor <= request.last) gaps.add(cursor..request.last)
+          if (cursor <= request.last) {
+              gaps.add(cursor..request.last)
+          }
           return gaps
       }
     tests: |
       checkEqual("沒有已載入", listOf(0..99)) { missingRanges(emptyList(), 0..99) }
-      checkEqual("完全涵蓋", emptyList<IntRange>()) { missingRanges(listOf(0..200), 10..20) }
-      checkEqual("中間缺一段", listOf(11..19)) { missingRanges(listOf(0..10, 20..30), 0..30) }
-      checkEqual("重疊且未排序", listOf(41..50)) { missingRanges(listOf(20..40, 0..25), 0..50) }
-      checkEqual("相鄰視為連續", emptyList<IntRange>()) { missingRanges(listOf(4..6, 1..3), 1..6) }
-      checkEqual("頭尾都缺", listOf(0..4, 16..20)) { missingRanges(listOf(5..15, 100..200), 0..20) }
+      checkEqual("完全涵蓋", emptyList<IntRange>()) {
+          missingRanges(listOf(0..200), 10..20)
+      }
+
+      checkEqual("中間缺一段", listOf(11..19)) {
+          missingRanges(listOf(0..10, 20..30), 0..30)
+      }
+
+      checkEqual("重疊且未排序", listOf(41..50)) {
+          missingRanges(listOf(20..40, 0..25), 0..50)
+      }
+
+      checkEqual("相鄰視為連續", emptyList<IntRange>()) {
+          missingRanges(listOf(4..6, 1..3), 1..6)
+      }
+
+      checkEqual("頭尾都缺", listOf(0..4, 16..20)) {
+          missingRanges(listOf(5..15, 100..200), 0..20)
+      }
 
 - id: livecoding-ds-04
   type: single

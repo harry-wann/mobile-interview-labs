@@ -113,7 +113,11 @@
         kCGImageSourceCreateThumbnailWithTransform: true,
         ____: true,
     ]
-    let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    let cgImage = CGImageSourceCreateThumbnailAtIndex(
+        source,
+        0,
+        options as CFDictionary
+    )
   blanks:
     - [kCGImageSourceThumbnailMaxPixelSize]
     - [kCGImageSourceShouldCacheImmediately]

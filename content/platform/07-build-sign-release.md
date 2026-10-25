@@ -60,12 +60,17 @@ lane :beta do
   api_key = app_store_connect_api_key(
     key_id: ENV["ASC_KEY_ID"],
     issuer_id: ENV["ASC_ISSUER_ID"],
-    key_content: ENV["ASC_KEY_CONTENT"],   # .p8 檔案的內容，放在 CI 的 secret
+    # .p8 檔案的內容，放在 CI 的 secret
+    key_content: ENV["ASC_KEY_CONTENT"],
     is_key_content_base64: true
   )
-  match(type: "appstore", readonly: true, api_key: api_key)   # 只下載共用的憑證與 profile
+  # 只下載共用的憑證與 profile
+  match(type: "appstore", readonly: true, api_key: api_key)
   build_app(scheme: "App")
-  upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
+  upload_to_testflight(
+    api_key: api_key,
+    skip_waiting_for_build_processing: true
+  )
 end
 ```
 
@@ -75,18 +80,29 @@ end
 import java.util.Properties
 
 val keystoreProps = Properties().apply {
-    val file = rootProject.file("keystore.properties")   // 這個檔案不進 repo
-    if (file.exists()) file.inputStream().use { load(it) }
+    // 這個檔案不進 repo
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        file.inputStream().use {
+            load(it)
+        }
+    }
 }
 
 android {
     signingConfigs {
         create("release") {
             // CI 讀環境變數，本機讀 keystore.properties
-            storeFile = file(System.getenv("UPLOAD_KEYSTORE_PATH") ?: keystoreProps.getProperty("storeFile"))
-            storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD") ?: keystoreProps.getProperty("storePassword")
-            keyAlias = System.getenv("UPLOAD_KEY_ALIAS") ?: keystoreProps.getProperty("keyAlias")
-            keyPassword = System.getenv("UPLOAD_KEY_PASSWORD") ?: keystoreProps.getProperty("keyPassword")
+            storeFile = file(
+                System.getenv("UPLOAD_KEYSTORE_PATH")
+                    ?: keystoreProps.getProperty("storeFile"),
+            )
+            storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+                ?: keystoreProps.getProperty("storePassword")
+            keyAlias = System.getenv("UPLOAD_KEY_ALIAS")
+                ?: keystoreProps.getProperty("keyAlias")
+            keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+                ?: keystoreProps.getProperty("keyPassword")
         }
     }
 }
@@ -190,7 +206,8 @@ R8 是 Android 的程式碼縮減與混淆工具（取代 ProGuard），release 
 用 fastlane 把 iOS 與 Android 的上傳寫成 lane：
 
 ```ruby
-lane :beta do   # iOS：憑證 → 建置 → 上傳 TestFlight → 上傳 dSYM
+# iOS：憑證 → 建置 → 上傳 TestFlight → 上傳 dSYM
+lane :beta do
   match(type: "appstore", readonly: is_ci)
   increment_build_number(build_number: latest_testflight_build_number + 1)
   build_app(scheme: "App")
@@ -198,13 +215,19 @@ lane :beta do   # iOS：憑證 → 建置 → 上傳 TestFlight → 上傳 dSYM
   upload_symbols_to_crashlytics
 end
 
-lane :internal do   # Android：建置 AAB → 上傳到內部測試軌
+# Android：建置 AAB → 上傳到內部測試軌
+lane :internal do
   gradle(task: "bundle", build_type: "Release")
   upload_to_play_store(track: "internal", json_key: ENV["PLAY_JSON_KEY_PATH"])
 end
 
-lane :go_production do   # Android：把內部測試軌的版本升到 production，先放 5%
-  upload_to_play_store(track: "internal", track_promote_to: "production", rollout: "0.05")
+# Android：把內部測試軌的版本升到 production，先放 5%
+lane :go_production do
+  upload_to_play_store(
+    track: "internal",
+    track_promote_to: "production",
+    rollout: "0.05"
+  )
 end
 ```
 

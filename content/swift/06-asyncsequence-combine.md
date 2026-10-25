@@ -30,14 +30,16 @@ WebSocket 收到資料 → 解碼 → AsyncStream（來不及處理時只留最�
 `AsyncStream` 是標準函式庫提供的 `AsyncSequence` 實作，由你自己用 `yield` 把值丟進去，用 `finish()` 結束。最常用來把 callback、delegate、WebSocket 包成可以 `for await` 的形式。Swift 5.5（iOS 13 起可向下部署，Xcode 13.2 以上）就有；`AsyncStream.makeStream(of:)` 這個同時拿到 stream 與 continuation 的寫法，要 Swift 5.9 以上。
 
 ```swift
-// makeStream：同時拿到「讀取端 stream」和「寫入端 continuation」，適合生產者和消費者在不同地方
+// makeStream：同時拿到「讀取端 stream」和「寫入端 continuation」，
+// 適合生產者和消費者在不同地方
 let (stream, continuation) = AsyncStream.makeStream(of: Int.self)
-continuation.yield(1)      // 生產者丟一筆
+continuation.yield(1) // 生產者丟一筆
 continuation.yield(2)
-continuation.finish()      // 沒有更多資料了
+continuation.finish() // 沒有更多資料了
 
-for await value in stream {     // 消費者一筆一筆讀，stream 結束時迴圈自然結束
-    print(value)                // 輸出：1，然後是 2
+// 消費者一筆一筆讀，stream 結束時迴圈自然結束
+for await value in stream {
+    print(value) // 輸出：1，然後是 2
 }
 ```
 
@@ -70,14 +72,19 @@ for await value in stream {     // 消費者一筆一筆讀，stream 結束時�
 ```swift
 let (stream, continuation) = AsyncStream.makeStream(
     of: Int.self,
-    bufferingPolicy: .bufferingNewest(2)    // 緩衝區只放得下 2 筆，新的進來就擠掉最舊的
+    // 緩衝區只放得下 2 筆，新的進來就擠掉最舊的
+    bufferingPolicy: .bufferingNewest(2)
 )
-for i in 1...5 { continuation.yield(i) }
+for i in 1...5 {
+    continuation.yield(i)
+}
 continuation.finish()
 
 var out: [Int] = []
-for await v in stream { out.append(v) }
-print(out)   // 輸出：[4, 5]
+for await v in stream {
+    out.append(v)
+}
+print(out) // 輸出：[4, 5]
 // 換成 .bufferingOldest(2)，輸出是 [1, 2]；.unbounded 則是 [1, 2, 3, 4, 5]
 ```
 
@@ -103,21 +110,31 @@ print(out)   // 輸出：[4, 5]
 ```swift
 import Foundation
 
-struct Tick: Sendable { let price: Decimal }
+struct Tick: Sendable {
+    let price: Decimal
+}
 
 // 假設的 WebSocket 介面：訂閱一個 topic，會一直回呼；退訂用 token
 protocol MarketSocket: Sendable {
-    func subscribe(_ topic: String, handler: @escaping @Sendable (Tick) -> Void) -> UUID
+    func subscribe(
+        _ topic: String,
+        handler: @escaping @Sendable (Tick) -> Void
+    ) -> UUID
     func unsubscribe(_ token: UUID)
 }
 
 func tickStream(topic: String, socket: some MarketSocket) -> AsyncStream<Tick> {
-    AsyncStream(Tick.self, bufferingPolicy: .bufferingNewest(1)) { continuation in
+    AsyncStream(
+        Tick.self,
+        bufferingPolicy: .bufferingNewest(1)
+    ) { continuation in
         let token = socket.subscribe(topic) { tick in
-            continuation.yield(tick)             // 每次 callback 回來，就丟進 stream
+            // 每次 callback 回來，就丟進 stream
+            continuation.yield(tick)
         }
         continuation.onTermination = { _ in
-            socket.unsubscribe(token)            // stream 結束時一定要退訂，否則 WebSocket 的 topic 會一直訂閱
+            // stream 結束時一定要退訂，否則 WebSocket 的 topic 會一直訂閱
+            socket.unsubscribe(token)
         }
     }
 }
@@ -148,13 +165,21 @@ Combine 是 Apple 的響應式框架（iOS 13 起）。下面這幾個運算子�
 import Combine
 import Foundation
 
-struct Quote { let price: Decimal }
+struct Quote {
+    let price: Decimal
+}
 
 let ticks = PassthroughSubject<Quote, Never>()
 let uiPrice = ticks
     .map(\.price)
-    .removeDuplicates()                                                                   // 價格沒變就不送
-    .throttle(for: .milliseconds(200), scheduler: DispatchQueue.main, latest: true)       // 每 200 ms 最多一次，送最新價
+    // 價格沒變就不送
+    .removeDuplicates()
+    // 每 200 ms 最多一次，送最新價
+    .throttle(
+        for: .milliseconds(200),
+        scheduler: DispatchQueue.main,
+        latest: true
+    )
 ```
 
 **`share()`：多個訂閱者共用同一次上游訂閱**，不用每個訂閱者各算一次、各打一次 API。要知道的行為：沒有 `share()` 時，每個訂閱者會各自觸發一次上游的 `map`；有了它，`map` 只執行一次。但它**不會重播**：晚到的訂閱者只收到之後的值，之前的值看不到。需要重播時，用 `multicast` 搭配 `CurrentValueSubject`。
@@ -162,16 +187,22 @@ let uiPrice = ticks
 ```swift
 var mapCalls = 0
 let subject = PassthroughSubject<Int, Never>()
-let shared = subject.map { v -> Int in mapCalls += 1; return v * 2 }.share()
+let shared = subject
+    .map { v -> Int in
+        mapCalls += 1
+        return v * 2
+    }
+    .share()
 
 var late: [Int] = []
 let c1 = shared.sink { _ in }
 let c2 = shared.sink { _ in }
 subject.send(1)
 subject.send(2)
-let c3 = shared.sink { late.append($0) }    // 在 send(2) 之後才訂閱
+// 在 send(2) 之後才訂閱
+let c3 = shared.sink { late.append($0) }
 subject.send(3)
-print(mapCalls, late)   // 輸出：3 [6]
+print(mapCalls, late) // 輸出：3 [6]
 // map 只執行 3 次（沒有 share 會是 6 次）；晚到的訂閱者只收到 send(3) 的結果 6
 ```
 
@@ -185,10 +216,13 @@ final class DepthViewModel: ObservableObject {
     init() {
         $symbol
             .removeDuplicates()
-            .map { fetchDepth($0).replaceError(with: Book.empty) }   // 每個 symbol 轉成一個請求
-            .switchToLatest()                                        // 新的請求出現，就取消前一個
+            // 每個 symbol 轉成一個請求
+            .map { fetchDepth($0).replaceError(with: Book.empty) }
+            // 新的請求出現，就取消前一個
+            .switchToLatest()
             .receive(on: DispatchQueue.main)
-            .assign(to: &$book)                                      // iOS 14 起可用，不會抓住 self
+            // iOS 14 起可用，不會抓住 self
+            .assign(to: &$book)
     }
 }
 ```

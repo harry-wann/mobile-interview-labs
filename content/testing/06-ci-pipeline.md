@@ -97,15 +97,20 @@ jobs:
   unit-tests:
     runs-on: macos-15
     steps:
-      - run: xcodebuild test -scheme ExchangeApp -destination 'platform=iOS Simulator,name=iPhone 17'
+      - run: >-
+          xcodebuild test -scheme ExchangeApp
+          -destination 'platform=iOS Simulator,name=iPhone 17'
 
   gate:
-    if: always()                        # 前面的 job 失敗、被取消、被略過時，這個 job 仍然要跑
+    # 前面的 job 失敗、被取消、被略過時，這個 job 仍然要跑
+    if: always()
     needs: [lint, build, unit-tests]
     runs-on: ubuntu-latest
     steps:
       - name: 前面的 job 都必須成功
-        run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success")'
+        run: >-
+          echo '${{ toJSON(needs) }}'
+          | jq -e 'all(.[]; .result == "success")'
 ```
 
 branch protection 的 required check 只設 `gate` 這一個，不用逐一列出每個 job。
@@ -150,11 +155,14 @@ android/solution/testing/testing06-ci/L01_GatingSkipped.kt#fixed
 
 ```bash
 # iOS：每台機器只跑分到的測試（-only-testing 可以重複指定）
-xcodebuild test-without-building -scheme ExchangeApp -destination 'platform=iOS Simulator,name=iPhone 17' \
-  -only-testing:ExchangeAppTests/OrderBookTests -only-testing:ExchangeAppTests/PrecisionTests
+xcodebuild test-without-building -scheme ExchangeApp \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:ExchangeAppTests/OrderBookTests \
+  -only-testing:ExchangeAppTests/PrecisionTests
 
 # Android：Firebase Test Lab 可以自動分片
-gcloud firebase test android run --type instrumentation --app app-debug.apk --test app-debug-androidTest.apk \
+gcloud firebase test android run --type instrumentation \
+  --app app-debug.apk --test app-debug-androidTest.apk \
   --num-uniform-shards=3
 ```
 
@@ -202,8 +210,11 @@ android/solution/testing/testing06-ci/L02_UnbalancedShards.kt#fixed
     path: |
       ~/.gradle/caches
       ~/.gradle/wrapper
-    key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
-    restore-keys: gradle-${{ runner.os }}-      # 沒有完全相同的 key 時，退而求其次用同一個作業系統最近的快取
+    key: >-
+      gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*',
+      '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+    # 沒有完全相同的 key 時，退而求其次用同一個作業系統最近的快取
+    restore-keys: gradle-${{ runner.os }}-
 ```
 
 iOS 的 SPM 套件快取，key 改用 `hashFiles('**/Package.resolved')`。注意 `restore-keys` 會拿到「舊的、部分相符的」快取，所以快取裡存的最好是可以增量更新的東西（下載來的套件），不要存會讓舊產物混進去的東西（編譯出的最後成品）。

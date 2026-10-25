@@ -38,7 +38,8 @@ import Foundation
 
 var count = 0
 DispatchQueue.concurrentPerform(iterations: 1000) { _ in
-    count += 1          // 1000 個工作分給多個執行緒同時執行，沒有任何保護
+    // 1000 個工作分給多個執行緒同時執行，沒有任何保護
+    count += 1
 }
 print(count)
 // 輸出：不固定。可能是 1000，也可能比 1000 小，例如 898
@@ -48,8 +49,10 @@ print(count)
 
 ```kotlin
 // ConcurrentHashMap 的每個方法單獨都是執行緒安全的
-if (!prices.containsKey(symbol)) {   // 檢查：兩個執行緒都發現沒有
-    prices[symbol] = price           // 動作：兩個執行緒都寫入，後寫的蓋掉先寫的
+// 檢查：兩個執行緒都發現沒有
+if (!prices.containsKey(symbol)) {
+    // 動作：兩個執行緒都寫入，後寫的蓋掉先寫的
+    prices[symbol] = price
 }
 // 正確：prices.putIfAbsent(symbol, price)，檢查與寫入是一個不可分割的動作
 ```
@@ -61,12 +64,16 @@ actor Counter {
     var value = 0
 
     func incrementSlowly() async {
-        let before = value                          // 步驟 1：讀到 0
-        try? await Task.sleep(nanoseconds: 10_000_000)  // 步驟 2：暫停，別的呼叫可以進來
-        value = before + 1                          // 步驟 3：寫入 0 + 1，蓋掉別人已經加的結果
+        // 步驟 1：讀到 0
+        let before = value
+        // 步驟 2：暫停，別的呼叫可以進來
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        // 步驟 3：寫入 0 + 1，蓋掉別人已經加的結果
+        value = before + 1
     }
 
-    func increment() { value += 1 }                 // 正確：中間沒有 await，不會被打斷
+    // 正確：中間沒有 await，不會被打斷
+    func increment() { value += 1 }
 }
 // 同時呼叫兩次 incrementSlowly()，最後 value 是 1，不是 2
 ```
@@ -75,11 +82,15 @@ Kotlin 的協程也一樣。就算只有一條執行緒，兩個協程在 `delay
 
 ```kotlin
 suspend fun incSlowly() {
-    val before = value        // 兩個協程都讀到 0
-    delay(10)                 // 暫停，換另一個協程執行
-    value = before + 1        // 兩個都寫入 1
+    // 兩個協程都讀到 0
+    val before = value
+    // 暫停，換另一個協程執行
+    delay(10)
+    // 兩個都寫入 1
+    value = before + 1
 }
-// 同時啟動兩個 incSlowly()，最後 value 是 1。這沒有 data race，是 race condition
+// 同時啟動兩個 incSlowly()，最後 value 是 1。
+// 這沒有 data race，是 race condition
 ```
 
 修法是用 `Mutex.withLock` 把整段「讀、delay、寫」包起來（第 3 題說明）。
@@ -109,11 +120,13 @@ import os
 let prices = OSAllocatedUnfairLock(initialState: [String: Decimal]())
 
 func updatePrice(_ price: Decimal, for symbol: String) {
-    prices.withLock { $0[symbol] = price }          // 寫入：整段在鎖裡面
+    // 寫入：整段在鎖裡面
+    prices.withLock { $0[symbol] = price }
 }
 
 func latestPrice(for symbol: String) -> Decimal? {
-    prices.withLock { $0[symbol] }                  // 讀取
+    // 讀取
+    prices.withLock { $0[symbol] }
 }
 ```
 
@@ -161,9 +174,11 @@ class SocketState {
 val mutex = Mutex()
 
 suspend fun incSlowly() {
-    mutex.withLock {              // 一次只有一個協程能進來，其他的在這裡暫停等待
+    // 一次只有一個協程能進來，其他的在這裡暫停等待
+    mutex.withLock {
         val before = value
-        delay(10)                 // 暫停期間，別的協程進不來，所以 value 不會被改掉
+        // 暫停期間，別的協程進不來，所以 value 不會被改掉
+        delay(10)
         value = before + 1
     }
 }
@@ -194,8 +209,10 @@ deadlock（死結）是**幾個執行緒互相等對方放開鎖，誰也動不�
 
 ```swift
 // 在主執行緒上執行：deadlock
-DispatchQueue.main.sync {   // sync：目前的執行緒要等這個區塊執行完才會繼續
-    updateUI()              // 區塊要排進主佇列才能執行，但主佇列正被這行呼叫占著，永遠輪不到
+// sync：目前的執行緒要等這個區塊執行完才會繼續
+DispatchQueue.main.sync {
+    // 區塊要排進主佇列才能執行，但主佇列正被這行呼叫占著，永遠輪不到
+    updateUI()
 }
 // 正確：DispatchQueue.main.async { updateUI() }，或標上 @MainActor
 ```
@@ -254,19 +271,23 @@ priority inversion（優先權反轉）是**高優先權的執行緒，被低優
 **Swift 6 的編譯時檢查。** TSan 要等到執行才知道，Swift 6 則在**編譯時**就找出 data race。它檢查兩件事：資料要跨過執行緒的邊界時，這個型別是不是 `Sendable`（可以安全地在執行緒之間傳遞的型別）；可以修改的狀態，是不是被某個 actor 或 `@MainActor` 隔離保護。
 
 ```swift
-final class PriceCache {          // 一般的 class，有可修改的屬性，不是 Sendable
+// 一般的 class，有可修改的屬性，不是 Sendable
+final class PriceCache {
     var last: Decimal = 0
 }
 
 func start() {
     let cache = PriceCache()
     Task.detached {
-        cache.last = 1            // 背景任務修改
+        // 背景任務修改
+        cache.last = 1
     }
-    cache.last = 2                // 呼叫端同時修改
+    // 呼叫端同時修改
+    cache.last = 2
 }
 // Swift 6 語言模式：編譯錯誤
-// error: sending value of non-Sendable type '() async -> ()' risks causing data races
+// error: sending value of non-Sendable type '() async -> ()'
+// risks causing data races
 ```
 
 修法是把 `PriceCache` 改成 `actor`，兩邊都透過 `await` 存取，編譯器就沒有意見。

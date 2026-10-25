@@ -30,11 +30,14 @@ Swift Concurrency 指的是 Swift 5.5（2021 年，Xcode 13）加入的一組語
 
 ```swift
 // 結構化：三個請求同時進行，三個都回來才繼續往下走
-func loadAssetScreen() async throws -> (tickers: [Ticker], balance: Balance, orders: [Order]) {
-    async let tickers = fetchTickers()       // 立刻開始，不等結果
-    async let balance = fetchBalance()       // 立刻開始
-    async let orders = fetchOpenOrders()     // 立刻開始
-    return try await (tickers, balance, orders)   // 在這裡才等結果
+func loadAssetScreen() async throws
+    -> (tickers: [Ticker], balance: Balance, orders: [Order]) {
+    // 立刻開始，不等結果
+    async let tickers = fetchTickers()
+    async let balance = fetchBalance() // 立刻開始
+    async let orders = fetchOpenOrders() // 立刻開始
+    // 在這裡才等結果
+    return try await (tickers, balance, orders)
 }
 // 如果其中一個丟錯：錯誤要等 await 輪到它時才往外拋（前面的會照常等完）；
 // 函式因錯誤離開時，還沒完成的會被取消，並等它們結束。
@@ -44,7 +47,8 @@ func loadAssetScreen() async throws -> (tickers: [Ticker], balance: Balance, ord
 ```swift
 // 非結構化：開出去就不管（fire-and-forget）
 func onAppear() {
-    Task { await loadAssets() }   // 沒有保存這個 Task：使用者離開畫面後，它還是會繼續跑
+    // 沒有保存這個 Task：使用者離開畫面後，它還是會繼續跑
+    Task { await loadAssets() }
 }
 ```
 
@@ -72,17 +76,25 @@ func onAppear() {
 
 ```swift
 let order = await withTaskGroup(of: String.self) { group -> [String] in
-    for (name, ms) in [("A", 300), ("B", 100), ("C", 200)] as [(String, UInt64)] {
+    for (name, ms) in [
+        ("A", 300), ("B", 100), ("C", 200)
+    ] as [(String, UInt64)] {
         group.addTask {
-            try? await Task.sleep(nanoseconds: ms * 1_000_000)   // 睡 ms 毫秒，模擬網路請求
+            // 睡 ms 毫秒，模擬網路請求
+            try? await Task.sleep(nanoseconds: ms * 1_000_000)
             return name
         }
     }
+
     var out: [String] = []
-    for await r in group { out.append(r) }   // 誰先做完就先拿到誰
+    // 誰先做完就先拿到誰
+    for await r in group {
+        out.append(r)
+    }
     return out
 }
-print(order.joined(separator: " "))   // 輸出：B C A（B 睡最短，最先完成）
+// 輸出：B C A（B 睡最短，最先完成）
+print(order.joined(separator: " "))
 ```
 
 想要依輸入順序拿到結果，就在回傳值裡一起帶上 index，最後再排序或寫回事先配好位置的陣列。
@@ -103,9 +115,11 @@ func fetchAll(symbols: [String], limit: Int) async throws -> [String: Ticker] {
         }
 
         var result: [String: Ticker] = [:]
-        while let (symbol, ticker) = try await group.next() {   // 每完成一個
+        // 每完成一個
+        while let (symbol, ticker) = try await group.next() {
             result[symbol] = ticker
-            if let next = iterator.next() {                    // 就補進下一個
+            // 就補進下一個
+            if let next = iterator.next() {
                 group.addTask { (next, try await fetchTicker(next)) }
             }
         }
@@ -133,11 +147,14 @@ final class PriceViewModel {
     var prices: [Ticker] = []
 
     func refresh() {
-        Task {                              // 繼承 @MainActor：這段在主執行緒執行
+        // 繼承 @MainActor：這段在主執行緒執行
+        Task {
             let data = (try? await fetchTickers()) ?? []
-            self.prices = data              // 可以直接更新畫面用的狀態
+            // 可以直接更新畫面用的狀態
+            self.prices = data
         }
-        Task.detached {                     // 不繼承：這段不在主執行緒
+        // 不繼承：這段不在主執行緒
+        Task.detached {
             // 做耗時的運算；要更新畫面就得自己回到 @MainActor
         }
     }
@@ -166,7 +183,8 @@ Swift 的取消是**協作式**（cooperative）的：呼叫 `task.cancel()` 只
 func parsePrices(_ lines: [String]) async throws -> [Decimal] {
     var result: [Decimal] = []
     for line in lines {
-        try Task.checkCancellation()               // 每一圈檢查一次旗子；已被取消就丟 CancellationError
+        // 每一圈檢查一次旗子；已被取消就丟 CancellationError
+        try Task.checkCancellation()
         result.append(Decimal(string: line) ?? 0)
     }
     return result
@@ -178,14 +196,15 @@ func parsePrices(_ lines: [String]) async throws -> [Decimal] {
 ```swift
 let task = Task {
     do {
-        try await Task.sleep(nanoseconds: 1_000_000_000)   // 睡一秒
+        // 睡一秒
+        try await Task.sleep(nanoseconds: 1_000_000_000)
         print("done")
     } catch {
         print("cancelled:", error is CancellationError)
     }
     print("isCancelled:", Task.isCancelled)
 }
-task.cancel()          // 馬上舉旗子
+task.cancel() // 馬上舉旗子
 await task.value
 // 輸出：cancelled: true
 // 輸出：isCancelled: true
@@ -203,32 +222,50 @@ func download(_ request: URLRequest) async throws -> Data {
     let box = TaskBox()
     return try await withTaskCancellationHandler {
         try await withCheckedThrowingContinuation { continuation in
-            let task = URLSession.shared.dataTask(with: request) { data, _, error in
-                if let data { continuation.resume(returning: data) }
-                else { continuation.resume(throwing: error ?? URLError(.unknown)) }
+            let task = URLSession.shared.dataTask(
+                with: request
+            ) { data, _, error in
+                if let data {
+                    continuation.resume(returning: data)
+                } else {
+                    continuation.resume(throwing: error ?? URLError(.unknown))
+                }
             }
-            box.set(task)   // 如果已經被取消了，這裡會立刻取消這個請求
+            // 如果已經被取消了，這裡會立刻取消這個請求
+            box.set(task)
             task.resume()
         }
     } onCancel: {
-        box.cancel()        // 取消請求；請求以「已取消」的錯誤結束，continuation 因此會被 resume
+        // 取消請求；請求以「已取消」的錯誤結束，continuation 因此會被 resume
+        box.cancel()
     }
 }
 
 // TaskBox 用鎖保護，因為 onCancel 和 operation 可能同時存取它。
-// @unchecked Sendable 的意思是：「同步由我自己負責，編譯器不用檢查」，下一個單元會說明
+// @unchecked Sendable 的意思是：「同步由我自己負責，編譯器不用檢查」，
+// 下一個單元會說明
 final class TaskBox: @unchecked Sendable {
     private let lock = NSLock()
     private var task: URLSessionTask?
     private var cancelled = false
 
     func set(_ t: URLSessionTask) {
-        lock.lock(); defer { lock.unlock() }
-        if cancelled { t.cancel() } else { task = t }
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        if cancelled {
+            t.cancel()
+        } else {
+            task = t
+        }
     }
 
     func cancel() {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
         cancelled = true
         task?.cancel()
     }
@@ -243,12 +280,14 @@ final class TaskBox: @unchecked Sendable {
 
 ```swift
 // SwiftUI：symbol 改變時，框架自動取消舊的 Task，並用新的 symbol 重新開始
-// symbol 要是 @State 或 @Binding（例如 @Binding var symbol: String），下面的 guard 才讀得到最新的值
+// symbol 要是 @State 或 @Binding（例如 @Binding var symbol: String），
+// 下面的 guard 才讀得到最新的值
 .task(id: symbol) {
     let requested = symbol
     do {
         let depth = try await api.depth(requested)
-        guard requested == symbol else { return }   // 回應回來時 symbol 已經換了：丟掉，避免蓋掉新資料
+        // 回應回來時 symbol 已經換了：丟掉，避免蓋掉新資料
+        guard requested == symbol else { return }
         book = depth
     } catch is CancellationError {
     } catch let error as URLError where error.code == .cancelled {
@@ -270,15 +309,20 @@ continuation 是把舊的 completion handler（callback）式 API 接成 `async`
 ```swift
 // 舊 API：用 completion handler 回傳結果
 final class LegacyClient: @unchecked Sendable {
-    func fetchPrice(_ symbol: String, completion: @escaping @Sendable (Result<Decimal, Error>) -> Void) { /* ... */ }
+    func fetchPrice(
+        _ symbol: String,
+        completion: @escaping @Sendable (Result<Decimal, Error>) -> Void
+    ) { /* ... */ }
 }
+
 let legacyClient = LegacyClient()
 
 // 包成 async 函式
 func fetchPrice(symbol: String) async throws -> Decimal {
     try await withCheckedThrowingContinuation { continuation in
         legacyClient.fetchPrice(symbol) { result in
-            continuation.resume(with: result)   // callback 回來時 resume，上面的 await 才會繼續
+            // callback 回來時 resume，上面的 await 才會繼續
+            continuation.resume(with: result)
         }
     }
 }

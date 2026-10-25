@@ -36,10 +36,14 @@ tags: [wallet, address, base58check, bip21, memo, network, withdraw, walletconne
 ```swift
 // 託管型：App 只持有「顯示用」的資料，沒有任何私鑰
 struct DepositInfo {
-    let asset: String      // 資產，例如 "xrp"
-    let network: String    // 網路，例如 "XRP Ledger"
-    let address: String    // 伺服器給的入金地址
-    let memo: String?      // 需要時才有，例如 XRP 的 Destination Tag
+    // 資產，例如 "xrp"
+    let asset: String
+    // 網路，例如 "XRP Ledger"
+    let network: String
+    // 伺服器給的入金地址
+    let address: String
+    // 需要時才有，例如 XRP 的 Destination Tag
+    let memo: String?
 }
 ```
 
@@ -76,18 +80,27 @@ fun isValidBase58Check(s: String): Boolean {
     var n = BigInteger.ZERO
     for (c in s) {
         val digit = B58.indexOf(c)
-        if (digit < 0) return false                    // 0、O、I、l 不在字母表裡
+        // 0、O、I、l 不在字母表裡
+        if (digit < 0) {
+            return false
+        }
         n = n * BigInteger.valueOf(58) + BigInteger.valueOf(digit.toLong())
     }
     // 2. 大整數轉位元組（toByteArray 可能多一個符號用的 0x00，要去掉）
     var magnitude = if (n.signum() == 0) ByteArray(0) else n.toByteArray()
-    if (magnitude.isNotEmpty() && magnitude[0] == 0.toByte()) magnitude = magnitude.copyOfRange(1, magnitude.size)
+    if (magnitude.isNotEmpty() && magnitude[0] == 0.toByte()) {
+        magnitude = magnitude.copyOfRange(1, magnitude.size)
+    }
     // 3. 開頭每個 '1' 代表一個 0x00 位元組，轉成大整數時會消失，要補回
     val bytes = ByteArray(s.takeWhile { it == '1' }.length) + magnitude
-    if (bytes.size < 5) return false                   // 至少要有 1 個版本位元組加 4 個校驗位元組
+    // 至少要有 1 個版本位元組加 4 個校驗位元組
+    if (bytes.size < 5) {
+        return false
+    }
     // 4. 校驗碼 ＝ 前面所有位元組做兩次 SHA-256 的前 4 個位元組
     val sha = MessageDigest.getInstance("SHA-256")
-    val checksum = sha.digest(sha.digest(bytes.copyOfRange(0, bytes.size - 4))).copyOfRange(0, 4)
+    val checksum = sha.digest(sha.digest(bytes.copyOfRange(0, bytes.size - 4)))
+        .copyOfRange(0, 4)
     return checksum.contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))
 }
 
@@ -119,14 +132,20 @@ JDK（Java Development Kit，Java 開發套件）內建的 `SHA3-256` 和 Apple 
 **memo／tag 的處理**。XRP 的 Destination Tag 是 32 位元的無號整數，範圍是 0 到 4294967295。這套 API 的文件裡，出金申請的 `addr-tag` 是選填的字串，出入金記錄的 `address-tag` 也是字串。常見的錯誤是把 tag 轉成 `Int` 存起來：Android 的 `Int` 是 32 位元有號整數，範圍只到 2147483647，超過就出問題，而且 `toLong().toInt()` 這種強制轉換**不會丟例外，會悄悄變成別的數字**：
 
 ```kotlin
-val tag = "3000000000"            // 合法的 XRP Destination Tag（沒有超過 4294967295）
-println(tag.toIntOrNull())        // 輸出：null（超過 Int 的範圍）
-println(tag.toLong().toInt())     // 輸出：-1294967296（悄悄溢位，tag 變成另一個數字，錢就入到錯的地方）
-println(tag.toLongOrNull())       // 輸出：3000000000
+// 合法的 XRP Destination Tag（沒有超過 4294967295）
+val tag = "3000000000"
+// 輸出：null（超過 Int 的範圍）
+println(tag.toIntOrNull())
+// 輸出：-1294967296（悄悄溢位，tag 變成另一個數字，錢就入到錯的地方）
+println(tag.toLong().toInt())
+// 輸出：3000000000
+println(tag.toLongOrNull())
 
 // 正確做法：保持字串，依網路驗證格式與範圍
 fun isValidXrpTag(tag: String): Boolean {
-    if (tag.isEmpty() || !tag.all { it in '0'..'9' }) return false
+    if (tag.isEmpty() || !tag.all { it in '0'..'9' }) {
+        return false
+    }
     val value = tag.toLongOrNull() ?: return false
     return value <= 4294967295L
 }
@@ -169,8 +188,10 @@ bitcoin:175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W?amount=20.3&label=Luke-Jr&message=Don
 - 同一個參數出現兩次是有歧義的，保守的做法是拒絕。
 
 ```kotlin
-println(java.net.URLDecoder.decode("a+b", "UTF-8"))   // 輸出：a b（+ 被當成空白了，但 BIP21 要的是 a+b）
-// 所以百分比解碼要自己寫：逐個位元組掃描，遇到 % 就讀兩個十六進位字元；解碼後要檢查是不是合法的 UTF-8
+// 輸出：a b（+ 被當成空白了，但 BIP21 要的是 a+b）
+println(java.net.URLDecoder.decode("a+b", "UTF-8"))
+// 所以百分比解碼要自己寫：逐個位元組掃描，遇到 % 就讀兩個十六進位字元；
+// 解碼後要檢查是不是合法的 UTF-8
 ```
 
 | 範例 | 結果 |
@@ -209,18 +230,28 @@ println(java.net.URLDecoder.decode("a+b", "UTF-8"))   // 輸出：a b（+ 被當
 App 要把這些狀態對應成使用者看得懂的階段，同時保留原始狀態碼給客服查詢。記錄裡的 `tx-hash` 是這筆交易在區塊鏈上的編號，可以連到區塊瀏覽器（block explorer，查詢鏈上交易的網站；每條鏈的網址由設定提供，不要寫死）。
 
 ```swift
-enum WithdrawStage { case applying, reviewing, processing, sent, completed, failed, canceled }
+enum WithdrawStage {
+    case applying, reviewing, processing, sent, completed, failed, canceled
+}
 
 func stage(for state: String) -> WithdrawStage? {
     switch state {
-    case "submitted": return .applying                              // 申請中
-    case "reexamine": return .reviewing                             // 審查中
-    case "pass", "pre-transfer": return .processing                 // 處理中
-    case "wallet-transfer": return .sent                            // 已送出，可以顯示 tx-hash 連結
-    case "confirmed": return .completed                             // 完成
-    case "reject", "wallet-reject", "confirm-error": return .failed // 失敗，要有下一步指引
-    case "canceled", "repealed": return .canceled                   // 已取消
-    default: return nil                                             // 不認識的狀態，顯示原始狀態碼，不要當成失敗
+    // 申請中
+    case "submitted": return .applying
+    // 審查中
+    case "reexamine": return .reviewing
+    // 處理中
+    case "pass", "pre-transfer": return .processing
+    // 已送出，可以顯示 tx-hash 連結
+    case "wallet-transfer": return .sent
+    // 完成
+    case "confirmed": return .completed
+    // 失敗，要有下一步指引
+    case "reject", "wallet-reject", "confirm-error": return .failed
+    // 已取消
+    case "canceled", "repealed": return .canceled
+    // 不認識的狀態，顯示原始狀態碼，不要當成失敗
+    default: return nil
     }
 }
 ```
@@ -265,6 +296,7 @@ func grouped(_ address: String, size: Int = 4) -> String {
         .map { String(body[$0..<min($0 + size, body.count)]) }
     return prefix + groups.joined(separator: " ")
 }
+
 print(grouped("0xde709f2102306220921060314715629080e2fb77"))
 // 輸出：0x de70 9f21 0230 6220 9210 6031 4715 6290 80e2 fb77
 ```
@@ -291,8 +323,16 @@ WalletConnect 是讓手機錢包 App 和其他 App 或網站連線的協定。�
 **簽名訊息的設計**：訊息如果每次都一樣，簽名就可以被別人重複使用。標準做法是 SIWE：訊息包含網域（domain）、地址、說明（statement）、URI、版本、chain id、**伺服器發出的一次性 nonce**、發出時間與到期時間。伺服器驗證：nonce 只能用一次且是自己發的、時間沒有過期、網域符合。
 
 ```swift
-func siweMessage(domain: String, address: String, statement: String, uri: String,
-                 chainId: Int, nonce: String, issuedAt: String, expiration: String) -> String {
+func siweMessage(
+    domain: String,
+    address: String,
+    statement: String,
+    uri: String,
+    chainId: Int,
+    nonce: String,
+    issuedAt: String,
+    expiration: String
+) -> String {
     """
     \(domain) wants you to sign in with your Ethereum account:
     \(address)
@@ -307,6 +347,7 @@ func siweMessage(domain: String, address: String, statement: String, uri: String
     Expiration Time: \(expiration)
     """
 }
+
 // nonce 由伺服器產生並記錄，只能使用一次；範例輸出的第一行是：
 // exchange.example.com wants you to sign in with your Ethereum account:
 ```

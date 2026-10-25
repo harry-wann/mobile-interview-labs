@@ -240,8 +240,10 @@ appId: jp.co.example.exchange
 ```
 
 ```bash
-# 在要跑之前才算驗證碼（oathtool 是產生 TOTP 的命令列工具）；--format 與 --output 產生 JUnit XML 報告給 CI 顯示
-maestro test -e PASSWORD="$E2E_PASSWORD" -e OTP="$(oathtool --totp -b "$E2E_TOTP_SECRET")" \
+# 在要跑之前才算驗證碼（oathtool 是產生 TOTP 的命令列工具）；
+# --format 與 --output 產生 JUnit XML 報告給 CI 顯示
+maestro test -e PASSWORD="$E2E_PASSWORD" \
+  -e OTP="$(oathtool --totp -b "$E2E_TOTP_SECRET")" \
   --format=junit --output=report.xml flows/login.yaml
 ```
 

@@ -22,11 +22,13 @@ tags: [decimal, bigdecimal, money, formatting, rounding]
 **結論：`Double` 用二進位存小數，很多十進位的小數存不準，而且有效位數只有 15 到 17 位。金額一律用十進位型別：Swift 的 `Decimal`、Kotlin／Java 的 `BigDecimal`。**
 
 ```swift
-print(0.1 + 0.2 == 0.3)   // false：Double 算出來是 0.30000000000000004
+// false：Double 算出來是 0.30000000000000004
+print(0.1 + 0.2 == 0.3)
 
 let a = Decimal(string: "0.1")!
 let b = Decimal(string: "0.2")!
-print(a + b == Decimal(string: "0.3")!)   // true：Decimal 用十進位存，0.1 就是真的 0.1
+// true：Decimal 用十進位存，0.1 就是真的 0.1
+print(a + b == Decimal(string: "0.3")!)
 ```
 
 為什麼會這樣？電腦用二進位存數字。`0.1` 換成二進位是無限循環的小數（就像 1/3 在十進位是 0.333…），只能存一個近似值。單看一筆誤差很小，但加加減減之後，就會出現「餘額顯示 0.30000000000000004」或「明明夠錢卻被判斷不夠」的問題。
@@ -60,12 +62,21 @@ print(a + b == Decimal(string: "0.3")!)   // true：Decimal 用十進位存，0.
 ```swift
 // 往下對齊到 step 的整數倍
 func floorToStep(_ value: Decimal, step: Decimal) -> Decimal {
-    var units = value / step                      // 有幾個 step
+    // 有幾個 step
+    var units = value / step
     var result = Decimal()
-    NSDecimalRound(&result, &units, 0, .down)     // 去掉小數（正數時 .down 就是往下）
+    // 去掉小數（正數時 .down 就是往下）
+    NSDecimalRound(&result, &units, 0, .down)
     return result * step
 }
-print(floorToStep(Decimal(string: "0.123456789")!, step: Decimal(string: "0.0001")!))   // 0.1234
+
+// 0.1234
+print(
+    floorToStep(
+        Decimal(string: "0.123456789")!,
+        step: Decimal(string: "0.0001")!
+    )
+)
 ```
 
 交易對的這些規則（精度、最小下單量）通常由 API 的交易對設定提供，實際的欄位名稱以交易所的 API 文件為準。**App 端的計算只用來預估和提早擋掉錯誤，最終以伺服器回傳的結果為準。**
@@ -81,9 +92,12 @@ print(floorToStep(Decimal(string: "0.123456789")!, step: Decimal(string: "0.0001
 - **Kotlin**：不要用 `BigDecimal(0.1)`。它會把 `0.1` 的二進位近似值完整保存下來，變成 `0.1000000000000000055511151231257827…`。要用 `BigDecimal("0.1")`；或 `BigDecimal.valueOf(0.1)`，它會先把 `Double` 轉成字串 `"0.1"` 再建立，結果是 `0.1`。
 
 ```kotlin
-println(BigDecimal(0.1))           // 0.1000000000000000055511151231257827021181583404541015625
-println(BigDecimal("0.1"))         // 0.1
-println(BigDecimal.valueOf(0.1))   // 0.1
+// 0.1000000000000000055511151231257827021181583404541015625
+println(BigDecimal(0.1))
+// 0.1
+println(BigDecimal("0.1"))
+// 0.1
+println(BigDecimal.valueOf(0.1))
 ```
 
 > [!TIP]

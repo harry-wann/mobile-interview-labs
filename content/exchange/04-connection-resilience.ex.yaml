@@ -56,6 +56,7 @@
         let delay = Int64(Double(ceiling) * 0.5)
         out.append(String(delay))
     }
+
     print(out.joined(separator: " "))
   answer: |
     250 500 1000 2000 4000 4000
@@ -257,7 +258,11 @@
               self.stableMs = stableMs
           }
 
-          private mutating func scheduleRetry(attempt: Int, now: Int64, random: Double) -> [ConnEffect] {
+          private mutating func scheduleRetry(
+              attempt: Int,
+              now: Int64,
+              random: Double
+          ) -> [ConnEffect] {
               let delay = backoff.delayMs(attempt: attempt, random: random)
               state = .waiting(attempt: attempt, retryAtMs: now + delay)
               return [.scheduleRetry(delayMs: delay)]
@@ -279,7 +284,9 @@
               case (.waiting(let n, _), .retryTimerFired):
                   state = .connecting(attempt: n)
                   return [.connect]
-              case (.connecting, .networkLost), (.connected, .networkLost), (.waiting, .networkLost):
+              case (.connecting, .networkLost),
+                   (.connected, .networkLost),
+                   (.waiting, .networkLost):
                   state = .offline
                   return [.cancelRetry, .closeSocket]
               case (.offline, .networkAvailable):
@@ -288,7 +295,8 @@
               case (.waiting, .networkAvailable):
                   state = .connecting(attempt: 0)
                   return [.cancelRetry, .connect]
-              case (.connecting, .enteredBackground), (.connected, .enteredBackground),
+              case (.connecting, .enteredBackground),
+                   (.connected, .enteredBackground),
                    (.waiting, .enteredBackground), (.offline, .enteredBackground):
                   state = .suspended
                   return [.cancelRetry, .closeSocket]
@@ -301,7 +309,9 @@
           }
       }
     tests: |
-      func machine() -> ConnMachine { ConnMachine(backoff: Backoff(baseMs: 1000, capMs: 30_000)) }
+      func machine() -> ConnMachine {
+          ConnMachine(backoff: Backoff(baseMs: 1000, capMs: 30_000))
+      }
 
       check("Backoff：full jitter 的上限、cap 與亂數") {
           let b = Backoff(baseMs: 1000, capMs: 30_000)
@@ -312,24 +322,31 @@
               && b.delayMs(attempt: 2, random: 0) == 0
               && b.delayMs(attempt: 2, random: 5) == 3999
       }
+
       check("Backoff：attempt 很大時不溢位，維持 cap") {
           let b = Backoff(baseMs: 1000, capMs: 30_000)
-          return b.delayMs(attempt: 200, random: 0.5) == 15_000 && b.delayMs(attempt: Int.max, random: 0.5) == 15_000
+          return b.delayMs(attempt: 200, random: 0.5) == 15_000 &&
+              b.delayMs(attempt: Int.max, random: 0.5) == 15_000
       }
+
       check("start 只在 idle 有效") {
           var m = machine()
           let e1 = m.handle(.start, random: 0.5)
           let s1 = m.state
           let e2 = m.handle(.start, random: 0.5)
-          return e1 == [.connect] && s1 == .connecting(attempt: 0) && e2 == [] && m.state == s1
+          return e1 == [.connect] && s1 == .connecting(attempt: 0) && e2 == [] &&
+              m.state == s1
       }
+
       check("連上後很快斷線：attempt 累加，進入 waiting 並排程重試") {
           var m = machine()
           _ = m.handle(.start, random: 0.5)
           _ = m.handle(.opened(nowMs: 0), random: 0.5)
           let e = m.handle(.closed(nowMs: 1000), random: 0.5)
-          return e == [.scheduleRetry(delayMs: 1000)] && m.state == .waiting(attempt: 1, retryAtMs: 2000)
+          return e == [.scheduleRetry(delayMs: 1000)] &&
+              m.state == .waiting(attempt: 1, retryAtMs: 2000)
       }
+
       check("計時器到期後重試；連線階段失敗繼續累加") {
           var m = machine()
           _ = m.handle(.start, random: 0.5)
@@ -338,8 +355,10 @@
           let afterTimer = m.state
           let e = m.handle(.closed(nowMs: 2500), random: 0.5)
           return t == [.connect] && afterTimer == .connecting(attempt: 1)
-              && e == [.scheduleRetry(delayMs: 2000)] && m.state == .waiting(attempt: 2, retryAtMs: 4500)
+              && e == [.scheduleRetry(delayMs: 2000)]
+              && m.state == .waiting(attempt: 2, retryAtMs: 4500)
       }
+
       check("連線穩定超過 stableMs 後才重置次數") {
           var m = machine()
           _ = m.handle(.start, random: 0.5)
@@ -349,9 +368,13 @@
           _ = m.handle(.retryTimerFired, random: 0.5)
           _ = m.handle(.opened(nowMs: 5000), random: 0.5)
           let e = m.handle(.closed(nowMs: 20_000), random: 0.5)
-          return e == [.scheduleRetry(delayMs: 500)] && m.state == .waiting(attempt: 0, retryAtMs: 20_500)
+          return e == [.scheduleRetry(delayMs: 500)] &&
+              m.state == .waiting(attempt: 0, retryAtMs: 20_500)
       }
-      check("網路消失：取消計時器並關閉 socket；斷線事件被忽略；恢復後立即連線並重置次數") {
+
+      check(
+          "網路消失：取消計時器並關閉 socket；斷線事件被忽略；恢復後立即連線並重置次數"
+      ) {
           var m = machine()
           _ = m.handle(.start, random: 0.5)
           _ = m.handle(.opened(nowMs: 0), random: 0.5)
@@ -359,9 +382,12 @@
           let ignored = m.handle(.closed(nowMs: 100), random: 0.5)
           let stateAfter = m.state
           let back = m.handle(.networkAvailable, random: 0.5)
-          return lost == [.cancelRetry, .closeSocket] && ignored == [] && stateAfter == .offline
+          return lost == [.cancelRetry, .closeSocket]
+              && ignored == []
+              && stateAfter == .offline
               && back == [.connect] && m.state == .connecting(attempt: 0)
       }
+
       check("退避等待中網路恢復：取消等待並立即重試") {
           var m = machine()
           _ = m.handle(.start, random: 0.5)
@@ -369,6 +395,7 @@
           let e = m.handle(.networkAvailable, random: 0.5)
           return e == [.cancelRetry, .connect] && m.state == .connecting(attempt: 0)
       }
+
       check("背景與前景：進背景關閉並取消，回前景重新連線；其餘狀態忽略") {
           var m = machine()
           let idleBg = m.handle(.enteredBackground, random: 0.5)
@@ -379,8 +406,13 @@
           let ignoredNet = m.handle(.networkAvailable, random: 0.5)
           let fg = m.handle(.enteredForeground, random: 0.5)
           let fg2 = m.handle(.enteredForeground, random: 0.5)
-          return idleBg == [] && idleState == .idle && bg == [.cancelRetry, .closeSocket]
-              && ignoredNet == [] && fg == [.connect] && m.state == .connecting(attempt: 0) && fg2 == []
+          return idleBg == []
+              && idleState == .idle
+              && bg == [.cancelRetry, .closeSocket]
+              && ignoredNet == []
+              && fg == [.connect]
+              && m.state == .connecting(attempt: 0)
+              && fg2 == []
       }
   kotlin:
     starter: |
@@ -418,7 +450,10 @@
           object CloseSocket : ConnEffect()
       }
 
-      class ConnMachine(private val backoff: Backoff, private val stableMs: Long = 10_000) {
+      class ConnMachine(
+          private val backoff: Backoff,
+          private val stableMs: Long = 10_000,
+      ) {
           var state: ConnState = ConnState.Idle
               private set
 
@@ -468,11 +503,18 @@
           object CloseSocket : ConnEffect()
       }
 
-      class ConnMachine(private val backoff: Backoff, private val stableMs: Long = 10_000) {
+      class ConnMachine(
+          private val backoff: Backoff,
+          private val stableMs: Long = 10_000,
+      ) {
           var state: ConnState = ConnState.Idle
               private set
 
-          private fun scheduleRetry(attempt: Int, now: Long, random: Double): List<ConnEffect> {
+          private fun scheduleRetry(
+              attempt: Int,
+              now: Long,
+              random: Double,
+          ): List<ConnEffect> {
               val delay = backoff.delayMs(attempt, random)
               state = ConnState.Waiting(attempt, now + delay)
               return listOf(ConnEffect.ScheduleRetry(delay))
@@ -490,7 +532,11 @@
                       emptyList()
                   }
                   s is ConnState.Connected && event is ConnEvent.Closed -> {
-                      val next = if (event.nowMs - s.sinceMs >= stableMs) 0 else s.attempt + 1
+                      val next = if (event.nowMs - s.sinceMs >= stableMs) {
+                          0
+                      } else {
+                          s.attempt + 1
+                      }
                       scheduleRetry(next, event.nowMs, random)
                   }
                   s is ConnState.Connecting && event is ConnEvent.Closed ->
@@ -499,7 +545,11 @@
                       state = ConnState.Connecting(s.attempt)
                       listOf(ConnEffect.Connect)
                   }
-                  (s is ConnState.Connecting || s is ConnState.Connected || s is ConnState.Waiting) &&
+                  (
+                      s is ConnState.Connecting ||
+                          s is ConnState.Connected ||
+                          s is ConnState.Waiting
+                  ) &&
                       event is ConnEvent.NetworkLost -> {
                       state = ConnState.Offline
                       listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket)
@@ -512,12 +562,18 @@
                       state = ConnState.Connecting(0)
                       listOf(ConnEffect.CancelRetry, ConnEffect.Connect)
                   }
-                  (s is ConnState.Connecting || s is ConnState.Connected || s is ConnState.Waiting ||
-                      s is ConnState.Offline) && event is ConnEvent.EnteredBackground -> {
+                  (
+                      s is ConnState.Connecting ||
+                          s is ConnState.Connected ||
+                          s is ConnState.Waiting ||
+                          s is ConnState.Offline
+                  ) &&
+                      event is ConnEvent.EnteredBackground -> {
                       state = ConnState.Suspended
                       listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket)
                   }
-                  s is ConnState.Suspended && event is ConnEvent.EnteredForeground -> {
+                  s is ConnState.Suspended &&
+                      event is ConnEvent.EnteredForeground -> {
                       state = ConnState.Connecting(0)
                       listOf(ConnEffect.Connect)
                   }
@@ -530,27 +586,39 @@
 
       check("Backoff：full jitter 的上限、cap 與亂數") {
           val b = Backoff(1000, 30_000)
-          b.delayMs(0, 0.5) == 500L && b.delayMs(1, 0.5) == 1000L && b.delayMs(3, 0.5) == 4000L &&
-              b.delayMs(5, 0.5) == 15_000L && b.delayMs(2, 0.0) == 0L && b.delayMs(2, 5.0) == 3999L
+          b.delayMs(0, 0.5) == 500L &&
+              b.delayMs(1, 0.5) == 1000L &&
+              b.delayMs(3, 0.5) == 4000L &&
+              b.delayMs(5, 0.5) == 15_000L &&
+              b.delayMs(2, 0.0) == 0L &&
+              b.delayMs(2, 5.0) == 3999L
       }
+
       check("Backoff：attempt 很大時不溢位，維持 cap") {
           val b = Backoff(1000, 30_000)
           b.delayMs(200, 0.5) == 15_000L && b.delayMs(Int.MAX_VALUE, 0.5) == 15_000L
       }
+
       check("start 只在 idle 有效") {
           val m = machine()
           val e1 = m.handle(ConnEvent.Start, 0.5)
           val s1 = m.state
           val e2 = m.handle(ConnEvent.Start, 0.5)
-          e1 == listOf(ConnEffect.Connect) && s1 == ConnState.Connecting(0) && e2.isEmpty() && m.state == s1
+          e1 == listOf(ConnEffect.Connect) &&
+              s1 == ConnState.Connecting(0) &&
+              e2.isEmpty() &&
+              m.state == s1
       }
+
       check("連上後很快斷線：attempt 累加，進入 waiting 並排程重試") {
           val m = machine()
           m.handle(ConnEvent.Start, 0.5)
           m.handle(ConnEvent.Opened(0), 0.5)
           val e = m.handle(ConnEvent.Closed(1000), 0.5)
-          e == listOf(ConnEffect.ScheduleRetry(1000)) && m.state == ConnState.Waiting(1, 2000)
+          e == listOf(ConnEffect.ScheduleRetry(1000)) &&
+              m.state == ConnState.Waiting(1, 2000)
       }
+
       check("計時器到期後重試；連線階段失敗繼續累加") {
           val m = machine()
           m.handle(ConnEvent.Start, 0.5)
@@ -559,8 +627,10 @@
           val afterTimer = m.state
           val e = m.handle(ConnEvent.Closed(2500), 0.5)
           t == listOf(ConnEffect.Connect) && afterTimer == ConnState.Connecting(1) &&
-              e == listOf(ConnEffect.ScheduleRetry(2000)) && m.state == ConnState.Waiting(2, 4500)
+              e == listOf(ConnEffect.ScheduleRetry(2000)) &&
+              m.state == ConnState.Waiting(2, 4500)
       }
+
       check("連線穩定超過 stableMs 後才重置次數") {
           val m = machine()
           m.handle(ConnEvent.Start, 0.5)
@@ -570,9 +640,13 @@
           m.handle(ConnEvent.RetryTimerFired, 0.5)
           m.handle(ConnEvent.Opened(5000), 0.5)
           val e = m.handle(ConnEvent.Closed(20_000), 0.5)
-          e == listOf(ConnEffect.ScheduleRetry(500)) && m.state == ConnState.Waiting(0, 20_500)
+          e == listOf(ConnEffect.ScheduleRetry(500)) &&
+              m.state == ConnState.Waiting(0, 20_500)
       }
-      check("網路消失：取消計時器並關閉 socket；斷線事件被忽略；恢復後立即連線並重置次數") {
+
+      check(
+          "網路消失：取消計時器並關閉 socket；斷線事件被忽略；恢復後立即連線並重置次數",
+      ) {
           val m = machine()
           m.handle(ConnEvent.Start, 0.5)
           m.handle(ConnEvent.Opened(0), 0.5)
@@ -580,17 +654,21 @@
           val ignored = m.handle(ConnEvent.Closed(100), 0.5)
           val stateAfter = m.state
           val back = m.handle(ConnEvent.NetworkAvailable, 0.5)
-          lost == listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket) && ignored.isEmpty() &&
+          lost == listOf(ConnEffect.CancelRetry, ConnEffect.CloseSocket) &&
+              ignored.isEmpty() &&
               stateAfter == ConnState.Offline && back == listOf(ConnEffect.Connect) &&
               m.state == ConnState.Connecting(0)
       }
+
       check("退避等待中網路恢復：取消等待並立即重試") {
           val m = machine()
           m.handle(ConnEvent.Start, 0.5)
           m.handle(ConnEvent.Closed(0), 0.5)
           val e = m.handle(ConnEvent.NetworkAvailable, 0.5)
-          e == listOf(ConnEffect.CancelRetry, ConnEffect.Connect) && m.state == ConnState.Connecting(0)
+          e == listOf(ConnEffect.CancelRetry, ConnEffect.Connect) &&
+              m.state == ConnState.Connecting(0)
       }
+
       check("背景與前景：進背景關閉並取消，回前景重新連線；其餘狀態忽略") {
           val m = machine()
           val idleBg = m.handle(ConnEvent.EnteredBackground, 0.5)

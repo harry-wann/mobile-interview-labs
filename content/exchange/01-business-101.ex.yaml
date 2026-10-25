@@ -74,7 +74,10 @@
 
     func D(_ s: String) -> Decimal { Decimal(string: s)! }
 
-    struct Level { let price: Decimal; var qty: Decimal }
+    struct Level {
+        let price: Decimal
+        var qty: Decimal
+    }
 
     var asks = [
         Level(price: D("10000000"), qty: D("0.2")),
@@ -91,6 +94,7 @@
         asks[i].qty -= take
         remaining -= take
     }
+
     let filled = D("0.6") - remaining
     print(filled)
     print(remaining)

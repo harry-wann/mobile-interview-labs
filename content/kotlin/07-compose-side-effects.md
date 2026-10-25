@@ -28,7 +28,8 @@ tags: [compose, side-effects, launchedeffect, disposableeffect, derivedstateof, 
 ```kotlin
 @Composable
 fun TickerScreen(symbol: String, vm: TickerViewModel) {
-    vm.subscribe(symbol)        // 錯誤：副作用直接寫在函式裡
+    // 錯誤：副作用直接寫在函式裡
+    vm.subscribe(symbol)
     Text(symbol)
 }
 ```
@@ -57,7 +58,8 @@ fun PriceHeader(symbol: String, repo: PriceRepo) {
     // symbol 變了，price 也重設為 "--"，避免暫時顯示上一個交易對的價格
     var price by remember(symbol) { mutableStateOf("--") }
 
-    LaunchedEffect(symbol) {                  // symbol 就是 key
+    // symbol 就是 key
+    LaunchedEffect(symbol) {
         repo.prices(symbol).collect { price = it }
     }
     Text(price)
@@ -79,9 +81,12 @@ key 寫錯，有兩種相反的 bug：
 **key 寫太多：effect 一直被重啟。** 把「每次重組都會變」的值當 key：
 
 ```kotlin
-LaunchedEffect(price) {       // price 每秒變好幾次
-    delay(5_000)              // 想等 5 秒後提示逾時
-    onTimeout()               // 但每次 price 一變，計時就被取消重來，永遠等不到 5 秒
+// price 每秒變好幾次
+LaunchedEffect(price) {
+    // 想等 5 秒後提示逾時
+    delay(5_000)
+    // 但每次 price 一變，計時就被取消重來，永遠等不到 5 秒
+    onTimeout()
 }
 ```
 
@@ -104,9 +109,11 @@ LaunchedEffect(price) {       // price 每秒變好幾次
 ```kotlin
 @Composable
 fun IdleTimer(onTimeout: () -> Unit) {
-    LaunchedEffect(Unit) {       // key 是 Unit：只啟動一次
+    // key 是 Unit：只啟動一次
+    LaunchedEffect(Unit) {
         delay(30_000)
-        onTimeout()              // 這裡用的是「第一次組合時」傳進來的 onTimeout
+        // 這裡用的是「第一次組合時」傳進來的 onTimeout
+        onTimeout()
     }
 }
 ```
@@ -118,11 +125,14 @@ fun IdleTimer(onTimeout: () -> Unit) {
 ```kotlin
 @Composable
 fun IdleTimer(onTimeout: () -> Unit) {
-    val currentOnTimeout by rememberUpdatedState(onTimeout)   // 永遠是最新一次組合傳進來的值
+    // 永遠是最新一次組合傳進來的值
+    val currentOnTimeout by rememberUpdatedState(onTimeout)
 
-    LaunchedEffect(Unit) {       // 計時器不會因為 onTimeout 換掉而重啟
+    // 計時器不會因為 onTimeout 換掉而重啟
+    LaunchedEffect(Unit) {
         delay(30_000)
-        currentOnTimeout()       // 30 秒後呼叫「最新」的 onTimeout
+        // 30 秒後呼叫「最新」的 onTimeout
+        currentOnTimeout()
     }
 }
 ```
@@ -143,8 +153,10 @@ fun IdleTimer(onTimeout: () -> Unit) {
 fun SocketListener(socket: Socket, vm: TickerViewModel) {
     DisposableEffect(socket) {
         val listener = Socket.Listener { event -> vm.onSocketEvent(event) }
-        socket.addListener(listener)                       // 進入 composition：註冊
-        onDispose { socket.removeListener(listener) }      // 離開 composition 或 socket 換了：解除
+        // 進入 composition：註冊
+        socket.addListener(listener)
+        // 離開 composition 或 socket 換了：解除
+        onDispose { socket.removeListener(listener) }
     }
 }
 ```
@@ -159,7 +171,8 @@ fun SocketListener(socket: Socket, vm: TickerViewModel) {
 @Composable
 fun ChartHost(theme: ChartTheme, legacyChart: LegacyChartView) {
     SideEffect {
-        legacyChart.setTheme(theme)    // 每次重組成功後，把最新的 theme 交給舊的 View
+        // 每次重組成功後，把最新的 theme 交給舊的 View
+        legacyChart.setTheme(theme)
     }
 }
 ```
@@ -183,7 +196,8 @@ fun TickList(listState: LazyListState) {
     val scope = rememberCoroutineScope()
 
     Button(onClick = {
-        scope.launch { listState.animateScrollToItem(0) }   // 正確：在事件裡啟動
+        // 正確：在事件裡啟動
+        scope.launch { listState.animateScrollToItem(0) }
     }) { Text("回到頂端") }
 }
 ```
@@ -194,7 +208,8 @@ fun TickList(listState: LazyListState) {
 @Composable
 fun Wrong(repo: Repo) {
     val scope = rememberCoroutineScope()
-    scope.launch { repo.load() }   // 錯誤：寫在函式裡，每次重組都再啟動一次
+    // 錯誤：寫在函式裡，每次重組都再啟動一次
+    scope.launch { repo.load() }
 }
 ```
 
@@ -220,8 +235,10 @@ fun Wrong(repo: Repo) {
 ```kotlin
 @Composable
 fun rememberBalance(repo: AssetRepo, currency: String): State<Balance?> =
-    produceState<Balance?>(null, currency) {        // 第一個參數是初始值；currency 變了就重新執行
-        value = repo.fetchBalance(currency)         // suspend 函式，結果寫進 value
+    // 第一個參數是初始值；currency 變了就重新執行
+    produceState<Balance?>(null, currency) {
+        // suspend 函式，結果寫進 value
+        value = repo.fetchBalance(currency)
     }
 ```
 
@@ -229,9 +246,11 @@ fun rememberBalance(repo: AssetRepo, currency: String): State<Balance?> =
 
 ```kotlin
 LaunchedEffect(listState) {
-    snapshotFlow { listState.firstVisibleItemIndex }   // 讀 Compose 的 State
+    // 讀 Compose 的 State
+    snapshotFlow { listState.firstVisibleItemIndex }
         .distinctUntilChanged()
-        .collect { vm.onScrolled(it) }                 // 當成 Flow 處理
+        // 當成 Flow 處理
+        .collect { vm.onScrolled(it) }
 }
 ```
 
@@ -244,7 +263,9 @@ val listState = rememberLazyListState()
 val showTop1 = listState.firstVisibleItemIndex > 0
 
 // 有 derivedStateOf：布林值從 false 變 true（或相反）時，才通知重組
-val showTop2 by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+val showTop2 by remember {
+    derivedStateOf { listState.firstVisibleItemIndex > 0 }
+}
 ```
 
 `derivedStateOf` 不是越多越好，有三個邊界：

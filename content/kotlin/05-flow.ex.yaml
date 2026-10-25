@@ -119,10 +119,14 @@
     fun main() = runTest {
         val result = mutableListOf<String>()
         val src = flow {
-            emit("b");    delay(100)
-            emit("bt");   delay(100)
-            emit("btc");  delay(400)
-            emit("btcj"); delay(400)
+            emit("b")
+            delay(100)
+            emit("bt")
+            delay(100)
+            emit("btc")
+            delay(400)
+            emit("btcj")
+            delay(400)
         }
         launch { src.debounce(300).collect { result += "$it@$currentTime" } }
         advanceUntilIdle()
@@ -260,9 +264,13 @@
           val src = PriceSource()
           val d = async { src.prices().take(3).toList() }
           delay(20)
-          listOf(1, 2, 3, 4).forEach { src.emit(it); yield() }
+          listOf(1, 2, 3, 4).forEach {
+              src.emit(it)
+              yield()
+          }
           d.await()
       }
+
       checkEqual("take 結束後已解除註冊", 0) {
           val src = PriceSource()
           val d = async { src.prices().take(1).toList() }
@@ -271,6 +279,7 @@
           d.await()
           src.listenerCount
       }
+
       checkEqual("收集期間有註冊、取消後解除", "1/0") {
           val src = PriceSource()
           val j = launch { src.prices().collect { } }
@@ -279,6 +288,7 @@
           j.cancelAndJoin()
           "$during/${src.listenerCount}"
       }
+
       checkEqual("onError 讓 flow 以該例外結束", "error:ws down") {
           val src = PriceSource()
           val d = async {
@@ -290,25 +300,37 @@
               }
           }
           delay(20)
-          src.emit(1); yield()
+          src.emit(1)
+          yield()
           src.fail(IllegalStateException("ws down"))
           d.await()
       }
+
       checkEqual("onClosed 讓 flow 正常結束", listOf(1, 2)) {
           val src = PriceSource()
           val d = async { src.prices().toList() }
           delay(20)
-          src.emit(1); yield()
-          src.emit(2); yield()
+          src.emit(1)
+          yield()
+          src.emit(2)
+          yield()
           src.close()
           d.await()
       }
+
       checkEqual("慢速 collector 面對瞬間大量價格，最後收到的是最新價", 200) {
           val src = PriceSource()
           val received = mutableListOf<Int>()
-          val j = launch { src.prices().collect { received += it; delay(50) } }
+          val j = launch {
+              src.prices().collect {
+                  received += it
+                  delay(50)
+              }
+          }
           delay(20)
-          for (i in 1..200) src.emit(i)
+          for (i in 1..200) {
+              src.emit(i)
+          }
           delay(300)
           j.cancelAndJoin()
           received.last()

@@ -159,7 +159,14 @@
       import Foundation
 
       enum OrderState: Equatable {
-          case pending, submitted, partialFilled, canceling, filled, canceled, partialCanceled, rejected
+          case pending,
+               submitted,
+               partialFilled,
+               canceling,
+               filled,
+               canceled,
+               partialCanceled,
+               rejected
       }
 
       struct Order: Equatable {
@@ -185,7 +192,14 @@
       import Foundation
 
       enum OrderState: Equatable {
-          case pending, submitted, partialFilled, canceling, filled, canceled, partialCanceled, rejected
+          case pending,
+               submitted,
+               partialFilled,
+               canceling,
+               filled,
+               canceled,
+               partialCanceled,
+               rejected
       }
 
       struct Order: Equatable {
@@ -207,11 +221,17 @@
           var o = order
           switch event {
           case .accepted:
-              if o.state == .pending { o.state = .submitted }
+              if o.state == .pending {
+                  o.state = .submitted
+              }
           case .rejected:
-              if o.state == .pending { o.state = .rejected }
+              if o.state == .pending {
+                  o.state = .rejected
+              }
           case .fill(let total):
-              guard o.state != .rejected, total > o.filled, total <= o.amount else { return o }
+              guard o.state != .rejected, total > o.filled, total <= o.amount else {
+                  return o
+              }
               o.filled = total
               if total == o.amount {
                   o.state = .filled
@@ -238,7 +258,10 @@
       }
     tests: |
       func D(_ s: String) -> Decimal { Decimal(string: s)! }
-      func fresh() -> Order { Order(clientOrderId: "c1", amount: D("1"), filled: 0, state: .pending) }
+      func fresh() -> Order {
+          Order(clientOrderId: "c1", amount: D("1"), filled: 0, state: .pending)
+      }
+
       func run(_ events: [OrderEvent], from order: Order = fresh()) -> Order {
           events.reduce(order) { reduce($0, $1) }
       }
@@ -246,43 +269,79 @@
       check("正常流程：ack → 部分成交 → 全部成交") {
           let a = run([.accepted])
           let b = run([.accepted, .fill(cumulative: D("0.3"))])
-          let c = run([.accepted, .fill(cumulative: D("0.3")), .fill(cumulative: D("1"))])
-          return a.state == .submitted && b.state == .partialFilled && b.filled == D("0.3")
+          let c = run(
+              [.accepted, .fill(cumulative: D("0.3")), .fill(cumulative: D("1"))]
+          )
+          return a.state == .submitted
+              && b.state == .partialFilled
+              && b.filled == D("0.3")
               && c.state == .filled && c.filled == D("1")
       }
+
       check("累計成交量只增不減：重複與較小的值忽略") {
-          let o = run([.accepted, .fill(cumulative: D("0.5")), .fill(cumulative: D("0.3")), .fill(cumulative: D("0.5"))])
+          let o = run(
+              [
+                  .accepted,
+                  .fill(cumulative: D("0.5")),
+                  .fill(cumulative: D("0.3")),
+                  .fill(cumulative: D("0.5"))
+              ]
+          )
           return o.filled == D("0.5") && o.state == .partialFilled
       }
+
       check("超過委託量的累計值無效，整個事件忽略") {
           let o = run([.accepted, .fill(cumulative: D("1.5"))])
           return o.filled == 0 && o.state == .submitted
       }
+
       check("終態不可離開") {
           let filled = run([.accepted, .fill(cumulative: D("1"))])
           let canceled = run([.accepted, .canceled])
-          return run([.accepted, .cancelRequested, .canceled, .rejected], from: filled) == filled
-              && run([.accepted, .cancelRequested, .rejected], from: canceled) == canceled
+          return run(
+              [.accepted, .cancelRequested, .canceled, .rejected],
+              from: filled
+          ) == filled
+              && run([.accepted, .cancelRequested, .rejected], from: canceled)
+                  == canceled
               && canceled.state == .canceled
       }
-      check("撤單競態 A：canceling 期間收到成交，仍是 canceling；確認取消後變 partialCanceled") {
+
+      check(
+          "撤單競態 A：canceling 期間收到成交，仍是 canceling；確認取消後變 partialCanceled"
+      ) {
           let o1 = run([.accepted, .cancelRequested, .fill(cumulative: D("0.4"))])
           let o2 = reduce(o1, .canceled)
           return o1.state == .canceling && o1.filled == D("0.4")
               && o2.state == .partialCanceled && o2.filled == D("0.4")
       }
-      check("撤單競態 B：取消請求送出時其實已全部成交 → filled，晚到的取消事件被忽略") {
-          let o = run([.accepted, .cancelRequested, .fill(cumulative: D("1")), .canceled])
+
+      check(
+          "撤單競態 B：取消請求送出時其實已全部成交 → filled，晚到的取消事件被忽略"
+      ) {
+          let o = run(
+              [.accepted, .cancelRequested, .fill(cumulative: D("1")), .canceled]
+          )
           return o.state == .filled && o.filled == D("1")
       }
+
       check("事件亂序：取消先到、成交後到；成交先於 ack") {
           let o1 = run([.accepted, .canceled, .fill(cumulative: D("0.4"))])
           let o2 = run([.fill(cumulative: D("0.2")), .accepted])
           return o1.state == .partialCanceled && o1.filled == D("0.4")
               && o2.state == .partialFilled && o2.filled == D("0.2")
       }
+
       check("rejected 只能從 pending 進入，且之後不會變") {
-          let r = run([.rejected, .accepted, .fill(cumulative: D("0.5")), .cancelRequested, .canceled])
+          let r = run(
+              [
+                  .rejected,
+                  .accepted,
+                  .fill(cumulative: D("0.5")),
+                  .cancelRequested,
+                  .canceled
+              ]
+          )
           let s = run([.accepted, .rejected])
           return r.state == .rejected && r.filled == 0 && s.state == .submitted
       }
@@ -290,7 +349,10 @@
     starter: |
       import java.math.BigDecimal
 
-      enum class OrderState { PENDING, SUBMITTED, PARTIAL_FILLED, CANCELING, FILLED, CANCELED, PARTIAL_CANCELED, REJECTED }
+      enum class OrderState {
+          PENDING, SUBMITTED, PARTIAL_FILLED, CANCELING, FILLED, CANCELED,
+          PARTIAL_CANCELED, REJECTED
+      }
 
       data class Order(
           val clientOrderId: String,
@@ -314,7 +376,10 @@
     solution: |
       import java.math.BigDecimal
 
-      enum class OrderState { PENDING, SUBMITTED, PARTIAL_FILLED, CANCELING, FILLED, CANCELED, PARTIAL_CANCELED, REJECTED }
+      enum class OrderState {
+          PENDING, SUBMITTED, PARTIAL_FILLED, CANCELING, FILLED, CANCELED,
+          PARTIAL_CANCELED, REJECTED
+      }
 
       data class Order(
           val clientOrderId: String,
@@ -333,31 +398,60 @@
 
       fun reduce(order: Order, event: OrderEvent): Order = when (event) {
           OrderEvent.Accepted ->
-              if (order.state == OrderState.PENDING) order.copy(state = OrderState.SUBMITTED) else order
+              if (order.state == OrderState.PENDING) {
+                  order.copy(state = OrderState.SUBMITTED)
+              } else {
+                  order
+              }
           OrderEvent.Rejected ->
-              if (order.state == OrderState.PENDING) order.copy(state = OrderState.REJECTED) else order
+              if (order.state == OrderState.PENDING) {
+                  order.copy(state = OrderState.REJECTED)
+              } else {
+                  order
+              }
           is OrderEvent.Fill -> {
               val total = event.cumulative
-              if (order.state == OrderState.REJECTED || total <= order.filled || total > order.amount) {
+              if (
+                  order.state == OrderState.REJECTED ||
+                  total <= order.filled ||
+                  total > order.amount
+              ) {
                   order
               } else if (total.compareTo(order.amount) == 0) {
                   order.copy(filled = total, state = OrderState.FILLED)
               } else {
                   val next = when (order.state) {
-                      OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED -> OrderState.PARTIAL_FILLED
-                      OrderState.CANCELED, OrderState.PARTIAL_CANCELED -> OrderState.PARTIAL_CANCELED
+                      OrderState.PENDING,
+                      OrderState.SUBMITTED,
+                      OrderState.PARTIAL_FILLED -> {
+                          OrderState.PARTIAL_FILLED
+                      }
+                      OrderState.CANCELED, OrderState.PARTIAL_CANCELED -> {
+                          OrderState.PARTIAL_CANCELED
+                      }
                       else -> order.state
                   }
                   order.copy(filled = total, state = next)
               }
           }
           OrderEvent.CancelRequested -> when (order.state) {
-              OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED -> order.copy(state = OrderState.CANCELING)
+              OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED -> {
+                  order.copy(state = OrderState.CANCELING)
+              }
               else -> order
           }
           OrderEvent.Canceled -> when (order.state) {
-              OrderState.PENDING, OrderState.SUBMITTED, OrderState.PARTIAL_FILLED, OrderState.CANCELING ->
-                  order.copy(state = if (order.filled.signum() > 0) OrderState.PARTIAL_CANCELED else OrderState.CANCELED)
+              OrderState.PENDING,
+              OrderState.SUBMITTED,
+              OrderState.PARTIAL_FILLED,
+              OrderState.CANCELING ->
+                  order.copy(
+                      state = if (order.filled.signum() > 0) {
+                          OrderState.PARTIAL_CANCELED
+                      } else {
+                          OrderState.CANCELED
+                      },
+                  )
               else -> order
           }
       }
@@ -366,52 +460,115 @@
 
       fun D(s: String) = BigDecimal(s)
       fun fresh() = Order("c1", D("1"), BigDecimal.ZERO, OrderState.PENDING)
-      fun run(events: List<OrderEvent>, from: Order = fresh()): Order = events.fold(from) { o, e -> reduce(o, e) }
+      fun run(
+          events: List<OrderEvent>,
+          from: Order = fresh(),
+      ): Order = events.fold(from) { o, e ->
+          reduce(o, e)
+      }
+
       fun f(s: String) = OrderEvent.Fill(D(s))
-      fun same(a: Order, b: Order) = a.state == b.state && a.filled.compareTo(b.filled) == 0
+      fun same(a: Order, b: Order) = a.state == b.state &&
+          a.filled.compareTo(b.filled) == 0
 
       check("正常流程：ack → 部分成交 → 全部成交") {
           val a = run(listOf(OrderEvent.Accepted))
           val b = run(listOf(OrderEvent.Accepted, f("0.3")))
           val c = run(listOf(OrderEvent.Accepted, f("0.3"), f("1")))
-          a.state == OrderState.SUBMITTED && b.state == OrderState.PARTIAL_FILLED && b.filled.compareTo(D("0.3")) == 0 &&
+          a.state == OrderState.SUBMITTED &&
+              b.state == OrderState.PARTIAL_FILLED &&
+              b.filled.compareTo(D("0.3")) == 0 &&
               c.state == OrderState.FILLED && c.filled.compareTo(D("1")) == 0
       }
+
       check("累計成交量只增不減：重複與較小的值忽略") {
           val o = run(listOf(OrderEvent.Accepted, f("0.5"), f("0.3"), f("0.5")))
           o.filled.compareTo(D("0.5")) == 0 && o.state == OrderState.PARTIAL_FILLED
       }
+
       check("超過委託量的累計值無效，整個事件忽略") {
           val o = run(listOf(OrderEvent.Accepted, f("1.5")))
           o.filled.signum() == 0 && o.state == OrderState.SUBMITTED
       }
+
       check("終態不可離開") {
           val filled = run(listOf(OrderEvent.Accepted, f("1")))
           val canceled = run(listOf(OrderEvent.Accepted, OrderEvent.Canceled))
-          same(run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, OrderEvent.Canceled, OrderEvent.Rejected), filled), filled) &&
-              same(run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, OrderEvent.Rejected), canceled), canceled) &&
+          same(
+              run(
+                  listOf(
+                      OrderEvent.Accepted,
+                      OrderEvent.CancelRequested,
+                      OrderEvent.Canceled,
+                      OrderEvent.Rejected,
+                  ),
+                  filled,
+              ),
+              filled,
+          ) &&
+              same(
+                  run(
+                      listOf(
+                          OrderEvent.Accepted,
+                          OrderEvent.CancelRequested,
+                          OrderEvent.Rejected,
+                      ),
+                      canceled,
+                  ),
+                  canceled,
+              ) &&
               canceled.state == OrderState.CANCELED
       }
-      check("撤單競態 A：canceling 期間收到成交，仍是 canceling；確認取消後變 partialCanceled") {
-          val o1 = run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, f("0.4")))
+
+      check(
+          "撤單競態 A：canceling 期間收到成交，仍是 canceling；確認取消後變 partialCanceled",
+      ) {
+          val o1 = run(
+              listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, f("0.4")),
+          )
           val o2 = reduce(o1, OrderEvent.Canceled)
           o1.state == OrderState.CANCELING && o1.filled.compareTo(D("0.4")) == 0 &&
-              o2.state == OrderState.PARTIAL_CANCELED && o2.filled.compareTo(D("0.4")) == 0
+              o2.state == OrderState.PARTIAL_CANCELED &&
+              o2.filled.compareTo(D("0.4")) == 0
       }
-      check("撤單競態 B：取消請求送出時其實已全部成交 → filled，晚到的取消事件被忽略") {
-          val o = run(listOf(OrderEvent.Accepted, OrderEvent.CancelRequested, f("1"), OrderEvent.Canceled))
+
+      check(
+          "撤單競態 B：取消請求送出時其實已全部成交 → filled，晚到的取消事件被忽略",
+      ) {
+          val o = run(
+              listOf(
+                  OrderEvent.Accepted,
+                  OrderEvent.CancelRequested,
+                  f("1"),
+                  OrderEvent.Canceled,
+              ),
+          )
           o.state == OrderState.FILLED && o.filled.compareTo(D("1")) == 0
       }
+
       check("事件亂序：取消先到、成交後到；成交先於 ack") {
           val o1 = run(listOf(OrderEvent.Accepted, OrderEvent.Canceled, f("0.4")))
           val o2 = run(listOf(f("0.2"), OrderEvent.Accepted))
-          o1.state == OrderState.PARTIAL_CANCELED && o1.filled.compareTo(D("0.4")) == 0 &&
-              o2.state == OrderState.PARTIAL_FILLED && o2.filled.compareTo(D("0.2")) == 0
+          o1.state == OrderState.PARTIAL_CANCELED &&
+              o1.filled.compareTo(D("0.4")) == 0 &&
+              o2.state == OrderState.PARTIAL_FILLED &&
+              o2.filled.compareTo(D("0.2")) == 0
       }
+
       check("rejected 只能從 pending 進入，且之後不會變") {
-          val r = run(listOf(OrderEvent.Rejected, OrderEvent.Accepted, f("0.5"), OrderEvent.CancelRequested, OrderEvent.Canceled))
+          val r = run(
+              listOf(
+                  OrderEvent.Rejected,
+                  OrderEvent.Accepted,
+                  f("0.5"),
+                  OrderEvent.CancelRequested,
+                  OrderEvent.Canceled,
+              ),
+          )
           val s = run(listOf(OrderEvent.Accepted, OrderEvent.Rejected))
-          r.state == OrderState.REJECTED && r.filled.signum() == 0 && s.state == OrderState.SUBMITTED
+          r.state == OrderState.REJECTED &&
+              r.filled.signum() == 0 &&
+              s.state == OrderState.SUBMITTED
       }
 
 - id: exchange-order-flow-08
@@ -484,38 +641,59 @@
       check("一開始是滿的：10 個可以立即取得，第 11 個失敗") {
           var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
           var ok = 0
-          for _ in 0..<10 { if b.tryAcquire(nowMs: 0) { ok += 1 } }
+          for _ in 0..<10 {
+              if b.tryAcquire(nowMs: 0) {
+                  ok += 1
+              }
+          }
           return ok == 10 && !b.tryAcquire(nowMs: 0)
       }
+
       check("每 100 毫秒補充 1 個") {
           var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
-          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 0) }
+          for _ in 0..<10 {
+              _ = b.tryAcquire(nowMs: 0)
+          }
           let early = b.tryAcquire(nowMs: 99)
           let onTime = b.tryAcquire(nowMs: 100)
           return !early && onTime && !b.tryAcquire(nowMs: 100)
       }
+
       check("補充有上限（capacity）") {
           var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
-          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 0) }
+          for _ in 0..<10 {
+              _ = b.tryAcquire(nowMs: 0)
+          }
           var ok = 0
-          for _ in 0..<20 { if b.tryAcquire(nowMs: 10_000) { ok += 1 } }
+          for _ in 0..<20 {
+              if b.tryAcquire(nowMs: 10_000) {
+                  ok += 1
+              }
+          }
           return ok == 10
       }
+
       check("waitMs：回傳還要等的毫秒數，且不消耗 token") {
           var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 0)
-          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 0) }
+          for _ in 0..<10 {
+              _ = b.tryAcquire(nowMs: 0)
+          }
           let w0 = b.waitMs(nowMs: 0)
           let w60 = b.waitMs(nowMs: 60)
           let w100 = b.waitMs(nowMs: 100)
           return w0 == 100 && w60 == 40 && w100 == 0 && b.tryAcquire(nowMs: 100)
       }
+
       check("時鐘倒退：不補充，之後的補充仍以最後時間為準") {
           var b = TokenBucket(capacity: 10, refillPerSecond: 10, startMs: 1000)
-          for _ in 0..<10 { _ = b.tryAcquire(nowMs: 1000) }
+          for _ in 0..<10 {
+              _ = b.tryAcquire(nowMs: 1000)
+          }
           let back = b.tryAcquire(nowMs: 500)
           let later = b.tryAcquire(nowMs: 1100)
           return !back && later
       }
+
       check("每秒 1 個、容量 1") {
           var b = TokenBucket(capacity: 1, refillPerSecond: 1, startMs: 0)
           let a = b.tryAcquire(nowMs: 0)
@@ -524,9 +702,12 @@
           let c = b.tryAcquire(nowMs: 1000)
           return a && !early && wait == 1 && c
       }
+
       check("不能整除的速率：每秒 3 個，要等 334 毫秒（向上取整）") {
           var b = TokenBucket(capacity: 3, refillPerSecond: 3, startMs: 0)
-          for _ in 0..<3 { _ = b.tryAcquire(nowMs: 0) }
+          for _ in 0..<3 {
+              _ = b.tryAcquire(nowMs: 0)
+          }
           let w = b.waitMs(nowMs: 0)
           let early = b.tryAcquire(nowMs: 333)
           let onTime = b.tryAcquire(nowMs: 334)
@@ -553,21 +734,27 @@
           private var last = startMs
 
           private fun refill(now: Long) {
-              if (now <= last) return
+              if (now <= last) {
+                  return
+              }
               level = minOf(capacityMilli, level + (now - last) * rate)
               last = now
           }
 
           fun tryAcquire(nowMs: Long): Boolean {
               refill(nowMs)
-              if (level < 1000) return false
+              if (level < 1000) {
+                  return false
+              }
               level -= 1000
               return true
           }
 
           fun waitMs(nowMs: Long): Long {
               refill(nowMs)
-              if (level >= 1000) return 0
+              if (level >= 1000) {
+                  return 0
+              }
               val deficit = 1000 - level
               return (deficit + rate - 1) / rate
           }
@@ -579,6 +766,7 @@
           repeat(10) { if (b.tryAcquire(0)) ok++ }
           ok == 10 && !b.tryAcquire(0)
       }
+
       check("每 100 毫秒補充 1 個") {
           val b = TokenBucket(10, 10, 0)
           repeat(10) { b.tryAcquire(0) }
@@ -586,6 +774,7 @@
           val onTime = b.tryAcquire(100)
           !early && onTime && !b.tryAcquire(100)
       }
+
       check("補充有上限（capacity）") {
           val b = TokenBucket(10, 10, 0)
           repeat(10) { b.tryAcquire(0) }
@@ -593,6 +782,7 @@
           repeat(20) { if (b.tryAcquire(10_000)) ok++ }
           ok == 10
       }
+
       check("waitMs：回傳還要等的毫秒數，且不消耗 token") {
           val b = TokenBucket(10, 10, 0)
           repeat(10) { b.tryAcquire(0) }
@@ -601,6 +791,7 @@
           val w100 = b.waitMs(100)
           w0 == 100L && w60 == 40L && w100 == 0L && b.tryAcquire(100)
       }
+
       check("時鐘倒退：不補充，之後的補充仍以最後時間為準") {
           val b = TokenBucket(10, 10, 1000)
           repeat(10) { b.tryAcquire(1000) }
@@ -608,6 +799,7 @@
           val later = b.tryAcquire(1100)
           !back && later
       }
+
       check("每秒 1 個、容量 1") {
           val b = TokenBucket(1, 1, 0)
           val a = b.tryAcquire(0)
@@ -616,6 +808,7 @@
           val c = b.tryAcquire(1000)
           a && !early && wait == 1L && c
       }
+
       check("不能整除的速率：每秒 3 個，要等 334 毫秒（向上取整）") {
           val b = TokenBucket(3, 3, 0)
           repeat(3) { b.tryAcquire(0) }

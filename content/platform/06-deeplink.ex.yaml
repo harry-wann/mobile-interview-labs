@@ -94,9 +94,13 @@
   codeLang: swift
   code: |
     ContentView()
-        .____ { url in router.handle(url) }                       // 自訂 scheme 與 Universal Link
-        .onContinueUserActivity(____) { activity in               // 瀏覽器點到的 Universal Link
-            if let url = activity.webpageURL { router.handle(url) }
+        // 自訂 scheme 與 Universal Link
+        .____ { url in router.handle(url) }
+        // 瀏覽器點到的 Universal Link
+        .onContinueUserActivity(____) { activity in
+            if let url = activity.webpageURL {
+                router.handle(url)
+            }
         }
   blanks:
     - [onOpenURL]
@@ -156,7 +160,11 @@
           case invalid
       }
 
-      func route(for urlString: String, isLoggedIn: Bool, allowedHosts: Set<String>) -> Route {
+      func route(
+          for urlString: String,
+          isLoggedIn: Bool,
+          allowedHosts: Set<String>
+      ) -> Route {
           // TODO
           return .home
       }
@@ -175,20 +183,33 @@
           s.range(of: pattern, options: .regularExpression) != nil
       }
 
-      func route(for urlString: String, isLoggedIn: Bool, allowedHosts: Set<String>) -> Route {
+      func route(
+          for urlString: String,
+          isLoggedIn: Bool,
+          allowedHosts: Set<String>
+      ) -> Route {
           guard let comps = URLComponents(string: urlString),
                 comps.scheme == "https",
                 let host = comps.host?.lowercased(),
-                allowedHosts.contains(host) else { return .invalid }
+                allowedHosts.contains(host)
+          else {
+              return .invalid
+          }
 
-          let parts = comps.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+          let parts = comps.path
+              .split(separator: "/", omittingEmptySubsequences: true)
+              .map(String.init)
           switch parts.count {
           case 0:
               return .home
           case 2 where parts[0] == "ticker":
-              return matches(parts[1], "^[a-z0-9]{3,12}$") ? .ticker(parts[1]) : .invalid
+              return matches(parts[1], "^[a-z0-9]{3,12}$")
+                  ? .ticker(parts[1])
+                  : .invalid
           case 2 where parts[0] == "alert":
-              guard matches(parts[1], "^[A-Za-z0-9]{6,32}$") else { return .invalid }
+              guard matches(parts[1], "^[A-Za-z0-9]{6,32}$") else {
+                  return .invalid
+              }
               return isLoggedIn ? .alert(parts[1]) : .login(resume: urlString)
           default:
               return .invalid
@@ -197,38 +218,54 @@
     tests: |
       let hosts: Set<String> = ["www.example-exchange.com"]
       let base = "https://www.example-exchange.com"
-      func r(_ url: String, login: Bool = false) -> Route { route(for: url, isLoggedIn: login, allowedHosts: hosts) }
+
+      func r(_ url: String, login: Bool = false) -> Route {
+          route(for: url, isLoggedIn: login, allowedHosts: hosts)
+      }
 
       check("ticker 路由（host 大小寫不敏感）") {
           r("\(base)/ticker/btcjpy") == .ticker("btcjpy")
-              && r("https://WWW.Example-Exchange.com/ticker/ethjpy") == .ticker("ethjpy")
+              && r("https://WWW.Example-Exchange.com/ticker/ethjpy")
+                  == .ticker("ethjpy")
       }
+
       check("首頁：根路徑、沒有路徑") {
           r("\(base)/") == .home && r(base, login: true) == .home
       }
+
       check("host 不在白名單、非 https、自訂 scheme、無法解析的字串都是 invalid") {
           r("https://evil.example.com/ticker/btcjpy", login: true) == .invalid
-              && r("http://www.example-exchange.com/ticker/btcjpy", login: true) == .invalid
-              && r("myapp://www.example-exchange.com/ticker/btcjpy", login: true) == .invalid
+              && r("http://www.example-exchange.com/ticker/btcjpy", login: true)
+                  == .invalid
+              && r("myapp://www.example-exchange.com/ticker/btcjpy", login: true)
+                  == .invalid
               && r("not a url", login: true) == .invalid
       }
+
       check("symbol 含不允許的字元或路徑穿越嘗試") {
           r("\(base)/ticker/BTC%2FJPY", login: true) == .invalid
               && r("\(base)/ticker/..%2Fwithdraw", login: true) == .invalid
               && r("\(base)/ticker/ab", login: true) == .invalid
       }
+
       check("提領、下單等其他路徑不能由連結觸發") {
           r("\(base)/withdraw?amount=1&address=abc", login: true) == .invalid
               && r("\(base)/order/btcjpy", login: true) == .invalid
               && r("\(base)/ticker/btcjpy/extra", login: true) == .invalid
       }
+
       checkEqual("query 一律忽略", Route.ticker("btcjpy")) {
           r("\(base)/ticker/btcjpy?symbol=evil&redirect=http://evil.com")
       }
+
       checkEqual("alert 已登入", Route.alert("abc123")) {
           r("\(base)/alert/abc123", login: true)
       }
-      checkEqual("alert 未登入要先登入並保留原網址", Route.login(resume: "\(base)/alert/abc123")) {
+
+      checkEqual(
+          "alert 未登入要先登入並保留原網址",
+          Route.login(resume: "\(base)/alert/abc123")
+      ) {
           r("\(base)/alert/abc123")
       }
   kotlin:
@@ -241,7 +278,11 @@
           object Invalid : Route()
       }
 
-      fun route(urlString: String, isLoggedIn: Boolean, allowedHosts: Set<String>): Route {
+      fun route(
+          urlString: String,
+          isLoggedIn: Boolean,
+          allowedHosts: Set<String>,
+      ): Route {
           // TODO
           return Route.Home
       }
@@ -259,17 +300,33 @@
       private val symbolRegex = Regex("^[a-z0-9]{3,12}$")
       private val alertIdRegex = Regex("^[A-Za-z0-9]{6,32}$")
 
-      fun route(urlString: String, isLoggedIn: Boolean, allowedHosts: Set<String>): Route {
-          val uri = try { URI(urlString) } catch (e: Exception) { return Route.Invalid }
-          if (uri.scheme != "https") return Route.Invalid
+      fun route(
+          urlString: String,
+          isLoggedIn: Boolean,
+          allowedHosts: Set<String>,
+      ): Route {
+          val uri = try {
+              URI(urlString)
+          } catch (e: Exception) {
+              return Route.Invalid
+          }
+          if (uri.scheme != "https") {
+              return Route.Invalid
+          }
           val host = uri.host?.lowercase() ?: return Route.Invalid
-          if (host !in allowedHosts) return Route.Invalid
+          if (host !in allowedHosts) {
+              return Route.Invalid
+          }
 
           val parts = (uri.path ?: "").split("/").filter { it.isNotEmpty() }
           return when {
               parts.isEmpty() -> Route.Home
               parts.size == 2 && parts[0] == "ticker" ->
-                  if (symbolRegex.matches(parts[1])) Route.Ticker(parts[1]) else Route.Invalid
+                  if (symbolRegex.matches(parts[1])) {
+                      Route.Ticker(parts[1])
+                  } else {
+                      Route.Invalid
+                  }
               parts.size == 2 && parts[0] == "alert" -> when {
                   !alertIdRegex.matches(parts[1]) -> Route.Invalid
                   isLoggedIn -> Route.Alert(parts[1])
@@ -281,36 +338,52 @@
     tests: |
       val hosts = setOf("www.example-exchange.com")
       val base = "https://www.example-exchange.com"
+
       fun r(url: String, login: Boolean = false): Route = route(url, login, hosts)
 
       check("ticker 路由（host 大小寫不敏感）") {
           r("$base/ticker/btcjpy") == Route.Ticker("btcjpy") &&
-              r("https://WWW.Example-Exchange.com/ticker/ethjpy") == Route.Ticker("ethjpy")
+              r("https://WWW.Example-Exchange.com/ticker/ethjpy") ==
+                  Route.Ticker("ethjpy")
       }
+
       check("首頁：根路徑、沒有路徑") {
           r("$base/") == Route.Home && r(base, true) == Route.Home
       }
+
       check("host 不在白名單、非 https、自訂 scheme、無法解析的字串都是 invalid") {
           r("https://evil.example.com/ticker/btcjpy", true) == Route.Invalid &&
-              r("http://www.example-exchange.com/ticker/btcjpy", true) == Route.Invalid &&
-              r("myapp://www.example-exchange.com/ticker/btcjpy", true) == Route.Invalid &&
+              r("http://www.example-exchange.com/ticker/btcjpy", true) ==
+                  Route.Invalid &&
+              r("myapp://www.example-exchange.com/ticker/btcjpy", true) ==
+                  Route.Invalid &&
               r("not a url", true) == Route.Invalid
       }
+
       check("symbol 含不允許的字元或路徑穿越嘗試") {
           r("$base/ticker/BTC%2FJPY", true) == Route.Invalid &&
               r("$base/ticker/..%2Fwithdraw", true) == Route.Invalid &&
               r("$base/ticker/ab", true) == Route.Invalid
       }
+
       check("提領、下單等其他路徑不能由連結觸發") {
           r("$base/withdraw?amount=1&address=abc", true) == Route.Invalid &&
               r("$base/order/btcjpy", true) == Route.Invalid &&
               r("$base/ticker/btcjpy/extra", true) == Route.Invalid
       }
+
       checkEqual("query 一律忽略", Route.Ticker("btcjpy")) {
           r("$base/ticker/btcjpy?symbol=evil&redirect=http://evil.com")
       }
-      checkEqual("alert 已登入", Route.Alert("abc123")) { r("$base/alert/abc123", true) }
-      checkEqual("alert 未登入要先登入並保留原網址", Route.Login("$base/alert/abc123")) {
+
+      checkEqual("alert 已登入", Route.Alert("abc123")) {
+          r("$base/alert/abc123", true)
+      }
+
+      checkEqual(
+          "alert 未登入要先登入並保留原網址",
+          Route.Login("$base/alert/abc123"),
+      ) {
           r("$base/alert/abc123")
       }
 

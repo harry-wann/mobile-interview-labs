@@ -50,9 +50,16 @@ func hotp(secret: [UInt8], counter: UInt64) -> String {
         message[i] = UInt8(c & 0xff)
         c >>= 8
     }
-    // 2. 用秘密當金鑰，算 HMAC-SHA-1，得到 20 個位元組（SHA-1 在 CryptoKit 裡叫 Insecure.SHA1）
-    let mac = Array(HMAC<Insecure.SHA1>.authenticationCode(for: message, using: SymmetricKey(data: secret)))
-    // 3. 動態截斷：最後一個位元組的低 4 位元是 offset，從 offset 取 4 個位元組，最高位元清成 0
+    // 2. 用秘密當金鑰，算 HMAC-SHA-1，得到 20 個位元組（SHA-1 在 CryptoKit
+    // 裡叫 Insecure.SHA1）
+    let mac = Array(
+        HMAC<Insecure.SHA1>.authenticationCode(
+            for: message,
+            using: SymmetricKey(data: secret)
+        )
+    )
+    // 3. 動態截斷：最後一個位元組的低 4 位元是 offset，從 offset 取 4
+    // 個位元組，最高位元清成 0
     let offset = Int(mac[mac.count - 1] & 0x0f)
     let binary = (UInt32(mac[offset] & 0x7f) << 24)
                | (UInt32(mac[offset + 1]) << 16)
@@ -68,9 +75,12 @@ func totp(secret: [UInt8], unixSeconds: UInt64) -> String {
 }
 
 let secret = Array("12345678901234567890".utf8)
-print(totp(secret: secret, unixSeconds: 59))           // 輸出：287082
-print(totp(secret: secret, unixSeconds: 29))           // 輸出：755224（counter 是 0，還沒換到下一個 30 秒）
-print(totp(secret: secret, unixSeconds: 1111111109))   // 輸出：081804（開頭的 0 不能掉）
+// 輸出：287082
+print(totp(secret: secret, unixSeconds: 59))
+// 輸出：755224（counter 是 0，還沒換到下一個 30 秒）
+print(totp(secret: secret, unixSeconds: 29))
+// 輸出：081804（開頭的 0 不能掉）
+print(totp(secret: secret, unixSeconds: 1111111109))
 ```
 
 Kotlin 的版本幾乎一樣，只是 8 個位元組用 `ByteBuffer`（預設就是 big-endian），HMAC 用 `javax.crypto.Mac`：
@@ -81,19 +91,28 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 fun hotp(secret: ByteArray, counter: Long): String {
-    val message = ByteBuffer.allocate(8).putLong(counter).array()   // 8 個位元組，big-endian
-    val mac = Mac.getInstance("HmacSHA1").apply { init(SecretKeySpec(secret, "HmacSHA1")) }
-    val h = mac.doFinal(message)                                    // 20 個位元組
-    val offset = h[h.size - 1].toInt() and 0x0f                     // 最後一個位元組的低 4 位元
+    // 8 個位元組，big-endian
+    val message = ByteBuffer.allocate(8).putLong(counter).array()
+    val mac = Mac.getInstance("HmacSHA1").apply {
+        init(SecretKeySpec(secret, "HmacSHA1"))
+    }
+    // 20 個位元組
+    val h = mac.doFinal(message)
+    // 最後一個位元組的低 4 位元
+    val offset = h[h.size - 1].toInt() and 0x0f
     // Kotlin 的 Byte 有正負號，所以每個位元組都要先 and 0xff，再組成整數
     val binary = ((h[offset].toInt() and 0x7f) shl 24) or
         ((h[offset + 1].toInt() and 0xff) shl 16) or
         ((h[offset + 2].toInt() and 0xff) shl 8) or
         (h[offset + 3].toInt() and 0xff)
-    return (binary % 1_000_000).toString().padStart(6, '0')         // 補零到 6 位
+    // 補零到 6 位
+    return (binary % 1_000_000).toString().padStart(6, '0')
 }
 
-fun totp(secret: ByteArray, unixSeconds: Long): String = hotp(secret, unixSeconds / 30)
+fun totp(
+    secret: ByteArray,
+    unixSeconds: Long,
+): String = hotp(secret, unixSeconds / 30)
 // totp("12345678901234567890".toByteArray(), 59) 的輸出：287082
 ```
 
@@ -132,13 +151,25 @@ otpauth://totp/Example:user@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&
 
 ```swift
 // 伺服器端的概念示範（沿用前面的 hotp 函式）
-// 回傳驗證成功的 counter；失敗回傳 nil。lastUsedCounter 是這位使用者上次成功的 counter
-func verifyTOTP(code: String, secret: [UInt8], now: Int64, lastUsedCounter: Int64?) -> Int64? {
+// 回傳驗證成功的 counter；失敗回傳 nil。lastUsedCounter 是這位使用者上次成功的
+// counter
+func verifyTOTP(
+    code: String,
+    secret: [UInt8],
+    now: Int64,
+    lastUsedCounter: Int64?
+) -> Int64? {
     let current = now / 30
-    for counter in (current - 1)...(current + 1) where counter >= 0 {     // 視窗 ±1
-        if let last = lastUsedCounter, counter <= last { continue }       // 用過的 counter 不能再用
-        if hotp(secret: secret, counter: UInt64(counter)) == code {       // 正式版這裡要改成固定時間比較
-            return counter                                                  // 呼叫端要把這個值存起來
+    // 視窗 ±1
+    for counter in (current - 1)...(current + 1) where counter >= 0 {
+        // 用過的 counter 不能再用
+        if let last = lastUsedCounter, counter <= last {
+            continue
+        }
+        // 正式版這裡要改成固定時間比較
+        if hotp(secret: secret, counter: UInt64(counter)) == code {
+            // 呼叫端要把這個值存起來
+            return counter
         }
     }
     return nil
@@ -184,32 +215,49 @@ func verifyTOTP(code: String, secret: [UInt8], now: Int64, lastUsedCounter: Int6
 // iOS：建立一把存在 Secure Enclave、使用前必須通過生物辨識的簽名金鑰
 let access = SecAccessControlCreateWithFlags(
     nil,
-    kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,   // 只在這支手機、而且有設定密碼時可用
-    [.privateKeyUsage, .biometryCurrentSet],           // 使用私鑰前要生物辨識；新增指紋或臉部後金鑰失效
+    // 只在這支手機、而且有設定密碼時可用
+    kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+    // 使用私鑰前要生物辨識；新增指紋或臉部後金鑰失效
+    [.privateKeyUsage, .biometryCurrentSet],
     nil
 )!
 let key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
-let publicKeyForServer = key.publicKey.derRepresentation   // 註冊時把公鑰傳給伺服器
+// 註冊時把公鑰傳給伺服器
+let publicKeyForServer = key.publicKey.derRepresentation
 
 // 使用時：呼叫 signature 會自動跳出生物辨識，通過才簽得出來
-let signature = try key.signature(for: challenge)           // challenge 是伺服器傳來的 Data
+// challenge 是伺服器傳來的 Data
+let signature = try key.signature(for: challenge)
 ```
 
 ```kotlin
-// Android：建立一把使用前必須通過驗證的簽名金鑰（橢圓曲線 secp256r1，和 iOS 的 P-256 是同一種）
+// Android：建立一把使用前必須通過驗證的簽名金鑰（橢圓曲線 secp256r1，和 iOS 的
+// P-256 是同一種）
 val spec = KeyGenParameterSpec.Builder("auth_key", KeyProperties.PURPOSE_SIGN)
     .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
     .setDigests(KeyProperties.DIGEST_SHA256)
-    .setUserAuthenticationRequired(true)               // 每次使用前都要通過生物辨識
+    // 每次使用前都要通過生物辨識
+    .setUserAuthenticationRequired(true)
     .build()
-val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
+val generator = KeyPairGenerator.getInstance(
+    KeyProperties.KEY_ALGORITHM_EC,
+    "AndroidKeyStore",
+)
 generator.initialize(spec)
-val keyPair = generator.generateKeyPair()              // keyPair.public 傳給伺服器登記
+// keyPair.public 傳給伺服器登記
+val keyPair = generator.generateKeyPair()
 
 // 使用時：把 Signature 交給 BiometricPrompt，通過驗證後才能簽名
-val signature = Signature.getInstance("SHA256withECDSA").apply { initSign(keyPair.private) }
-biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
-// 在 onAuthenticationSucceeded 裡：result.cryptoObject?.signature 才能 update(challenge) 並 sign()
+val signature = Signature.getInstance("SHA256withECDSA").apply {
+    initSign(keyPair.private)
+}
+
+biometricPrompt.authenticate(
+    promptInfo,
+    BiometricPrompt.CryptoObject(signature),
+)
+// 在 onAuthenticationSucceeded 裡：result.cryptoObject?.signature 才能
+// update(challenge) 並 sign()
 ```
 
 > [!WARNING]
@@ -236,13 +284,15 @@ biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature)
 ```swift
 // iOS 16 以上：進背景時記下時間點，回前景時比較
 final class AutoLock {
-    private let timeout: Duration = .seconds(60)   // 閒置多久要鎖，由產品決定
+    // 閒置多久要鎖，由產品決定
+    private let timeout: Duration = .seconds(60)
     private var backgroundedAt: ContinuousClock.Instant?
 
     func appDidEnterBackground() { backgroundedAt = ContinuousClock.now }
 
     func shouldLockOnForeground() -> Bool {
-        guard let start = backgroundedAt else { return true }   // 沒有記錄就當作要鎖
+        // 沒有記錄就當作要鎖
+        guard let start = backgroundedAt else { return true }
         return ContinuousClock.now - start >= timeout
     }
 }
@@ -255,7 +305,8 @@ class AutoLock(private val timeoutMs: Long = 60_000) {
     fun onBackground() { backgroundedAt = SystemClock.elapsedRealtime() }
 
     fun shouldLockOnForeground(): Boolean {
-        val start = backgroundedAt ?: return true                       // 沒有記錄就當作要鎖
+        // 沒有記錄就當作要鎖
+        val start = backgroundedAt ?: return true
         return SystemClock.elapsedRealtime() - start >= timeoutMs
     }
 }
@@ -301,15 +352,18 @@ func loadOrCreateDeviceID() -> String {
     var item: CFTypeRef?
     if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
        let data = item as? Data, let id = String(data: data, encoding: .utf8) {
-        return id                                       // 已經有了，沿用
+        // 已經有了，沿用
+        return id
     }
-    let id = UUID().uuidString                          // 第一次：產生新的並存起來
+    // 第一次：產生新的並存起來
+    let id = UUID().uuidString
     let add: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: "com.example.exchange.device",
         kSecAttrAccount as String: "device-id",
         kSecValueData as String: Data(id.utf8),
-        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        kSecAttrAccessible as String:
+            kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
     ]
     SecItemAdd(add as CFDictionary, nil)
     return id

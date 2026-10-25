@@ -28,13 +28,18 @@ class BalanceRepo(private val api: Api) {
     private var cache: Balance? = null
 
     suspend fun getBalance(): Balance {
-        cache?.let { return it }           // 檢查：有快取就直接回傳
-        val fresh = api.fetchBalance()     // 動作：這是 suspend，等待期間別的 coroutine 也會進來
+        // 檢查：有快取就直接回傳
+        cache?.let { return it }
+
+        // 動作：這是 suspend，等待期間別的 coroutine 也會進來
+        val fresh = api.fetchBalance()
         cache = fresh
         return fresh
     }
 }
-// 10 個畫面元件同時呼叫 getBalance()：10 個都看到 cache 是 null，結果 API 被呼叫 10 次
+
+// 10 個畫面元件同時呼叫 getBalance()：
+// 10 個都看到 cache 是 null，結果 API 被呼叫 10 次
 ```
 
 用 `Mutex`（互斥鎖）解決：拿到鎖的人才能進去，其他人排隊等。進去的那一段程式叫臨界區段（critical section），同一時間只能有一個人在裡面。
@@ -44,11 +49,15 @@ class BalanceRepo(private val api: Api) {
     private var cache: Balance? = null
     private val mutex = Mutex()
 
-    suspend fun getBalance(): Balance = mutex.withLock {   // 拿到鎖才能進來，離開時自動釋放
-        cache ?: api.fetchBalance().also { cache = it }    // 檢查與動作都在鎖裡面
+    // 拿到鎖才能進來，離開時自動釋放
+    suspend fun getBalance(): Balance = mutex.withLock {
+        // 檢查與動作都在鎖裡面
+        cache ?: api.fetchBalance().also { cache = it }
     }
 }
-// 同樣 10 個並行呼叫：第一個去呼叫 API，其他 9 個等鎖，進來時 cache 已經有了。API 只呼叫 1 次
+
+// 同樣 10 個並行呼叫：第一個去呼叫 API，其他 9 個等鎖，
+// 進來時 cache 已經有了。API 只呼叫 1 次
 ```
 
 | 需求 | 工具 | 備註 |
@@ -66,11 +75,18 @@ class BalanceRepo(private val api: Api) {
 ```kotlin
 val m = Mutex()
 m.withLock {
-    println(m.tryLock())                                   // 輸出：false（已經持鎖，拿不到第二次）
-    println(m.isLocked)                                    // 輸出：true
-    println(withTimeoutOrNull(50) { m.withLock { "inner" } }) // 輸出：null（內層要等自己，50 毫秒後逾時）
+    // 輸出：false（已經持鎖，拿不到第二次）
+    println(m.tryLock())
+
+    // 輸出：true
+    println(m.isLocked)
+
+    // 輸出：null（內層要等自己，50 毫秒後逾時）
+    println(withTimeoutOrNull(50) { m.withLock { "inner" } })
 }
-println(m.isLocked)                                        // 輸出：false（離開後鎖已釋放）
+
+// 輸出：false（離開後鎖已釋放）
+println(m.isLocked)
 ```
 
    需要巢狀呼叫時，把「已經持鎖」的版本拆成內部函式。
@@ -85,7 +101,12 @@ println(m.isLocked)                                        // 輸出：false（�
 private val gate = Semaphore(4)
 
 suspend fun fetchAll(ids: List<String>): List<Quote> = coroutineScope {
-    ids.map { id -> async { gate.withPermit { api.quote(id) } } }.awaitAll()   // 同時最多 4 個請求在跑
+    // 同時最多 4 個請求在跑
+    ids.map { id ->
+        async {
+            gate.withPermit { api.quote(id) }
+        }
+    }.awaitAll()
 }
 ```
 
@@ -99,9 +120,14 @@ suspend fun fetchAll(ids: List<String>): List<Quote> = coroutineScope {
 **不是。** `Dispatchers.Default.limitedParallelism(1)` 只保證「同一時間最多一個任務在跑」，也就是互斥，但**不保證每次都在同一條執行緒**。
 
 ```kotlin
-val serial = Dispatchers.Default.limitedParallelism(1)    // 同一時間最多一個任務
+// 同一時間最多一個任務
+val serial = Dispatchers.Default.limitedParallelism(1)
 var counter = 0
-repeat(1000) { launch(serial) { counter++ } }             // 不需要鎖，counter 也不會算錯
+
+// 不需要鎖，counter 也不會算錯
+repeat(1000) {
+    launch(serial) { counter++ }
+}
 ```
 
 這樣做可以取代鎖來保護變數：任務之間有 happens-before 的保證，意思是前一個任務寫入的資料，後一個任務一定看得到（不會讀到舊值）。
@@ -109,7 +135,8 @@ repeat(1000) { launch(serial) { counter++ } }             // 不需要鎖，coun
 但有些資源有 thread affinity（執行緒親和性）：只能在「建立它的那條執行緒」上使用，換一條就出錯。Realm 的實例就是這樣。`limitedParallelism(1)` 每次可能換不同的執行緒，所以不適合。這種資源要用真正的單執行緒 dispatcher：
 
 ```kotlin
-val realmDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+val realmDispatcher =
+    Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 // 所有 Realm 操作都用 withContext(realmDispatcher) 包起來
 // 不用時要呼叫 realmDispatcher.close()，否則那條執行緒不會被釋放
 ```
@@ -130,8 +157,10 @@ val realmDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher(
 
 ```kotlin
 // 在主執行緒上
-runBlocking {                          // 主執行緒被卡住，等這個區塊做完
-    withContext(Dispatchers.Main) {    // 但這個區塊要回到主執行緒才能執行 → 互相等，永遠卡住
+// 主執行緒被卡住，等這個區塊做完
+runBlocking {
+    // 但這個區塊要回到主執行緒才能執行 → 互相等，永遠卡住
+    withContext(Dispatchers.Main) {
         updateUi()
     }
 }
@@ -159,24 +188,49 @@ runBlocking {                          // 主執行緒被卡住，等這個區�
 3. **限制重試次數，並加 timeout。** 伺服器如果一直回 401，不能無限重試。
 
 ```kotlin
-class TokenStore(initial: String, private val refreshRemote: suspend (stale: String) -> String) {
+class TokenStore(
+    initial: String,
+    private val refreshRemote: suspend (stale: String) -> String,
+) {
     private val mutex = Mutex()
-    @Volatile private var current = initial
+
+    @Volatile
+    private var current = initial
 
     suspend fun refreshAfter401(stale: String): String = mutex.withLock {
-        if (current != stale) current                  // 前一個等鎖的人已經刷新過，直接用
-        else refreshRemote(stale).also { current = it } // 沒人刷新過，才真的呼叫 API
+        // 前一個等鎖的人已經刷新過，直接用
+        if (current != stale) {
+            current
+        } else {
+            // 沒人刷新過，才真的呼叫 API
+            refreshRemote(stale).also { current = it }
+        }
     }
 }
 
 class TokenAuthenticator(private val store: TokenStore) : Authenticator {
     override fun authenticate(route: Route?, response: Response): Request? {
-        // 往回數這個請求已經重試過幾次，超過上限就放棄（回傳 null 表示不再重送）
-        if (generateSequence(response) { it.priorResponse }.count() > 2) return null
-        val stale = response.request.header("Authorization")?.removePrefix("Bearer ") ?: return null
-        // 這是整個流程唯一的 runBlocking：Authenticator 是阻塞世界，refreshAfter401 是 suspend
-        val fresh = runBlocking { withTimeout(10_000) { store.refreshAfter401(stale) } }
-        return response.request.newBuilder().header("Authorization", "Bearer $fresh").build()
+        // 往回數這個請求已經重試過幾次，
+        // 超過上限就放棄（回傳 null 表示不再重送）
+        if (
+            generateSequence(response) { it.priorResponse }.count() > 2
+        ) {
+            return null
+        }
+
+        val stale = response.request.header("Authorization")
+            ?.removePrefix("Bearer ")
+            ?: return null
+
+        // 這是整個流程唯一的 runBlocking：
+        // Authenticator 是阻塞世界，refreshAfter401 是 suspend
+        val fresh = runBlocking {
+            withTimeout(10_000) { store.refreshAfter401(stale) }
+        }
+
+        return response.request.newBuilder()
+            .header("Authorization", "Bearer $fresh")
+            .build()
     }
 }
 ```
@@ -195,7 +249,10 @@ class TokenAuthenticator(private val store: TokenStore) : Authenticator {
 ```kotlin
 runTest {
     delay(10_000)
-    println("virtual now = $currentTime")   // 輸出：virtual now = 10000（虛擬時鐘走了 10 秒，實際上幾乎不花時間）
+
+    // 輸出：virtual now = 10000
+    // （虛擬時鐘走了 10 秒，實際上幾乎不花時間）
+    println("virtual now = $currentTime")
 }
 ```
 
@@ -208,15 +265,29 @@ runTest {
 ```kotlin
 runTest {
     val log = mutableListOf<String>()
-    launch { log += "A"; delay(100); log += "B" }
+    launch {
+        log += "A"
+        delay(100)
+        log += "B"
+    }
     log += "main"
-    runCurrent()                  // 執行排隊中的 launch：A
-    log += "t$currentTime"        // t0
-    advanceTimeBy(100)            // 時鐘推進到 100，但剛好排在 100 的 B 還沒執行
-    log += "t$currentTime"        // t100
-    runCurrent()                  // 現在才執行 B
+
+    // 執行排隊中的 launch：A
+    runCurrent()
+    // t0
+    log += "t$currentTime"
+
+    // 時鐘推進到 100，但剛好排在 100 的 B 還沒執行
+    advanceTimeBy(100)
+    // t100
+    log += "t$currentTime"
+
+    // 現在才執行 B
+    runCurrent()
     log += "end"
-    println(log.joinToString(" "))   // 輸出：main A t0 t100 B end
+
+    // 輸出：main A t0 t100 B end
+    println(log.joinToString(" "))
 }
 ```
 
@@ -224,12 +295,19 @@ runTest {
 
 ```kotlin
 class Repo(private val io: CoroutineDispatcher) {
-    suspend fun load() = withContext(io) { delay(10_000); "ok" }   // 用注入的 dispatcher
+    // 用注入的 dispatcher
+    suspend fun load() = withContext(io) {
+        delay(10_000)
+        "ok"
+    }
 }
 
 runTest {
-    val repo = Repo(StandardTestDispatcher(testScheduler))   // 共用測試的 scheduler
-    println("${repo.load()} at virtual $currentTime")        // 輸出：ok at virtual 10000，瞬間完成
+    // 共用測試的 scheduler
+    val repo = Repo(StandardTestDispatcher(testScheduler))
+
+    // 輸出：ok at virtual 10000，瞬間完成
+    println("${repo.load()} at virtual $currentTime")
 }
 // 如果 Repo 裡寫死 withContext(Dispatchers.IO)，這個測試會真的等 10 秒
 ```
@@ -240,8 +318,13 @@ runTest {
 class MainDispatcherRule(
     private val testDispatcher: TestDispatcher = UnconfinedTestDispatcher()
 ) : TestWatcher() {
-    override fun starting(description: Description) { Dispatchers.setMain(testDispatcher) }
-    override fun finished(description: Description) { Dispatchers.resetMain() }
+    override fun starting(description: Description) {
+        Dispatchers.setMain(testDispatcher)
+    }
+
+    override fun finished(description: Description) {
+        Dispatchers.resetMain()
+    }
 }
 ```
 

@@ -31,16 +31,22 @@
     import Foundation
 
     let order = await withTaskGroup(of: String.self) { group -> [String] in
-        for (name, ms) in [("A", 300), ("B", 100), ("C", 200)] as [(String, UInt64)] {
+        for (name, ms) in [
+            ("A", 300), ("B", 100), ("C", 200)
+        ] as [(String, UInt64)] {
             group.addTask {
                 try? await Task.sleep(nanoseconds: ms * 1_000_000)
                 return name
             }
         }
+
         var out: [String] = []
-        for await r in group { out.append(r) }
+        for await r in group {
+            out.append(r)
+        }
         return out
     }
+
     print(order.joined(separator: " "))
   answer: |
     B C A
@@ -88,6 +94,7 @@
     import Foundation
 
     struct Boom: Error {}
+
     func sleepMs(_ ms: UInt64) async throws {
         try await Task.sleep(nanoseconds: ms * 1_000_000)
     }
@@ -219,8 +226,11 @@
               for item in items {
                   group.addTask { try await transform(item) }
               }
+
               var out: [R] = []
-              for try await r in group { out.append(r) }
+              for try await r in group {
+                  out.append(r)
+              }
               return out
           }
       }
@@ -240,9 +250,11 @@
                   let item = items[index]
                   group.addTask { (index, try await transform(item)) }
               }
+
               while let (i, r) = try await group.next() {
                   results[i] = r
               }
+
               return results.map { $0! }
           }
       }
@@ -251,12 +263,25 @@
           private(set) var current = 0
           private(set) var peak = 0
           private(set) var started: [Int] = []
-          func begin(_ n: Int) { current += 1; peak = max(peak, current); started.append(n) }
-          func end() { current -= 1 }
-      }
-      struct Boom: Error { let n: Int }
 
-      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+          func begin(_ n: Int) {
+              current += 1
+              peak = max(peak, current)
+              started.append(n)
+          }
+
+          func end() {
+              current -= 1
+          }
+      }
+
+      struct Boom: Error {
+          let n: Int
+      }
+
+      func sleepMs(_ ms: UInt64) async throws {
+          try await Task.sleep(nanoseconds: ms * 1_000_000)
+      }
 
       await checkEqualAsync("保持輸入順序", [2, 4, 6, 8, 10, 12]) {
           try await mapConcurrent([1, 2, 3, 4, 5, 6], limit: 3) { n in
@@ -264,6 +289,7 @@
               return n * 2
           }
       }
+
       await checkAsync("同時進行的數量不超過 limit，且有用滿") {
           let tracker = Tracker()
           _ = try await mapConcurrent(Array(1...9), limit: 3) { n in
@@ -275,16 +301,21 @@
           let peak = await tracker.peak
           return peak == 3
       }
+
       await checkEqualAsync("limit 大於筆數", [1, 2]) {
           try await mapConcurrent([1, 2], limit: 10) { $0 }
       }
+
       await checkEqualAsync("空輸入", 0) {
           try await mapConcurrent([Int](), limit: 2) { $0 }.count
       }
+
       await checkAsync("錯誤向外拋出") {
           do {
               _ = try await mapConcurrent([1, 2, 3], limit: 2) { n -> Int in
-                  if n == 2 { throw Boom(n: n) }
+                  if n == 2 {
+                      throw Boom(n: n)
+                  }
                   return n
               }
               return false
@@ -292,12 +323,15 @@
               return e.n == 2
           }
       }
+
       await checkAsync("失敗後不再啟動後面的項目") {
           let tracker = Tracker()
           do {
               _ = try await mapConcurrent(Array(1...6), limit: 1) { n -> Int in
                   await tracker.begin(n)
-                  if n == 2 { throw Boom(n: n) }
+                  if n == 2 {
+                      throw Boom(n: n)
+                  }
                   return n
               }
           } catch {}
@@ -348,17 +382,26 @@
                   try await Task.sleep(nanoseconds: nanoseconds)
                   throw TimeoutError()
               }
-              defer { group.cancelAll() }
+              defer {
+                  group.cancelAll()
+              }
               return try await group.next()!
           }
       }
     tests: |
       actor Marker {
           private(set) var marked = false
-          func mark() { marked = true }
+
+          func mark() {
+              marked = true
+          }
       }
+
       struct OpError: Error {}
-      func sleepMs(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+      func sleepMs(_ ms: UInt64) async throws {
+          try await Task.sleep(nanoseconds: ms * 1_000_000)
+      }
 
       await checkEqualAsync("時限內完成就回傳結果", 42) {
           try await withTimeout(nanoseconds: 500_000_000) {
@@ -366,6 +409,7 @@
               return 42
           }
       }
+
       await checkAsync("超時丟 TimeoutError") {
           do {
               _ = try await withTimeout(nanoseconds: 30_000_000) {
@@ -379,22 +423,32 @@
               return false
           }
       }
+
       await checkAsync("超時後 operation 被取消，而且很快返回") {
           let marker = Marker()
           let start = Date()
           do {
               _ = try await withTimeout(nanoseconds: 30_000_000) {
-                  do { try await sleepMs(1500) }
-                  catch { await marker.mark(); throw error }
+                  do {
+                      try await sleepMs(1500)
+                  } catch {
+                      await marker.mark()
+                      throw error
+                  }
                   return 1
               }
           } catch {}
           let elapsed = Date().timeIntervalSince(start)
           return await marker.marked && elapsed < 0.9
       }
+
       await checkAsync("operation 自己的錯誤原樣拋出") {
           do {
-              _ = try await withTimeout(nanoseconds: 500_000_000) { () async throws -> Int in throw OpError() }
+              _ = try await withTimeout(
+                  nanoseconds: 500_000_000
+              ) { () async throws -> Int in
+                  throw OpError()
+              }
               return false
           } catch is OpError {
               return true
@@ -402,6 +456,7 @@
               return false
           }
       }
+
       await checkAsync("完成後不會有計時任務干擾") {
           let r = try await withTimeout(nanoseconds: 100_000_000) { 7 }
           try await sleepMs(150)

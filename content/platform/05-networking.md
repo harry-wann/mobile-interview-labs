@@ -37,17 +37,23 @@ URLSession 是 Apple 內建的網路 API。OkHttp 是 Square 開發的 Android H
 
 ```swift
 let config = URLSessionConfiguration.default
-config.timeoutIntervalForRequest = 15    // 兩個封包之間最久等 15 秒，超過就逾時
-config.timeoutIntervalForResource = 60   // 整個請求（含重新連線）最多 60 秒
+// 兩個封包之間最久等 15 秒，超過就逾時
+config.timeoutIntervalForRequest = 15
+// 整個請求（含重新連線）最多 60 秒
+config.timeoutIntervalForResource = 60
 let session = URLSession(configuration: config)
 ```
 
 ```kotlin
 val client = OkHttpClient.Builder()
-    .connectTimeout(10, TimeUnit.SECONDS)  // 建立連線最久等 10 秒
-    .readTimeout(10, TimeUnit.SECONDS)     // 等伺服器回資料，兩次讀取之間最久 10 秒
-    .writeTimeout(10, TimeUnit.SECONDS)    // 送出資料最久 10 秒
-    .callTimeout(30, TimeUnit.SECONDS)     // 整個呼叫最多 30 秒（預設是不限制）
+    // 建立連線最久等 10 秒
+    .connectTimeout(10, TimeUnit.SECONDS)
+    // 等伺服器回資料，兩次讀取之間最久 10 秒
+    .readTimeout(10, TimeUnit.SECONDS)
+    // 送出資料最久 10 秒
+    .writeTimeout(10, TimeUnit.SECONDS)
+    // 整個呼叫最多 30 秒（預設是不限制）
+    .callTimeout(30, TimeUnit.SECONDS)
     .build()
 ```
 
@@ -73,11 +79,13 @@ val client = OkHttpClient.Builder()
 
 ```bash
 # 取得 api.example.com 目前這張憑證的公鑰，算 SHA-256，再轉成 Base64
-openssl s_client -connect api.example.com:443 -servername api.example.com </dev/null 2>/dev/null \
+openssl s_client -connect api.example.com:443 \
+  -servername api.example.com </dev/null 2>/dev/null \
   | openssl x509 -pubkey -noout \
   | openssl pkey -pubin -outform der \
   | openssl dgst -sha256 -binary | base64
-# 輸出類似：AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=（44 個字元，下面的範例都用這種佔位字串）
+# 輸出類似：AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=（44 個字元，下面的範例
+# 都用這種佔位字串）
 ```
 
 **iOS 的兩種做法：**
@@ -87,18 +95,24 @@ openssl s_client -connect api.example.com:443 -servername api.example.com </dev/
 ```xml
 <key>NSAppTransportSecurity</key>
 <dict>
-    <key>NSPinnedDomains</key>
+  <key>NSPinnedDomains</key>
+  <dict>
+    <key>api.example.com</key>
     <dict>
-        <key>api.example.com</key>
+      <key>NSIncludesSubdomains</key><true/>
+      <key>NSPinnedLeafIdentities</key>
+      <array>
         <dict>
-            <key>NSIncludesSubdomains</key><true/>
-            <key>NSPinnedLeafIdentities</key>
-            <array>
-                <dict><key>SPKI-SHA256-BASE64</key><string>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</string></dict>
-                <dict><key>SPKI-SHA256-BASE64</key><string>BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</string></dict>
-            </array>
+          <key>SPKI-SHA256-BASE64</key>
+          <string>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</string>
         </dict>
+        <dict>
+          <key>SPKI-SHA256-BASE64</key>
+          <string>BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</string>
+        </dict>
+      </array>
     </dict>
+  </dict>
 </dict>
 ```
 
@@ -106,21 +120,32 @@ openssl s_client -connect api.example.com:443 -servername api.example.com </dev/
 
 ```swift
 final class PinningDelegate: NSObject, URLSessionDelegate {
-    func urlSession(_ session: URLSession,
-                    didReceive challenge: URLAuthenticationChallenge,
-                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (
+            URLSession.AuthChallengeDisposition, URLCredential?
+        ) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod
+                == NSURLAuthenticationMethodServerTrust,
               let trust = challenge.protectionSpace.serverTrust,
-              SecTrustEvaluateWithError(trust, nil),   // 先通過系統一般的憑證驗證
-              isPinned(trust)                          // 再比對公鑰雜湊（自己實作）
+              // 先通過系統一般的憑證驗證
+              SecTrustEvaluateWithError(trust, nil),
+              // 再比對公鑰雜湊（自己實作）
+              isPinned(trust)
         else {
-            completionHandler(.cancelAuthenticationChallenge, nil)   // 任何一步失敗就中止連線
+            // 任何一步失敗就中止連線
+            completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
         completionHandler(.useCredential, URLCredential(trust: trust))
     }
 
-    private func isPinned(_ trust: SecTrust) -> Bool { /* 取出憑證的公鑰，算 SHA-256，和內建的 pin 清單比對 */ false }
+    private func isPinned(_ trust: SecTrust) -> Bool {
+        /* 取出憑證的公鑰，算 SHA-256，和內建的 pin 清單比對 */
+        false
+    }
 }
 ```
 
@@ -130,16 +155,20 @@ final class PinningDelegate: NSObject, URLSessionDelegate {
 
 ```xml
 <network-security-config>
-    <domain-config>
-        <domain includeSubdomains="true">api.example.com</domain>
-        <pin-set expiration="2027-06-30">   <!-- 這個日期之後，釘選自動失效 -->
-            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
-            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
-        </pin-set>
-    </domain-config>
-    <debug-overrides>   <!-- 只在 debug build 生效：信任使用者安裝的 CA，方便用 Charles -->
-        <trust-anchors><certificates src="user" /></trust-anchors>
-    </debug-overrides>
+  <domain-config>
+    <domain includeSubdomains="true">api.example.com</domain>
+    <!-- 這個日期之後，釘選自動失效 -->
+    <pin-set expiration="2027-06-30">
+      <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+      <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
+    </pin-set>
+  </domain-config>
+  <!-- 只在 debug build 生效：信任使用者安裝的 CA，方便用 Charles -->
+  <debug-overrides>
+    <trust-anchors>
+      <certificates src="user" />
+    </trust-anchors>
+  </debug-overrides>
 </network-security-config>
 ```
 
@@ -149,8 +178,14 @@ final class PinningDelegate: NSObject, URLSessionDelegate {
 val client = OkHttpClient.Builder()
     .certificatePinner(
         CertificatePinner.Builder()
-            .add("api.example.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-            .add("api.example.com", "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")
+            .add(
+                "api.example.com",
+                "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            )
+            .add(
+                "api.example.com",
+                "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+            )
             .build()
     )
     .build()
@@ -213,14 +248,21 @@ OkHttp 有兩個攔截點，職責不同：
 刷新要放在 `Authenticator`，並用 Mutex（coroutine 版本的鎖，同一時間只有一個 coroutine 能進入，其他的會暫停等待，不會卡住執行緒）做 single-flight：
 
 ```kotlin
-class TokenProvider(initial: String, private val refresh: suspend () -> String) {
+class TokenProvider(
+    initial: String,
+    private val refresh: suspend () -> String,
+) {
     private val mutex = Mutex()
-    @Volatile private var token: String = initial   // @Volatile：讓其他執行緒讀到最新的值
+    // @Volatile：讓其他執行緒讀到最新的值
+    @Volatile private var token: String = initial
 
     fun currentToken(): String = token
 
     suspend fun refreshIfNeeded(failedToken: String): String = mutex.withLock {
-        if (token != failedToken) return@withLock token   // 別人已經刷新過了，直接用新的，不再刷新
+        // 別人已經刷新過了，直接用新的，不再刷新
+        if (token != failedToken) {
+            return@withLock token
+        }
         val fresh = refresh()
         token = fresh
         fresh
@@ -241,7 +283,9 @@ class AuthInterceptor(private val tokens: TokenProvider) : Interceptor {
 class TokenAuthenticator(private val tokens: TokenProvider) : Authenticator {
     override fun authenticate(route: Route?, response: Response): Request? {
         // 用新 token 重送之後還是 401，就放棄，避免無限迴圈
-        if (response.priorResponse != null) return null
+        if (response.priorResponse != null) {
+            return null
+        }
         val failedToken = response.request.header("Authorization")
             ?.removePrefix("Bearer ") ?: return null
         // OkHttp 的這個方法跑在背景執行緒，允許阻塞等待
@@ -262,19 +306,31 @@ URLSession 對 Bearer token 沒有內建的刷新機制（它的驗證 delegate 
 ```swift
 actor TokenProvider {
     private var token: String
-    private var inFlight: Task<String, Error>?   // 進行中的刷新
+    // 進行中的刷新
+    private var inFlight: Task<String, Error>?
     private let refresh: @Sendable () async throws -> String
 
-    init(initial: String, refresh: @escaping @Sendable () async throws -> String) {
+    init(
+        initial: String,
+        refresh: @escaping @Sendable () async throws -> String
+    ) {
         self.token = initial
         self.refresh = refresh
     }
 
-    func currentToken() -> String { token }
+    func currentToken() -> String {
+        token
+    }
 
     func refreshIfNeeded(failedToken: String) async throws -> String {
-        if token != failedToken { return token }                    // 別人已經刷新過了
-        if let running = inFlight { return try await running.value } // 已經有人在刷新，等同一個結果
+        // 別人已經刷新過了
+        if token != failedToken {
+            return token
+        }
+        // 已經有人在刷新，等同一個結果
+        if let running = inFlight {
+            return try await running.value
+        }
 
         let task = Task { [refresh] in try await refresh() }
         inFlight = task
@@ -284,7 +340,8 @@ actor TokenProvider {
             inFlight = nil
             return fresh
         } catch {
-            inFlight = nil    // 失敗後清掉，下一個呼叫可以再試
+            // 失敗後清掉，下一個呼叫可以再試
+            inFlight = nil
             throw error
         }
     }
@@ -295,15 +352,25 @@ struct APIClient {
 
     func data(for request: URLRequest) async throws -> Data {
         let used = await tokens.currentToken()
-        let (data, response) = try await URLSession.shared.data(for: authorized(request, token: used))
-        guard (response as? HTTPURLResponse)?.statusCode == 401 else { return data }
+        let (data, response) = try await URLSession.shared.data(
+            for: authorized(request, token: used)
+        )
+        guard (response as? HTTPURLResponse)?.statusCode == 401
+        else { return data }
 
-        let fresh = try await tokens.refreshIfNeeded(failedToken: used)   // 8 個 401 同時進來，只會刷新一次
-        let (retryData, _) = try await URLSession.shared.data(for: authorized(request, token: fresh))
-        return retryData                                                  // 只重送一次，不再遞迴
+        // 8 個 401 同時進來，只會刷新一次
+        let fresh = try await tokens.refreshIfNeeded(failedToken: used)
+        let (retryData, _) = try await URLSession.shared.data(
+            for: authorized(request, token: fresh)
+        )
+        // 只重送一次，不再遞迴
+        return retryData
     }
 
-    private func authorized(_ request: URLRequest, token: String) -> URLRequest {
+    private func authorized(
+        _ request: URLRequest,
+        token: String
+    ) -> URLRequest {
         var request = request
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return request
@@ -336,19 +403,32 @@ struct APIClient {
 **可以自動重試的請求，也要小心怎麼重試。** 用指數退避（exponential backoff：每失敗一次，等待時間加倍）加上 jitter（隨機抖動）：
 
 ```kotlin
-fun backoffMillis(attempt: Int, baseMs: Long = 1_000, capMs: Long = 30_000): Long {
-    val ceiling = minOf(capMs, baseMs * (1L shl attempt))  // 上限依序是 1、2、4、8 秒……最多 30 秒
-    return Random.nextLong(0, ceiling + 1)                  // 在 0 到上限之間隨機挑一個時間
+fun backoffMillis(
+    attempt: Int,
+    baseMs: Long = 1_000,
+    capMs: Long = 30_000,
+): Long {
+    // 上限依序是 1、2、4、8 秒……最多 30 秒
+    val ceiling = minOf(capMs, baseMs * (1L shl attempt))
+    // 在 0 到上限之間隨機挑一個時間
+    return Random.nextLong(0, ceiling + 1)
 }
-// attempt = 0, 1, 2, 3 時，等待時間的上限分別是 1、2、4、8 秒；實際等多久每次都不一樣
+// attempt = 0, 1, 2, 3 時，等待時間的上限分別是 1、2、4、8 秒；
+// 實際等多久每次都不一樣
 ```
 
 ```swift
 import Foundation
 
-func backoffSeconds(attempt: Int, base: Double = 1, cap: Double = 30) -> Double {
-    let ceiling = min(cap, base * pow(2, Double(attempt)))   // 上限依序是 1、2、4、8 秒……最多 30 秒
-    return Double.random(in: 0...ceiling)                    // 在 0 到上限之間隨機挑一個時間
+func backoffSeconds(
+    attempt: Int,
+    base: Double = 1,
+    cap: Double = 30
+) -> Double {
+    // 上限依序是 1、2、4、8 秒……最多 30 秒
+    let ceiling = min(cap, base * pow(2, Double(attempt)))
+    // 在 0 到上限之間隨機挑一個時間
+    return Double.random(in: 0...ceiling)
 }
 ```
 

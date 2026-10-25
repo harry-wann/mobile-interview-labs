@@ -31,16 +31,28 @@
     下列程式依序印出什麼？（`bye` 沒有宣告在協定裡，只寫在 extension）
   codeLang: "swift"
   code: |
-    protocol Greeter { func hello() }
+    protocol Greeter {
+        func hello()
+    }
 
     extension Greeter {
-        func hello() { print("default hello") }
-        func bye() { print("default bye") }
+        func hello() {
+            print("default hello")
+        }
+
+        func bye() {
+            print("default bye")
+        }
     }
 
     struct English: Greeter {
-        func hello() { print("hello") }
-        func bye() { print("bye") }
+        func hello() {
+            print("hello")
+        }
+
+        func bye() {
+            print("bye")
+        }
     }
 
     let e = English()
@@ -123,12 +135,24 @@
     下列程式為什麼無法編譯？最合適的修法是？
   codeLang: "swift"
   code: |
-    protocol Badge { var title: String { get } }
-    struct Warning: Badge { let title = "Warning" }
-    struct Info: Badge { let title = "Info" }
+    protocol Badge {
+        var title: String { get }
+    }
+
+    struct Warning: Badge {
+        let title = "Warning"
+    }
+
+    struct Info: Badge {
+        let title = "Info"
+    }
 
     func makeBadge(isWarning: Bool) -> some Badge {
-        if isWarning { return Warning() } else { return Info() }
+        if isWarning {
+            return Warning()
+        } else {
+            return Info()
+        }
     }
   options:
     - "`some` 後面要加 `where` 子句限制型別"
@@ -193,13 +217,18 @@
 
           init<F: PriceFeed>(_ feed: F) where F.Price == Price {
               symbol = feed.symbol
-              snapshot = feed.latest()   // TODO: 這是快照，改成轉發
+              // TODO: 這是快照，改成轉發
+              snapshot = feed.latest()
           }
 
-          func latest() -> Price? { snapshot }
+          func latest() -> Price? {
+              snapshot
+          }
       }
 
-      func lowest<Price: Comparable>(_ feeds: [AnyPriceFeed<Price>]) -> (symbol: String, price: Price)? {
+      func lowest<Price: Comparable>(
+          _ feeds: [AnyPriceFeed<Price>]
+      ) -> (symbol: String, price: Price)? {
           // TODO
           return nil
       }
@@ -220,15 +249,22 @@
           }
 
           var symbol: String { _symbol() }
-          func latest() -> Price? { _latest() }
+
+          func latest() -> Price? {
+              _latest()
+          }
       }
 
-      func lowest<Price: Comparable>(_ feeds: [AnyPriceFeed<Price>]) -> (symbol: String, price: Price)? {
+      func lowest<Price: Comparable>(
+          _ feeds: [AnyPriceFeed<Price>]
+      ) -> (symbol: String, price: Price)? {
           var best: (symbol: String, price: Price)?
           for feed in feeds {
               guard let p = feed.latest() else { continue }
               if let current = best {
-                  if p < current.price { best = (feed.symbol, p) }
+                  if p < current.price {
+                      best = (feed.symbol, p)
+                  }
               } else {
                   best = (feed.symbol, p)
               }
@@ -239,44 +275,79 @@
       struct StaticFeed: PriceFeed {
           let symbol: String
           let value: Int?
-          func latest() -> Int? { value }
+
+          func latest() -> Int? {
+              value
+          }
       }
+
       final class LiveFeed: PriceFeed {
           let symbol: String
           var value: Int?
-          init(_ symbol: String, _ value: Int?) { self.symbol = symbol; self.value = value }
-          func latest() -> Int? { value }
+
+          init(_ symbol: String, _ value: Int?) {
+              self.symbol = symbol
+              self.value = value
+          }
+
+          func latest() -> Int? {
+              value
+          }
       }
 
       check("不同型別的來源可放進同一個陣列") {
-          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: 10)), AnyPriceFeed(LiveFeed("B", 20))]
+          let feeds: [AnyPriceFeed<Int>] = [
+              AnyPriceFeed(StaticFeed(symbol: "A", value: 10)),
+              AnyPriceFeed(LiveFeed("B", 20))
+          ]
           return feeds.map { $0.symbol } == ["A", "B"]
       }
+
       check("抹除後仍反映 class 來源之後的更新") {
           let live = LiveFeed("L", 50)
           let erased = AnyPriceFeed(live)
           live.value = 42
           return erased.latest() == 42
       }
+
       checkEqual("lowest 找最低價的來源", "B") {
-          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: 10)), AnyPriceFeed(StaticFeed(symbol: "B", value: 7))]
+          let feeds: [AnyPriceFeed<Int>] = [
+              AnyPriceFeed(StaticFeed(symbol: "A", value: 10)),
+              AnyPriceFeed(StaticFeed(symbol: "B", value: 7))
+          ]
           return lowest(feeds)?.symbol ?? "nil"
       }
+
       checkEqual("lowest 的價格", 7) {
-          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: 10)), AnyPriceFeed(StaticFeed(symbol: "B", value: 7))]
+          let feeds: [AnyPriceFeed<Int>] = [
+              AnyPriceFeed(StaticFeed(symbol: "A", value: 10)),
+              AnyPriceFeed(StaticFeed(symbol: "B", value: 7))
+          ]
           return lowest(feeds)?.price ?? -1
       }
+
       checkEqual("忽略沒有報價的來源", "C") {
-          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: nil)), AnyPriceFeed(StaticFeed(symbol: "C", value: 99))]
+          let feeds: [AnyPriceFeed<Int>] = [
+              AnyPriceFeed(StaticFeed(symbol: "A", value: nil)),
+              AnyPriceFeed(StaticFeed(symbol: "C", value: 99))
+          ]
           return lowest(feeds)?.symbol ?? "nil"
       }
+
       check("全部沒有報價回傳 nil") {
-          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "A", value: nil))]
+          let feeds: [AnyPriceFeed<Int>] = [
+              AnyPriceFeed(StaticFeed(symbol: "A", value: nil))
+          ]
           return lowest(feeds) == nil
       }
+
       check("空陣列回傳 nil") { lowest([AnyPriceFeed<Int>]()) == nil }
+
       checkEqual("同價取先出現的", "first") {
-          let feeds: [AnyPriceFeed<Int>] = [AnyPriceFeed(StaticFeed(symbol: "first", value: 5)), AnyPriceFeed(StaticFeed(symbol: "second", value: 5))]
+          let feeds: [AnyPriceFeed<Int>] = [
+              AnyPriceFeed(StaticFeed(symbol: "first", value: 5)),
+              AnyPriceFeed(StaticFeed(symbol: "second", value: 5))
+          ]
           return lowest(feeds)?.symbol ?? "nil"
       }
 

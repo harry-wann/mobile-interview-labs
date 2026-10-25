@@ -25,23 +25,47 @@ tags: [protocol, generics, some, any, dispatch, type-erasure]
 - **`any Shape`**：編譯器不知道具體型別，只知道「它遵守 `Shape`」，實際是哪一個要到程式執行時才知道。所以呼叫方法時，要先查表才知道該執行哪個型別的版本（這個查表動作比直接呼叫慢一點）。換來的好處是：同一個變數、同一個陣列，可以放不同的具體型別。
 
 ```swift
-protocol Shape { func area() -> Double }
-struct Circle: Shape { var r: Double; func area() -> Double { .pi * r * r } }
-struct Square: Shape { var side: Double; func area() -> Double { side * side } }
+protocol Shape {
+    func area() -> Double
+}
+
+struct Circle: Shape {
+    var r: Double
+
+    func area() -> Double {
+        .pi * r * r
+    }
+}
+
+struct Square: Shape {
+    var side: Double
+
+    func area() -> Double {
+        side * side
+    }
+}
 
 // some：固定回傳 Circle，只是對呼叫端隱藏。編譯器知道它是 Circle
-func makeDefaultShape() -> some Shape { Circle(r: 1) }
+func makeDefaultShape() -> some Shape {
+    Circle(r: 1)
+}
 
 // 參數的 some：每個參數各自是「某一個」Shape，兩個參數可以是不同型別
-func totalArea(_ a: some Shape, _ b: some Shape) -> Double { a.area() + b.area() }
+func totalArea(_ a: some Shape, _ b: some Shape) -> Double {
+    a.area() + b.area()
+}
 
 // any：陣列裡可以放 Circle，也可以放 Square
 let shapes: [any Shape] = [Circle(r: 1), Square(side: 2)]
-let total = shapes.reduce(0) { $0 + $1.area() }   // 每個元素呼叫 area() 時，才查表決定執行哪個版本
+// 每個元素呼叫 area() 時，才查表決定執行哪個版本
+let total = shapes.reduce(0) { $0 + $1.area() }
 
-print(makeDefaultShape().area())                  // 輸出：3.141592653589793
-print(totalArea(Circle(r: 1), Square(side: 2)))   // 輸出：7.141592653589793
-print(total)                                      // 輸出：7.141592653589793
+// 輸出：3.141592653589793
+print(makeDefaultShape().area())
+// 輸出：7.141592653589793
+print(totalArea(Circle(r: 1), Square(side: 2)))
+// 輸出：7.141592653589793
+print(total)
 ```
 
 為什麼 `[any Shape]` 可以放不同型別，而用泛型或 `some` 就不行？因為陣列的元素型別在編譯時必須固定。泛型版本會寫成 `[Circle]` 或 `[Square]`，只能擇一；`[any Shape]` 把元素型別固定為「遵守 `Shape` 的任何東西」，所以兩種都能放。
@@ -50,8 +74,13 @@ print(total)                                      // 輸出：7.141592653589793
 
 ```swift
 func makeShape(round: Bool) -> some Shape {
-    if round { return Circle(r: 1) } else { return Square(side: 2) }
-    // 編譯錯誤：return statements in its body do not have matching underlying types
+    if round {
+        return Circle(r: 1)
+    } else {
+        return Square(side: 2)
+    }
+    // 編譯錯誤：return statements in its body do not have matching underlying
+    // types
 }
 ```
 
@@ -84,8 +113,10 @@ Swift 5.7 之後：
 let a: any Collection = [1, 2, 3]
 let b: any Collection<Int> = [1, 2, 3]
 
-print(type(of: a.map { $0 }))   // 輸出：Array<Any>：沒有指定 Element，編譯器只好當成 Any
-print(type(of: b.map { $0 }))   // 輸出：Array<Int>：指定了 Collection<Int>，元素型別保留下來
+// 輸出：Array<Any>：沒有指定 Element，編譯器只好當成 Any
+print(type(of: a.map { $0 }))
+// 輸出：Array<Int>：指定了 Collection<Int>，元素型別保留下來
+print(type(of: b.map { $0 }))
 ```
 
 兩個還是會碰到的限制：
@@ -106,23 +137,42 @@ print(type(of: b.map { $0 }))   // 輸出：Array<Int>：指定了 Collection<In
 先看一個會讓人意外的例子：
 
 ```swift
-protocol Greeter { func hello() }          // hello 是協定的 requirement（要求）
+// hello 是協定的 requirement（要求）
+protocol Greeter {
+    func hello()
+}
+
 extension Greeter {
-    func hello() { print("default hello") }  // hello 的預設實作
-    func bye() { print("default bye") }      // bye 不在協定宣告裡，只存在於 extension
+    // hello 的預設實作
+    func hello() {
+        print("default hello")
+    }
+
+    // bye 不在協定宣告裡，只存在於 extension
+    func bye() {
+        print("default bye")
+    }
 }
 
 struct English: Greeter {
-    func hello() { print("hello") }
-    func bye() { print("bye") }
+    func hello() {
+        print("hello")
+    }
+
+    func bye() {
+        print("bye")
+    }
 }
 
 let e = English()
 let g: any Greeter = e
-e.hello()   // 輸出：hello
-e.bye()     // 輸出：bye
-g.hello()   // 輸出：hello：hello 是 requirement，執行時查表，找到 English 自己的版本
-g.bye()     // 輸出：default bye：bye 不是 requirement，編譯器只看到 any Greeter，直接呼叫 extension 的版本
+e.hello() // 輸出：hello
+e.bye() // 輸出：bye
+// 輸出：hello：hello 是 requirement，執行時查表，找到 English 自己的版本
+g.hello()
+// 輸出：default bye：bye 不是 requirement，編譯器只看到 any Greeter，直接呼叫
+// extension 的版本
+g.bye()
 ```
 
 規則是這樣的：**只有寫在協定宣告裡的方法（requirement，要求遵守者一定要提供的成員）才是動態派發。** 只寫在 extension 裡的方法，編譯器依「變數宣告的型別」直接決定，不會去找 conformer（遵守這個協定的型別，例如上面的 `English`）自己的同名方法。所以 `g.bye()` 印出 `default bye`，`English` 自己寫的 `bye` 被忽略了。
@@ -169,11 +219,16 @@ struct AnyPriceFeed<Price>: PriceFeed {
     private let fetchLatest: () -> Price?
 
     init<F: PriceFeed>(_ feed: F) where F.Price == Price {
-        fetchLatest = { feed.latest() }   // 用 closure 把呼叫轉發給原本的 feed
+        // 用 closure 把呼叫轉發給原本的 feed
+        fetchLatest = { feed.latest() }
     }
-    func latest() -> Price? { fetchLatest() }
+
+    func latest() -> Price? {
+        fetchLatest()
+    }
 }
-// 現在 [AnyPriceFeed<Decimal>] 可以放任何 Price 是 Decimal 的來源，不管它們實際是哪個型別
+// 現在 [AnyPriceFeed<Decimal>] 可以放任何 Price 是 Decimal 的來源，不管它們實際
+// 是哪個型別
 ```
 
 Swift 5.7 有了 `any PriceFeed<Decimal>` 之後，很多場合不必再手寫這種包裝。手寫的版本仍然有用的情況是：需要讓包起來的型別符合 `Hashable`／`Equatable`、要放進泛型型別當成一個具體型別，或部署目標比較舊。

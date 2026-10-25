@@ -39,16 +39,22 @@ SwiftUI 的做法是：真正需要保留的資料，另外存在 SwiftUI 自己
 import SwiftUI
 
 struct OrderScreen: View {
-    @State private var quantity = ""            // 這個畫面自己擁有的資料
+    // 這個畫面自己擁有的資料
+    @State private var quantity = ""
+
     var body: some View {
-        QuantityField(text: $quantity)         // $quantity 的型別是 Binding<String>
+        // $quantity 的型別是 Binding<String>
+        QuantityField(text: $quantity)
     }
 }
 
 struct QuantityField: View {
-    @Binding var text: String                   // 借用上層的 quantity，不擁有它
+    // 借用上層的 quantity，不擁有它
+    @Binding var text: String
+
     var body: some View {
-        TextField("數量", text: $text)          // 使用者輸入時，改的是上層的 quantity
+        // 使用者輸入時，改的是上層的 quantity
+        TextField("數量", text: $text)
     }
 }
 ```
@@ -71,25 +77,38 @@ import SwiftUI
 
 final class OrderViewModel: ObservableObject {
     @Published var quantity = ""
-    init() { print("建立 OrderViewModel") }
+
+    init() {
+        print("建立 OrderViewModel")
+    }
 }
 
 struct WrongOrderView: View {
-    // 錯誤：@ObservedObject 不擁有物件，卻自己建立。每次 struct 重建都會再 new 一個
+    // 錯誤：@ObservedObject 不擁有物件，卻自己建立。
+    // 每次 struct 重建都會再 new 一個
     @ObservedObject var vm = OrderViewModel()
-    var body: some View { TextField("數量", text: $vm.quantity) }
+
+    var body: some View {
+        TextField("數量", text: $vm.quantity)
+    }
 }
 
 struct RightOrderView: View {
     // 正確：view 自己建立並擁有，用 @StateObject。只會建立一次
     @StateObject private var vm = OrderViewModel()
-    var body: some View { TextField("數量", text: $vm.quantity) }
+
+    var body: some View {
+        TextField("數量", text: $vm.quantity)
+    }
 }
 
 struct InjectedOrderView: View {
     // 外面建好再傳進來，才用 @ObservedObject
     @ObservedObject var vm: OrderViewModel
-    var body: some View { TextField("數量", text: $vm.quantity) }
+
+    var body: some View {
+        TextField("數量", text: $vm.quantity)
+    }
 }
 ```
 
@@ -112,12 +131,14 @@ struct InjectedOrderView: View {
 import SwiftUI
 
 struct PriceEditor: View {
-    @State private var local: Int      // 輸入框正在編輯的值
-    let value: Int                     // 上層傳進來的值
+    // 輸入框正在編輯的值
+    @State private var local: Int
+    let value: Int // 上層傳進來的值
 
     init(value: Int) {
         self.value = value
-        _local = State(initialValue: value)   // 只有第一次建立時才會用到這個值
+        // 只有第一次建立時才會用到這個值
+        _local = State(initialValue: value)
     }
 
     var body: some View {
@@ -128,7 +149,11 @@ struct PriceEditor: View {
 
 struct Parent: View {
     @State var v = 0
-    var body: some View { PriceEditor(value: v) }   // v 之後被更新成 1、再更新成 2
+
+    // v 之後被更新成 1、再更新成 2
+    var body: some View {
+        PriceEditor(value: v)
+    }
 }
 // 輸出：
 // local=0 value=0
@@ -156,7 +181,10 @@ struct PriceScreen: View {
         // symbol 只有第一次建立 ViewModel 時有效
         _vm = StateObject(wrappedValue: PriceViewModel(symbol: symbol))
     }
-    var body: some View { Text(vm.price) }
+
+    var body: some View {
+        Text(vm.price)
+    }
 }
 ```
 
@@ -182,21 +210,29 @@ final class SessionStore: ObservableObject {
 
 @main
 struct TradeApp: App {
-    @StateObject private var session = SessionStore()   // 在最上層建立並擁有
+    // 在最上層建立並擁有
+    @StateObject private var session = SessionStore()
+
     var body: some Scene {
         WindowGroup {
-            RootView().environmentObject(session)       // 放進環境，底下所有 view 都拿得到
+            // 放進環境，底下所有 view 都拿得到
+            RootView().environmentObject(session)
         }
     }
 }
 
 struct RootView: View {
-    var body: some View { ProfileView() }
+    var body: some View {
+        ProfileView()
+    }
 }
 
 struct ProfileView: View {
-    @EnvironmentObject var session: SessionStore         // 依型別從環境取出
-    @Environment(\.dismiss) private var dismiss          // 讀取系統提供的「關閉畫面」動作（iOS 15）
+    // 依型別從環境取出
+    @EnvironmentObject var session: SessionStore
+    // 讀取系統提供的「關閉畫面」動作（iOS 15）
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         Button("\(session.userName)，關閉") { dismiss() }
     }
@@ -242,15 +278,19 @@ import Observation
 final class TickerModel {
     var price = "0"
     var change = "0%"
-    @ObservationIgnored var debugLabel = ""   // 不追蹤，改它不會觸發畫面更新
+    // 不追蹤，改它不會觸發畫面更新
+    @ObservationIgnored var debugLabel = ""
 }
 
 @available(iOS 17, *)
 struct TickerScreen: View {
-    @State private var model = TickerModel()   // 自己擁有，用 @State 取代 @StateObject
+    // 自己擁有，用 @State 取代 @StateObject
+    @State private var model = TickerModel()
+
     var body: some View {
         VStack {
-            Text(model.price)                  // body 讀了 price，所以只有 price 改變時才需要重算
+            // body 讀了 price，所以只有 price 改變時才需要重算
+            Text(model.price)
             EditField(model: model)
         }
     }
@@ -258,8 +298,12 @@ struct TickerScreen: View {
 
 @available(iOS 17, *)
 struct EditField: View {
-    @Bindable var model: TickerModel           // 需要 $model.xxx 時才用 @Bindable
-    var body: some View { TextField("價格", text: $model.price) }
+    // 需要 $model.xxx 時才用 @Bindable
+    @Bindable var model: TickerModel
+
+    var body: some View {
+        TextField("價格", text: $model.price)
+    }
 }
 ```
 
@@ -268,13 +312,23 @@ SwiftUI 追蹤屬性的做法，你也可以用 `withObservationTracking` 親眼
 ```swift
 import Observation
 
-@Observable final class Model { var a = 0; var b = 0 }
+@Observable final class Model {
+    var a = 0
+    var b = 0
+}
+
 let m = Model()
 
-withObservationTracking { _ = m.a } onChange: { print("a 變了") }
-m.b = 1   // 沒有輸出：上面的區塊只讀了 a，沒讀 b
-m.a = 1   // 輸出：a 變了
-m.a = 2   // 沒有輸出：onChange 只會通知一次
+withObservationTracking {
+    _ = m.a
+} onChange: {
+    print("a 變了")
+}
+// 沒有輸出：上面的區塊只讀了 a，沒讀 b
+m.b = 1
+m.a = 1 // 輸出：a 變了
+// 沒有輸出：onChange 只會通知一次
+m.a = 2
 ```
 
 注意一個容易踩的地方：`@State private var model = TickerModel()` 的初始值**不是** autoclosure，和 `@StateObject` 不一樣。父層每更新一次，這行就會再執行一次建構式，只是多建的那些會被丟掉，真正保留的只有第一個。我們實測父層更新 3 次，`init` 被呼叫 4 次。所以建構式要保持輕量，需要大量運算或載入資料的工作，放到 `.task`。
@@ -296,22 +350,30 @@ m.a = 2   // 沒有輸出：onChange 只會通知一次
 import SwiftUI
 
 struct Ticker: Identifiable, Equatable {
-    let id: String        // 幣種代號，例如 "btcjpy"
+    // 幣種代號，例如 "btcjpy"
+    let id: String
     var price: Decimal
 }
 
 struct MarketList: View {
-    @StateObject private var vm = MarketViewModel()   // 持有全部報價
+    // 持有全部報價
+    @StateObject private var vm = MarketViewModel()
+
     var body: some View {
         List(vm.tickers) { ticker in
-            TickerRow(ticker: ticker)                 // 只傳這一檔的值，不傳整個 vm
+            // 只傳這一檔的值，不傳整個 vm
+            TickerRow(ticker: ticker)
         }
     }
 }
 
 struct TickerRow: View {
-    let ticker: Ticker                                // 值沒變，這一列就可以被跳過
-    var body: some View { Text("\(ticker.id) \(ticker.price.description)") }
+    // 值沒變，這一列就可以被跳過
+    let ticker: Ticker
+
+    var body: some View {
+        Text("\(ticker.id) \(ticker.price.description)")
+    }
 }
 ```
 

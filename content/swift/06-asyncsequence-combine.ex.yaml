@@ -11,11 +11,15 @@
         of: Int.self,
         bufferingPolicy: .bufferingNewest(2)
     )
-    for i in 1...5 { continuation.yield(i) }
+    for i in 1...5 {
+        continuation.yield(i)
+    }
     continuation.finish()
 
     var out: [Int] = []
-    for await v in stream { out.append(v) }
+    for await v in stream {
+        out.append(v)
+    }
     print(out.map(String.init).joined(separator: " "))
   answer: |
     4 5
@@ -59,7 +63,10 @@
     var mapCalls = 0
     let subject = PassthroughSubject<Int, Never>()
     let shared = subject
-        .map { v -> Int in mapCalls += 1; return v * 2 }
+        .map { v -> Int in
+            mapCalls += 1
+            return v * 2
+        }
         .share()
 
     var a: [Int] = []
@@ -215,14 +222,20 @@
           private var handlers: [UUID: (Decimal) -> Void] = [:]
 
           func addHandler(_ handler: @escaping (Decimal) -> Void) -> UUID {
-              lock.lock(); defer { lock.unlock() }
+              lock.lock()
+              defer {
+                  lock.unlock()
+              }
               let id = UUID()
               handlers[id] = handler
               return id
           }
 
           func removeHandler(_ id: UUID) {
-              lock.lock(); defer { lock.unlock() }
+              lock.lock()
+              defer {
+                  lock.unlock()
+              }
               handlers[id] = nil
           }
 
@@ -230,11 +243,16 @@
               lock.lock()
               let current = Array(handlers.values)
               lock.unlock()
-              for handler in current { handler(price) }
+              for handler in current {
+                  handler(price)
+              }
           }
 
           var handlerCount: Int {
-              lock.lock(); defer { lock.unlock() }
+              lock.lock()
+              defer {
+                  lock.unlock()
+              }
               return handlers.count
           }
       }
@@ -251,14 +269,20 @@
           private var handlers: [UUID: (Decimal) -> Void] = [:]
 
           func addHandler(_ handler: @escaping (Decimal) -> Void) -> UUID {
-              lock.lock(); defer { lock.unlock() }
+              lock.lock()
+              defer {
+                  lock.unlock()
+              }
               let id = UUID()
               handlers[id] = handler
               return id
           }
 
           func removeHandler(_ id: UUID) {
-              lock.lock(); defer { lock.unlock() }
+              lock.lock()
+              defer {
+                  lock.unlock()
+              }
               handlers[id] = nil
           }
 
@@ -266,28 +290,43 @@
               lock.lock()
               let current = Array(handlers.values)
               lock.unlock()
-              for handler in current { handler(price) }
+              for handler in current {
+                  handler(price)
+              }
           }
 
           var handlerCount: Int {
-              lock.lock(); defer { lock.unlock() }
+              lock.lock()
+              defer {
+                  lock.unlock()
+              }
               return handlers.count
           }
       }
 
       func prices(from ticker: PriceTicker, conflate: Bool) -> AsyncStream<Decimal> {
-          AsyncStream(Decimal.self, bufferingPolicy: conflate ? .bufferingNewest(1) : .unbounded) { continuation in
+          AsyncStream(
+              Decimal.self,
+              bufferingPolicy: conflate ? .bufferingNewest(1) : .unbounded
+          ) { continuation in
               let id = ticker.addHandler { price in continuation.yield(price) }
               continuation.onTermination = { _ in ticker.removeHandler(id) }
           }
       }
     tests: |
-      func D(_ s: String) -> Decimal { Decimal(string: s)! }
+      func D(_ s: String) -> Decimal {
+          Decimal(string: s)!
+      }
 
-      func waitUntil(timeoutMs: Int = 1000, _ cond: @escaping @Sendable () -> Bool) async -> Bool {
+      func waitUntil(
+          timeoutMs: Int = 1000,
+          _ cond: @escaping @Sendable () -> Bool
+      ) async -> Bool {
           var waited = 0
           while waited < timeoutMs {
-              if cond() { return true }
+              if cond() {
+                  return true
+              }
               try? await Task.sleep(nanoseconds: 10_000_000)
               waited += 10
           }
@@ -297,14 +336,19 @@
       await checkAsync("emit 的價格依序從 stream 收到") {
           let ticker = PriceTicker()
           let stream = prices(from: ticker, conflate: false)
-          ticker.emit(D("100")); ticker.emit(D("101")); ticker.emit(D("102"))
+          ticker.emit(D("100"))
+          ticker.emit(D("101"))
+          ticker.emit(D("102"))
           var got: [Decimal] = []
           for await p in stream {
               got.append(p)
-              if got.count == 3 { break }
+              if got.count == 3 {
+                  break
+              }
           }
           return got == [D("100"), D("101"), D("102")]
       }
+
       await checkAsync("建立 stream 時註冊 handler") {
           let ticker = PriceTicker()
           let stream = prices(from: ticker, conflate: false)
@@ -312,15 +356,19 @@
           withExtendedLifetime(stream) {}
           return count == 1
       }
+
       await checkAsync("consumer break 之後移除 handler") {
           let ticker = PriceTicker()
           do {
               let stream = prices(from: ticker, conflate: false)
               ticker.emit(D("1"))
-              for await _ in stream { break }
+              for await _ in stream {
+                  break
+              }
           }
           return await waitUntil { ticker.handlerCount == 0 }
       }
+
       await checkAsync("consumer 的 Task 被取消後移除 handler") {
           let ticker = PriceTicker()
           let task = Task {
@@ -332,10 +380,13 @@
           let removed = await waitUntil { ticker.handlerCount == 0 }
           return registered && removed
       }
+
       await checkAsync("conflate 只保留最新一筆") {
           let ticker = PriceTicker()
           let stream = prices(from: ticker, conflate: true)
-          for i in 1...5 { ticker.emit(Decimal(i)) }
+          for i in 1...5 {
+              ticker.emit(Decimal(i))
+          }
           var got: [Decimal] = []
           for await p in stream {
               got.append(p)
@@ -343,14 +394,19 @@
           }
           return got == [Decimal(5)]
       }
+
       await checkAsync("不 conflate 時保留全部") {
           let ticker = PriceTicker()
           let stream = prices(from: ticker, conflate: false)
-          for i in 1...5 { ticker.emit(Decimal(i)) }
+          for i in 1...5 {
+              ticker.emit(Decimal(i))
+          }
           var got: [Decimal] = []
           for await p in stream {
               got.append(p)
-              if got.count == 5 { break }
+              if got.count == 5 {
+                  break
+              }
           }
           return got == (1...5).map { Decimal($0) }
       }

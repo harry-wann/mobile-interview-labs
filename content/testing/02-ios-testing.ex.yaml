@@ -15,7 +15,10 @@
             ("0.123456789", "0.0001", "0.1234"),
         ])
         func floors(value: String, step: String, expected: String) {
-            let result = floorToStep(Decimal(string: value)!, step: Decimal(string: step)!)
+            let result = floorToStep(
+                Decimal(string: value)!,
+                step: Decimal(string: step)!
+            )
             #____(result == Decimal(string: expected)!)
         }
     }

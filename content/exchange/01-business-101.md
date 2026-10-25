@@ -110,7 +110,10 @@ import Foundation
 
 func D(_ s: String) -> Decimal { Decimal(string: s)! }
 
-struct Level { let price: Decimal; var qty: Decimal }
+struct Level {
+    let price: Decimal
+    var qty: Decimal
+}
 
 // 賣板，由低價排到高價
 var asks = [
@@ -119,14 +122,18 @@ var asks = [
     Level(price: D("10030000"), qty: D("0.5")),
 ]
 
-var remaining = D("0.6")        // 還想買多少
-var cost = Decimal(0)           // 目前花了多少日圓
+// 還想買多少
+var remaining = D("0.6")
+// 目前花了多少日圓
+var cost = Decimal(0)
 for i in asks.indices where remaining > 0 {
-    let take = min(remaining, asks[i].qty)   // 這一層最多吃多少
+    // 這一層最多吃多少
+    let take = min(remaining, asks[i].qty)
     cost += take * asks[i].price
     asks[i].qty -= take
     remaining -= take
 }
+
 let filled = D("0.6") - remaining
 print(filled, cost, cost / filled)
 // 輸出：0.6 6006000 10010000
@@ -173,9 +180,12 @@ import Foundation
 enum Side { case buy, sell }
 
 enum OrderKind {
-    case market                       // 成行
-    case limit(price: Decimal)        // 指値
-    case stop(trigger: Decimal)       // 逆指値：到了觸發價才送出實際委託
+    // 成行
+    case market
+    // 指値
+    case limit(price: Decimal)
+    // 逆指値：到了觸發價才送出實際委託
+    case stop(trigger: Decimal)
 }
 
 struct SingleOrder {
@@ -187,20 +197,42 @@ struct SingleOrder {
 // 用 enum 表達「這幾張單是什麼關係」，不要用字串拼
 enum OrderGroup {
     case single(SingleOrder)
-    case oco(SingleOrder, SingleOrder)                              // 二選一
-    case ifd(first: SingleOrder, then: SingleOrder)                // 第一張成交後才送出第二張
-    case ifdoco(first: SingleOrder, takeProfit: SingleOrder, stopLoss: SingleOrder)
+    // 二選一
+    case oco(SingleOrder, SingleOrder)
+    // 第一張成交後才送出第二張
+    case ifd(first: SingleOrder, then: SingleOrder)
+    case ifdoco(
+        first: SingleOrder,
+        takeProfit: SingleOrder,
+        stopLoss: SingleOrder
+    )
 }
 
 let qty = Decimal(string: "0.1")!
 let group = OrderGroup.ifdoco(
-    first: SingleOrder(side: .buy, kind: .limit(price: 9_800_000), quantity: qty),         // 進場
-    takeProfit: SingleOrder(side: .sell, kind: .limit(price: 10_300_000), quantity: qty),  // 停利
-    stopLoss: SingleOrder(side: .sell, kind: .stop(trigger: 9_500_000), quantity: qty)     // 停損
+    // 進場
+    first: SingleOrder(
+        side: .buy,
+        kind: .limit(price: 9_800_000),
+        quantity: qty
+    ),
+    // 停利
+    takeProfit: SingleOrder(
+        side: .sell,
+        kind: .limit(price: 10_300_000),
+        quantity: qty
+    ),
+    // 停損
+    stopLoss: SingleOrder(
+        side: .sell,
+        kind: .stop(trigger: 9_500_000),
+        quantity: qty
+    )
 )
 if case .ifdoco(let first, _, _) = group, case .limit(let price) = first.kind {
     print("進場價格", price)
 }
+
 // 輸出：進場價格 9800000
 ```
 

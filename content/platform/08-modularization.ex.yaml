@@ -94,8 +94,10 @@
   codeLang: kotlin
   code: |
     dependencies {
-        ____(project(":core:model"))   // 型別出現在本模組的公開 API，使用者也需要看得到
-        ____(libs.okhttp)              // 內部實作，不外洩
+        // 型別出現在本模組的公開 API，使用者也需要看得到
+        ____(project(":core:model"))
+        // 內部實作，不外洩
+        ____(libs.okhttp)
     }
   blanks:
     - [api]

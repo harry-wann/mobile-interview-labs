@@ -50,7 +50,8 @@
         return (tsSec + offset) / period * period - offset
     }
 
-    let t: Int64 = 1_632_929_400   // 2021-09-29 15:30:00 UTC
+    // 2021-09-29 15:30:00 UTC
+    let t: Int64 = 1_632_929_400
     for off in [0, 28_800, 32_400] as [Int64] {
         print(bucketStart(t, period: 86_400, offset: off))
     }
@@ -169,7 +170,11 @@
           var count: Int
       }
 
-      func aggregate(_ trades: [Trade], periodSec: Int64, originOffsetSec: Int64) -> [Candle] {
+      func aggregate(
+          _ trades: [Trade],
+          periodSec: Int64,
+          originOffsetSec: Int64
+      ) -> [Candle] {
           // TODO
           return []
       }
@@ -197,19 +202,28 @@
           return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q
       }
 
-      func aggregate(_ trades: [Trade], periodSec: Int64, originOffsetSec: Int64) -> [Candle] {
+      func aggregate(
+          _ trades: [Trade],
+          periodSec: Int64,
+          originOffsetSec: Int64
+      ) -> [Candle] {
           guard periodSec > 0 else { return [] }
           var seen = Set<Int64>()
           var valid: [Trade] = []
           for t in trades where t.price > 0 && t.qty > 0 {
-              if seen.insert(t.id).inserted { valid.append(t) }
+              if seen.insert(t.id).inserted {
+                  valid.append(t)
+              }
           }
           valid.sort { ($0.tsMs, $0.id) < ($1.tsMs, $1.id) }
 
           var result: [Candle] = []
           for t in valid {
               let sec = floorDiv(t.tsMs, 1000)
-              let start = floorDiv(sec + originOffsetSec, periodSec) * periodSec - originOffsetSec
+              let start = floorDiv(
+                  sec + originOffsetSec,
+                  periodSec
+              ) * periodSec - originOffsetSec
               if var last = result.last, last.start == start {
                   last.high = max(last.high, t.price)
                   last.low = min(last.low, t.price)
@@ -219,14 +233,25 @@
                   last.count += 1
                   result[result.count - 1] = last
               } else {
-                  result.append(Candle(start: start, open: t.price, high: t.price, low: t.price,
-                                       close: t.price, amount: t.qty, vol: t.price * t.qty, count: 1))
+                  result.append(
+                      Candle(
+                          start: start,
+                          open: t.price,
+                          high: t.price,
+                          low: t.price,
+                          close: t.price,
+                          amount: t.qty,
+                          vol: t.price * t.qty,
+                          count: 1
+                      )
+                  )
               }
           }
           return result
       }
     tests: |
-      let B: Int64 = 1_632_931_200_000   // 2021-09-29 16:00:00 UTC（文件範例中一根日 K 的 id × 1000）
+      // 2021-09-29 16:00:00 UTC（文件範例中一根日 K 的 id × 1000）
+      let B: Int64 = 1_632_931_200_000
       func tr(_ id: Int64, _ ms: Int64, _ p: Int64, _ q: Int64) -> Trade {
           Trade(id: id, tsMs: ms, price: p, qty: q)
       }
@@ -238,36 +263,90 @@
               tr(12, B + 55_000, 4_810_000, 5_000_000),
               tr(13, B + 20_000, 4_780_000, 30_000_000),
           ]
-          let expected = [Candle(start: 1_632_931_200, open: 4_790_000, high: 4_810_000, low: 4_780_000,
-                                 close: 4_810_000, amount: 65_000_000, vol: 311_350_000_000_000, count: 4)]
+          let expected = [
+              Candle(
+                  start: 1_632_931_200,
+                  open: 4_790_000,
+                  high: 4_810_000,
+                  low: 4_780_000,
+                  close: 4_810_000,
+                  amount: 65_000_000,
+                  vol: 311_350_000_000_000,
+                  count: 4
+              )
+          ]
           return aggregate(trades, periodSec: 60, originOffsetSec: 0) == expected
       }
-      checkEqual("跨桶：依起點遞增排序，沒有成交的桶不輸出", [
-          Candle(start: 1_632_931_200, open: 4_800_000, high: 4_800_000, low: 4_800_000, close: 4_800_000,
-                 amount: 10_000_000, vol: 48_000_000_000_000, count: 1),
-          Candle(start: 1_632_931_320, open: 4_820_000, high: 4_830_000, low: 4_820_000, close: 4_830_000,
-                 amount: 30_000_000, vol: 144_800_000_000_000, count: 2),
-      ]) {
+
+      checkEqual(
+          "跨桶：依起點遞增排序，沒有成交的桶不輸出",
+          [
+              Candle(
+                  start: 1_632_931_200,
+                  open: 4_800_000,
+                  high: 4_800_000,
+                  low: 4_800_000,
+                  close: 4_800_000,
+                  amount: 10_000_000,
+                  vol: 48_000_000_000_000,
+                  count: 1
+              ),
+              Candle(
+                  start: 1_632_931_320,
+                  open: 4_820_000,
+                  high: 4_830_000,
+                  low: 4_820_000,
+                  close: 4_830_000,
+                  amount: 30_000_000,
+                  vol: 144_800_000_000_000,
+                  count: 2
+              ),
+          ]
+      ) {
           aggregate([
               tr(21, B + 130_000, 4_820_000, 10_000_000),
               tr(20, B + 10_000, 4_800_000, 10_000_000),
               tr(22, B + 135_000, 4_830_000, 20_000_000),
           ], periodSec: 60, originOffsetSec: 0)
       }
-      checkEqual("同一毫秒的成交用 id 決定先後", [
-          Candle(start: 1_632_931_200, open: 4_800_000, high: 4_810_000, low: 4_800_000, close: 4_805_000,
-                 amount: 40_000_000, vol: 192_150_000_000_000, count: 3),
-      ]) {
+
+      checkEqual(
+          "同一毫秒的成交用 id 決定先後",
+          [
+              Candle(
+                  start: 1_632_931_200,
+                  open: 4_800_000,
+                  high: 4_810_000,
+                  low: 4_800_000,
+                  close: 4_805_000,
+                  amount: 40_000_000,
+                  vol: 192_150_000_000_000,
+                  count: 3
+              ),
+          ]
+      ) {
           aggregate([
               tr(2, B + 1_000, 4_810_000, 10_000_000),
               tr(1, B + 1_000, 4_800_000, 20_000_000),
               tr(3, B + 1_000, 4_805_000, 10_000_000),
           ], periodSec: 60, originOffsetSec: 0)
       }
-      checkEqual("重複的成交 id 只算一次", [
-          Candle(start: 1_632_931_200, open: 4_800_000, high: 4_810_000, low: 4_800_000, close: 4_810_000,
-                 amount: 20_000_000, vol: 96_100_000_000_000, count: 2),
-      ]) {
+
+      checkEqual(
+          "重複的成交 id 只算一次",
+          [
+              Candle(
+                  start: 1_632_931_200,
+                  open: 4_800_000,
+                  high: 4_810_000,
+                  low: 4_800_000,
+                  close: 4_810_000,
+                  amount: 20_000_000,
+                  vol: 96_100_000_000_000,
+                  count: 2
+              ),
+          ]
+      ) {
           aggregate([
               tr(1, B + 1_000, 4_800_000, 10_000_000),
               tr(1, B + 1_000, 4_800_000, 10_000_000),
@@ -275,32 +354,111 @@
           ], periodSec: 60, originOffsetSec: 0)
       }
 
-      let day1: Int64 = 1_632_929_400_000   // 2021-09-29 15:30:00 UTC
-      let day2: Int64 = 1_632_933_000_000   // 2021-09-29 16:30:00 UTC
-      let dayTrades = [tr(1, day1, 4_700_000, 10_000_000), tr(2, day2, 4_750_000, 20_000_000)]
+      // 2021-09-29 15:30:00 UTC
+      let day1: Int64 = 1_632_929_400_000
+      // 2021-09-29 16:30:00 UTC
+      let day2: Int64 = 1_632_933_000_000
+      let dayTrades = [
+          tr(1, day1, 4_700_000, 10_000_000),
+          tr(2, day2, 4_750_000, 20_000_000)
+      ]
 
-      checkEqual("日 K：UTC 日界，兩筆落在同一根", [
-          Candle(start: 1_632_873_600, open: 4_700_000, high: 4_750_000, low: 4_700_000, close: 4_750_000,
-                 amount: 30_000_000, vol: 142_000_000_000_000, count: 2),
-      ]) { aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 0) }
-      checkEqual("日 K：UTC+8 日界，分成兩根（第二根的起點就是文件範例的 id）", [
-          Candle(start: 1_632_844_800, open: 4_700_000, high: 4_700_000, low: 4_700_000, close: 4_700_000,
-                 amount: 10_000_000, vol: 47_000_000_000_000, count: 1),
-          Candle(start: 1_632_931_200, open: 4_750_000, high: 4_750_000, low: 4_750_000, close: 4_750_000,
-                 amount: 20_000_000, vol: 95_000_000_000_000, count: 1),
-      ]) { aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 28_800) }
-      checkEqual("日 K：JST 日界，兩筆落在同一根，起點是 15:00 UTC", [
-          Candle(start: 1_632_927_600, open: 4_700_000, high: 4_750_000, low: 4_700_000, close: 4_750_000,
-                 amount: 30_000_000, vol: 142_000_000_000_000, count: 2),
-      ]) { aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 32_400) }
+      checkEqual(
+          "日 K：UTC 日界，兩筆落在同一根",
+          [
+              Candle(
+                  start: 1_632_873_600,
+                  open: 4_700_000,
+                  high: 4_750_000,
+                  low: 4_700_000,
+                  close: 4_750_000,
+                  amount: 30_000_000,
+                  vol: 142_000_000_000_000,
+                  count: 2
+              ),
+          ]
+      ) {
+          aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 0)
+      }
 
-      checkEqual("毫秒邊界與無效輸入：59_999 ms 屬於第 0 分；price／qty 不合法略過；periodSec 為 0 回傳空", [
-          Candle(start: 0, open: 100, high: 100, low: 100, close: 100, amount: 1, vol: 100, count: 1),
-          Candle(start: 60, open: 200, high: 200, low: 200, close: 200, amount: 1, vol: 200, count: 1),
-      ]) {
+      checkEqual(
+          "日 K：UTC+8 日界，分成兩根（第二根的起點就是文件範例的 id）",
+          [
+              Candle(
+                  start: 1_632_844_800,
+                  open: 4_700_000,
+                  high: 4_700_000,
+                  low: 4_700_000,
+                  close: 4_700_000,
+                  amount: 10_000_000,
+                  vol: 47_000_000_000_000,
+                  count: 1
+              ),
+              Candle(
+                  start: 1_632_931_200,
+                  open: 4_750_000,
+                  high: 4_750_000,
+                  low: 4_750_000,
+                  close: 4_750_000,
+                  amount: 20_000_000,
+                  vol: 95_000_000_000_000,
+                  count: 1
+              ),
+          ]
+      ) {
+          aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 28_800)
+      }
+
+      checkEqual(
+          "日 K：JST 日界，兩筆落在同一根，起點是 15:00 UTC",
+          [
+              Candle(
+                  start: 1_632_927_600,
+                  open: 4_700_000,
+                  high: 4_750_000,
+                  low: 4_700_000,
+                  close: 4_750_000,
+                  amount: 30_000_000,
+                  vol: 142_000_000_000_000,
+                  count: 2
+              ),
+          ]
+      ) {
+          aggregate(dayTrades, periodSec: 86_400, originOffsetSec: 32_400)
+      }
+
+      checkEqual(
+          "毫秒邊界與無效輸入：59_999 ms 屬於第 0 分；price／qty 不合法略過；periodSec 為 0 回傳空",
+          [
+              Candle(
+                  start: 0,
+                  open: 100,
+                  high: 100,
+                  low: 100,
+                  close: 100,
+                  amount: 1,
+                  vol: 100,
+                  count: 1
+              ),
+              Candle(
+                  start: 60,
+                  open: 200,
+                  high: 200,
+                  low: 200,
+                  close: 200,
+                  amount: 1,
+                  vol: 200,
+                  count: 1
+              ),
+          ]
+      ) {
           let ts = [tr(1, 59_999, 100, 1), tr(2, 60_000, 200, 1), tr(3, 61_000, 0, 5),
                     tr(4, 62_000, 300, 0), tr(5, 63_000, -1, 1)]
-          return aggregate(ts, periodSec: 60, originOffsetSec: 0) + aggregate(ts, periodSec: 0, originOffsetSec: 0)
+          return aggregate(
+              ts,
+              periodSec: 60,
+              originOffsetSec: 0
+          ) + aggregate(ts, periodSec: 0, originOffsetSec: 0)
       }
   kotlin:
     starter: |
@@ -317,7 +475,11 @@
           val count: Int,
       )
 
-      fun aggregate(trades: List<Trade>, periodSec: Long, originOffsetSec: Long): List<Candle> {
+      fun aggregate(
+          trades: List<Trade>,
+          periodSec: Long,
+          originOffsetSec: Long,
+      ): List<Candle> {
           // TODO
           return emptyList()
       }
@@ -335,19 +497,30 @@
           val count: Int,
       )
 
-      fun aggregate(trades: List<Trade>, periodSec: Long, originOffsetSec: Long): List<Candle> {
-          if (periodSec <= 0) return emptyList()
+      fun aggregate(
+          trades: List<Trade>,
+          periodSec: Long,
+          originOffsetSec: Long,
+      ): List<Candle> {
+          if (periodSec <= 0) {
+              return emptyList()
+          }
           val seen = HashSet<Long>()
           val valid = ArrayList<Trade>()
           for (t in trades) {
-              if (t.price > 0 && t.qty > 0 && seen.add(t.id)) valid.add(t)
+              if (t.price > 0 && t.qty > 0 && seen.add(t.id)) {
+                  valid.add(t)
+              }
           }
           valid.sortWith(compareBy<Trade>({ it.tsMs }, { it.id }))
 
           val result = ArrayList<Candle>()
           for (t in valid) {
               val sec = Math.floorDiv(t.tsMs, 1000L)
-              val start = Math.floorDiv(sec + originOffsetSec, periodSec) * periodSec - originOffsetSec
+              val start = Math.floorDiv(
+                  sec + originOffsetSec,
+                  periodSec,
+              ) * periodSec - originOffsetSec
               val last = result.lastOrNull()
               if (last != null && last.start == start) {
                   result[result.size - 1] = last.copy(
@@ -359,13 +532,25 @@
                       count = last.count + 1,
                   )
               } else {
-                  result.add(Candle(start, t.price, t.price, t.price, t.price, t.qty, t.price * t.qty, 1))
+                  result.add(
+                      Candle(
+                          start,
+                          t.price,
+                          t.price,
+                          t.price,
+                          t.price,
+                          t.qty,
+                          t.price * t.qty,
+                          1,
+                      ),
+                  )
               }
           }
           return result
       }
     tests: |
-      val B = 1_632_931_200_000L   // 2021-09-29 16:00:00 UTC（文件範例中一根日 K 的 id × 1000）
+      // 2021-09-29 16:00:00 UTC（文件範例中一根日 K 的 id × 1000）
+      val B = 1_632_931_200_000L
       fun tr(id: Long, ms: Long, p: Long, q: Long) = Trade(id, ms, p, q)
 
       check("亂序輸入：open／close 依時間決定，其餘欄位正確") {
@@ -376,32 +561,89 @@
               tr(13, B + 20_000, 4_780_000, 30_000_000),
           )
           val expected = listOf(
-              Candle(1_632_931_200, 4_790_000, 4_810_000, 4_780_000, 4_810_000, 65_000_000, 311_350_000_000_000, 4),
+              Candle(
+                  1_632_931_200,
+                  4_790_000,
+                  4_810_000,
+                  4_780_000,
+                  4_810_000,
+                  65_000_000,
+                  311_350_000_000_000,
+                  4,
+              ),
           )
           aggregate(trades, 60, 0) == expected
       }
-      checkEqual("跨桶：依起點遞增排序，沒有成交的桶不輸出", listOf(
-          Candle(1_632_931_200, 4_800_000, 4_800_000, 4_800_000, 4_800_000, 10_000_000, 48_000_000_000_000, 1),
-          Candle(1_632_931_320, 4_820_000, 4_830_000, 4_820_000, 4_830_000, 30_000_000, 144_800_000_000_000, 2),
-      )) {
+
+      checkEqual(
+          "跨桶：依起點遞增排序，沒有成交的桶不輸出",
+          listOf(
+              Candle(
+                  1_632_931_200,
+                  4_800_000,
+                  4_800_000,
+                  4_800_000,
+                  4_800_000,
+                  10_000_000,
+                  48_000_000_000_000,
+                  1,
+              ),
+              Candle(
+                  1_632_931_320,
+                  4_820_000,
+                  4_830_000,
+                  4_820_000,
+                  4_830_000,
+                  30_000_000,
+                  144_800_000_000_000,
+                  2,
+              ),
+          ),
+      ) {
           aggregate(listOf(
               tr(21, B + 130_000, 4_820_000, 10_000_000),
               tr(20, B + 10_000, 4_800_000, 10_000_000),
               tr(22, B + 135_000, 4_830_000, 20_000_000),
           ), 60, 0)
       }
-      checkEqual("同一毫秒的成交用 id 決定先後", listOf(
-          Candle(1_632_931_200, 4_800_000, 4_810_000, 4_800_000, 4_805_000, 40_000_000, 192_150_000_000_000, 3),
-      )) {
+
+      checkEqual(
+          "同一毫秒的成交用 id 決定先後",
+          listOf(
+              Candle(
+                  1_632_931_200,
+                  4_800_000,
+                  4_810_000,
+                  4_800_000,
+                  4_805_000,
+                  40_000_000,
+                  192_150_000_000_000,
+                  3,
+              ),
+          ),
+      ) {
           aggregate(listOf(
               tr(2, B + 1_000, 4_810_000, 10_000_000),
               tr(1, B + 1_000, 4_800_000, 20_000_000),
               tr(3, B + 1_000, 4_805_000, 10_000_000),
           ), 60, 0)
       }
-      checkEqual("重複的成交 id 只算一次", listOf(
-          Candle(1_632_931_200, 4_800_000, 4_810_000, 4_800_000, 4_810_000, 20_000_000, 96_100_000_000_000, 2),
-      )) {
+
+      checkEqual(
+          "重複的成交 id 只算一次",
+          listOf(
+              Candle(
+                  1_632_931_200,
+                  4_800_000,
+                  4_810_000,
+                  4_800_000,
+                  4_810_000,
+                  20_000_000,
+                  96_100_000_000_000,
+                  2,
+              ),
+          ),
+      ) {
           aggregate(listOf(
               tr(1, B + 1_000, 4_800_000, 10_000_000),
               tr(1, B + 1_000, 4_800_000, 10_000_000),
@@ -409,27 +651,93 @@
           ), 60, 0)
       }
 
-      val day1 = 1_632_929_400_000L   // 2021-09-29 15:30:00 UTC
-      val day2 = 1_632_933_000_000L   // 2021-09-29 16:30:00 UTC
-      val dayTrades = listOf(tr(1, day1, 4_700_000, 10_000_000), tr(2, day2, 4_750_000, 20_000_000))
+      // 2021-09-29 15:30:00 UTC
+      val day1 = 1_632_929_400_000L
+      // 2021-09-29 16:30:00 UTC
+      val day2 = 1_632_933_000_000L
+      val dayTrades = listOf(
+          tr(1, day1, 4_700_000, 10_000_000),
+          tr(2, day2, 4_750_000, 20_000_000),
+      )
 
-      checkEqual("日 K：UTC 日界，兩筆落在同一根", listOf(
-          Candle(1_632_873_600, 4_700_000, 4_750_000, 4_700_000, 4_750_000, 30_000_000, 142_000_000_000_000, 2),
-      )) { aggregate(dayTrades, 86_400, 0) }
-      checkEqual("日 K：UTC+8 日界，分成兩根（第二根的起點就是文件範例的 id）", listOf(
-          Candle(1_632_844_800, 4_700_000, 4_700_000, 4_700_000, 4_700_000, 10_000_000, 47_000_000_000_000, 1),
-          Candle(1_632_931_200, 4_750_000, 4_750_000, 4_750_000, 4_750_000, 20_000_000, 95_000_000_000_000, 1),
-      )) { aggregate(dayTrades, 86_400, 28_800) }
-      checkEqual("日 K：JST 日界，兩筆落在同一根，起點是 15:00 UTC", listOf(
-          Candle(1_632_927_600, 4_700_000, 4_750_000, 4_700_000, 4_750_000, 30_000_000, 142_000_000_000_000, 2),
-      )) { aggregate(dayTrades, 86_400, 32_400) }
+      checkEqual(
+          "日 K：UTC 日界，兩筆落在同一根",
+          listOf(
+              Candle(
+                  1_632_873_600,
+                  4_700_000,
+                  4_750_000,
+                  4_700_000,
+                  4_750_000,
+                  30_000_000,
+                  142_000_000_000_000,
+                  2,
+              ),
+          ),
+      ) {
+          aggregate(dayTrades, 86_400, 0)
+      }
 
-      checkEqual("毫秒邊界與無效輸入：59_999 ms 屬於第 0 分；price／qty 不合法略過；periodSec 為 0 回傳空", listOf(
-          Candle(0, 100, 100, 100, 100, 1, 100, 1),
-          Candle(60, 200, 200, 200, 200, 1, 200, 1),
-      )) {
-          val ts = listOf(tr(1, 59_999, 100, 1), tr(2, 60_000, 200, 1), tr(3, 61_000, 0, 5),
-                          tr(4, 62_000, 300, 0), tr(5, 63_000, -1, 1))
+      checkEqual(
+          "日 K：UTC+8 日界，分成兩根（第二根的起點就是文件範例的 id）",
+          listOf(
+              Candle(
+                  1_632_844_800,
+                  4_700_000,
+                  4_700_000,
+                  4_700_000,
+                  4_700_000,
+                  10_000_000,
+                  47_000_000_000_000,
+                  1,
+              ),
+              Candle(
+                  1_632_931_200,
+                  4_750_000,
+                  4_750_000,
+                  4_750_000,
+                  4_750_000,
+                  20_000_000,
+                  95_000_000_000_000,
+                  1,
+              ),
+          ),
+      ) {
+          aggregate(dayTrades, 86_400, 28_800)
+      }
+
+      checkEqual(
+          "日 K：JST 日界，兩筆落在同一根，起點是 15:00 UTC",
+          listOf(
+              Candle(
+                  1_632_927_600,
+                  4_700_000,
+                  4_750_000,
+                  4_700_000,
+                  4_750_000,
+                  30_000_000,
+                  142_000_000_000_000,
+                  2,
+              ),
+          ),
+      ) {
+          aggregate(dayTrades, 86_400, 32_400)
+      }
+
+      checkEqual(
+          "毫秒邊界與無效輸入：59_999 ms 屬於第 0 分；price／qty 不合法略過；periodSec 為 0 回傳空",
+          listOf(
+              Candle(0, 100, 100, 100, 100, 1, 100, 1),
+              Candle(60, 200, 200, 200, 200, 1, 200, 1),
+          ),
+      ) {
+          val ts = listOf(
+              tr(1, 59_999, 100, 1),
+              tr(2, 60_000, 200, 1),
+              tr(3, 61_000, 0, 5),
+              tr(4, 62_000, 300, 0),
+              tr(5, 63_000, -1, 1),
+          )
           aggregate(ts, 60, 0) + aggregate(ts, 0, 0)
       }
 
@@ -483,7 +791,11 @@
           var avgLoss = 0.0
           for i in 1...period {
               let d = closes[i] - closes[i - 1]
-              if d > 0 { avgGain += d } else { avgLoss -= d }
+              if d > 0 {
+                  avgGain += d
+              } else {
+                  avgLoss -= d
+              }
           }
           avgGain /= Double(period)
           avgLoss /= Double(period)
@@ -511,21 +823,35 @@
 
       check("EMA(3) 小例：種子是前 3 根的 SMA，其後遞迴") {
           let r = ema([1, 2, 3, 4, 5], period: 3)
-          return r.count == 5 && r[0] == nil && r[1] == nil && r[2] == 2 && r[3] == 3 && r[4] == 4
+          return r.count == 5 && r[0] == nil && r[1] == nil && r[2] == 2 &&
+              r[3] == 3 && r[4] == 4
       }
+
       check("EMA(10)：索引 9 是前 10 根的 SMA，之前都是 nil") {
           let r = ema(emaData, period: 10)
-          return (0..<9).allSatisfy { r[$0] == nil } && abs((r[9] ?? -1) - 22.221) < 1e-9
+          return (0..<9).allSatisfy { r[$0] == nil } &&
+              abs((r[9] ?? -1) - 22.221) < 1e-9
       }
-      checkClose("EMA(10) 索引 10", 22.208090909090906, 1e-9) { ema(emaData, period: 10)[10] ?? -1 }
-      checkClose("EMA(10) 最後一根（遞迴累積）", 22.915004434033058, 1e-9) { ema(emaData, period: 10)[29] ?? -1 }
+
+      checkClose("EMA(10) 索引 10", 22.208090909090906, 1e-9) {
+          ema(emaData, period: 10)[10] ?? -1
+      }
+
+      checkClose("EMA(10) 最後一根（遞迴累積）", 22.915004434033058, 1e-9) {
+          ema(emaData, period: 10)[29] ?? -1
+      }
+
       check("EMA 資料不足或 period 不合法：全部 nil，長度不變") {
           let a = ema([1, 2], period: 3)
           let b = ema([1, 2, 3], period: 0)
           let c = ema([1, 2, 3], period: -2)
-          return a.count == 2 && a.allSatisfy { $0 == nil } && b.count == 3 && b.allSatisfy { $0 == nil }
+          return a.count == 2
+              && a.allSatisfy { $0 == nil }
+              && b.count == 3
+              && b.allSatisfy { $0 == nil }
               && c.count == 3 && c.allSatisfy { $0 == nil }
       }
+
       check("RSI(2) 小例（可手算）：50、83.33、50、80.77") {
           let r = rsi([10, 11, 10, 12, 11, 13], period: 2)
           guard r.count == 6, r[0] == nil, r[1] == nil else { return false }
@@ -534,14 +860,26 @@
               && abs((r[4] ?? -1) - 50) < 1e-9
               && abs((r[5] ?? -1) - 80.76923076923077) < 1e-9
       }
-      checkClose("RSI(14) 第一個值在索引 14", 70.46413502109705, 1e-9) { rsi(rsiData, period: 14)[14] ?? -1 }
-      checkClose("RSI(14) 最後一個值（Wilder 平滑）", 57.91502067008556, 1e-9) { rsi(rsiData, period: 14)[19] ?? -1 }
-      check("RSI 邊界：資料不足為 nil；一路上漲 100、一路下跌 0、全平盤 100（約定）") {
+
+      checkClose("RSI(14) 第一個值在索引 14", 70.46413502109705, 1e-9) {
+          rsi(rsiData, period: 14)[14] ?? -1
+      }
+
+      checkClose("RSI(14) 最後一個值（Wilder 平滑）", 57.91502067008556, 1e-9) {
+          rsi(rsiData, period: 14)[19] ?? -1
+      }
+
+      check(
+          "RSI 邊界：資料不足為 nil；一路上漲 100、一路下跌 0、全平盤 100（約定）"
+      ) {
           let short = rsi([1, 2, 3], period: 3)
           let up = rsi([1, 2, 3, 4, 5, 6], period: 3)
           let down = rsi([6, 5, 4, 3, 2, 1], period: 3)
           let flat = rsi([5, 5, 5, 5, 5, 5], period: 3)
-          return short.count == 3 && short.allSatisfy { $0 == nil } && up[3] == 100 && up[5] == 100
+          return short.count == 3
+              && short.allSatisfy { $0 == nil }
+              && up[3] == 100
+              && up[5] == 100
               && down[3] == 0 && down[5] == 0 && flat[3] == 100 && flat[5] == 100
       }
   kotlin:
@@ -558,7 +896,9 @@
     solution: |
       fun ema(closes: List<Double>, period: Int): List<Double?> {
           val out = MutableList<Double?>(closes.size) { null }
-          if (period <= 0 || closes.size < period) return out
+          if (period <= 0 || closes.size < period) {
+              return out
+          }
           val k = 2.0 / (period + 1)
           var prev = closes.subList(0, period).sum() / period
           out[period - 1] = prev
@@ -571,14 +911,25 @@
 
       fun rsi(closes: List<Double>, period: Int): List<Double?> {
           val out = MutableList<Double?>(closes.size) { null }
-          if (period <= 0 || closes.size <= period) return out
+          if (period <= 0 || closes.size <= period) {
+              return out
+          }
+
           fun value(gain: Double, loss: Double): Double =
-              if (loss == 0.0) 100.0 else 100.0 - 100.0 / (1.0 + gain / loss)
+              if (loss == 0.0) {
+                  100.0
+              } else {
+                  100.0 - 100.0 / (1.0 + gain / loss)
+              }
           var avgGain = 0.0
           var avgLoss = 0.0
           for (i in 1..period) {
               val d = closes[i] - closes[i - 1]
-              if (d > 0) avgGain += d else avgLoss -= d
+              if (d > 0) {
+                  avgGain += d
+              } else {
+                  avgLoss -= d
+              }
           }
           avgGain /= period
           avgLoss /= period
@@ -606,21 +957,33 @@
 
       check("EMA(3) 小例：種子是前 3 根的 SMA，其後遞迴") {
           val r = ema(listOf(1.0, 2.0, 3.0, 4.0, 5.0), 3)
-          r.size == 5 && r[0] == null && r[1] == null && r[2] == 2.0 && r[3] == 3.0 && r[4] == 4.0
+          r.size == 5 && r[0] == null && r[1] == null && r[2] == 2.0 && r[3] == 3.0 &&
+              r[4] == 4.0
       }
+
       check("EMA(10)：索引 9 是前 10 根的 SMA，之前都是 null") {
           val r = ema(emaData, 10)
-          (0 until 9).all { r[it] == null } && Math.abs((r[9] ?: -1.0) - 22.221) < 1e-9
+          (0 until 9).all { r[it] == null } &&
+              Math.abs((r[9] ?: -1.0) - 22.221) < 1e-9
       }
-      checkClose("EMA(10) 索引 10", 22.208090909090906, 1e-9) { ema(emaData, 10)[10] ?: -1.0 }
-      checkClose("EMA(10) 最後一根（遞迴累積）", 22.915004434033058, 1e-9) { ema(emaData, 10)[29] ?: -1.0 }
+
+      checkClose("EMA(10) 索引 10", 22.208090909090906, 1e-9) {
+          ema(emaData, 10)[10] ?: -1.0
+      }
+
+      checkClose("EMA(10) 最後一根（遞迴累積）", 22.915004434033058, 1e-9) {
+          ema(emaData, 10)[29] ?: -1.0
+      }
+
       check("EMA 資料不足或 period 不合法：全部 null，長度不變") {
           val a = ema(listOf(1.0, 2.0), 3)
           val b = ema(listOf(1.0, 2.0, 3.0), 0)
           val c = ema(listOf(1.0, 2.0, 3.0), -2)
-          a.size == 2 && a.all { it == null } && b.size == 3 && b.all { it == null } &&
+          a.size == 2 && a.all { it == null } && b.size == 3 &&
+              b.all { it == null } &&
               c.size == 3 && c.all { it == null }
       }
+
       check("RSI(2) 小例（可手算）：50、83.33、50、80.77") {
           val r = rsi(listOf(10.0, 11.0, 10.0, 12.0, 11.0, 13.0), 2)
           r.size == 6 && r[0] == null && r[1] == null &&
@@ -629,14 +992,24 @@
               Math.abs((r[4] ?: -1.0) - 50.0) < 1e-9 &&
               Math.abs((r[5] ?: -1.0) - 80.76923076923077) < 1e-9
       }
-      checkClose("RSI(14) 第一個值在索引 14", 70.46413502109705, 1e-9) { rsi(rsiData, 14)[14] ?: -1.0 }
-      checkClose("RSI(14) 最後一個值（Wilder 平滑）", 57.91502067008556, 1e-9) { rsi(rsiData, 14)[19] ?: -1.0 }
-      check("RSI 邊界：資料不足為 null；一路上漲 100、一路下跌 0、全平盤 100（約定）") {
+
+      checkClose("RSI(14) 第一個值在索引 14", 70.46413502109705, 1e-9) {
+          rsi(rsiData, 14)[14] ?: -1.0
+      }
+
+      checkClose("RSI(14) 最後一個值（Wilder 平滑）", 57.91502067008556, 1e-9) {
+          rsi(rsiData, 14)[19] ?: -1.0
+      }
+
+      check(
+          "RSI 邊界：資料不足為 null；一路上漲 100、一路下跌 0、全平盤 100（約定）",
+      ) {
           val short = rsi(listOf(1.0, 2.0, 3.0), 3)
           val up = rsi(listOf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0), 3)
           val down = rsi(listOf(6.0, 5.0, 4.0, 3.0, 2.0, 1.0), 3)
           val flat = rsi(listOf(5.0, 5.0, 5.0, 5.0, 5.0, 5.0), 3)
-          short.size == 3 && short.all { it == null } && up[3] == 100.0 && up[5] == 100.0 &&
+          short.size == 3 && short.all { it == null } && up[3] == 100.0 &&
+              up[5] == 100.0 &&
               down[3] == 0.0 && down[5] == 0.0 && flat[3] == 100.0 && flat[5] == 100.0
       }
 

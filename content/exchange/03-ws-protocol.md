@@ -67,26 +67,44 @@ import Foundation
 /// 把 gzip 資料解成原始資料。失敗回傳 nil。
 func gunzip(_ data: Data) -> Data? {
     let bytes = [UInt8](data)
-    // gzip 開頭：0x1f 0x8b 是固定的識別碼，第 3 個位元組 8 代表壓縮方式是 DEFLATE
-    guard bytes.count > 18, bytes[0] == 0x1f, bytes[1] == 0x8b, bytes[2] == 8 else { return nil }
+    // gzip 開頭：0x1f 0x8b 是固定的識別碼，第 3 個位元組 8 代表壓縮方式是
+    // DEFLATE
+    guard bytes.count > 18,
+          bytes[0] == 0x1f,
+          bytes[1] == 0x8b,
+          bytes[2] == 8 else {
+        return nil
+    }
 
     let flags = bytes[3]
-    var offset = 10                                  // 固定標頭 10 bytes
-    if flags & 0x04 != 0 {                           // 有 extra 欄位：先讀 2 bytes 長度再跳過
+    // 固定標頭 10 bytes
+    var offset = 10
+    // 有 extra 欄位：先讀 2 bytes 長度再跳過
+    if flags & 0x04 != 0 {
         guard offset + 2 <= bytes.count else { return nil }
         offset += 2 + Int(bytes[offset]) + (Int(bytes[offset + 1]) << 8)
     }
-    if flags & 0x08 != 0 {                           // 有檔名：跳到字串結尾（值為 0 的位元組）
-        while offset < bytes.count, bytes[offset] != 0 { offset += 1 }
+    // 有檔名：跳到字串結尾（值為 0 的位元組）
+    if flags & 0x08 != 0 {
+        while offset < bytes.count, bytes[offset] != 0 {
+            offset += 1
+        }
         offset += 1
     }
-    if flags & 0x10 != 0 {                           // 有註解：同樣跳到字串結尾
-        while offset < bytes.count, bytes[offset] != 0 { offset += 1 }
+    // 有註解：同樣跳到字串結尾
+    if flags & 0x10 != 0 {
+        while offset < bytes.count, bytes[offset] != 0 {
+            offset += 1
+        }
         offset += 1
     }
-    if flags & 0x02 != 0 { offset += 2 }             // 有標頭檢查碼：跳過 2 bytes
+    // 有標頭檢查碼：跳過 2 bytes
+    if flags & 0x02 != 0 {
+        offset += 2
+    }
 
-    let end = bytes.count - 8                        // 結尾 8 bytes 是 CRC-32 與原始長度
+    // 結尾 8 bytes 是 CRC-32 與原始長度
+    let end = bytes.count - 8
     guard offset < end else { return nil }
 
     // 中間這段是「裸的 DEFLATE」，系統的 .zlib 剛好解得開
@@ -95,10 +113,14 @@ func gunzip(_ data: Data) -> Data? {
 }
 
 let frame = Data([
-    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,   // 固定標頭 10 bytes
-    0xab, 0x56, 0x2a, 0xc8, 0xcc, 0x4b, 0x57, 0xb2, 0x32, 0xb4, 0x30, 0x32, 0x34, 0x32,
-    0x35, 0xb5, 0x30, 0x30, 0x30, 0xa8, 0x05, 0x00,               // DEFLATE 壓縮資料
-    0x53, 0xa1, 0x30, 0x3f, 0x14, 0x00, 0x00, 0x00,               // 結尾 8 bytes
+    // 固定標頭 10 bytes
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+    0xab, 0x56, 0x2a, 0xc8, 0xcc, 0x4b, 0x57, 0xb2, 0x32, 0xb4,
+    0x30, 0x32, 0x34, 0x32,
+    // DEFLATE 壓縮資料
+    0x35, 0xb5, 0x30, 0x30, 0x30, 0xa8, 0x05, 0x00,
+    // 結尾 8 bytes
+    0x53, 0xa1, 0x30, 0x3f, 0x14, 0x00, 0x00, 0x00,
 ])
 print(String(data: gunzip(frame)!, encoding: .utf8)!)
 // 輸出：{"ping":18212558000}
@@ -113,7 +135,11 @@ import java.io.ByteArrayInputStream
 import java.util.zip.GZIPInputStream
 
 fun gunzip(bytes: ByteArray): String =
-    GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+    GZIPInputStream(ByteArrayInputStream(bytes))
+        .bufferedReader(Charsets.UTF_8)
+        .use {
+        it.readText()
+    }
 // 傳入上面那 40 個位元組，回傳 {"ping":18212558000}
 ```
 
@@ -160,6 +186,7 @@ func pongReply(for json: [String: Any]) -> String? {
     guard let ping = (json["ping"] as? NSNumber)?.int64Value else { return nil }
     return "{\"pong\":\(ping)}"
 }
+
 print(pongReply(for: ["ping": 18212558000]) ?? "沒有 ping")
 // 輸出：{"pong":18212558000}
 print(pongReply(for: ["ch": "market.btcjpy.bbo"]) ?? "沒有 ping")
@@ -180,7 +207,19 @@ print(pongReply(for: ["ch": "market.btcjpy.bbo"]) ?? "沒有 ping")
 ```json
 {"sub":"market.btcjpy.bbo","id":"id1"}
 {"id":"id1","status":"ok","subbed":"market.btcjpy.bbo","ts":1489474081631}
-{"ch":"market.btcjpy.bbo","ts":1630994555540,"tick":{"seqId":137005210233,"ask":52665.02,"askSize":1.502181,"bid":52665.01,"bidSize":0.178567,"quoteTime":1630994555539,"symbol":"btcjpy"}}
+{
+  "ch":"market.btcjpy.bbo",
+  "ts":1630994555540,
+  "tick":{
+    "seqId":137005210233,
+    "ask":52665.02,
+    "askSize":1.502181,
+    "bid":52665.01,
+    "bidSize":0.178567,
+    "quoteTime":1630994555539,
+    "symbol":"btcjpy"
+  }
+}
 ```
 
 第一行是 App 送出的訂閱；第二行是伺服器的確認（ack，意思是「我收到並處理了」），`subbed` 欄位帶著 topic；第三行起是持續的推送，`ch` 是它屬於哪個 topic，資料放在 `tick`。`id` 是 App 自己產生的識別碼，伺服器回覆時會帶回來，讓你知道這個回覆對應哪個請求；文件上這個欄位是選填，但建議一律帶上。
@@ -208,7 +247,13 @@ print(pongReply(for: ["ch": "market.btcjpy.bbo"]) ?? "沒有 ping")
 出錯時，伺服器會回 `status: error`，附上錯誤碼和說明。例如訂閱了文件裡沒有的 `kline.3min`：
 
 ```json
-{"id":"id3","status":"error","err-code":"bad-request","err-msg":"invalid topic market.btcjpy.kline.3min","ts":1494310283622}
+{
+  "id":"id3",
+  "status":"error",
+  "err-code":"bad-request",
+  "err-msg":"invalid topic market.btcjpy.kline.3min",
+  "ts":1494310283622
+}
 ```
 
 對沒有訂閱過的 topic 送 `unsub` 也會得到錯誤（`unsub with not subbed topic …`）。所以 App 要處理 `status: error`，用 `id` 對回是哪個請求失敗，不能只處理成功的情況。
@@ -230,7 +275,18 @@ print(pongReply(for: ["ch": "market.btcjpy.bbo"]) ?? "沒有 ping")
 **認證流程：**
 
 ```json
-{"action":"req","ch":"auth","params":{"authType":"api","accessKey":"你的 API key","signatureMethod":"HmacSHA256","signatureVersion":"2.1","timestamp":"2019-09-01T18:16:16","signature":"簽名"}}
+{
+  "action":"req",
+  "ch":"auth",
+  "params":{
+    "authType":"api",
+    "accessKey":"你的 API key",
+    "signatureMethod":"HmacSHA256",
+    "signatureVersion":"2.1",
+    "timestamp":"2019-09-01T18:16:16",
+    "signature":"簽名"
+  }
+}
 ```
 
 成功會回 `{"action":"req","code":200,"ch":"auth","data":{}}`。簽名用 HmacSHA256（一種用密鑰產生簽名的演算法，HMAC 是 Hash-based Message Authentication Code），簽名的原文是 `GET\napi.example-exchange.com\n/ws/v2\n<排序後的參數>`，簽名的做法見 API 簽名單元。注意 JSON 裡的值不需要再做 URL 編碼。
@@ -271,15 +327,19 @@ print(pongReply(for: ["ch": "market.btcjpy.bbo"]) ?? "沒有 ping")
 ```swift
 import Foundation
 
-let topic = #"market.btcjpy.bbo","x":"y"#          // 錯誤或惡意的輸入，裡面多了引號
-let bad = "{\"sub\":\"\(topic)\",\"id\":\"id1\"}"   // 直接把字串接進 JSON
+// 錯誤或惡意的輸入，裡面多了引號
+let topic = #"market.btcjpy.bbo","x":"y"#
+// 直接把字串接進 JSON
+let bad = "{\"sub\":\"\(topic)\",\"id\":\"id1\"}"
 print(bad)
-// 輸出：{"sub":"market.btcjpy.bbo","x":"y","id":"id1"}   ← 多出一個欄位，JSON 結構被改掉了
+// 輸出：{"sub":"market.btcjpy.bbo","x":"y","id":"id1"}   ← 多出一個欄位，JSON
+// 結構被改掉了
 
 // 正確：先檢查字元，只允許英數字和 . _ # -，長度 1 到 64
 func isValidToken(_ s: String) -> Bool {
     s.range(of: "^[A-Za-z0-9._#-]{1,64}$", options: .regularExpression) != nil
 }
+
 print(isValidToken(topic), isValidToken("market.btcjpy.bbo"))
 // 輸出：false true
 ```
@@ -291,7 +351,8 @@ import Foundation
 
 final class MarketSocket {
     private let task: URLSessionWebSocketTask
-    private let queue = DispatchQueue(label: "market.socket")   // 背景佇列：解壓、解碼、心跳都在這裡做
+    // 背景佇列：解壓、解碼、心跳都在這裡做
+    private let queue = DispatchQueue(label: "market.socket")
 
     init(url: URL) {
         task = URLSession.shared.webSocketTask(with: url)
@@ -308,19 +369,24 @@ final class MarketSocket {
             switch result {
             case .success(.data(let frame)):
                 queue.async { self.handle(frame: frame) }
-                receiveNext()                 // receive 一次只收一則，要自己再呼叫一次
+                // receive 一次只收一則，要自己再呼叫一次
+                receiveNext()
             case .success:
-                receiveNext()                 // 這個協定不會送文字訊息，直接略過
+                // 這個協定不會送文字訊息，直接略過
+                receiveNext()
             case .failure:
-                break                         // 連線斷了：交給重連邏輯（見連線韌性單元）
+                // 連線斷了：交給重連邏輯（見連線韌性單元）
+                break
             }
         }
     }
 
     private func handle(frame: Data) {
         guard let jsonData = gunzip(frame),
-              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-        else { return }                       // 解壓或解碼失敗：丟掉這一則，不讓連線崩潰
+              let json = try? JSONSerialization.jsonObject(with: jsonData)
+                  as? [String: Any]
+        // 解壓或解碼失敗：丟掉這一則，不讓連線崩潰
+        else { return }
 
         // 心跳最先檢查：收到 {"ping":N}，原樣回 {"pong":N}
         if let ping = (json["ping"] as? NSNumber)?.int64Value {
@@ -351,9 +417,11 @@ class MarketSocketListener : WebSocketListener() {
             GZIPInputStream(ByteArrayInputStream(bytes.toByteArray()))
                 .bufferedReader(Charsets.UTF_8).use { it.readText() }
         } catch (e: Exception) {
-            return                                    // 解壓失敗：丟掉這一則，不讓連線崩潰
+            // 解壓失敗：丟掉這一則，不讓連線崩潰
+            return
         }
-        val json = try { JSONObject(text) } catch (e: Exception) { return }   // 解碼失敗也一樣丟掉
+        // 解碼失敗也一樣丟掉
+        val json = try { JSONObject(text) } catch (e: Exception) { return }
 
         // 心跳最先檢查：收到 {"ping":N}，原樣回 {"pong":N}
         if (json.has("ping")) {
@@ -363,7 +431,11 @@ class MarketSocketListener : WebSocketListener() {
         // …其他訊息（確認、錯誤、推送）在這裡處理
     }
 
-    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+    override fun onFailure(
+        webSocket: WebSocket,
+        t: Throwable,
+        response: Response?,
+    ) {
         // 連線斷了：交給重連邏輯（見連線韌性單元）
     }
 }

@@ -27,7 +27,14 @@ tags: [order-book, depth, snapshot, sequence, aggregation, cumulative, diff]
 先看文件裡的格式。WebSocket（讓伺服器可以持續主動推送資料給 App 的連線）的 topic（主題名稱）是 `market.$symbol.depth.$type`，訂閱（`sub`）和一次性請求（`req`）都可以用；推送長這樣，每個檔位是 `[價格, 數量]`：
 
 ```json
-{"ch":"market.btcjpy.depth.step0","ts":1489474082831,"data":{"bids":[[10000000,0.4],[9990000,0.6]],"asks":[[10010000,0.3],[10020000,0.5]]}}
+{
+  "ch":"market.btcjpy.depth.step0",
+  "ts":1489474082831,
+  "data":{
+    "bids":[[10000000,0.4],[9990000,0.6]],
+    "asks":[[10010000,0.3],[10020000,0.5]]
+  }
+}
 ```
 
 （數字是為了說明編的，格式依文件。）幾個要注意的地方：
@@ -70,17 +77,30 @@ import Foundation
 struct Book {
     var bids: [Decimal: Decimal] = [:]    // 價格 → 數量
     var asks: [Decimal: Decimal] = [:]
-    var lastSeq: Int64?                   // nil 代表還沒有快照，或已經失效
+    // nil 代表還沒有快照，或已經失效
+    var lastSeq: Int64?
 
-    mutating func apply(seq: Int64, bids newBids: [(Decimal, Decimal)], asks newAsks: [(Decimal, Decimal)]) -> String {
+    mutating func apply(
+        seq: Int64,
+        bids newBids: [(Decimal, Decimal)],
+        asks newAsks: [(Decimal, Decimal)]
+    ) -> String {
         guard let last = lastSeq else { return "要先抓快照" }
-        if seq <= last { return "重複或過期，忽略" }
+        if seq <= last {
+            return "重複或過期，忽略"
+        }
         if seq != last + 1 {
-            lastSeq = nil                 // 簿已經不可信，等重新抓快照
+            // 簿已經不可信，等重新抓快照
+            lastSeq = nil
             return "跳號：期待 \(last + 1)，收到 \(seq)，要重新抓快照"
         }
-        for (price, qty) in newBids { bids[price] = qty == 0 ? nil : qty }   // 數量 0 代表刪除這一檔
-        for (price, qty) in newAsks { asks[price] = qty == 0 ? nil : qty }
+        // 數量 0 代表刪除這一檔
+        for (price, qty) in newBids {
+            bids[price] = qty == 0 ? nil : qty
+        }
+        for (price, qty) in newAsks {
+            asks[price] = qty == 0 ? nil : qty
+        }
         lastSeq = seq
         return "套用成功"
     }
@@ -97,7 +117,13 @@ var book = Book(
 
 print(book.apply(seq: 100, bids: [], asks: []))
 // 輸出：重複或過期，忽略
-print(book.apply(seq: 101, bids: [(D("10000000"), 0), (D("9995000"), D("0.2"))], asks: [(D("10010000"), D("0.1"))]))
+print(
+    book.apply(
+        seq: 101,
+        bids: [(D("10000000"), 0), (D("9995000"), D("0.2"))],
+        asks: [(D("10010000"), D("0.1"))]
+    )
+)
 // 輸出：套用成功
 print(book.bids.keys.sorted(by: >), book.asks[D("10010000")]!)
 // 輸出：[9995000, 9990000] 0.1
@@ -137,15 +163,19 @@ fun main() {
     val hash = HashMap<BigDecimal, Int>()
     hash[BigDecimal("100.0")] = 1
     hash[BigDecimal("100")] = 2
-    println(hash.size)   // 輸出：2（equals 連小數位數都比，被當成兩檔）
+    // 輸出：2（equals 連小數位數都比，被當成兩檔）
+    println(hash.size)
 
     // 買方：價格由高到低（賣方用預設排序，由低到高）
     val bids = TreeMap<BigDecimal, BigDecimal>(Comparator.reverseOrder())
     bids[BigDecimal("100.0")] = BigDecimal("1")
-    bids[BigDecimal("100")] = BigDecimal("2")     // compareTo 認為是同一檔，數量被覆蓋成 2
+    // compareTo 認為是同一檔，數量被覆蓋成 2
+    bids[BigDecimal("100")] = BigDecimal("2")
     bids[BigDecimal("99.5")] = BigDecimal("3")
-    println(bids.size)                            // 輸出：2
-    println(bids.firstEntry().value)              // 輸出：2（最佳買價那一檔排在最前面）
+    // 輸出：2
+    println(bids.size)
+    // 輸出：2（最佳買價那一檔排在最前面）
+    println(bids.firstEntry().value)
 }
 ```
 
@@ -176,26 +206,39 @@ func D(_ s: String) -> Decimal { Decimal(string: s)! }
 
 // 把價格取整到 step 的倍數：買方往下（.down），賣方往上（.up）
 func bucket(_ price: Decimal, step: Decimal, roundUp: Bool) -> Decimal {
-    var q = price / step                                     // 有幾個 step
+    // 有幾個 step
+    var q = price / step
     var r = Decimal()
-    NSDecimalRound(&r, &q, 0, roundUp ? .up : .down)         // 去掉小數：往下或往上
+    // 去掉小數：往下或往上
+    NSDecimalRound(&r, &q, 0, roundUp ? .up : .down)
     return r * step
 }
 
-print(bucket(D("4860380"), step: D("1000"), roundUp: false))   // 買方
+// 買方
+print(bucket(D("4860380"), step: D("1000"), roundUp: false))
 // 輸出：4860000
-print(bucket(D("4860850"), step: D("1000"), roundUp: true))    // 賣方
+// 賣方
+print(bucket(D("4860850"), step: D("1000"), roundUp: true))
 // 輸出：4861000
-print(bucket(D("4861000"), step: D("1000"), roundUp: true))    // 已經對齊的不會多跳一檔
+// 已經對齊的不會多跳一檔
+print(bucket(D("4861000"), step: D("1000"), roundUp: true))
 // 輸出：4861000
 
 // 合併：同一檔的數量相加
-let bids = [(D("4860380"), D("0.2")), (D("4860120"), D("0.5")), (D("4859900"), D("0.1"))]
+let bids = [
+    (D("4860380"), D("0.2")),
+    (D("4860120"), D("0.5")),
+    (D("4859900"), D("0.1"))
+]
 var merged: [Decimal: Decimal] = [:]
 for (price, qty) in bids {
     merged[bucket(price, step: D("1000"), roundUp: false), default: 0] += qty
 }
-for price in merged.keys.sorted(by: >) { print(price, merged[price]!) }
+
+for price in merged.keys.sorted(by: >) {
+    print(price, merged[price]!)
+}
+
 // 輸出：
 // 4860000 0.7
 // 4859000 0.1
@@ -226,11 +269,16 @@ func D(_ s: String) -> Decimal { Decimal(string: s)! }
 // 輸入：從最佳價開始排好的各檔數量。輸出：累計數量
 func cumulative(_ qtys: [Decimal]) -> [Decimal] {
     var running: Decimal = 0
-    return qtys.map { running += $0; return running }
+    return qtys.map {
+        running += $0
+        return running
+    }
 }
 
-let asks = cumulative([D("0.1"), D("0.5")])      // 賣方：10,010,000 有 0.1，10,020,000 有 0.5
-let bids = cumulative([D("0.2"), D("0.6")])      // 買方：9,995,000 有 0.2，9,990,000 有 0.6
+// 賣方：10,010,000 有 0.1，10,020,000 有 0.5
+let asks = cumulative([D("0.1"), D("0.5")])
+// 買方：9,995,000 有 0.2，9,990,000 有 0.6
+let bids = cumulative([D("0.2"), D("0.6")])
 print(asks, bids)
 // 輸出：[0.1, 0.6] [0.2, 0.8]
 
@@ -259,22 +307,39 @@ import Foundation
 func D(_ s: String) -> Decimal { Decimal(string: s)! }
 
 struct Level: Equatable {
-    let price: Decimal      // 以價格當 identity：同一個價格就是同一列
+    // 以價格當 identity：同一個價格就是同一列
+    let price: Decimal
     let qty: Decimal
 }
 
 /// 比較新舊兩版，回傳新增、移除、數量改變的價格
-func diff(old: [Level], new: [Level]) -> (added: [Decimal], removed: [Decimal], changed: [Decimal]) {
-    let oldByPrice = Dictionary(uniqueKeysWithValues: old.map { ($0.price, $0.qty) })
-    let newByPrice = Dictionary(uniqueKeysWithValues: new.map { ($0.price, $0.qty) })
+func diff(old: [Level], new: [Level]) -> (
+    added: [Decimal],
+    removed: [Decimal],
+    changed: [Decimal]
+) {
+    let oldByPrice = Dictionary(
+        uniqueKeysWithValues: old.map { ($0.price, $0.qty) }
+    )
+    let newByPrice = Dictionary(
+        uniqueKeysWithValues: new.map { ($0.price, $0.qty) }
+    )
     let added = new.map(\.price).filter { oldByPrice[$0] == nil }
     let removed = old.map(\.price).filter { newByPrice[$0] == nil }
-    let changed = new.filter { oldByPrice[$0.price] != nil && oldByPrice[$0.price] != $0.qty }.map(\.price)
+    let changed = new.filter {
+        oldByPrice[$0.price] != nil && oldByPrice[$0.price] != $0.qty
+    }.map(\.price)
     return (added, removed, changed)
 }
 
-let before = [Level(price: D("10000000"), qty: D("0.4")), Level(price: D("9990000"), qty: D("0.6"))]
-let after = [Level(price: D("9995000"), qty: D("0.2")), Level(price: D("9990000"), qty: D("0.9"))]
+let before = [
+    Level(price: D("10000000"), qty: D("0.4")),
+    Level(price: D("9990000"), qty: D("0.6"))
+]
+let after = [
+    Level(price: D("9995000"), qty: D("0.2")),
+    Level(price: D("9990000"), qty: D("0.9"))
+]
 let result = diff(old: before, new: after)
 print(result.added, result.removed, result.changed)
 // 輸出：[9995000] [10000000] [9990000]
@@ -285,14 +350,16 @@ print(result.added, result.removed, result.changed)
 ```swift
 import UIKit
 
-struct PriceRow: Hashable { let price: Decimal }    // 以價格當 identity
+// 以價格當 identity
+struct PriceRow: Hashable { let price: Decimal }
 
 func update(rows: [PriceRow], changed: [PriceRow],
             dataSource: UITableViewDiffableDataSource<Int, PriceRow>) {
     var snapshot = NSDiffableDataSourceSnapshot<Int, PriceRow>()
     snapshot.appendSections([0])
     snapshot.appendItems(rows)
-    snapshot.reconfigureItems(changed)              // iOS 15 起：只更新有變動的列內容，不重建 cell
+    // iOS 15 起：只更新有變動的列內容，不重建 cell
+    snapshot.reconfigureItems(changed)
     dataSource.apply(snapshot, animatingDifferences: false)
 }
 ```

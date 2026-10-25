@@ -46,26 +46,39 @@ App（Composition Root：整個 App 唯一負責組裝實作的地方）
 
 ```kotlin
 // :core:navigation 模組定義介面，Feature 只看得到這個介面
-interface WalletNavigator { fun openWallet() }
+interface WalletNavigator {
+    fun openWallet()
+}
 
 // :feature:order 只呼叫介面，完全不知道 :feature:wallet 存在
 class OrderViewModel(private val walletNavigator: WalletNavigator) {
-    fun onOrderPlaced() = walletNavigator.openWallet()   // 下單成功後，請 App 層帶使用者去資產頁
+    // 下單成功後，請 App 層帶使用者去資產頁
+    fun onOrderPlaced() = walletNavigator.openWallet()
 }
-// :app 模組：實作 WalletNavigator（真正去開資產頁），並用 Hilt（Google 的依賴注入函式庫）或手動注入給 OrderViewModel
+// :app 模組：實作 WalletNavigator（真正去開資產頁），
+// 並用 Hilt（Google 的依賴注入函式庫）或手動注入給 OrderViewModel
 ```
 
 ```swift
 // Core 模組定義的協定，Feature 只依賴它
-protocol WalletNavigator { func openWallet() }
+protocol WalletNavigator {
+    func openWallet()
+}
 
 // OrderFeature 模組只呼叫協定
 final class OrderViewModel {
     private let walletNavigator: WalletNavigator
-    init(walletNavigator: WalletNavigator) { self.walletNavigator = walletNavigator }
-    func onOrderPlaced() { walletNavigator.openWallet() }
+
+    init(walletNavigator: WalletNavigator) {
+        self.walletNavigator = walletNavigator
+    }
+
+    func onOrderPlaced() {
+        walletNavigator.openWallet()
+    }
 }
-// App 層（例如 FlowController／Coordinator，負責管理畫面跳轉的物件）實作 WalletNavigator 並注入
+// App 層（例如 FlowController／Coordinator，負責管理畫面跳轉的物件）
+// 實作 WalletNavigator 並注入
 ```
 
 > [!TIP]
@@ -99,7 +112,8 @@ let package = Package(
     targets: [
         .target(name: "Domain"),
         .target(name: "MarketFeature", dependencies: ["Domain"]),
-        .target(name: "OrderFeature", dependencies: ["Domain"]),   // 只依賴 Domain，不依賴 MarketFeature
+        // 只依賴 Domain，不依賴 MarketFeature
+        .target(name: "OrderFeature", dependencies: ["Domain"]),
         .testTarget(name: "OrderFeatureTests", dependencies: ["OrderFeature"]),
     ]
 )
@@ -115,17 +129,26 @@ let package = Package(
 
 ```swift
 // Domain 模組
-public protocol OrderRepository {          // 其他模組要用，所以 public
+// 其他模組要用，所以 public
+public protocol OrderRepository {
     func place(_ request: OrderRequest) async throws -> String
 }
+
 public struct OrderRequest {
     public let symbol: String
-    public init(symbol: String) { self.symbol = symbol }   // public struct 的 init 預設是 internal，要自己加 public
+    // public struct 的 init 預設是 internal，要自己加 public
+    public init(symbol: String) {
+        self.symbol = symbol
+    }
 }
-package func validate(_ request: OrderRequest) -> Bool {   // 同一個 package 的其他模組（例如 OrderFeature）可用，App 看不到
+
+// 同一個 package 的其他模組（例如 OrderFeature）可用，App 看不到
+package func validate(_ request: OrderRequest) -> Bool {
     !request.symbol.isEmpty
 }
-func internalHelper() {}                   // internal：只有 Domain 模組自己看得到
+
+// internal：只有 Domain 模組自己看得到
+func internalHelper() {}
 ```
 
 測試時用 `@testable import`：測試目標可以存取被測模組的 `internal` 成員，但不能存取 `private`；被測模組要用 debug 設定建置（`-enable-testing`）。
@@ -142,8 +165,10 @@ func internalHelper() {}                   // internal：只有 Domain 模組自
 ```kotlin
 // :core:network 的 build.gradle.kts
 dependencies {
-    api(project(":core:model"))   // 型別出現在本模組的公開 API，使用者也要看得到，所以用 api
-    implementation(libs.okhttp)   // 純內部實作，不外洩給使用者
+    // 型別出現在本模組的公開 API，使用者也要看得到，所以用 api
+    api(project(":core:model"))
+    // 純內部實作，不外洩給使用者
+    implementation(libs.okhttp)
 }
 ```
 

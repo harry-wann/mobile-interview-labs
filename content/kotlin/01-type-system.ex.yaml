@@ -53,16 +53,19 @@
     data class Quote(val symbol: String, val price: BigDecimal) {
         var seen: Int = 0
     }
+
     data class Blob(val bytes: ByteArray)
 
     fun main() {
         val a = Quote("BTC", BigDecimal("1.0"))
         val b = Quote("BTC", BigDecimal("1.00"))
         println(a == b)
+
         a.seen = 3
         val c = a.copy()
         println(c.seen)
         println(a == c)
+
         println(Blob(byteArrayOf(1)) == Blob(byteArrayOf(1)))
     }
   answer: |
@@ -82,7 +85,8 @@
     補上關鍵字。第一個函式要在執行時取得 `T` 的實際型別，讓 `as? T` 真的會檢查；第二個函式的 lambda 會被放進 `Runnable` 在別的地方執行，所以必須禁止 non-local return（在 lambda 裡直接寫 `return`，結果是結束外層函式）。
   codeLang: kotlin
   code: |
-    inline fun <____ T : Any> Map<String, Any?>.getAs(key: String): T? = this[key] as? T
+    inline fun <____ T : Any> Map<String, Any?>.getAs(key: String): T? =
+        this[key] as? T
 
     inline fun runOnMain(h: Handler, ____ block: () -> Unit) {
         h.post { block() }

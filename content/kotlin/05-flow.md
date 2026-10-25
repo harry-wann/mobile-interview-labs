@@ -28,13 +28,17 @@ Flow 是「隨著時間陸續送出一連串值」的資料流，例如一檔幣
 可以用影片來比喻。cold 像 YouTube 影片，每個人按下播放，各自從頭看；hot 像電視直播，不管有沒有人看，節目都在播，你晚進來就錯過前面的內容。
 
 ```kotlin
-val cold = flow {                  // flow { } 建立的是 cold flow
+// flow { } 建立的是 cold flow
+val cold = flow {
     println("上游開始")
     emit(1)
     emit(2)
 }
-cold.collect { println("A $it") }  // 第一個 collector：上游跑一次
-cold.collect { println("B $it") }  // 第二個 collector：上游又從頭跑一次
+
+// 第一個 collector：上游跑一次
+cold.collect { println("A $it") }
+// 第二個 collector：上游又從頭跑一次
+cold.collect { println("B $it") }
 // 輸出：上游開始、A 1、A 2、上游開始、B 1、B 2
 ```
 
@@ -61,12 +65,17 @@ cold flow 還有一個性質：collector 處理得慢，上游的 `emit` 就會�
 
 ```kotlin
 val s = MutableStateFlow(0)
-val job = launch(start = CoroutineStart.UNDISPATCHED) {   // 讓 collector 立刻跑到第一個暫停點
+
+// 讓 collector 立刻跑到第一個暫停點
+val job = launch(start = CoroutineStart.UNDISPATCHED) {
     s.collect { println("got $it") }
 }
+
 s.value = 1
-s.value = 1      // 和目前值相同，不會發射
-s.value = 2      // 前面的 1 還沒被收集就被蓋掉
+// 和目前值相同，不會發射
+s.value = 1
+// 前面的 1 還沒被收集就被蓋掉
+s.value = 2
 delay(50)
 job.cancel()
 // 輸出：got 0、got 2
@@ -77,15 +86,24 @@ collector 先收到目前值 `0`；之後連續設定 `1`、`1`、`2`，期間 c
 **`SharedFlow`** 是廣播用的。`replay` 是「新訂閱者進來時，補送最近幾筆給它」：
 
 ```kotlin
-val plain = MutableSharedFlow<Int>()                 // 預設 replay 0
-plain.emit(1)                                        // 沒有訂閱者，值直接消失
-val j1 = launch(start = CoroutineStart.UNDISPATCHED) { plain.collect { println("plain $it") } }
-plain.emit(2)                                        // 輸出：plain 2
+// 預設 replay 0
+val plain = MutableSharedFlow<Int>()
+// 沒有訂閱者，值直接消失
+plain.emit(1)
+val j1 = launch(start = CoroutineStart.UNDISPATCHED) {
+    plain.collect { println("plain $it") }
+}
+// 輸出：plain 2
+plain.emit(2)
 
-val replayed = MutableSharedFlow<Int>(replay = 1)    // 保留最後 1 筆給新訂閱者
+// 保留最後 1 筆給新訂閱者
+val replayed = MutableSharedFlow<Int>(replay = 1)
 replayed.emit(10)
-replayed.emit(11)                                    // 10 被擠掉
-val j2 = launch(start = CoroutineStart.UNDISPATCHED) { replayed.collect { println("replay $it") } }
+// 10 被擠掉
+replayed.emit(11)
+val j2 = launch(start = CoroutineStart.UNDISPATCHED) {
+    replayed.collect { println("replay $it") }
+}
 // 輸出：replay 11
 ```
 
@@ -97,9 +115,23 @@ val j2 = launch(start = CoroutineStart.UNDISPATCHED) { replayed.collect { printl
 
 ```kotlin
 val ch = Channel<Int>(Channel.BUFFERED)
-launch { for (x in ch) println("A $x") }   // 兩個接收者
-launch { for (x in ch) println("B $x") }
-for (i in 1..4) ch.send(i)                  // 送出 4 筆，總共只會被收到 4 次，不是 8 次
+
+// 兩個接收者
+launch {
+    for (x in ch) {
+        println("A $x")
+    }
+}
+launch {
+    for (x in ch) {
+        println("B $x")
+    }
+}
+
+// 送出 4 筆，總共只會被收到 4 次，不是 8 次
+for (i in 1..4) {
+    ch.send(i)
+}
 ch.close()
 ```
 
@@ -124,15 +156,22 @@ class OrderViewModel : ViewModel() {
     val state: StateFlow<OrderUiState> = _state.asStateFlow()
 
     fun onOrderPlaced(id: OrderId) {
-        _state.update { it.copy(pendingNavigation = id) }       // 把「要導航」存進 state
+        // 把「要導航」存進 state
+        _state.update { it.copy(pendingNavigation = id) }
     }
+
     fun onNavigated() {
-        _state.update { it.copy(pendingNavigation = null) }     // UI 導航完，通知 ViewModel 清掉
+        // UI 導航完，通知 ViewModel 清掉
+        _state.update { it.copy(pendingNavigation = null) }
     }
 }
+
 // UI 端（Compose）：
 // LaunchedEffect(state.pendingNavigation) {
-//     state.pendingNavigation?.let { navigate(it); viewModel.onNavigated() }
+//     state.pendingNavigation?.let {
+//         navigate(it)
+//         viewModel.onNavigated()
+//     }
 // }
 ```
 
@@ -152,13 +191,20 @@ class OrderViewModel : ViewModel() {
 情境：WebSocket 每秒推送幾十筆價格，但畫面不可能每筆都重畫。用一個簡化的串流測試：每 100 毫秒發一筆，共 6 筆（價格 1 到 6），在 `runTest` 的虛擬時間下觀察（`@時間` 是收到的毫秒數）：
 
 ```kotlin
-fun ticker() = flow { for (p in 1..6) { emit(p); delay(100) } }
+fun ticker() = flow {
+    for (p in 1..6) {
+        emit(p)
+        delay(100)
+    }
+}
 
 ticker().collect { /* 立即處理 */ }
 // 全部收到：1@0、2@100、3@200、4@300、5@400、6@500
 
-ticker().collect { delay(250) }   // collector 每筆要處理 250 毫秒，而且沒有丟舊值
-// 1@0、2@350、3@700 … 6@1750（越來越落後：價格 6 在 500 就發生了，卻到 1750 才顯示）
+// collector 每筆要處理 250 毫秒，而且沒有丟舊值
+ticker().collect { delay(250) }
+// 1@0、2@350、3@700 … 6@1750
+// （越來越落後：價格 6 在 500 就發生了，卻到 1750 才顯示）
 
 ticker().conflate().collect { delay(250) }
 // conflate：collector 忙的時候，只留最新的一筆：1@0、3@250、5@500、6@750
@@ -197,12 +243,16 @@ ticker().debounce(300).collect { }
 
 ```kotlin
 class TickerViewModel(repo: TickerRepo) : ViewModel() {
-    val uiState: StateFlow<UiState> = repo.tickers()       // repo.tickers() 是 cold flow（開 WebSocket）
+    // repo.tickers() 是 cold flow（開 WebSocket）
+    val uiState: StateFlow<UiState> = repo.tickers()
         .map { it.toUi() }
         .stateIn(
-            scope = viewModelScope,                         // 共用的上游跑在 ViewModel 的 scope
-            started = SharingStarted.WhileSubscribed(5_000),// 什麼時候開始、什麼時候停
-            initialValue = UiState.Loading                  // StateFlow 一定要有初始值
+            // 共用的上游跑在 ViewModel 的 scope
+            scope = viewModelScope,
+            // 什麼時候開始、什麼時候停
+            started = SharingStarted.WhileSubscribed(5_000),
+            // StateFlow 一定要有初始值
+            initialValue = UiState.Loading,
         )
 }
 ```
@@ -216,7 +266,9 @@ class TickerViewModel(repo: TickerRepo) : ViewModel() {
 用虛擬時間看一遍旋轉的情境（`starts` 記錄上游啟動了幾次）：
 
 ```text
-collector 消失（旋轉）  →  4 秒後新的 collector 出現  →  上游沒有重啟（starts 仍是 1），新 collector 立刻拿到最近的值
+collector 消失（旋轉）
+  →  4 秒後新的 collector 出現
+  →  上游沒有重啟（starts 仍是 1），新 collector 立刻拿到最近的值
 collector 全部消失  →  超過 5 秒沒有人  →  上游停止
 之後又有 collector 出現  →  上游重新啟動（starts 變 2）
 ```
@@ -242,17 +294,29 @@ import kotlinx.coroutines.flow.*
 fun OkHttpClient.tickers(request: Request): Flow<Ticker> = callbackFlow {
     val ws = newWebSocket(request, object : WebSocketListener() {
         override fun onMessage(webSocket: WebSocket, text: String) {
-            trySend(parse(text))               // callback 不是 suspend 函式，所以用 trySend，不能用 send
+            // callback 不是 suspend 函式，所以用 trySend，不能用 send
+            trySend(parse(text))
         }
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            close(t)                           // 連線失敗：讓 Flow 以這個例外結束
+
+        override fun onFailure(
+            webSocket: WebSocket,
+            t: Throwable,
+            response: Response?,
+        ) {
+            // 連線失敗：讓 Flow 以這個例外結束
+            close(t)
         }
+
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            close()                            // 正常關閉：讓 Flow 正常結束
+            // 正常關閉：讓 Flow 正常結束
+            close()
         }
     })
-    awaitClose { ws.close(1000, null) }        // 必寫：collector 取消或 Flow 關閉時，關掉連線
-}.conflate()                                    // 價格只要最新值，collector 忙時丟掉中間的值
+
+    // 必寫：collector 取消或 Flow 關閉時，關掉連線
+    awaitClose { ws.close(1000, null) }
+// 價格只要最新值，collector 忙時丟掉中間的值
+}.conflate()
 ```
 
 三個重點的原因：
@@ -277,14 +341,18 @@ fun OkHttpClient.tickers(request: Request): Flow<Ticker> = callbackFlow {
 ```kotlin
 // View／Fragment
 viewLifecycleOwner.lifecycleScope.launch {
-    viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {   // 離開前景就取消，回來重新收集
-        launch { vm.prices.collect { renderPrices(it) } }             // 同一個區塊要收多個 flow：各自 launch
-        launch { vm.orders.collect { renderOrders(it) } }             // 因為 collect 會一直掛住，不 launch 的話第二個永遠跑不到
+    // 離開前景就取消，回來重新收集
+    viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+        // 同一個區塊要收多個 flow：各自 launch
+        launch { vm.prices.collect { renderPrices(it) } }
+        // 因為 collect 會一直掛住，不 launch 的話第二個永遠跑不到
+        launch { vm.orders.collect { renderOrders(it) } }
     }
 }
 
 // Compose
-val state by vm.uiState.collectAsStateWithLifecycle()   // 來自 lifecycle-runtime-compose，預設 STARTED 才收集
+// 來自 lifecycle-runtime-compose，預設 STARTED 才收集
+val state by vm.uiState.collectAsStateWithLifecycle()
 ```
 
 Compose 裡的 `collectAsState()` 不知道 lifecycle，Activity 在背景時，只要 composition 還在就會繼續收集。

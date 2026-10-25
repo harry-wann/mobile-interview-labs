@@ -25,7 +25,10 @@ tags: [java, interop, jvm-annotations, jmm, volatile, synchronized, concurrentha
 先看 Kotlin 這一邊的程式碼：
 
 ```kotlin
-class Client @JvmOverloads constructor(val baseUrl: String, val timeoutMs: Long = 10_000) {
+class Client @JvmOverloads constructor(
+    val baseUrl: String,
+    val timeoutMs: Long = 10_000,
+) {
     companion object {
         @JvmStatic fun create() = Client("https://api.example.com")
         @JvmField val TAG = "Client"
@@ -40,14 +43,20 @@ Java 呼叫端的差別：
 
 ```java
 // 有加註解
-Client c1 = new Client("https://api.example.com");   // @JvmOverloads：可以只傳第一個參數
-Client c2 = Client.create();                          // @JvmStatic：像一般的 static 方法
-String tag = Client.TAG;                              // @JvmField：直接讀欄位
+// @JvmOverloads：可以只傳第一個參數
+Client c1 = new Client("https://api.example.com");
+// @JvmStatic：像一般的 static 方法
+Client c2 = Client.create();
+// @JvmField：直接讀欄位
+String tag = Client.TAG;
 
 // 沒加註解的話，Java 要這樣寫
-Client c3 = new Client("https://api.example.com", 10_000L);  // 看不到預設值，要傳滿所有參數
-Client c4 = Client.Companion.create();                        // 要經過 Companion
-String tag2 = Client.Companion.getTAG();                      // 要呼叫 getter
+// 看不到預設值，要傳滿所有參數
+Client c3 = new Client("https://api.example.com", 10_000L);
+// 要經過 Companion
+Client c4 = Client.Companion.create();
+// 要呼叫 getter
+String tag2 = Client.Companion.getTAG();
 ```
 
 | 註解 | 效果 | 不加會怎樣 |
@@ -71,29 +80,44 @@ String tag2 = Client.Companion.getTAG();                      // 要呼叫 gette
 
 ```java
 public class UserRepo {
-    public String findName(int id) { return null; }   // 沒標註：可能回傳 null
+    // 沒標註：可能回傳 null
+    public String findName(int id) {
+        return null;
+    }
 }
 ```
 
 ```kotlin
 val repo = UserRepo()
-val a = repo.findName(1)             // 型別是 String!（platform type），編譯器不擋你
-val b: String = repo.findName(1)     // 宣告成非 null：Java 回傳 null 時，這一行就丟 NullPointerException
-val c: String? = repo.findName(1)    // 保守的寫法：當成可能是 null，之後用 ?. 或 ?: 處理
+// 型別是 String!（platform type），編譯器不擋你
+val a = repo.findName(1)
+// 宣告成非 null：Java 回傳 null 時，這一行就丟 NullPointerException
+val b: String = repo.findName(1)
+// 保守的寫法：當成可能是 null，之後用 ?. 或 ?: 處理
+val c: String? = repo.findName(1)
 ```
 
 **nullability 註解**是 Java 這邊的補救：在 Java 程式碼上加 `@Nullable` 或 `@NonNull`（JetBrains 的 `org.jetbrains.annotations`、AndroidX 的 `androidx.annotation` 都有提供），Kotlin 編譯器讀到之後，就能推斷出明確的型別，而不是 `String!`：
 
 ```java
 public class UserRepo {
-    @Nullable public String findNickname(int id) { return null; }  // Kotlin 看到 String?
-    @NonNull public String findEmail(int id) { return "a@b.com"; }  // Kotlin 看到 String
+    // Kotlin 看到 String?
+    @Nullable public String findNickname(int id) {
+        return null;
+    }
+
+    // Kotlin 看到 String
+    @NonNull public String findEmail(int id) {
+        return "a@b.com";
+    }
 }
 ```
 
 ```kotlin
-repo.findNickname(1).length    // 編譯錯誤：只能用 ?. 呼叫，因為它是 String?
-repo.findEmail(1).length       // 可以直接用
+// 編譯錯誤：只能用 ?. 呼叫，因為它是 String?
+repo.findNickname(1).length
+// 可以直接用
+repo.findEmail(1).length
 ```
 
 Android 本身的 API 就有這些標註。例如 `intent.getStringExtra("id")` 在 Kotlin 裡的型別是 `String?`，編譯器會提醒你處理 null。
@@ -112,7 +136,8 @@ Android 本身的 API 就有這些標註。例如 `intent.getStringExtra("id")` 
 **(1) SAM 轉換。** SAM 是 single abstract method 的縮寫，指「只有一個抽象方法的介面」，例如 `Runnable`。Java 的 SAM 介面，在 Kotlin 可以直接傳 lambda：
 
 ```kotlin
-executor.execute { println("run") }       // Java 的 Executor.execute(Runnable)
+// Java 的 Executor.execute(Runnable)
+executor.execute { println("run") }
 val r = Runnable { println("run") }
 ```
 
@@ -127,7 +152,8 @@ Kotlin 自己宣告的介面，要寫成 `fun interface`（Kotlin 1.4 起）才�
 ```java
 try {
     client.load("a");
-} catch (IOException e) { }   // 編譯錯誤：這個例外從未被宣告可能丟出
+// 編譯錯誤：這個例外從未被宣告可能丟出
+} catch (IOException e) { }
 ```
 
 因為 Kotlin 產生的方法簽名沒有 `throws`。所以公開給 Java 的 API 要標 `@Throws`。同樣的規則也適用於 Kotlin Multiplatform（KMP，用 Kotlin 寫一份共用邏輯給 iOS 與 Android 使用）匯出給 Swift 的情況：`suspend fun` 若沒有標 `@Throws`，丟出的例外 Swift 端接不住，會讓 App 直接終止。
@@ -147,13 +173,16 @@ Kotlin 的 `use { }` 則對應 Java 的 try-with-resources（用完自動關閉�
 
 ```kotlin
 class Poller {
-    var running = true                       // 沒有 @Volatile
+    // 沒有 @Volatile
+    var running = true
 
-    fun loop() {                             // 在執行緒 A 執行
+    // 在執行緒 A 執行
+    fun loop() {
         while (running) { /* 輪詢行情 */ }
     }
 
-    fun stop() { running = false }           // 在執行緒 B 呼叫
+    // 在執行緒 B 呼叫
+    fun stop() { running = false }
 }
 ```
 
@@ -162,7 +191,8 @@ B 已經把 `running` 設成 `false`，但 A 的迴圈可能**永遠不結束**�
 修法是加上 `@Volatile`（對應 Java 的 `volatile`）：
 
 ```kotlin
-@Volatile var running = true    // 每次讀都讀最新的值，每次寫都立刻讓其他執行緒看得到
+// 每次讀都讀最新的值，每次寫都立刻讓其他執行緒看得到
+@Volatile var running = true
 ```
 
 **例子二：重排（reordering）。**
@@ -176,7 +206,10 @@ data = 42
 ready = true
 
 // 執行緒 B
-if (ready) println(data)    // 因為 ready 是 volatile，只要 B 讀到 ready == true，一定印出 42
+// 因為 ready 是 volatile，只要 B 讀到 ready == true，一定印出 42
+if (ready) {
+    println(data)
+}
 ```
 
 如果 `ready` 不是 volatile，B 可能讀到 `ready == true` 卻讀到 `data == 0`，因為 A 的兩行寫入可能被重排，或其中一個還沒讓 B 看到。`@Volatile` 保證：A 在寫入 `ready` **之前**做的所有寫入（包含 `data = 42`），B 讀到這個 `ready` 之後都看得到。
@@ -220,12 +253,18 @@ if (ready) println(data)    // 因為 ready 是 volatile，只要 B 讀到 ready
 class Counter {
     private val lock = Any()
     private var count = 0
-    fun increment() = synchronized(lock) { count++ }   // 同一時間只有一個執行緒進來
-    fun get() = synchronized(lock) { count }            // 讀也要用同一把鎖，才看得到最新值
+
+    // 同一時間只有一個執行緒進來
+    fun increment() = synchronized(lock) { count++ }
+
+    // 讀也要用同一把鎖，才看得到最新值
+    fun get() = synchronized(lock) { count }
 }
 
 val atomic = java.util.concurrent.atomic.AtomicInteger()
-atomic.incrementAndGet()    // 原子地加一。底層用 CAS：先讀出目前的值，只有值還沒被別人改過，才寫入新值，否則重試
+// 原子地加一。底層用 CAS：先讀出目前的值，
+// 只有值還沒被別人改過，才寫入新值，否則重試
+atomic.incrementAndGet()
 ```
 
 CAS 是 compare-and-set 的縮寫，「比較再設定」：如果現在的值還是我剛才讀到的那個值，才改成新值；已經被別人改過，就重來一次。
@@ -237,8 +276,10 @@ CAS 是 compare-and-set 的縮寫，「比較再設定」：如果現在的值�
 
 ```kotlin
 // balance 的讀和寫各自都有同步，但這段仍然有問題
-if (balance >= amount) {      // 兩筆委託同時檢查，餘額都夠
-    balance -= amount         // 兩筆都扣，餘額變成負的
+// 兩筆委託同時檢查，餘額都夠
+if (balance >= amount) {
+    // 兩筆都扣，餘額變成負的
+    balance -= amount
 }
 ```
 
@@ -283,11 +324,14 @@ class Repo private constructor() {
 val map = ConcurrentHashMap<String, Session>()
 
 // 錯誤：兩個執行緒可能同時通過 containsKey，各自 put，後寫的覆蓋先寫的
-if (!map.containsKey(id)) { map[id] = Session(id) }
+if (!map.containsKey(id)) {
+    map[id] = Session(id)
+}
 
 // 正確：合成一個原子操作
 map.putIfAbsent(id, Session(id))
-map.computeIfAbsent(id) { Session(id) }   // 只在 key 不存在時才建立 Session
+// 只在 key 不存在時才建立 Session
+map.computeIfAbsent(id) { Session(id) }
 ```
 
 注意 Kotlin 的 `ConcurrentMap.getOrPut` **不是原子的**：預設值的函式在多執行緒下可能被執行多次（只保證不會覆蓋已經存在的值）。要確保只建立一次，用 `computeIfAbsent`。
@@ -296,10 +340,12 @@ map.computeIfAbsent(id) { Session(id) }   // 只在 key 不存在時才建立 Se
 
 ```kotlin
 val hm = HashMap<String?, Int?>()
-hm[null] = null            // 可以，size 是 1
+// 可以，size 是 1
+hm[null] = null
 
 val chm = ConcurrentHashMap<String, Int?>()
-chm["a"] = null            // 可以編譯，但執行時丟 NullPointerException
+// 可以編譯，但執行時丟 NullPointerException
+chm["a"] = null
 ```
 
 Kotlin 的型別系統不會替你擋下這個問題。
@@ -308,11 +354,21 @@ Kotlin 的型別系統不會替你擋下這個問題。
 
 ```kotlin
 val a = mutableListOf(1, 2, 3)
-for (x in a) { if (x == 2) a.remove(x) }
-println(a)    // 輸出：[1, 3]，沒有丟例外，而且 3 根本沒有被走訪到
+for (x in a) {
+    if (x == 2) {
+        a.remove(x)
+    }
+}
+// 輸出：[1, 3]，沒有丟例外，而且 3 根本沒有被走訪到
+println(a)
 
 val b = mutableListOf(1, 2, 3, 4)
-for (x in b) { if (x == 2) b.remove(x) }   // 這個會丟 ConcurrentModificationException
+// 這個會丟 ConcurrentModificationException
+for (x in b) {
+    if (x == 2) {
+        b.remove(x)
+    }
+}
 ```
 
 第一個迴圈沒丟例外，是因為迭代器判斷「還有沒有下一個」的方式，是比較目前位置和目前的大小：移除 `2` 後，位置剛好等於大小，迴圈就默默結束了。要在迭代時修改集合，用 `removeIf`、`iterator.remove()`，或先複製一份。

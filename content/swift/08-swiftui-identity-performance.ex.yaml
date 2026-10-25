@@ -12,20 +12,33 @@
     var created: [String: Int] = [:]
 
     final class Model: ObservableObject {
-        init(_ tag: String) { created[tag, default: 0] += 1 }
+        init(_ tag: String) {
+            created[tag, default: 0] += 1
+        }
     }
 
     struct Leaf: View {
         @StateObject private var model: Model
-        init(_ tag: String) { _model = StateObject(wrappedValue: Model(tag)) }
-        var body: some View { Text("leaf") }
+
+        init(_ tag: String) {
+            _model = StateObject(wrappedValue: Model(tag))
+        }
+
+        var body: some View {
+            Text("leaf")
+        }
     }
 
     struct Demo: View {
         @State var flag = false
+
         var body: some View {
             VStack {
-                if flag { Leaf("branch") } else { Leaf("branch") }
+                if flag {
+                    Leaf("branch")
+                } else {
+                    Leaf("branch")
+                }
                 Leaf("single").opacity(flag ? 1 : 0.4)
                 Button("toggle") { flag.toggle() }
             }
@@ -93,7 +106,9 @@
     下面這個函式用 `AnyView` 回傳不同的畫面。哪個重構最合適？
   codeLang: swift
   code: |
-    enum Mode { case price, depth, trades }
+    enum Mode {
+        case price, depth, trades
+    }
 
     func content(for mode: Mode) -> AnyView {
         switch mode {
@@ -183,12 +198,19 @@
     starter: |
       struct TickBatcher<Value> {
           let intervalMs: Int64
-          init(intervalMs: Int64) { self.intervalMs = intervalMs }
+
+          init(intervalMs: Int64) {
+              self.intervalMs = intervalMs
+          }
 
           var pendingCount: Int { 0 }
 
           // TODO: 累積每個 symbol 的最新值，到了間隔才送出
-          mutating func push(_ symbol: String, _ value: Value, now: Int64) -> [String: Value]? {
+          mutating func push(
+              _ symbol: String,
+              _ value: Value,
+              now: Int64
+          ) -> [String: Value]? {
               return nil
           }
 
@@ -203,13 +225,21 @@
           private var pending: [String: Value] = [:]
           private var lastFlush: Int64?
 
-          init(intervalMs: Int64) { self.intervalMs = intervalMs }
+          init(intervalMs: Int64) {
+              self.intervalMs = intervalMs
+          }
 
           var pendingCount: Int { pending.count }
 
-          mutating func push(_ symbol: String, _ value: Value, now: Int64) -> [String: Value]? {
+          mutating func push(
+              _ symbol: String,
+              _ value: Value,
+              now: Int64
+          ) -> [String: Value]? {
               pending[symbol] = value
-              if let last = lastFlush, now - last < intervalMs { return nil }
+              if let last = lastFlush, now - last < intervalMs {
+                  return nil
+              }
               return flush(now: now)
           }
 
@@ -225,6 +255,7 @@
           var b = TickBatcher<Int>(intervalMs: 100)
           return b.push("BTC", 1, now: 0) ?? [:]
       }
+
       check("區間內的後續資料先累積、不送出") {
           var b = TickBatcher<Int>(intervalMs: 100)
           _ = b.push("BTC", 1, now: 0)
@@ -232,6 +263,7 @@
           let r2 = b.push("ETH", 9, now: 99)
           return r1 == nil && r2 == nil && b.pendingCount == 2
       }
+
       checkEqual("到達間隔後送出每個 symbol 的最新值", ["BTC": 4, "ETH": 9]) {
           var b = TickBatcher<Int>(intervalMs: 100)
           _ = b.push("BTC", 1, now: 0)
@@ -240,6 +272,7 @@
           _ = b.push("BTC", 3, now: 80)
           return b.push("BTC", 4, now: 100) ?? [:]
       }
+
       checkEqual("送出後清空累積", 0) {
           var b = TickBatcher<Int>(intervalMs: 100)
           _ = b.push("BTC", 1, now: 0)
@@ -247,16 +280,19 @@
           _ = b.push("BTC", 3, now: 100)
           return b.pendingCount
       }
+
       checkEqual("flush 強制送出累積的內容", ["BTC": 2]) {
           var b = TickBatcher<Int>(intervalMs: 100)
           _ = b.push("BTC", 1, now: 0)
           _ = b.push("BTC", 2, now: 50)
           return b.flush(now: 60)
       }
+
       checkEqual("沒有累積時 flush 回傳空", 0) {
           var b = TickBatcher<Int>(intervalMs: 100)
           return b.flush(now: 10).count
       }
+
       check("flush 之後從該時間點重新計時") {
           var b = TickBatcher<Int>(intervalMs: 100)
           _ = b.push("BTC", 1, now: 0)

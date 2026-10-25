@@ -178,12 +178,23 @@
       }
     tests: |
       func D(_ s: String) -> Decimal { Decimal(string: s)! }
-      checkEqual("價格 tick 0.01", D("1234.56")) { floorToStep(D("1234.567"), step: D("0.01")) }
-      checkEqual("數量 step 0.0001", D("0.1234")) { floorToStep(D("0.123456789"), step: D("0.0001")) }
+      checkEqual("價格 tick 0.01", D("1234.56")) {
+          floorToStep(D("1234.567"), step: D("0.01"))
+      }
+
+      checkEqual("數量 step 0.0001", D("0.1234")) {
+          floorToStep(D("0.123456789"), step: D("0.0001"))
+      }
+
       checkEqual("tick 為 5 円", D("1230")) { floorToStep(D("1234"), step: D("5")) }
-      checkEqual("小於 step 回傳 0", D("0")) { floorToStep(D("0.00009"), step: D("0.0001")) }
+      checkEqual("小於 step 回傳 0", D("0")) {
+          floorToStep(D("0.00009"), step: D("0.0001"))
+      }
+
       checkEqual("已對齊不變", D("2.5")) { floorToStep(D("2.5"), step: D("0.5")) }
-      checkEqual("satoshi 精度", D("0.12345678")) { floorToStep(D("0.123456789123"), step: D("0.00000001")) }
+      checkEqual("satoshi 精度", D("0.12345678")) {
+          floorToStep(D("0.123456789123"), step: D("0.00000001"))
+      }
   kotlin:
     starter: |
       import java.math.BigDecimal
@@ -199,12 +210,29 @@
           value.divide(step, 0, RoundingMode.DOWN).multiply(step)
     tests: |
       fun plain(v: BigDecimal) = v.stripTrailingZeros().toPlainString()
-      checkEqual("價格 tick 0.01", "1234.56") { plain(floorToStep(BigDecimal("1234.567"), BigDecimal("0.01"))) }
-      checkEqual("數量 step 0.0001", "0.1234") { plain(floorToStep(BigDecimal("0.123456789"), BigDecimal("0.0001"))) }
-      checkEqual("tick 為 5 円", "1230") { plain(floorToStep(BigDecimal("1234"), BigDecimal("5"))) }
-      checkEqual("小於 step 回傳 0", "0") { plain(floorToStep(BigDecimal("0.00009"), BigDecimal("0.0001"))) }
-      checkEqual("已對齊不變", "2.5") { plain(floorToStep(BigDecimal("2.5"), BigDecimal("0.5"))) }
-      checkEqual("satoshi 精度", "0.12345678") { plain(floorToStep(BigDecimal("0.123456789123"), BigDecimal("0.00000001"))) }
+      checkEqual("價格 tick 0.01", "1234.56") {
+          plain(floorToStep(BigDecimal("1234.567"), BigDecimal("0.01")))
+      }
+
+      checkEqual("數量 step 0.0001", "0.1234") {
+          plain(floorToStep(BigDecimal("0.123456789"), BigDecimal("0.0001")))
+      }
+
+      checkEqual("tick 為 5 円", "1230") {
+          plain(floorToStep(BigDecimal("1234"), BigDecimal("5")))
+      }
+
+      checkEqual("小於 step 回傳 0", "0") {
+          plain(floorToStep(BigDecimal("0.00009"), BigDecimal("0.0001")))
+      }
+
+      checkEqual("已對齊不變", "2.5") {
+          plain(floorToStep(BigDecimal("2.5"), BigDecimal("0.5")))
+      }
+
+      checkEqual("satoshi 精度", "0.12345678") {
+          plain(floorToStep(BigDecimal("0.123456789123"), BigDecimal("0.00000001")))
+      }
 
 - id: exchange-precision-09
   type: code
@@ -247,14 +275,37 @@
       }
     tests: |
       func D(_ s: String) -> Decimal { Decimal(string: s)! }
-      checkEqual("上漲", "+1.23%") { formatChangePercent(open: D("100"), last: D("101.234")) }
-      checkEqual("下跌補零", "-0.50%") { formatChangePercent(open: D("100"), last: D("99.5")) }
-      checkEqual("持平", "0.00%") { formatChangePercent(open: D("100"), last: D("100")) }
-      checkEqual("open 為 0", "--") { formatChangePercent(open: D("0"), last: D("1")) }
-      checkEqual("0.005 進位", "+0.01%") { formatChangePercent(open: D("200"), last: D("200.01")) }
-      checkEqual("-0.005 遠離 0", "-0.01%") { formatChangePercent(open: D("200"), last: D("199.99")) }
-      checkEqual("極小跌幅顯示 0.00%", "0.00%") { formatChangePercent(open: D("100000"), last: D("99999.999")) }
-      checkEqual("不加千分位", "+15000.00%") { formatChangePercent(open: D("1"), last: D("151")) }
+      checkEqual("上漲", "+1.23%") {
+          formatChangePercent(open: D("100"), last: D("101.234"))
+      }
+
+      checkEqual("下跌補零", "-0.50%") {
+          formatChangePercent(open: D("100"), last: D("99.5"))
+      }
+
+      checkEqual("持平", "0.00%") {
+          formatChangePercent(open: D("100"), last: D("100"))
+      }
+
+      checkEqual("open 為 0", "--") {
+          formatChangePercent(open: D("0"), last: D("1"))
+      }
+
+      checkEqual("0.005 進位", "+0.01%") {
+          formatChangePercent(open: D("200"), last: D("200.01"))
+      }
+
+      checkEqual("-0.005 遠離 0", "-0.01%") {
+          formatChangePercent(open: D("200"), last: D("199.99"))
+      }
+
+      checkEqual("極小跌幅顯示 0.00%", "0.00%") {
+          formatChangePercent(open: D("100000"), last: D("99999.999"))
+      }
+
+      checkEqual("不加千分位", "+15000.00%") {
+          formatChangePercent(open: D("1"), last: D("151"))
+      }
   kotlin:
     starter: |
       import java.math.BigDecimal
@@ -267,20 +318,47 @@
       import java.math.RoundingMode
 
       fun formatChangePercent(open: BigDecimal, last: BigDecimal): String {
-          if (open.signum() == 0) return "--"
-          val pct = (last - open).multiply(BigDecimal(100)).divide(open, 2, RoundingMode.HALF_UP)
+          if (open.signum() == 0) {
+              return "--"
+          }
+          val pct = (last - open)
+              .multiply(BigDecimal(100))
+              .divide(open, 2, RoundingMode.HALF_UP)
           val sign = if (pct.signum() > 0) "+" else ""
           return sign + pct.toPlainString() + "%"
       }
     tests: |
-      checkEqual("上漲", "+1.23%") { formatChangePercent(BigDecimal("100"), BigDecimal("101.234")) }
-      checkEqual("下跌補零", "-0.50%") { formatChangePercent(BigDecimal("100"), BigDecimal("99.5")) }
-      checkEqual("持平", "0.00%") { formatChangePercent(BigDecimal("100"), BigDecimal("100")) }
-      checkEqual("open 為 0", "--") { formatChangePercent(BigDecimal("0"), BigDecimal("1")) }
-      checkEqual("0.005 進位", "+0.01%") { formatChangePercent(BigDecimal("200"), BigDecimal("200.01")) }
-      checkEqual("-0.005 遠離 0", "-0.01%") { formatChangePercent(BigDecimal("200"), BigDecimal("199.99")) }
-      checkEqual("極小跌幅顯示 0.00%", "0.00%") { formatChangePercent(BigDecimal("100000"), BigDecimal("99999.999")) }
-      checkEqual("不加千分位", "+15000.00%") { formatChangePercent(BigDecimal("1"), BigDecimal("151")) }
+      checkEqual("上漲", "+1.23%") {
+          formatChangePercent(BigDecimal("100"), BigDecimal("101.234"))
+      }
+
+      checkEqual("下跌補零", "-0.50%") {
+          formatChangePercent(BigDecimal("100"), BigDecimal("99.5"))
+      }
+
+      checkEqual("持平", "0.00%") {
+          formatChangePercent(BigDecimal("100"), BigDecimal("100"))
+      }
+
+      checkEqual("open 為 0", "--") {
+          formatChangePercent(BigDecimal("0"), BigDecimal("1"))
+      }
+
+      checkEqual("0.005 進位", "+0.01%") {
+          formatChangePercent(BigDecimal("200"), BigDecimal("200.01"))
+      }
+
+      checkEqual("-0.005 遠離 0", "-0.01%") {
+          formatChangePercent(BigDecimal("200"), BigDecimal("199.99"))
+      }
+
+      checkEqual("極小跌幅顯示 0.00%", "0.00%") {
+          formatChangePercent(BigDecimal("100000"), BigDecimal("99999.999"))
+      }
+
+      checkEqual("不加千分位", "+15000.00%") {
+          formatChangePercent(BigDecimal("1"), BigDecimal("151"))
+      }
 
 - id: exchange-precision-10
   type: open

@@ -168,7 +168,9 @@
 
           mutating func tick(nowMs: Int64) -> Value? {
               guard let value = pending else { return nil }
-              if let last = lastEmitMs, nowMs - last < intervalMs { return nil }
+              if let last = lastEmitMs, nowMs - last < intervalMs {
+                  return nil
+              }
               pending = nil
               lastEmitMs = nowMs
               return value
@@ -183,24 +185,29 @@
     tests: |
       check("第一次 tick 立即送出最新值（舊值被覆蓋）") {
           var t = ThrottleLatest<Int>(intervalMs: 100)
-          t.offer(1); t.offer(2)
+          t.offer(1)
+          t.offer(2)
           return t.tick(nowMs: 0) == 2
       }
+
       check("區間內只保留最新值；間隔未到回傳 nil 且保留待送值") {
           var t = ThrottleLatest<Int>(intervalMs: 100)
           t.offer(2)
           _ = t.tick(nowMs: 0)
-          t.offer(3); t.offer(4)
+          t.offer(3)
+          t.offer(4)
           let early = t.tick(nowMs: 50)
           let onTime = t.tick(nowMs: 100)
           return early == nil && onTime == 4
       }
+
       check("沒有新值就不重複送出") {
           var t = ThrottleLatest<Int>(intervalMs: 100)
           t.offer(1)
           _ = t.tick(nowMs: 0)
           return t.tick(nowMs: 100) == nil && t.tick(nowMs: 500) == nil
       }
+
       check("間隔從上一次「送出」的時間起算（不是上一次 tick）") {
           var t = ThrottleLatest<Int>(intervalMs: 100)
           t.offer(1)
@@ -211,6 +218,7 @@
           let c = t.tick(nowMs: 100)
           return a == nil && b == nil && c == 5
       }
+
       check("時鐘倒退不送出，之後正常恢復") {
           var t = ThrottleLatest<Int>(intervalMs: 100)
           t.offer(1)
@@ -220,6 +228,7 @@
           let later = t.tick(nowMs: 300)
           return back == nil && later == 6
       }
+
       check("flush 取出尾端的待送值並清除") {
           var t = ThrottleLatest<String>(intervalMs: 100)
           t.offer("a")
@@ -227,8 +236,10 @@
           t.offer("b")
           let early = t.tick(nowMs: 10)
           let tail = t.flush()
-          return early == nil && tail == "b" && t.flush() == nil && t.tick(nowMs: 1000) == nil
+          return early == nil && tail == "b" && t.flush() == nil &&
+              t.tick(nowMs: 1000) == nil
       }
+
       check("intervalMs 為 0：每次 tick 只要有待送值就送出") {
           var t = ThrottleLatest<Int>(intervalMs: 0)
           t.offer(1)
@@ -266,7 +277,9 @@
           fun tick(nowMs: Long): T? {
               val value = pending ?: return null
               val last = lastEmitMs
-              if (last != null && nowMs - last < intervalMs) return null
+              if (last != null && nowMs - last < intervalMs) {
+                  return null
+              }
               pending = null
               lastEmitMs = nowMs
               return value
@@ -281,24 +294,29 @@
     tests: |
       check("第一次 tick 立即送出最新值（舊值被覆蓋）") {
           val t = ThrottleLatest<Int>(100)
-          t.offer(1); t.offer(2)
+          t.offer(1)
+          t.offer(2)
           t.tick(0) == 2
       }
+
       check("區間內只保留最新值；間隔未到回傳 null 且保留待送值") {
           val t = ThrottleLatest<Int>(100)
           t.offer(2)
           t.tick(0)
-          t.offer(3); t.offer(4)
+          t.offer(3)
+          t.offer(4)
           val early = t.tick(50)
           val onTime = t.tick(100)
           early == null && onTime == 4
       }
+
       check("沒有新值就不重複送出") {
           val t = ThrottleLatest<Int>(100)
           t.offer(1)
           t.tick(0)
           t.tick(100) == null && t.tick(500) == null
       }
+
       check("間隔從上一次「送出」的時間起算（不是上一次 tick）") {
           val t = ThrottleLatest<Int>(100)
           t.offer(1)
@@ -309,6 +327,7 @@
           val c = t.tick(100)
           a == null && b == null && c == 5
       }
+
       check("時鐘倒退不送出，之後正常恢復") {
           val t = ThrottleLatest<Int>(100)
           t.offer(1)
@@ -318,6 +337,7 @@
           val later = t.tick(300)
           back == null && later == 6
       }
+
       check("flush 取出尾端的待送值並清除") {
           val t = ThrottleLatest<String>(100)
           t.offer("a")
@@ -327,6 +347,7 @@
           val tail = t.flush()
           early == null && tail == "b" && t.flush() == null && t.tick(1000) == null
       }
+
       check("intervalMs 為 0：每次 tick 只要有待送值就送出") {
           val t = ThrottleLatest<Int>(0)
           t.offer(1)

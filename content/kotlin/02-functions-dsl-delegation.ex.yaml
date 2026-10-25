@@ -21,6 +21,7 @@
         val b: Base = Derived()
         println(b.name())
         println(Derived().name())
+
         println(Greeter().hi())
         println(Greeter().hi(2))
     }
@@ -66,12 +67,18 @@
     var n = 0
     val v by lazy {
         n++
-        if (n < 2) error("boom")
+        if (n < 2) {
+            error("boom")
+        }
         n
     }
 
     fun main() {
-        try { println(v) } catch (e: IllegalStateException) { println("fail") }
+        try {
+            println(v)
+        } catch (e: IllegalStateException) {
+            println("fail")
+        }
         println(v)
         println(v)
         println(n)
@@ -147,7 +154,8 @@
         symbol = "btcjpy"
         leg {
             price = BigDecimal("100")
-            symbol = "oops"   // 在 leg 區塊裡寫了外層 builder 的屬性
+            // 在 leg 區塊裡寫了外層 builder 的屬性
+            symbol = "oops"
         }
     }
   options:
@@ -176,10 +184,12 @@
         fun price(): Int
         fun double(): Int
     }
+
     class Real : Repo {
         override fun price() = 10
         override fun double() = price() * 2
     }
+
     class Wrapper(r: Repo) : Repo by r {
         override fun price() = 99
     }

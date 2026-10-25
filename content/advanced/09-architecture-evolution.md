@@ -41,11 +41,14 @@ tags: [architecture, mvvm, mvi, clean-architecture, tca, modularization, feature
 
 ```kotlin
 // 步驟一：資料層對外先提供 Flow，內部暫時還是 Rx
-// asFlow() 來自 kotlinx-coroutines-rx3（用 RxJava 2 時是 kotlinx-coroutines-rx2）
+// asFlow() 來自 kotlinx-coroutines-rx3
+// （用 RxJava 2 時是 kotlinx-coroutines-rx2）
 class PriceRepositoryImpl(private val api: PriceApi) : PriceRepository {
     override fun prices(): Flow<List<Price>> =
-        api.observePrices()   // 舊的：回傳 Observable<List<Price>>
-            .asFlow()         // 橋接成 Flow，ViewModel 可以先改成收集 Flow
+        // 舊的：回傳 Observable<List<Price>>
+        api.observePrices()
+            // 橋接成 Flow，ViewModel 可以先改成收集 Flow
+            .asFlow()
 }
 ```
 
@@ -74,7 +77,8 @@ UDF 的原則是「**狀態往下、事件往上**」：畫面只顯示狀態，
 final class OrderViewModel: ObservableObject {
     @Published var price = ""
     @Published var quantity = ""
-    @Published var canSubmit = false   // 要自己記得在每次欄位改變後更新，否則會和 price、quantity 不一致
+    // 要自己記得在每次欄位改變後更新，否則會和 price、quantity 不一致
+    @Published var canSubmit = false
 }
 ```
 
@@ -84,7 +88,11 @@ MVI 把全部放進一份 state，狀態怎麼變只有 reducer 一個地方決�
 struct OrderState: Equatable {
     var price = ""
     var quantity = ""
-    var canSubmit: Bool { Decimal(string: price) != nil && Decimal(string: quantity) != nil }   // 由其他欄位算出來，不會不一致
+
+    // 由其他欄位算出來，不會不一致
+    var canSubmit: Bool {
+        Decimal(string: price) != nil && Decimal(string: quantity) != nil
+    }
 }
 
 enum OrderAction {
@@ -94,8 +102,11 @@ enum OrderAction {
 
 func reduce(_ state: inout OrderState, _ action: OrderAction) {
     switch action {
-    case .priceChanged(let text): state.price = text       // 唯一能修改 state 的地方
-    case .quantityChanged(let text): state.quantity = text
+    // 唯一能修改 state 的地方
+    case .priceChanged(let text):
+        state.price = text
+    case .quantityChanged(let text):
+        state.quantity = text
     }
 }
 ```
@@ -112,14 +123,20 @@ func reduce(_ state: inout OrderState, _ action: OrderAction) {
 UseCase（又稱 interactor）是 domain 層的一個小單位，代表使用者想做的一件事，例如「下單」。看兩個對比：
 
 ```kotlin
-// 有價值：協調兩個 repository，並放入下單前的業務規則；一般下單和快速下單兩個畫面都會用到
+// 有價值：協調兩個 repository，並放入下單前的業務規則；
+// 一般下單和快速下單兩個畫面都會用到
 class PlaceOrderUseCase(
     private val orders: OrderRepository,
     private val balances: BalanceRepository,
 ) {
     suspend operator fun invoke(draft: OrderDraft): Result<Order> {
-        if (!draft.isAlignedToTick()) return Result.failure(InvalidPriceException())   // 價格要符合 tick size（最小跳動單位）
-        if (balances.available() < draft.requiredFunds()) return Result.failure(InsufficientFundsException())
+        // 價格要符合 tick size（最小跳動單位）
+        if (!draft.isAlignedToTick()) {
+            return Result.failure(InvalidPriceException())
+        }
+        if (balances.available() < draft.requiredFunds()) {
+            return Result.failure(InsufficientFundsException())
+        }
         return runCatching { orders.place(draft) }
     }
 }
@@ -177,12 +194,14 @@ class GetPricesUseCase(private val repo: PriceRepository) {
 
 ```kotlin
 @HiltViewModel
-class OrderViewModel @Inject constructor(      // @Inject 告訴 Hilt 怎麼建立這個類別
+// @Inject 告訴 Hilt 怎麼建立這個類別
+class OrderViewModel @Inject constructor(
     private val placeOrder: PlaceOrderUseCase,
 ) : ViewModel()
 
 @Module
-@InstallIn(SingletonComponent::class)           // 綁定的存活時間：和整個 Application 一樣長
+// 綁定的存活時間：和整個 Application 一樣長
+@InstallIn(SingletonComponent::class)
 object NetworkModule {
     @Provides @Singleton
     fun okHttp(): OkHttpClient = OkHttpClient()
