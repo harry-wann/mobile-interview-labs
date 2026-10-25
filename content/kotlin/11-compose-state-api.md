@@ -1,7 +1,7 @@
 ---
 id: kotlin-compose-state-api
-title: Compose 的狀態 API 全覽（SwiftUI 對照版）：@State、@Binding、@Observable 在 Compose 裡叫什麼
-summary: 給熟 SwiftUI、還沒寫過 Jetpack Compose 的 iOS 工程師。每個 API 用條列固定分四塊：這是什麼、什麼時候用、範例，以及 SwiftUI 對照（先列對應關係與差異，再給 SwiftUI 與 Compose 兩段做同一件事的程式碼；SwiftUI 沒有的概念就說明為什麼沒有）。用同一張下單表單帶出 mutableStateOf、SnapshotMutationPolicy、rememberSaveable、derivedStateOf、collectAsStateWithLifecycle、StateFlow 等 API，最後給一張「情境、SwiftUI、Compose」三欄的速查表。
+title: Compose 的狀態 API 全覽：mutableStateOf、remember、derivedStateOf、collectAsState 怎麼選
+summary: 給會 Kotlin、但還沒寫過 Jetpack Compose 的人。先用三個觀念（Composable 是描述畫面的函式、State 是 Compose 盯著看的變數、remember 讓重組時不忘記）說明為什麼普通的 var 改了畫面不會動，再用同一張下單表單，一個 API 一個小節，帶出 mutableStateOf、rememberSaveable、derivedStateOf、collectAsStateWithLifecycle、StateFlow 等：這是什麼、什麼時候用、範例、不這樣寫會怎樣。每一題的最後有一小節「對應到 SwiftUI」，給寫過 SwiftUI 的人對照，沒寫過可以跳過；最後給一張「情境對應 API」的速查表。
 priority: P0
 day: 5
 tags: [compose, state, recomposition, mutablestateof, remember, remembersaveable, saver, derivedstateof, snapshotflow, collectasstatewithlifecycle, stateflow]
@@ -9,44 +9,67 @@ tags: [compose, state, recomposition, mutablestateof, remember, remembersaveable
 
 ## 重點講解
 
-這個單元寫給熟 SwiftUI、還沒寫過 Jetpack Compose（Android 官方的宣告式 UI 框架）的 iOS 工程師。
-
-- 每個 API 固定四塊，全用條列：**這是什麼**、**什麼時候用**、**範例**、**SwiftUI 對照**；坑放在 **常見錯誤**。
-- 不是一對一的地方標「大致對應」；SwiftUI 沒有的概念，直接說為什麼沒有。
-- 範例是同一張「下單表單」：交易對、數量、價格三個欄位和送出按鈕，下面一條跳動的即時價格。
-- 重組見 Kotlin06，effect 見 Kotlin07，Flow 見 Kotlin05。
+這個單元假設你會寫 Kotlin，但還沒寫過 Jetpack Compose（Android 官方的宣告式 UI 框架。「宣告式」的意思是：你描述畫面現在該長什麼樣子，而不是一步一步指揮「把這個按鈕改成那樣」）。Kotlin06、Kotlin07 講過重組與 effect 的細節，這裡不要求你先看過，用到的觀念都會先用白話講一遍。
 
 這個單元回答九個面試常見問題：
 
-1. Composable、State、`remember` 對應 SwiftUI 的什麼？差在哪？
-2. `mutableStateOf`：`by` 和 `.value` 差在哪？怎麼只重畫價格那一行？
-3. `mutableStateListOf` 和 `mutableStateOf(listOf())` 差在哪？
-4. `SnapshotMutationPolicy`（SwiftUI 沒有）什麼時候要換？
-5. `remember`、`rememberSaveable`、`rememberUpdatedState` 怎麼選？`Saver` 怎麼寫？
-6. `derivedStateOf`、`snapshotFlow`、`produceState` 怎麼選？Snapshot 是什麼？
-7. `collectAsState` 還是 `collectAsStateWithLifecycle`？
-8. ViewModel 的畫面狀態用 `mutableStateOf` 還是 `StateFlow`？狀態放哪一層？
-9. 情境對應 SwiftUI 與 Compose 該用哪個 API？
+1. Composable、State、`remember` 到底是什麼？為什麼普通的 `var` 改了畫面不會動？
+2. `mutableStateOf` 怎麼用？`by` 和 `.value` 差在哪？價格每秒更新幾十次，怎麼只重畫那一行？
+3. 清單與對照表怎麼放進 State？`mutableStateListOf` 和 `mutableStateOf(listOf())` 差在哪？
+4. Compose 怎麼判斷「值有沒有變」？什麼時候要換 policy？
+5. 數量輸入到一半，旋轉螢幕不能消失：`remember`、`rememberSaveable`、`rememberUpdatedState` 怎麼選？`Saver` 怎麼寫？
+6. 價格超過警示線才顯示紅字：`derivedStateOf`、`snapshotFlow`、`produceState` 怎麼選？Snapshot 是什麼？
+7. ViewModel 給的價格 Flow 要顯示在畫面上、退到背景不要收：`collectAsState` 還是 `collectAsStateWithLifecycle`？
+8. ViewModel 的畫面狀態用 `mutableStateOf` 還是 `StateFlow`？狀態該放哪一層？
+9. 一張速查表：情境對應該用哪個 API？
 
-### 1. Composable、State、`remember` 對應 SwiftUI 的什麼？差在哪？
+整個單元用同一張「下單表單」當例子。表單有交易對、數量、價格三個欄位和一個送出按鈕，下面有一條會一直跳動的即時價格，送出之後底下多一筆委託。每一題的 API，都是為了解決這張表單的某個需求：
 
-**`@Composable` 函式對應 `View.body`，`remember { mutableStateOf(…) }` 對應 `@State`；差別是 Compose 要自己寫 `remember`，忘了就在每次重組時歸零。**
+| 下單表單的需求 | 用到的 API | 第幾題 |
+|---|---|---|
+| 按下「送出」，畫面要顯示已送出幾筆 | `mutableStateOf`、`remember` | 1 |
+| 即時價格每秒更新幾十次，只有那一行要重畫 | 把 State 的讀取往下推、`mutableLongStateOf` | 2 |
+| 送出後，底下的委託清單多一筆 | `mutableStateListOf` | 3 |
+| 同一筆訂單的狀態改了，畫面卻沒動 | `SnapshotMutationPolicy` | 4 |
+| 數量輸入到一半，旋轉螢幕不能消失 | `rememberSaveable`、`Saver` | 5 |
+| 價格超過警示線，才顯示紅字 | `derivedStateOf` | 6 |
+| ViewModel（Android 用來放畫面資料、旋轉螢幕時不會被銷毀的物件）給的價格 Flow（Kotlin 的非同步資料串流）要顯示，退到背景不要收 | `collectAsStateWithLifecycle` | 7 |
+| 這些狀態該放在 ViewModel，還是放在畫面裡 | `StateFlow`、state hoisting | 8 |
+
+Compose 的狀態 API 雖然多，其實只在回答兩個問題：**值放在哪裡**（建立、記住），以及**值從哪裡來**（從別的 State 衍生、從 Flow 或 callback 轉進來）。重組怎麼運作，Kotlin06 有完整的講解；`LaunchedEffect` 這類 effect API，Kotlin07 講過；Flow 的種類與 `stateIn`，Kotlin05 講過。這裡只聚焦「該選哪一個」，需要時簡短帶過並指回去。
+
+每個 API 是一個小節，固定分成四塊：
+
+- **這是什麼**：它解決什麼問題、怎麼運作。
+- **什麼時候用**：下單表單的哪個需求會用到它，哪些情況不要用。
+- **範例**：一段完整的程式碼，以及執行起來會看到什麼。
+- **不這樣寫會怎樣**：常見的錯誤寫法，每一條講症狀和原因。沒有什麼坑的小節會省略這一塊。
+
+第 1 到 8 題的最後，各有一個「對應到 SwiftUI」小節，給寫過 SwiftUI 的人把 Compose 接到已經熟悉的東西上。沒寫過 SwiftUI 的話，整個小節跳過就好，其他地方都不需要它。
+
+### 1. Composable、State、`remember` 到底是什麼？為什麼普通的 `var` 改了畫面不會動？
+
+**Compose 的畫面是用函式「描述」出來的：State 一改變，Compose 就把讀過它的函式重新執行一次，算出新畫面；而函式每次執行，裡面的區域變數都會從頭開始，所以要保留的資料得用 `remember` 存起來。** 這三件事（Composable、State、`remember`）弄懂了，後面所有 API 都只是它們的變化。
+
+這一題用最小的例子串起來：下單表單上有一個「送出」按鈕，按一下，畫面顯示「已送出幾筆」。
 
 #### `@Composable` 函式
 
 **這是什麼**
 
-- 描述畫面現在的樣子，不是建立 view 物件。
-- 資料變了就重新執行（重組，recomposition），只更新有變的部分。
+用 `@Composable` 標記的函式叫做 Composable。它不是在「建立一個按鈕物件」，而是在「描述畫面現在長什麼樣子」，例如 `Text("已送出 3 筆")` 的意思是「這裡有一行字，內容是已送出 3 筆」。Android 傳統的 View 系統，你會建立 `TextView` 再呼叫 `setText` 改字；Compose 沒有這種可以拿在手上的物件。
+
+要改畫面，做法是用新的資料把函式再執行一次，Compose 會比對前後兩次的描述，只更新有變的部分。這個「再執行一次」叫重組（recomposition），所以 Composable 會被反覆執行；Compose 目前建好的整棵畫面樹，叫 composition。
 
 **什麼時候用**
 
-- 用：所有畫面；拆成小函式，重畫範圍跟著變小。
-- 不用：函式裡直接打 API；副作用放進 effect（如 `LaunchedEffect`，見 Kotlin07）。
+所有畫面都用 Composable 組出來。重組是以函式為單位，函式拆得越小，資料改變時需要重新執行的範圍就越小。
+
+因為函式會被反覆執行，次數和時機都由 Compose 決定，所以函式本體只負責描述畫面，不要在裡面直接打 API 或寫檔案。這類會影響外面世界的事叫副作用（side effect），要放進 `LaunchedEffect` 這類 effect（Compose 專門讓你安全放副作用的地方，Kotlin07 講）。
 
 **範例**
 
-用普通的 `if` 描述畫面。
+依數量有沒有填，描述兩種不同的畫面。
 
 ```kotlin
 @Composable
@@ -59,60 +82,108 @@ fun OrderSummary(qty: String) {
 }
 ```
 
-**SwiftUI 對照**
+傳入空字串，畫面是紅字「請輸入數量」；傳入 `"0.25"`，畫面是「數量：0.25」。用的就是普通的 `if`，傳進來的資料一變，Compose 再執行一次，畫面就換成另一種。
 
-| SwiftUI | Compose | 差異 |
-|---|---|---|
-| `View` 的 `body` | `@Composable` 函式 | 大致對應 |
-| 以 view 為單位重算 | 以函式為單位重組 | 參數沒變、型別 stable（不會被偷偷改，見 Kotlin06）就跳過 |
+**不這樣寫會怎樣**
 
-```swift
-struct OrderSummary: View {
-    let qty: String
-
-    var body: some View {
-        Text(qty.isEmpty ? "請輸入數量" : "數量：\(qty)")
-    }
-}
-```
-
-```kotlin
-@Composable
-fun OrderSummary(qty: String) {
-    Text(if (qty.isEmpty()) "請輸入數量" else "數量：$qty")
-}
-```
+- 在函式本體直接呼叫下單 API，重組幾次就下幾次單。因為 Composable 會被反覆執行，Compose 也不保證會執行幾次。
 
 #### State：Compose 盯著看的變數
 
 **這是什麼**
 
-- Compose 會記下「哪個 Composable 讀過它」。
-- 被寫入新值，就重組讀過它的 Composable。
+State 是 Compose 會盯著看的變數。Compose 執行 Composable 的時候，會記下「哪個函式讀過哪個 State」；之後只要這個 State 被寫入新值，Compose 就重新執行讀過它的那些函式，畫面跟著更新。
+
+用 `mutableStateOf` 建立的才是 State。普通的 `var` Compose 看不到，所以改了也沒人通知它。
 
 **什麼時候用**
 
-- 用：值改了畫面要跟著變，例如已送出筆數。
-- 不用：只在事件處理裡暫時用的值。
+凡是「值改了，畫面要跟著變」的資料，都放進 State，例如已送出的筆數、買賣方向、輸入框裡的字。只在按鈕事件裡暫時用一下、畫面不需要顯示的值，不必做成 State，因為追蹤每個 State 都有成本。
 
 **範例**
 
-按「送出」，筆數加一（`remember` 下一節講）。
+按「送出」，筆數加一。這裡的 `remember` 下一節才講，先照著寫。
 
 ```kotlin
-var sent by remember { mutableIntStateOf(0) }
+@Composable
+fun SubmitCounter() {
+    // State 加 remember：值會變，重組時也不會歸零
+    var sent by remember { mutableIntStateOf(0) }
 
-Button(onClick = { sent++ }) { Text("已送出：$sent 筆") }
+    // Column：把裡面的東西由上往下排
+    Column {
+        // 讀取 sent：Compose 記下這個函式依賴它
+        Text("已送出：$sent 筆")
+
+        // onClick：點下去時執行的程式
+        Button(onClick = { sent++ }) {
+            Text("送出")
+        }
+    }
+}
 ```
 
-**常見錯誤**
+點一下「送出」，畫面從「已送出：0 筆」變成「已送出：1 筆」，再點變成 2。過程是：`sent++` 寫入 State，Compose 找到讀過它的函式，重新執行，`Text` 描述出新的數字。
 
-- 用普通的 `var sent = 0`：值變了沒人通知，畫面不動。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
+- 把 `sent` 寫成普通的區域變數，點了按鈕，畫面永遠是「已送出：0 筆」。`sent` 真的變成了 1，但 Compose 看不到這個變數，沒有人通知它重組。
 
-- `@State` 大致對應「State 加 `remember`」。
-- `body` 改普通屬性，編譯器會擋；Compose 能編譯，只是沒人通知。
+```kotlin
+// 普通的區域變數，Compose 看不到它
+var sent = 0
+```
+
+#### `remember`
+
+**這是什麼**
+
+`remember` 的意思是「重組時不要忘記」。Composable 每次重組都會從頭再跑一遍，如果直接寫 `mutableIntStateOf(0)`，每次重組都會建出一個新的、值為 0 的 State。
+
+`remember { … }` 會把第一次算出來的結果存起來，之後重組直接拿同一份。可以想成：函式每次重組都像拿到一張白紙，`remember` 則是貼在牆上的便利貼，下次回來還在；Compose 用這段程式在畫面樹上的位置，當作便利貼的標籤。
+
+**什麼時候用**
+
+任何要跨重組保留的東西都用它：State，或是建立起來比較貴的物件，例如價格格式化器。`remember` 只管「重組之間」不忘記。旋轉螢幕、App 被系統殺掉，它就管不到了，那是第 5 題 `rememberSaveable` 的工作。
+
+**範例**
+
+價格格式化器只建一次，之後每次價格變都拿同一個來用。`PriceFormatter` 是範例假設的類別，負責把價格排成想要的小數位數。
+
+```kotlin
+@Composable
+fun PriceText(price: Long) {
+    // 第一次執行時建立並存起來，之後重組直接拿
+    val formatter = remember { PriceFormatter(0.01) }
+
+    Text(formatter.format(price))
+}
+```
+
+價格每變一次，`PriceText` 就重組一次，但 `formatter` 還是第一次建的那一個，不會重建。
+
+**不這樣寫會怎樣**
+
+- 把計數器的 `remember` 拿掉（`var sent by mutableIntStateOf(0)`），點按鈕畫面永遠是 0。State 有被寫入、Compose 也重組了，但重組時函式從頭跑，又建出一個值為 0 的新 State。
+
+三種寫法並排比較：
+
+| 寫法 | 點一下按鈕之後 | 原因 |
+|---|---|---|
+| 普通的 `var` | 畫面不動 | Compose 看不到這個變數，沒有人通知它重組 |
+| State，但沒有 `remember` | 畫面不動，數字永遠是 0 | 有重組，但每次重組都建立新的 State，值回到 0 |
+| `remember` 加 State | 畫面變成 1，再點變成 2 | 正確 |
+
+#### 對應到 SwiftUI
+
+在 SwiftUI 裡，`View` 的 `body` 做的是同一件事：資料變了，就重新算一次「畫面現在長什麼樣子」。`@State` 對應的是「State 加 `remember`」這兩件事合起來。
+
+最大的差別是：SwiftUI 的 `@State` 由框架依 view 在樹上的位置保管，`body` 重算多少次值都不會歸零；Compose 要自己寫 `remember`，漏了就每次重組都歸零。另外，SwiftUI 的 struct 在 `body` 裡改普通屬性，編譯器會直接擋；Compose 的區域變數卻能編譯，所以是靜悄悄地失敗。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| `View` 的 `body` | `@Composable` 函式 | 都在描述畫面；Compose 以函式為單位重組 |
+| `@State` | `remember { mutableStateOf(…) }` | 前者框架保管，後者要自己寫 `remember` |
 
 ```swift
 struct SubmitCounter: View {
@@ -125,138 +196,74 @@ struct SubmitCounter: View {
 ```
 
 ```kotlin
-var sent by remember { mutableIntStateOf(0) }
+@Composable
+fun SubmitCounter() {
+    var sent by remember { mutableIntStateOf(0) }
 
-Button(onClick = { sent++ }) { Text("已送出：$sent 筆") }
-```
-
-#### `remember`
-
-**這是什麼**
-
-- 「重組時不要忘記」：第一次執行並存起來，之後直接拿。
-- 存放的依據是這段程式在畫面樹上的位置。
-
-**什麼時候用**
-
-- 用：要跨重組保留的東西，例如 State、建立成本高的物件。
-- 不用：旋轉、被系統殺掉後還要保留的值，用 `rememberSaveable`（第 5 題）或 ViewModel（旋轉時不銷毀的畫面資料物件，第 8 題）。
-
-**範例**
-
-格式化器只建一次。
-
-```kotlin
-val formatter = remember { PriceFormatter(0.01) }
-
-Text(formatter.format(price))
-```
-
-**常見錯誤**
-
-- 計數器漏掉 `remember`：每次重組都建新的 State，值回到 0。三種寫法並排：
-
-| 寫法 | 點一下按鈕之後 | 原因 |
-|---|---|---|
-| 普通的 `var` | 畫面不動 | Compose 看不到，沒人通知 |
-| State，沒有 `remember` | 永遠是 0 | 有重組，但每次都建新的 State |
-| `remember` 加 State | 1、2、3… | 正確 |
-
-**SwiftUI 對照**
-
-- 兩邊都靠「在樹上的位置」找回狀態：`if` 分支拿掉再放回、`key()` 變了、`LazyColumn` 項目被回收，值都會重置。
-- `@State` 由框架保管，不會忘；Compose 要自己寫 `remember`。
-
-```swift
-struct QtyInput: View {
-    // 外層 if 拿掉再放回來，qty 就回到空字串
-    @State private var qty = ""
-
-    var body: some View {
-        TextField("數量", text: $qty)
+    Button(onClick = { sent++ }) {
+        Text("已送出：$sent 筆")
     }
 }
 ```
 
-```kotlin
-@Composable
-fun QtyInput() {
-    var qty by remember { mutableStateOf("") }
-
-    TextField(value = qty, onValueChange = { qty = it })
-}
-```
-
 > [!TIP]
-> 面試時可以這樣說：「Composable 像 body，State 像 @State，但一定要 remember，否則重組就歸零。」
+> 面試時可以這樣說：「Composable 是描述畫面的函式，State 是 Compose 盯著看的變數，但一定要 remember，否則重組就歸零。」
 
-### 2. `mutableStateOf`：`by` 和 `.value` 差在哪？怎麼只重畫價格那一行？
+### 2. `mutableStateOf` 怎麼用？`by` 和 `.value` 差在哪？價格每秒更新幾十次，怎麼只重畫那一行？
 
-**`mutableStateOf` 建立 Compose 盯著看的 State，只有讀過它的 Composable 會在它變時重組，所以重畫範圍取決於讀取發生在哪。**
+**`mutableStateOf` 建立 Compose 會盯著看的 State，只有「讀過它」的 Composable 才會在它改變時重組，所以重畫的範圍取決於「哪個 Composable 去讀」。** 即時價格每秒更新幾十次，只要把讀取放在顯示價格的那個小 Composable 裡，重組就只發生在那一行。數字另外有 primitive 版（`mutableLongStateOf` 等），避免每次寫入都多包一層物件。
 
 #### `mutableStateOf`
 
 **這是什麼**
 
-- 型別 `MutableState<T>` 可讀可寫，`State<T>` 唯讀。
-- 慣例：對外只給唯讀的，擁有者才能寫。
+`mutableStateOf` 建立一個 State，裡面放一個值。它的型別是 `MutableState<T>`，可以讀（`value`）也可以寫；Compose 另外有 `State<T>`，只能讀。慣例是對外只給唯讀的，只有擁有者能寫：在屬性後面加 `private set`，外面讀得到，卻改不了。
 
 **什麼時候用**
 
-- 用：表單上改了畫面就變的值，例如買賣。
-- 不用：頻繁寫入的數字（`mutableIntStateOf`）、整份清單（第 3 題）、要撐過旋轉的輸入（第 5 題）、業務資料（第 8 題）。
+表單上任何「改了就要讓畫面跟著變」的值，例如選的是買還是賣。以下情況不是用它的最佳選擇：每秒更新很多次的數字（用本題最後的 primitive 版）、整份清單（第 3 題）、要撐過旋轉螢幕的輸入文字（第 5 題）、業務資料（第 8 題）。
 
 **範例**
 
-點按鈕切換買賣方向。
+點按鈕，在買和賣之間切換。
 
 ```kotlin
-var side by remember { mutableStateOf("BUY") }
+@Composable
+fun SideToggle() {
+    var side by remember { mutableStateOf("BUY") }
 
-Button(onClick = { side = if (side == "BUY") "SELL" else "BUY" }) {
-    // 在這裡讀 side：Compose 記下這裡依賴它
-    Text("目前：$side")
-}
-```
+    // 點下去寫入新值，讀過 side 的地方會重組
+    val onToggle = {
+        side = if (side == "BUY") "SELL" else "BUY"
+    }
 
-**SwiftUI 對照**
-
-- `@State`（第 1 題）對應畫面自己用的值。
-- `private set` 對應 `private(set)`；`@Observable` 是 iOS 17 起的 Observation 框架。
-
-```swift
-@Observable
-final class OrderFormModel {
-    private(set) var qty = ""
-
-    func onQtyChange(_ input: String) {
-        qty = input.filter { $0.isNumber || $0 == "." }
+    Button(onClick = onToggle) {
+        // 在這裡讀 side：Compose 記下這裡依賴它
+        Text("目前：$side")
     }
 }
 ```
 
-```kotlin
-class OrderFormState {
-    var qty by mutableStateOf("")
-        private set
+按鈕上一開始寫「目前：BUY」，點一下變成「目前：SELL」，再點又變回來。
 
-    fun onQtyChange(input: String) {
-        qty = input.filter { it.isDigit() || it == '.' }
-    }
-}
-```
+**不這樣寫會怎樣**
 
-#### `by` 和 `.value`
+- 把 `MutableState` 直接公開給外面（沒有 `private set`），任何程式都能改它的值，出了問題找不到是誰改的。因為 State 本身不限制誰可以寫，限制要自己加。
+- 換成普通的 `var`，或漏了 `remember`，症狀和原因已經在第 1 題看過。
+
+#### `by` 和 `.value` 差在哪
 
 **這是什麼**
 
-- 兩種寫法行為一樣：`by`（屬性委派）像用普通變數。
-- 不寫 `by` 就拿到 State 本身，用 `.value` 讀寫。
+這是同一件事的兩種寫法，行為完全一樣。`by` 是 Kotlin 的屬性委派（property delegation），讓你像用普通變數一樣讀寫，背後實際是在讀寫 State 的 `value`。
+
+不寫 `by`，拿到的就是 State 本身，要自己加 `.value`。Int、Long、Float、Double 的 primitive 版，屬性名稱則是 `intValue`、`longValue` 這類。
 
 **什麼時候用**
 
-- 用：多數情況用 `by`，程式最短；但它讓 State 像普通變數，別忘了這行在讀 State。
-- 不用：要把 State 本身傳給別的函式時；`by` 只能傳值或 lambda。
+多數情況用 `by`，程式碼最短。需要把 State 本身傳給別的函式時，才不用 `by`，因為 `by` 的變數只能傳出它的值。
+
+要記得：讀取發生在「用到變數的那一行」，不是宣告的那一行。`by` 讓 State 看起來像普通變數，反而容易忘記那一行其實在讀 State。
 
 | | 用 `by` | 不用 `by` |
 |---|---|---|
@@ -271,43 +278,35 @@ class OrderFormState {
 開盤價用 `by`，最新價保留 State 本身。
 
 ```kotlin
-var open by remember { mutableLongStateOf(0L) }
-val last = remember { mutableLongStateOf(0L) }
+@Composable
+fun PriceBoard() {
+    // by：像普通變數一樣讀寫
+    var open by remember { mutableLongStateOf(0L) }
 
-Text("開盤 $open，最新 ${last.longValue}")
+    // 不用 by：保留 State 本身，讀寫要加 longValue
+    val last = remember { mutableLongStateOf(0L) }
+
+    Text("開盤 $open，最新 ${last.longValue}")
+}
 ```
 
-**SwiftUI 對照**
+兩個價格都會顯示在同一行，值變了，這行就跟著重組。
 
-- `price` 是值（`wrappedValue`），`$price` 是 `Binding`（`projectedValue`）。
-- `by` 像 `price`；不寫 `by` 的 State 像 `$price`，但是儲存本體，不是 get／set 包出的 `Binding`。傳給子元件更常用 state hoisting（第 8 題）。
+**不這樣寫會怎樣**
 
-```swift
-@State private var last = 0
+- 用了 `by` 卻沒 import `androidx.compose.runtime.getValue` 和 `setValue`，編譯不過。因為 `by` 靠這兩個函式才知道怎麼讀寫 State（Android Studio 通常會替你補上）。
 
-// $last 是 Binding，可傳給子 view 讀寫
-PriceEditor(price: $last)
-```
-
-```kotlin
-val last = remember { mutableLongStateOf(0L) }
-
-// State 本身可以傳下去
-PriceEditor(price = last)
-```
-
-#### 把讀取往下推
+#### 把讀取往下推：只重畫價格那一行
 
 **這是什麼**
 
-- 不是 API，是寫法：讀取 State 的那一行在哪，哪裡就重組。
-- 把 State 或 lambda 往下傳，讀取留在最小的 Composable。
+這不是一個 API，是一種寫法：重組的範圍，由「讀取 State 的那一行在哪個 Composable」決定。做法是把 State 本身（或一個回傳值的 lambda）往下傳，讀取留在最小的那個 Composable 裡。State 變的時候，只有那個小 Composable 重組。
 
 **什麼時候用**
 
-- 用：即時價格這種每秒更新很多次的值。
-- 用：在 `Modifier.offset { }`（元件的修飾）裡讀 State，延後到 Layout 階段（決定位置與大小）才讀，連重組都省了（Kotlin08）。
-- 不用：只在按下按鈕才改一次的值。
+即時價格這種每秒更新很多次的值。只在按下按鈕時才改一次的值，不必這麼費工。
+
+更進一步，在 `Modifier.offset { }` 這類接收 lambda 的修飾裡讀 State（Modifier 是串在元件後面的設定清單，管大小、位置、點擊等），讀取會延後到 Layout 階段才發生。Layout 階段是 Compose 每個畫面格三個階段的第二個：決定顯示什麼、決定放哪裡和多大、畫出來。這樣連重組都省了，Kotlin08 有完整的講解。
 
 **範例**
 
@@ -316,9 +315,13 @@ PriceEditor(price = last)
 ```kotlin
 @Composable
 fun OrderForm(price: State<Long>) {
-    QtyField()
+    Column {
+        // 沒有讀價格：價格變了，這行完全不動
+        Text("下單表單")
 
-    LivePrice(price)
+        // 把 State 交給小函式，讀取留在那裡
+        LivePrice(price)
+    }
 }
 
 @Composable
@@ -328,10 +331,53 @@ fun LivePrice(price: State<Long>) {
 }
 ```
 
-**SwiftUI 對照**
+價格一秒變幾十次，只有「即時價格」那一行在重新執行；`OrderForm` 本身和上面的標題都不動。傳 `() -> Long` 這樣的 lambda，在 `LivePrice` 裡呼叫它，效果一樣。
 
-- SwiftUI 也拆小 subview，傳整個 `@Observable` model，`body` 讀到屬性才被追蹤。
-- Compose 傳 State 或 lambda，讀取留在最小的 Composable。
+**不這樣寫會怎樣**
+
+- 在上層先讀成 `Long` 再傳下去（`OrderForm(price = priceState.value)`），價格每變一次，呼叫端和 `OrderForm` 都要重組。因為讀取發生在呼叫端，Compose 記下的是「呼叫端依賴價格」。
+
+#### `mutableIntStateOf` 家族
+
+**這是什麼**
+
+`mutableIntStateOf`、`mutableLongStateOf`、`mutableFloatStateOf`、`mutableDoubleStateOf` 是專門存數字的 State，從 Compose runtime 1.5 起提供。它們直接存原始數字（primitive）。`mutableStateOf(0L)` 的 `Long` 是泛型參數，而 JVM 的泛型只能裝物件，每次寫入都要把 `Long` 包成物件，這個動作叫 boxing（自動裝箱）。
+
+**什麼時候用**
+
+會一直被改寫的數字：價格（以最小單位存成 `Long`）、未讀數、捲動位置。`Boolean` 沒有 primitive 版，因為包起來的 `Boolean` 只有 `TRUE`、`FALSE` 兩個共用物件，不會每次新建。
+
+**範例**
+
+價格用 `Long` 版，未讀數用 `Int` 版。
+
+```kotlin
+@Composable
+fun PriceAndUnread() {
+    var price by remember { mutableLongStateOf(0L) }
+    var unread by remember { mutableIntStateOf(0) }
+
+    Text("價格：$price，未讀：$unread")
+}
+```
+
+畫面顯示「價格：0，未讀：0」，值被改寫時照常更新，行為和 `mutableStateOf` 沒有差別。
+
+**不這樣寫會怎樣**
+
+- 用 `mutableStateOf(0L)` 存每秒更新幾十次的價格，畫面照樣正常，看不出問題，卻每次寫入都多一個短命物件（-128 到 127 的小整數會共用快取，超過就新建），增加記憶體回收的負擔。Android Studio 的 lint（內建的程式碼檢查工具）`AutoboxingStateCreation` 會提醒。
+- 用了 primitive 版卻去讀 `.value`，一樣會 boxing。要改讀 `longValue` 或用 `by`，lint 的 `AutoboxingStateValueProperty` 會提醒。
+
+#### 對應到 SwiftUI
+
+在 SwiftUI 裡，你也會把價格那一行拆成小的 subview，把 `@Observable` 的 model 傳進去，只有在 `body` 裡讀到屬性的 view 才會被追蹤。Compose 的想法一樣，差別是傳下去的是 State 或 lambda，讀取留在最小的 Composable。
+
+`price` 是值，`$price` 是 `Binding`。`by` 的變數像 `price`；不寫 `by` 的 State 像 `$price`，但它是儲存本體，不是用 get 和 set 包出來的 `Binding`。Swift 的 `Int` 是值型別，`@State` 直接存整數，不會 boxing，所以 SwiftUI 沒有 `mutableIntStateOf` 這組 API。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| 拆小 subview，傳 `@Observable` model | 傳 State 或 lambda 給小 Composable | 都是縮小讀取的範圍 |
+| `$price`（`Binding`） | 不用 `by` 的 State 本身 | State 是儲存本體，`Binding` 是包出來的讀寫 |
 
 ```swift
 struct LivePrice: View {
@@ -347,105 +393,145 @@ struct LivePrice: View {
 ```kotlin
 @Composable
 fun LivePrice(price: () -> Long) {
-    // 傳 lambda 也行：讀取 State 發生在 LivePrice
+    // 傳 lambda 也行：讀取 State 發生在 LivePrice 裡
     Text("即時價格：${price()}")
 }
-```
-
-#### `mutableIntStateOf` 家族
-
-**這是什麼**
-
-- 數字專用 State：Int、Long、Float、Double 版。
-- 直接存原始數字，省掉 boxing（把數字包成物件）。
-
-**什麼時候用**
-
-- 用：一直被改寫的數字，如價格（存成 `Long`）、未讀數（Compose runtime 1.5 起）。
-- 不用：`Boolean` 沒有 primitive 版（只有 `TRUE`、`FALSE` 兩個共用物件）。
-
-**範例**
-
-價格用 `Long` 版，未讀數用 `Int` 版。
-
-```kotlin
-var price by remember { mutableLongStateOf(0L) }
-var unread by remember { mutableIntStateOf(0) }
-
-Text("價格：$price，未讀：$unread")
-```
-
-**常見錯誤**
-
-- 不用也能跑，只是多一堆短命物件；lint（程式碼檢查）的 `AutoboxingStateCreation` 會提醒。
-- 用了卻讀 `.value`，一樣 boxing；要讀 `longValue` 或用 `by`。
-
-**SwiftUI 對照**
-
-- Swift 的 `Int` 是值型別，`@State` 直接存整數，不會 boxing，所以沒有這組 API。
-- Compose 這組只是補 Kotlin 泛型只能裝物件的限制。
-
-```swift
-@State private var price = 0
-@State private var unread = 0
-
-Text("價格：\(price)，未讀：\(unread)")
-```
-
-```kotlin
-var price by remember { mutableLongStateOf(0L) }
-var unread by remember { mutableIntStateOf(0) }
 ```
 
 > [!TIP]
 > 面試時可以這樣說：「數字用 primitive 版避免 boxing；頻繁更新的 State 往下傳，在最小的 Composable 才讀。」
 
-### 3. `mutableStateListOf` 和 `mutableStateOf(listOf())` 差在哪？
+### 3. 清單與對照表怎麼放進 State？`mutableStateListOf` 和 `mutableStateOf(listOf())` 差在哪？
 
-**SwiftUI 的陣列是值型別，`append` 就會重畫；Compose 的 `List` 是參考，原地修改不會通知，要用 `mutableStateListOf` 或整個換成新的 list。**
+**會一筆一筆增減的清單用 `mutableStateListOf`，對照表用 `mutableStateMapOf`；如果把一般的 `mutableListOf()` 放進 `mutableStateOf`，之後原地 `add`，Compose 不會知道，畫面不更新。** 原因是 `mutableStateOf` 追蹤的是「State 的值有沒有被換掉」，而不是「值的內容有沒有變」。
+
+下單表單送出之後，底下要多一筆委託。三種寫法的行為不同：
 
 | 寫法 | 怎麼更新 | Compose 什麼時候知道 |
 |---|---|---|
-| `mutableStateOf(listOf(…))` | 整個換掉：`orders = orders + order` | 值被換掉時 |
-| `mutableStateOf(mutableListOf(…))` | 原地 `add` | 不會（lint 的 `MutableCollectionMutableState` 會警告） |
-| `mutableStateListOf(…)` | `add`、`removeAt`、`set`、`clear` | 清單內容改變時 |
+| `mutableStateOf(listOf(…))` | 整個換成新 list：`orders = orders + order` | State 的值被換掉時 |
+| `mutableStateOf(mutableListOf(…))` | 原地 `add` | **不會知道**（lint 的 `MutableCollectionMutableState` 會警告） |
+| `mutableStateListOf(…)` | `add`、`removeAt`、`set`、`clear` | 清單的內容改變時 |
 
 #### `mutableStateListOf`
 
 **這是什麼**
 
-- Compose 追蹤的清單，`SnapshotStateList`。
-- `add`、`removeAt`、`set` 都會通知畫面。
-- 現成的 list 用 `toMutableStateList()` 轉換。
+這是一個 Compose 追蹤的清單，型別是 `SnapshotStateList`（名字裡的 Snapshot 是 Compose 管理 State 的機制，第 6 題會講）。對它呼叫 `add`、`removeAt`、`set`、`clear`，Compose 都會通知讀過這個清單的 Composable。手上已經有現成的 list，用 `toMutableStateList()` 轉成追蹤版。
 
 **什麼時候用**
 
-- 用：一筆一筆增減的清單，例如剛送出的委託。
-- 不用：每次整份換掉的資料；或要存進 `rememberSaveable`（預設存不進去，第 5 題）。
+一筆一筆增減的清單：剛送出的委託、自選幣種。每次都整份換掉的資料（例如每秒一份訂單簿快照）不適合，用本題最後的寫法比較單純。它也預設存不進 `rememberSaveable`，要自己寫 Saver（第 5 題）。
 
 **範例**
 
-按「送出」就 `add` 一筆委託。
+按「送出」就 `add` 一筆委託，下面列出所有委託。
 
 ```kotlin
 data class OrderRow(val symbol: String, val filled: Double)
 
-val orders = remember { mutableStateListOf<OrderRow>() }
+@Composable
+fun OrderList() {
+    val orders = remember { mutableStateListOf<OrderRow>() }
 
-Button(onClick = { orders.add(OrderRow("BTC_JPY", 0.0)) }) {
-    Text("送出")
+    Column {
+        Button(onClick = { orders.add(OrderRow("BTC_JPY", 0.0)) }) {
+            Text("送出")
+        }
+
+        // 讀取清單的內容：add 之後，這裡會重組
+        orders.forEach {
+            Text("${it.symbol} 已成交 ${it.filled}")
+        }
+    }
 }
 ```
 
-**常見錯誤**
+每按一次「送出」，按鈕下面就多一行「BTC_JPY 已成交 0.0」。
 
-- 項目是 `class` 又原地改欄位：清單沒變，畫面不動；用 `data class` 加 `val`，`copy` 換掉那一格（演練 1）。
-- 走訪時修改會丟 `ConcurrentModificationException`；刪項目用 `removeAll { }`。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
+- 項目是 `class` 又原地改欄位（`orders[1].filled = 0.5`），清單那一列的畫面不更新。因為清單只認得自己內容的改變（新增、刪除、換掉某一格），不看項目裡面；項目要用 `data class` 加 `val`，更新時換掉那一格：`orders[1] = orders[1].copy(filled = 0.5)`（演練 1）。
+- 一邊走訪一邊修改，會丟 `ConcurrentModificationException`（走訪的同時改動集合會出的錯）。因為走訪到一半，清單的內容被改了；要刪除符合條件的項目，用 `removeAll { }`。
 
-- SwiftUI 陣列是值型別，`append` 或改欄位都等於寫回 `@State`，所以會重畫。
-- Compose 的 `List` 不是，要靠 `mutableStateListOf`；`data class` 加 `copy` 在模仿值語意。
+#### `mutableStateMapOf`
+
+**這是什麼**
+
+這是 `mutableStateListOf` 的對照表（Map）版本，型別是 `SnapshotStateMap`。對它 `put`、`remove`，Compose 都會通知讀過它的 Composable。手上已經有現成的 map，用 `toMutableStateMap()` 轉成追蹤版。
+
+**什麼時候用**
+
+「交易對 對應 最新價格」這種一筆一筆更新的對照表。值如果是可以原地修改的物件，道理和清單一樣：要換掉整個值，不要改物件裡面的欄位。
+
+**範例**
+
+收到報價，就寫進對照表，畫面顯示最新價格。
+
+```kotlin
+@Composable
+fun LatestPrices() {
+    // 交易對 → 最新價格
+    val latest = remember { mutableStateMapOf<String, Long>() }
+
+    Column {
+        Button(onClick = { latest["BTC_JPY"] = 1_000_123L }) {
+            Text("收到 BTC_JPY 報價")
+        }
+
+        // 還沒有資料就顯示 --
+        Text("BTC_JPY：${latest["BTC_JPY"] ?: "--"}")
+    }
+}
+```
+
+一開始顯示「BTC_JPY：--」，點按鈕之後變成「BTC_JPY：1000123」。
+
+**不這樣寫會怎樣**
+
+- `mutableStateOf(mutableMapOf())` 之後原地 `put`，畫面不更新。State 的值還是同一個 map，Compose 以為沒有換。
+
+#### `mutableStateOf(listOf(…))`：整個換掉
+
+**這是什麼**
+
+這不是專用 API，而是用 State 存一份不可變的 list，更新時整份換成新的。Compose 追蹤的是「值有沒有被換掉」，每次換掉，讀過它的 Composable 就重組。
+
+**什麼時候用**
+
+整份換掉的資料，例如每秒收到一份 20 檔的訂單簿快照；或是清單很小，複製一份也無所謂。頻繁在原地增減的清單不適合，因為每次都要複製出一份新的 list。
+
+**範例**
+
+收到快照就整份換掉，Compose 才知道有變。
+
+```kotlin
+@Composable
+fun BidBook() {
+    var bids by remember { mutableStateOf(listOf<Long>()) }
+
+    Button(onClick = { bids = listOf(101L, 100L, 99L) }) {
+        Text("收到訂單簿快照，目前 ${bids.size} 檔")
+    }
+}
+```
+
+一開始顯示「目前 0 檔」，點按鈕之後變成「目前 3 檔」。
+
+**不這樣寫會怎樣**
+
+- 把 `mutableListOf()` 放進 `mutableStateOf` 再原地 `add`，畫面不動（Kotlin06 演練 2）。因為 State 的值還是同一個 list 物件，Compose 只比「換沒換」，看不到裡面多了一筆。
+
+#### 對應到 SwiftUI
+
+在 SwiftUI 裡，`@State var orders: [OrderRow]` 加上 `append`，畫面就會更新，連 `orders[0].filled = 0.5` 這種改欄位的寫法也會。原因是 Swift 的陣列和 struct 都是值型別，任何一處的修改，等於把整個陣列重新寫回 `@State`。
+
+Compose 的 `List` 是參考，原地修改 Compose 完全看不到，所以才需要 `mutableStateListOf`，項目也要用 `data class` 加 `copy` 換掉那一格，這是在模仿值型別的行為。字典同理：SwiftUI 的 `[String: Int]` 直接放 `@State`，Compose 要用 `mutableStateMapOf`。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| `@State` 陣列加 `append` | `mutableStateListOf` 加 `add` | 值型別的修改等於寫回，Compose 靠專用清單通知 |
+| `orders[0].filled = 0.5` | `orders[0] = orders[0].copy(filled = 0.5)` | Compose 要換掉整個項目 |
 
 ```swift
 struct OrderRow {
@@ -460,110 +546,25 @@ orders[0].filled = 0.5
 ```
 
 ```kotlin
-val orders = remember { mutableStateListOf(OrderRow("ETH_JPY", 0.0)) }
+val orders = remember {
+    mutableStateListOf(OrderRow("ETH_JPY", 0.0))
+}
 
 // data class 加 val：用 copy 換掉那一格
 orders[0] = orders[0].copy(filled = 0.5)
 ```
 
-#### `mutableStateMapOf`
-
-**這是什麼**
-
-- 對照表版本，`SnapshotStateMap`。
-- `put`、`remove` 都會通知畫面。
-- 現成的 map 用 `toMutableStateMap()` 轉換。
-
-**什麼時候用**
-
-- 用：「交易對 → 最新價格」這種一筆一筆更新的對照表。
-- 不用：`mutableStateOf(mutableMapOf())` 再原地 `put`（不會通知）；值是可原地修改的物件時，要換掉整個值。
-
-**範例**
-
-收到報價就寫進對照表。
-
-```kotlin
-val latest = remember { mutableStateMapOf<String, Long>() }
-
-Button(onClick = { latest["BTC_JPY"] = 1_000_123L }) {
-    Text("收到 BTC_JPY 報價")
-}
-```
-
-**SwiftUI 對照**
-
-- `@State private var latest: [String: Int]` 直接對應。
-- 字典是值型別，改 key 等於寫回整個字典，所以不需要專用 API。
-
-```swift
-@State private var latest: [String: Int] = [:]
-
-latest["BTC_JPY"] = 1_000_123
-```
-
-```kotlin
-val latest = remember { mutableStateMapOf<String, Long>() }
-
-latest["BTC_JPY"] = 1_000_123L
-```
-
-#### `mutableStateOf(listOf(…))`：整個換掉
-
-**這是什麼**
-
-- 不是專用 API，是用 State 存不可變的 list，更新時整個換掉。
-- 追蹤「值有沒有被換掉」，不是內容有沒有變。
-
-**什麼時候用**
-
-- 用：整份換掉的資料，如每秒一份訂單簿快照；或清單很小。
-- 不用：頻繁原地增減的清單。
-
-**範例**
-
-收到快照就整份換掉，Compose 才知道有變。
-
-```kotlin
-var bids by remember { mutableStateOf(listOf<Long>()) }
-
-Button(onClick = { bids = listOf(101L, 100L, 99L) }) {
-    Text("收到訂單簿快照")
-}
-```
-
-**SwiftUI 對照**
-
-- SwiftUI 的 `append` 會重畫，因為值型別的修改等於寫回 `@State`。
-- Compose 的 `listOf` 不可變；`orders + x` 等於 `orders = orders + [x]`。
-
-```swift
-@State private var orders: [String] = []
-
-// append 原地改，值型別的 @State 照樣重畫
-orders.append("BTC_JPY 買 0.25")
-```
-
-```kotlin
-var orders by remember { mutableStateOf(listOf<String>()) }
-
-// listOf 不可變：建立新 list 再賦值
-orders = orders + "BTC_JPY 買 0.25"
-```
-
 > [!TIP]
 > 面試時可以這樣說：「List 不是值型別，所以用 mutableStateListOf，項目用 data class 並 copy 換掉。」
 
-### 4. `SnapshotMutationPolicy`（SwiftUI 沒有）什麼時候要換？
+### 4. Compose 怎麼判斷「值有沒有變」？什麼時候要換 policy？
 
-**Compose 寫入 State 時先比較新舊值，「一樣」就當作沒發生；預設用 `equals` 比，想改比法就在 `mutableStateOf` 的第二個參數傳 policy。**
+**寫入 State 時，Compose 先比較新舊值，「一樣」就把這次寫入當作沒發生，不重組；預設用 `equals` 比。想改變「怎麼比」，在 `mutableStateOf` 的第二個參數傳一個 policy。** 這個「判斷新舊值算不算一樣的規則」，正式名稱叫 `SnapshotMutationPolicy`。
 
-- 「判斷新舊值算不算一樣的規則」叫 `SnapshotMutationPolicy`；SwiftUI 沒有，所以這一題四個 API 都是 Compose 獨有。
-
-| policy | 怎麼判斷「一樣」 | 什麼時候用 |
+| policy | Compose 怎麼判斷「一樣」 | 什麼時候用 |
 |---|---|---|
-| `structuralEqualityPolicy()`（預設） | `a == b` | 字串、數字、data class，絕大多數情況 |
-| `referentialEqualityPolicy()` | `a === b`（同一個物件才算） | `equals` 很貴，或不適合決定畫面要不要更新 |
+| `structuralEqualityPolicy()`（預設） | `a == b`（`equals`） | 絕大多數情況：字串、數字、data class |
+| `referentialEqualityPolicy()` | `a === b`（同一個物件才算） | `equals` 很貴，或不適合拿來決定畫面要不要更新 |
 | `neverEqualPolicy()` | 永遠不一樣 | 同一個物件就地修改後要通知 |
 | 自訂 `SnapshotMutationPolicy` | 自己寫 `equivalent(a, b)` | 只比畫面上看得到的欄位 |
 
@@ -571,49 +572,47 @@ orders = orders + "BTC_JPY 買 0.25"
 
 **這是什麼**
 
-- 用 `equals`（`==`）比較新舊值，相等就丟掉寫入。
-- 平常寫 `mutableStateOf(x)` 用的就是它。
+用 `equals`（也就是 `==`）比較新舊值，相等就把這次寫入丟掉，不重組。你平常寫 `mutableStateOf(x)`，用的就是它。
 
 **什麼時候用**
 
-- 用：幾乎都用它，如字串、數字、`data class`。
-- 不用：`equals` 不適合決定畫面更新時，改用下面兩個 policy。
+幾乎都用它：字串、數字、`data class`（`data class` 的 `equals` 會比所有欄位）。預設值本身沒有問題，出問題的是 `equals` 寫得不適合拿來決定畫面要不要更新的時候，才需要換成下面幾個 policy。
 
 **範例**
 
-內容完全一樣的新物件，不重組。
+寫進一個內容完全一樣的新物件，Compose 不重組。
 
 ```kotlin
 data class Tick(val symbol: String, val price: Long, val receivedAt: Long)
 
-var tick by remember {
-    mutableStateOf(Tick("BTC_JPY", 100, receivedAt = 1))
-}
+@Composable
+fun TickLabel() {
+    var tick by remember {
+        mutableStateOf(Tick("BTC_JPY", 100, receivedAt = 1))
+    }
 
-// 內容完全一樣：這次寫入被丟掉
-Button(onClick = { tick = Tick("BTC_JPY", 100, receivedAt = 1) }) {
-    Text("${tick.symbol} ${tick.price}")
+    // 內容完全一樣：equals 為 true，這次寫入被丟掉
+    Button(onClick = { tick = Tick("BTC_JPY", 100, receivedAt = 1) }) {
+        Text("${tick.symbol} ${tick.price}")
+    }
 }
 ```
 
-**常見錯誤**
+點按鈕之後，畫面沒有任何變化，也沒有重組，因為新舊兩個 `Tick` 的每個欄位都相等。
 
-- 領域物件 `Order` 的 `equals` 只比 `id`：A1 從 New 變 Filled 被當成沒變，畫面停在 New（演練 2）。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
-
-- 沒有對應：`@State` 的比對規則由框架決定，不能調整。
+- 領域物件 `Order` 的 `equals` 只比 `id`，訂單 A1 的狀態從 New 變成 Filled，畫面卻停在 New，連 State 裡存的都還是舊物件。因為新舊 `Order` 的 `id` 一樣，`equals` 說相等，寫入就被丟掉了（演練 2）。
 
 #### `referentialEqualityPolicy()`
 
 **這是什麼**
 
-- 用 `===` 比較：必須是同一個物件才算一樣。
+它用 `===` 比較：必須是同一個物件才算一樣，換成另一個物件，就算變了。`===` 問的是「是不是同一個物件」，不看裡面的欄位內容，所以不受 `equals` 怎麼寫影響。
 
 **什麼時候用**
 
-- 用：`equals` 只比 id（如 Room，Android 本機資料庫函式庫的 entity），或 `equals` 很貴。
-- 不用：更好的做法常是讓 UI 的 model 用 `data class`。
+`equals` 只比 id 的物件，例如 Room（Android 的本機資料庫函式庫）的 entity；或是 `equals` 很貴，像幾千筆的 list。更好的做法常是讓 UI 用的 model 用 `data class`，`equals` 會比所有欄位，就不必動 policy。
 
 **範例**
 
@@ -621,35 +620,39 @@ Button(onClick = { tick = Tick("BTC_JPY", 100, receivedAt = 1) }) {
 
 ```kotlin
 class Order(val id: String, val status: String) {
-    // 只比 id
+    // equals 只比 id
     override fun equals(other: Any?) = other is Order && other.id == id
 
     override fun hashCode() = id.hashCode()
 }
 
-var order by remember {
-    mutableStateOf(Order("A1", "New"), referentialEqualityPolicy())
-}
+@Composable
+fun OrderStatus() {
+    var order by remember {
+        mutableStateOf(Order("A1", "New"), referentialEqualityPolicy())
+    }
 
-Button(onClick = { order = Order("A1", "Filled") }) {
-    Text("訂單 ${order.id}：${order.status}")
+    Button(onClick = { order = Order("A1", "Filled") }) {
+        Text("訂單 ${order.id}：${order.status}")
+    }
 }
 ```
 
-**SwiftUI 對照**
+點按鈕之後，畫面從「訂單 A1：New」變成「訂單 A1：Filled」，因為寫進去的是另一個物件。
 
-- 沒有對應：struct 是值型別，沒有「同一個物件」可比；class 搭配 `@Observable` 追蹤的是屬性寫入。
+**不這樣寫會怎樣**
+
+- 用預設 policy，同樣的程式點了按鈕，畫面還是 New。因為 `equals` 只比 `id`，寫入被當成沒變而丟掉（演練 2）。
 
 #### `neverEqualPolicy()`
 
 **這是什麼**
 
-- 任何一次寫入都算變了，連同一個物件寫進去也會通知。
+它認為任何一次寫入都算變了，連同一個物件再寫進去也會通知。換句話說，這個 policy 不比較新舊值，只要有人寫，就一律當成有變。
 
 **什麼時候用**
 
-- 用：引擎就地更新、全 App 共用一個物件，更新後寫回同一個物件來通知（演練 3）。
-- 不用：想「再顯示一次相同的錯誤訊息」。
+訂單簿引擎為了效率，內部就地更新，整個 App 共用同一個物件。更新之後，再把同一個物件寫回 State，通知畫面重組（演練 3）。代價是每次寫入都會重組，連內容沒變的寫入也一樣，所以只用在「就地更新、明確通知」的情況。
 
 **範例**
 
@@ -670,25 +673,22 @@ fun BestBid(book: OrderBook) {
 }
 ```
 
-**常見錯誤**
+`OrderBook` 是範例假設的訂單簿類別。點按鈕之後，最佳買價從 100 變成 101。
 
-- 不用它：同一個物件被當成沒變，最佳買價停在舊的；代價是每次寫入都重組。
-- 拿它重複顯示訊息沒用：`LaunchedEffect(message)` 比 key 用 `equals`，相同字串不重啟；改包成帶 id 的物件，或照 Kotlin05 第 3 題。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
-
-- 沒有對應：`@Observable` 屬性一被寫入就通知，不需要再寫回同一個物件。
+- 用預設 policy，最佳買價停在舊的 100。因為寫進去的是同一個物件，`equals` 當然相等，這次寫入被當成沒變（演練 3）。
+- 拿它當成「再顯示一次相同的錯誤訊息」的工具，訊息不會再出現。因為 `LaunchedEffect(message)`（在 Composable 裡啟動 coroutine 的入口，coroutine 是 Kotlin 可以中途暫停等待的輕量非同步工作；key 變了才重新啟動）比較 key 用的還是 `equals`，相同字串不會重啟；一次性事件要包成帶 id 的物件，或照 Kotlin05 第 3 題的做法。
 
 #### 自訂 `SnapshotMutationPolicy`
 
 **這是什麼**
 
-- 自己實作 `equivalent(a, b)`，決定「什麼叫一樣」。
+當內建的三種比法都不合用時，可以自己實作 `SnapshotMutationPolicy`，裡面只有一個要寫的函式 `equivalent(a, b)`，回傳 `true` 就代表「這兩個算一樣」。比法完全由你決定，例如只比其中幾個欄位。
 
 **什麼時候用**
 
-- 用：行情帶接收時間，但價格沒變不該重組；不自訂則每筆都重組。`derivedStateOf`（第 6 題）也能傳 policy。
-- 不用：預設或內建 policy 夠用時。
+行情每筆都帶接收時間，但價格沒變就不該重組，所以只比 symbol 和 price。`derivedStateOf`（第 6 題）的結果也是用 `equals` 判斷有沒有變，同樣可以傳 policy，寫成 `derivedStateOf(referentialEqualityPolicy()) { … }`。
 
 **範例**
 
@@ -702,46 +702,92 @@ val tickPolicy = object : SnapshotMutationPolicy<Tick> {
     }
 }
 
-var tick by remember {
-    mutableStateOf(Tick("BTC_JPY", 100, 1), tickPolicy)
+@Composable
+fun PolicyTick() {
+    var tick by remember {
+        mutableStateOf(Tick("BTC_JPY", 100, 1), tickPolicy)
+    }
+
+    // 只有接收時間不同：算一樣，不重組
+    Button(onClick = { tick = Tick("BTC_JPY", 100, 2) }) {
+        Text("${tick.symbol} ${tick.price}")
+    }
 }
 ```
 
-**SwiftUI 對照**
+點按鈕寫進一筆價格沒變、只有接收時間不同的行情，畫面不重組。
 
-- 沒有對應：SwiftUI 不開放比較規則；控制重算靠拆小 view，或 `Equatable` 加 `.equatable()`（大致）。
+**不這樣寫會怎樣**
+
+- 用預設 policy，每一筆行情都重組，連價格沒變也一樣。因為 `receivedAt` 每筆都不同，`equals` 永遠說不相等。
+
+#### 對應到 SwiftUI
+
+SwiftUI 沒有這一題的 API：`@State` 怎麼比較新舊值，由框架決定，沒有讓你挑比較規則的參數。這是因為 SwiftUI 的 view 是 struct 值，它判斷要不要重算 `body`，靠的是「這個 view 的輸入值有沒有變」，並不是去比一個 State 裡的物件；class 搭配 `@Observable`，追蹤的是屬性被寫入，也沒有「同一個物件」的問題，所以不需要 `neverEqualPolicy` 這種硬逼通知的辦法。
+
+你唯一能影響比較規則的地方，是讓 view 遵循 `Equatable`，再加上 `.equatable()`，由你決定哪些欄位算相同。這最接近 Compose 的自訂 policy。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| 框架決定怎麼比 | 四種 policy 自己選 | SwiftUI 不開放 State 的比較規則 |
+| `Equatable` 加 `.equatable()` | 自訂 `SnapshotMutationPolicy` | 都是自己決定哪些欄位算一樣 |
+
+```swift
+struct TickLabel: View, Equatable {
+    let symbol: String
+    let price: Int
+    let receivedAt: Int
+
+    // 只比畫面看得到的欄位
+    static func == (a: Self, b: Self) -> Bool {
+        a.symbol == b.symbol && a.price == b.price
+    }
+
+    var body: some View {
+        Text("\(symbol) \(price)")
+    }
+}
+
+// 使用時加上 .equatable()：TickLabel(…).equatable()
+```
+
+```kotlin
+val tickPolicy = object : SnapshotMutationPolicy<Tick> {
+    // 只比畫面看得到的欄位
+    override fun equivalent(a: Tick, b: Tick): Boolean {
+        return a.symbol == b.symbol && a.price == b.price
+    }
+}
+```
 
 > [!TIP]
 > 面試時可以這樣說：「mutableStateOf 預設用 equals 判斷，相等的寫入會被丟掉。」
 
-### 5. `remember`、`rememberSaveable`、`rememberUpdatedState` 怎麼選？`Saver` 怎麼寫？
+### 5. 數量輸入到一半，旋轉螢幕不能消失：`remember`、`rememberSaveable`、`rememberUpdatedState` 怎麼選？`Saver` 怎麼寫？
 
-**`remember` 對應 `@State`，只活過重組；`rememberSaveable` 大致對應 `@SceneStorage`，撐得過旋轉和行程被殺，只放小量資料；業務資料放 ViewModel。**
+**看資料要活多久：只要活過重組，用 `remember`；還要撐過旋轉螢幕、App 被系統殺掉再重開，用 `rememberSaveable`（只放小量資料）；業務資料要撐過旋轉，放 ViewModel。** `rememberUpdatedState` 是另一件事：讓長時間運作的 effect 讀到最新的 callback（交給別人、事件發生時才被呼叫的函式）。
 
-- Android 旋轉螢幕會重建 Activity（畫面容器），SwiftUI 的 view 不會，所以 `remember` 的值會消失。
-- 行程被殺（process death）是 App 在背景被系統整個回收；ViewModel 大致像 `@StateObject` 的 model。
+先分清楚資料會遇到的三種事件。**重組**就是第 1 題的「函式再執行一次」。**旋轉螢幕**時，Activity（Android 的畫面容器）會被銷毀再重建，但 App 的行程還在，所以 ViewModel 還活著。**行程被殺**（process death）是 App 在背景時，系統為了回收記憶體，把整個行程殺掉；使用者回來時，系統重建畫面並還原先前存的狀態（saved instance state，Android 讓你在畫面被銷毀前存一小份資料、重建時還原的機制），ViewModel 也跟著消失。
 
 | 事件 | `remember` | `rememberSaveable` | ViewModel |
 |---|---|---|---|
 | 重組 | 還在 | 還在 | 還在 |
 | 旋轉螢幕 | 消失 | 還在 | 還在 |
-| 行程被殺後重開 | 消失 | 還在 | 消失（要搭配 `SavedStateHandle`） |
+| 行程被系統殺掉後重開 | 消失 | 還在 | 消失（要搭配 `SavedStateHandle`） |
 
 #### `remember(key)`
 
 **這是什麼**
 
-- 括號裡的 key 是「會影響計算結果的輸入」。
-- key 和上次不一樣，就丟掉存的值、重新計算。
+`remember` 第 1 題講過：第一次執行時算出值並存起來，之後重組直接拿。括號裡可以放 key，key 是「會影響計算結果的輸入」。key 和上次不一樣，就丟掉存起來的值，重新計算。
 
 **什麼時候用**
 
-- 用：結果取決於某個參數且算起來不便宜，如依 tick size（價格最小跳動單位）決定小數位數的格式化器；沒寫 key，換交易對後格式會停在上一個（Kotlin06 演練 6）。
-- 不用：把「一直在變」的值當 key，等於沒有 `remember`。
+結果取決於某個參數、而且算起來不便宜的時候。例如價格格式化器，小數位數取決於交易對的 tick size（價格的最小跳動單位），換了交易對就要重建。不要拿「一直在變」的值當 key，那樣每次都重算，等於沒有 `remember`。
 
 **範例**
 
-`tickSize` 當 key，換交易對就重建格式化器。
+`tickSize` 當 key，換交易對時重建格式化器。
 
 ```kotlin
 @Composable
@@ -752,40 +798,26 @@ fun PriceText(price: Long, tickSize: Double) {
 }
 ```
 
-**SwiftUI 對照**
+`tickSize` 沒變時，每次重組拿同一個 formatter；從 BTC_JPY 換到 ETH_JPY、`tickSize` 變了，就建一個新的。
 
-- SwiftUI 沒有內建「依輸入快取」：`@State` 初始值只在 view 第一次出現時採用。
-- 要自己 `.onChange(of:)` 更新，或 `.id()` 換整個 view 的身分（會連其他 `@State` 一起重置）。
+**不這樣寫會怎樣**
 
-```swift
-@State private var formatter = PriceFormatter(tickSize: 0.01)
-
-Text(formatter.format(price))
-    // tickSize 變了，自己重建（iOS 17 的寫法）
-    .onChange(of: tickSize) { _, newValue in
-        formatter = PriceFormatter(tickSize: newValue)
-    }
-```
-
-```kotlin
-val formatter = remember(tickSize) { PriceFormatter(tickSize) }
-```
+- 沒寫 key，切換交易對之後價格的格式停在上一個交易對的。因為 `remember` 只算一次，不知道 `tickSize` 變了（Kotlin06 演練 6）。
+- 沒有 `remember`，每次重組都重建一個格式化器。因為函式每次執行都從頭跑。
 
 #### `rememberSaveable`
 
 **這是什麼**
 
-- 寫法同 `remember`，值還存進 Bundle（暫存畫面狀態的容器）。
-- 旋轉、行程被殺都撐得過；也能放 key。
+寫法和 `remember` 一樣，差別是值還會存進 Bundle，所以旋轉螢幕、行程被殺都撐得過。Bundle 是 Android 用來暫存畫面狀態的容器，可以想成一個 key-value 字典，只收固定幾種型別。它也能像 `remember` 一樣放 key：任何一個 key 變了，之前存的值就丟掉、重新初始化。
 
 **什麼時候用**
 
-- 用：輸入到一半的欄位（數量、價格）、選的分頁。
-- 不用：大型資料放資料庫或 repository（取得與保存資料的類別），業務資料放 ViewModel。
+使用者輸入到一半的欄位（數量、價格）、選的分頁。只放小量資料，大型資料放資料庫或 repository（負責取得與保存資料的類別），業務資料放 ViewModel。
 
 **範例**
 
-價格用 `symbol` 當 key，切換交易對就清空。
+數量撐過旋轉，價格用 `symbol` 當 key，切換交易對就清空。兩個輸入框都是 `OutlinedTextField`（有外框的輸入框）。
 
 ```kotlin
 @Composable
@@ -795,183 +827,190 @@ fun OrderInputs(symbol: String) {
     // symbol 當 key：切換交易對就清空
     var price by rememberSaveable(symbol) { mutableStateOf("") }
 
-    Text("數量 $qty，價格 $price")
+    Column {
+        OutlinedTextField(
+            value = qty,
+            onValueChange = { qty = it },
+            label = { Text("數量") },
+        )
+        OutlinedTextField(
+            value = price,
+            onValueChange = { price = it },
+            label = { Text("價格") },
+        )
+    }
 }
 ```
 
-**常見錯誤**
+在數量欄輸入 `0.25`，旋轉螢幕，欄位裡還是 0.25；在價格欄輸入 `100`，再把 `symbol` 換成另一個交易對，價格欄就清空了。要實際測試行程被殺：App 退到背景，執行 `adb shell am kill <套件名稱>`，再從最近使用的 App 點回來。
 
-- 輸入框用 `remember`：輸入 `0.25` 後旋轉就清空（Kotlin06 演練 5）。
-- 測行程被殺：App 退到背景，`adb shell am kill <套件名稱>`，再從最近使用的 App 點回來。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
-
-- 大致對應 `@SceneStorage`，保存輸入到一半的內容。
-- iOS 旋轉不重建，`@State` 平常夠用；Android 旋轉就重建，輸入框幾乎都要 `rememberSaveable`。
-
-```swift
-@SceneStorage("qty") private var qty = ""
-
-TextField("數量", text: $qty)
-```
-
-```kotlin
-var qty by rememberSaveable { mutableStateOf("") }
-
-TextField(value = qty, onValueChange = { qty = it })
-```
+- 輸入框用 `remember`，輸入 `0.25` 後旋轉螢幕，欄位清空要重打。因為旋轉時 Activity 被銷毀重建，`remember` 的值跟著一起沒了（Kotlin06 演練 5）。
+- 放 Bundle 收不下的型別（一般的 data class、`SnapshotStateList`、lambda），畫面一打開就閃退。下一節講怎麼解決。
 
 #### `Saver`（`listSaver`、`mapSaver`）
 
 **這是什麼**
 
-- Bundle 只收基本型別與 `Parcelable` 等。
-- data class 存不了，要給 `Saver`。
-- `Saver` 定義 `save` 怎麼拆、`restore` 怎麼組。
+Bundle 只收基本型別（`String`、數字、`Boolean`），以及實作了 `Parcelable`（Android 的序列化介面，通常用 `@Parcelize` 自動產生）或 `Serializable`（Java 的序列化介面）的型別。自訂的 data class 不在其中。
+
+`Saver` 告訴 Compose 兩件事：`save` 怎麼把物件拆成存得了的東西，`restore` 怎麼組回來。`listSaver` 拆成 List、用位置對應欄位；`mapSaver` 拆成 Map、用 key 對應；`Saver(save, restore)` 給單一值的型別用。
 
 **什麼時候用**
 
-- 用：自訂型別要放進 `rememberSaveable`，做法見下表。
-- 不用：ViewModel 撐過行程被殺，用 `SavedStateHandle`（會還原的 key-value 存放處），同樣只適合小量資料。
+下單草稿 `OrderDraft`（交易對加數量）是自訂的 data class，要放進 `rememberSaveable` 的時候。四種做法的取捨如下表。
 
 | 做法 | 適合 | 缺點 |
 |---|---|---|
-| `@Parcelize` 加 `Parcelable`（Android 的序列化介面） | 型別本來就要放進 Intent 或 Bundle | 要套用 Parcelize plugin |
+| `@Parcelize` 加 `Parcelable` | 型別本來就要放進 Intent 或 Bundle | 要套用 Parcelize plugin |
 | `listSaver` | 欄位少而且固定 | 用位置對應（`it[0]`、`it[1]`），加欄位或換順序容易對錯 |
 | `mapSaver` | 欄位多，之後可能增加 | 用 key 對應，漏存的欄位不會報錯（演練 5） |
 | `Saver(save, restore)` | 單一值的型別，如把金額存成字串 | 自己寫 |
 
+ViewModel 想撐過行程被殺，用 `SavedStateHandle`（ViewModel 裡的 key-value 存放處，寫進去的值會跟著 saved instance state 還原）。它也是放進 Bundle，所以同樣只適合小量資料。
+
 **範例**
 
-`listSaver` 把草稿拆成 `List`。
+`listSaver` 把草稿拆成 `List`，旋轉後再組回來。
 
 ```kotlin
 data class OrderDraft(val symbol: String, val qty: Double)
 
 val draftSaver = listSaver<OrderDraft, Any>(
+    // 物件 → 存得了的 List
     save = { listOf(it.symbol, it.qty) },
+    // List → 物件，位置要和 save 對上
     restore = { OrderDraft(it[0] as String, it[1] as Double) },
 )
 
-// MutableState 的參數叫 stateSaver；一般物件的版本叫 saver
-var draft by rememberSaveable(stateSaver = draftSaver) {
-    mutableStateOf(OrderDraft("BTC_JPY", 0.1))
+@Composable
+fun DraftEditor() {
+    // MutableState 的參數叫 stateSaver；一般物件的版本叫 saver
+    var draft by rememberSaveable(stateSaver = draftSaver) {
+        mutableStateOf(OrderDraft("BTC_JPY", 0.1))
+    }
+
+    Text("${draft.symbol} ${draft.qty}")
 }
 ```
 
-**常見錯誤**
-
-- 沒給 Saver 就放 data class：組合時丟 `IllegalArgumentException`，一打開就閃退（演練 4）。
-- 加欄位卻忘了改 Saver：`restore` 用預設值補，旋轉後該欄位靜悄悄歸零（演練 5）；要寫單元測試。
-
-**SwiftUI 對照**
-
-- SwiftUI 沒有 Saver 型別；`@SceneStorage` 只收基本型別（`Bool`、`Int`、`Double`、`String`、`URL`、`Data`）和 `RawRepresentable`。
-- 自訂型別要拆成基本型別各存一個；Compose 把拆與組集中在 `Saver`，能單獨測試。
-
-```swift
-// SceneStorage 只收基本型別：草稿拆成兩個欄位各存各的
-@SceneStorage("draft.symbol") private var symbol = "BTC_JPY"
-@SceneStorage("draft.qty") private var qty = 0.1
-```
+旋轉螢幕前後，畫面上都是同一份草稿。欄位多、之後可能增加的話，改用 `mapSaver`，用 key 對應：
 
 ```kotlin
-// 整個草稿是一個值；拆與組的規則集中在 draftSaver
-var draft by rememberSaveable(stateSaver = draftSaver) {
-    mutableStateOf(OrderDraft("BTC_JPY", 0.1))
-}
+val draftMapSaver = mapSaver<OrderDraft>(
+    save = { mapOf("symbol" to it.symbol, "qty" to it.qty) },
+    restore = {
+        OrderDraft(it["symbol"] as String, it["qty"] as Double)
+    },
+)
 ```
+
+**不這樣寫會怎樣**
+
+- 不給 Saver 就放 data class，一打開畫面就閃退，丟 `IllegalArgumentException`。因為 Bundle 收不下自訂型別，組合畫面的當下就檢查出來了（演練 4）。
+- 為 `OrderDraft` 加了新欄位，卻忘了改 Saver，旋轉後那個欄位靜悄悄地歸零。因為 `restore` 用預設值補沒存的欄位，編譯器不會提醒（演練 5）；給 Saver 寫一個「存起來再還原，確認每個欄位都一樣」的單元測試。
 
 #### `rememberUpdatedState`
 
 **這是什麼**
 
-- 把「最新傳進來的值」包成 State。
-- 長時間運作的 effect 讀到最新值，不用重啟。
+`rememberUpdatedState` 把「最新傳進來的值」包成 State，讓長時間運作的 effect 在需要的那一刻讀到最新的值，又不用重啟。effect 是 Compose 裡專門放副作用的地方。`LaunchedEffect` 是其中一種：進入畫面時啟動一個 coroutine，離開時取消，括號裡的 key 變了就取消重啟（Kotlin07 第 2 題）。
 
 **什麼時候用**
 
-- 用：10 秒逾時倒數（用 coroutine，約等於 Swift 的 `Task`），時間到呼叫 `onTimeout`；期間 callback 換了版，倒數不能重來。
-- 不用：想讓 effect 在值變時重啟，就把值放進 `LaunchedEffect` 的 key（Kotlin07 第 2 題）。
+送出訂單之後，開始 10 秒的逾時倒數，時間到要呼叫 `onTimeout`。倒數期間，外面可能換了新版的 `onTimeout`，但倒數不能因此重來。如果希望 effect 在值變的時候重啟，就把值放進 `LaunchedEffect` 的 key，不用 `rememberUpdatedState`。
 
 **範例**
 
-只啟動一次，時間到才讀最新的 callback。
+effect 只啟動一次，時間到才讀最新的 callback。
 
 ```kotlin
 @Composable
 fun SubmitTimeout(onTimeout: () -> Unit) {
+    // 每次重組都更新成最新傳進來的 callback
     val currentOnTimeout by rememberUpdatedState(onTimeout)
 
     // key 是 Unit：只啟動一次，重組不重啟
     LaunchedEffect(Unit) {
         delay(10_000)
+
+        // 時間到才讀，拿到的是最新的 callback
         currentOnTimeout()
     }
 }
 ```
 
-**常見錯誤**
+畫面出現後等 10 秒，呼叫的是 10 秒那一刻最新傳進來的 `onTimeout`，期間 `onTimeout` 換了幾次版，倒數都不受影響。
 
-- 直接呼叫 `onTimeout` 會抓到舊版；放進 key 則 callback 一換就取消重啟，10 秒重新計（Kotlin07 演練 5）。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
+- 直接呼叫 `onTimeout`，時間到時呼叫到舊版 callback。因為 effect 抓著的是第一次進來的那一份。
+- 把 `onTimeout` 放進 `LaunchedEffect` 的 key，callback 一換，10 秒就重新計時。因為 key 變了，effect 被取消重啟（Kotlin07 演練 5）。
 
-- 大致對應「`.task` 讀 model 的屬性，而不是啟動時抓到的 view 屬性」。
-- `.task` 捕捉啟動時的 view 值，看不到新 closure；常見做法是 callback 放 class 裡，要用時才讀。
+#### 對應到 SwiftUI
+
+在 SwiftUI 裡，`@State` 是你平常用的畫面狀態，`@SceneStorage` 則是把輸入到一半的內容保存下來，App 被系統回收後重開可以還原。對應到 Compose，`@State` 大致像 `remember`，`@SceneStorage` 大致像 `rememberSaveable`。
+
+最大的差別在旋轉螢幕：iOS 旋轉時 view 不會被銷毀，`@State` 平常就夠用；Android 旋轉會重建 Activity，輸入框幾乎都要用 `rememberSaveable`。另外，`@SceneStorage` 只收基本型別和 `RawRepresentable`，自訂型別要拆成基本型別各存一個；Compose 把拆與組集中在 `Saver`，可以單獨測試。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| `@State` | `remember` | iOS 旋轉不影響；Android 旋轉會讓 `remember` 的值消失 |
+| `@SceneStorage` | `rememberSaveable` | 都撐得過 App 被系統回收後重開，只放小量資料 |
 
 ```swift
-@Observable
-final class SubmitModel {
-    var onTimeout: () -> Void = {}
-}
+struct QtyInput: View {
+    // App 被系統回收後重開，qty 會還原
+    @SceneStorage("qty") private var qty = ""
 
-Color.clear.task {
-    try? await Task.sleep(for: .seconds(10))
-
-    // 讀 model 的屬性，不是啟動時抓到的值
-    model.onTimeout()
+    var body: some View {
+        TextField("數量", text: $qty)
+    }
 }
 ```
 
 ```kotlin
-val currentOnTimeout by rememberUpdatedState(onTimeout)
+@Composable
+fun QtyInput() {
+    // 旋轉螢幕或行程被殺後重開，qty 會還原
+    var qty by rememberSaveable { mutableStateOf("") }
 
-LaunchedEffect(Unit) {
-    delay(10_000)
-    currentOnTimeout()
+    TextField(value = qty, onValueChange = { qty = it })
 }
 ```
 
 > [!TIP]
-> 面試時可以這樣說：「rememberSaveable 像 @SceneStorage，自訂 class 要給 Saver，新增欄位要同步改。」
+> 面試時可以這樣說：「rememberSaveable 撐得過旋轉和行程被殺，自訂 class 要給 Saver，新增欄位要同步改。」
 
-### 6. `derivedStateOf`、`snapshotFlow`、`produceState` 怎麼選？Snapshot 是什麼？
+### 6. 價格超過警示線才顯示紅字：`derivedStateOf`、`snapshotFlow`、`produceState` 怎麼選？Snapshot 是什麼？
 
-**`derivedStateOf` 是 State 變 State，用在「輸入常變、結果少變」；`snapshotFlow` 是 State 變 Flow，大致對應 `.onChange(of:)`；`produceState` 是 suspend 函式或 callback 變 State，大致對應 `.task { state = await … }`。**
+**三個 API 的方向不同：`derivedStateOf` 是 State 變成另一個 State，目的是「輸入變很頻繁、結果很少變時，減少通知」；`snapshotFlow` 是 State 變成 Flow；`produceState` 是 suspend 函式或 callback 變成 State。** Kotlin07 第 6 題列過方向對照，這裡講怎麼選，以及最容易搞混的 `derivedStateOf`、`remember(key)`、直接計算三者的差別。
 
 #### `derivedStateOf`
 
 **這是什麼**
 
-- 用計算式從別的 State 算出新的 State。
-- 只有「結果」真的變了，才通知讀它的 Composable。
+`derivedStateOf` 用一個計算式，從別的 State 算出新的 State。價格每變一次，計算式就重算一次，但只有算出來的「結果」真的變了，才通知讀它的 Composable。
 
 **什麼時候用**
 
-- 用：價格每秒變幾十次，紅字只在超過、回到警示線時才要變。
-- 不用：結果跟著輸入一起變（`price * qty`），沒省到通知。
+即時價格每秒變幾十次，但紅字只在「超過警示線」和「回到警示線以下」這兩個狀態換邊時才需要變。如果結果跟著輸入一起變，例如 `derivedStateOf { price * qty }`，輸入每變一次結果也變一次，沒有省到任何通知，反而多了一層，直接計算就好。
+
+三種寫法的差別：
 
 | | 直接算 | `remember(key) { 計算 }` | `remember { derivedStateOf { 計算 } }` |
 |---|---|---|---|
-| 重算時機 | 每次重組 | key 變了 | 讀過的 State 變了 |
-| 追蹤什麼 | 函式裡讀到的 State | 放進 key 的一般參數 | **State 的讀取**，一般參數它看不到 |
-| 重組時機 | 輸入每變一次就重組 | 沒有通知，只在重組時重算 | 結果真的變了才重組 |
+| 什麼時候重算 | 每次重組 | 組合時發現 key 和上次不一樣 | 計算式裡讀過的 State 變了 |
+| 追蹤什麼 | 函式裡讀到的 State | 你放進 key 的一般參數 | **State 的讀取**，一般參數它看不到 |
+| 什麼時候重組 | 輸入每變一次就重組 | 沒有通知，只在重組時重算 | 結果真的變了才重組 |
 | 適合 | 輸入不常變，或結果跟著輸入變 | 參數變了要重算（排序、篩選） | State 變很頻繁、結果很少變 |
+
+口訣是：**一般參數放 `remember` 的括號（key），State 放進 `derivedStateOf` 的大括號裡讀。**
 
 **範例**
 
-一般參數放 `remember` 的 key，State 在大括號裡讀。
+價格是 State，警示線是一般參數，兩個一起用。
 
 ```kotlin
 @Composable
@@ -981,49 +1020,32 @@ fun PriceAlert(price: State<Long>, alertLine: Long) {
         derivedStateOf { price.value > alertLine }
     }
 
+    // 只在 over 換邊時重組
     if (over) {
         Text("價格超過警示線", color = Color.Red)
     }
 }
 ```
 
-**常見錯誤**
+價格在警示線上下來回跳，畫面只在越線和回落的那一刻重組；價格在線的同一側繼續漲跌，畫面完全不動。
 
-- 直接寫 `val over = price.value > alertLine`：每次價格變都重組。
-- 漏了 `remember`：每次重組都建新的 derived state。
-- 參數沒當 key：警示線調高了還顯示「超過」（演練 6）。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
-
-- 沒有對應：SwiftUI 寫計算屬性，每次 `body` 重算就算一次。
-- 警示線也是 State 時，計算式裡直接讀，不需要 key。
-
-```swift
-var body: some View {
-    if quote.price > alertLine {
-        Text("價格超過警示線").foregroundStyle(.red)
-    }
-}
-```
-
-```kotlin
-val over by remember {
-    derivedStateOf { price.value > alertLine.value }
-}
-```
+- 直接寫 `val over = price.value > alertLine`，價格每變一次，這個 Composable 就重組一次，儘管 `over` 根本沒換邊。因為 Composable 自己讀了 `price.value`。
+- 漏了 `remember`，每次重組都建一個新的 derived state，快取等於沒有。實測：外層重組 10 次，沒有 `remember` 的計算式執行 11 次，有 `remember` 的只執行 1 次。
+- 一般參數沒當 key，警示線調高了，畫面還顯示「超過」。因為 `derivedStateOf` 看不到一般參數，沒有 key 的 `remember` 又只建一次，一直抓著第一次的 `alertLine`（演練 6）。
 
 #### `snapshotFlow`
 
 **這是什麼**
 
-- 在大括號裡讀 State，回傳 Flow（非同步資料串流）。
-- 開始收集先送目前的值，之後 State 變了送新值。
-- 連續相同的值去重（0、1、1、2 只收到 0、1、2）。
+`snapshotFlow` 在大括號裡讀 State，回傳一個 Flow。Flow 是 Kotlin 的非同步資料串流，一個值接一個值送出，用 `collect` 接收，第 7 題會講種類。
+
+開始收集時先送出目前的值，之後裡面讀過的 State 變了，就重新計算並送出新值。連續相同的值會去重（0、1、1、2 只收到 0、1、2）。
 
 **什麼時候用**
 
-- 用：State 改變時「做一件事」，如交易對變了回報分析（analytics）、數量改了存草稿。
-- 不用：只是要顯示 State（直接讀）；或要讓非 Compose 的程式觀察 ViewModel（改用 `StateFlow`，第 8 題）。
+想在 State 改變時「做一件事」，而不是「畫出東西」：例如使用者選的交易對變了，回報給分析（analytics）；數量改了，存一份草稿。只是要顯示 State，直接讀就好。要讓非 Compose 的程式觀察 ViewModel 的狀態，用 `StateFlow`（第 8 題）。
 
 **範例**
 
@@ -1043,53 +1065,34 @@ fun SymbolPicker(analytics: Analytics) {
 }
 ```
 
-**常見錯誤**
+`Analytics` 是範例假設的類別。畫面一出現就回報一次 `BTC_JPY`（開始收集時先送目前的值），之後每換一次交易對，就回報一次新的。
 
-- `val s = symbol` 再 `snapshotFlow { s }`：lambda 裡沒讀 State，只有第一個值。
-- 單元測試（沒有 Compose 在跑）收不到後續變化，見 Snapshot 與演練 8。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
-
-- 大致對應 `.onChange(of:initial:)`（`initial` iOS 17 起有）。
-- `snapshotFlow` 一定先送目前的值，像 `initial: true`；`.onChange` 預設第一次不執行。要只在變動時做，用 `drop(1)`。
-
-```swift
-TextField("數量", text: $qty)
-    // initial 預設是 false：第一次不執行，只在變動時執行
-    .onChange(of: qty) { _, newValue in
-        store.save(qty: newValue)
-    }
-```
-
-```kotlin
-LaunchedEffect(Unit) {
-    // snapshotFlow 一開始就送出目前的值，drop(1) 跳過它
-    snapshotFlow { qty }
-        .drop(1)
-        .collect { store.save(it) }
-}
-```
+- 先把 State 讀出來再放進 lambda（`val s = symbol` 再 `snapshotFlow { s }`），永遠只收到第一個值。因為 lambda 裡面沒有讀 State，Compose 沒有東西可以追蹤。
+- 在沒有 Compose 在跑的環境，例如單元測試，收不到後續的變化。原因見下一節的 Snapshot 與演練 8。
 
 #### `produceState`
 
 **這是什麼**
 
-- 把 suspend 函式或 callback 的結果變成 State。
-- 結果回來前是 `initialValue`；key 換了或離開畫面就取消。
+`produceState` 把 suspend 函式或 callback 的結果，變成 State。suspend 函式是可以中途暫停、等結果回來的函式，callback 則是「資料來了再通知我」的寫法。
+
+結果回來之前，State 的值是你給的 `initialValue`。key 換了會重新執行，離開畫面就取消。
 
 **什麼時候用**
 
-- 用：顯示伺服器時間（一次性的 suspend 函式，約等於 Swift 的 `async` 函式），或 callback 風格的 socket。
-- 不用：來源是 Flow（在 `produceState` 裡 `flow.collect` 就是 `collectAsState` 的做法），直接用第 7 題。
+畫面要顯示伺服器時間（一次性的 suspend 載入），或價格來自 callback 風格的 socket。如果資料來源是 Flow，在 `produceState` 裡 `flow.collect { value = it }` 就是 `collectAsState` 內部做的事，所以直接用第 7 題的 API，不要自己寫。
 
 **範例**
 
-callback 轉成 State，離開畫面時解除 listener。
+把 socket 的 callback 轉成 State，離開畫面時解除 listener。
 
 ```kotlin
 @Composable
 fun rememberLastPrice(socket: PriceSocket): State<Long> {
     return produceState(initialValue = 0L, socket) {
+        // callback 風格的 API：收到價格就寫進 value
         val listener = PriceSocket.Listener { value = it }
         socket.addListener(listener)
 
@@ -1099,49 +1102,32 @@ fun rememberLastPrice(socket: PriceSocket): State<Long> {
 }
 ```
 
-**常見錯誤**
+`PriceSocket` 是範例假設的類別。畫面上讀這個 State 的人，會看到價格隨 socket 推來的值一直更新；離開畫面時，listener 會被拿掉。
 
-- callback 版沒用 `awaitDispose` 解除：listener 一直掛著（Kotlin07 演練 6）。
-- 漏放 key：參數變了不重跑，規則同 `LaunchedEffect`（Kotlin07 演練 2）。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
+- callback 版沒用 `awaitDispose` 解除，畫面離開了 listener 還掛在 socket 上。因為 Compose 不知道要怎麼拆掉你加的 listener（Kotlin07 演練 6）。
+- 漏放 key，參數變了卻不重跑。規則和 `LaunchedEffect` 完全相同（Kotlin07 演練 2）。
 
-- 大致對應 `.task { state = await … }`；`produceState` 包成回傳 State 的 Composable，不用自己宣告 State。
-
-```swift
-@State private var serverTime: Int?
-
-Text(serverTime.map { "伺服器時間：\($0)" } ?? "--")
-    // view 出現時啟動，消失時取消
-    .task { serverTime = await client.fetchServerTime() }
-```
-
-```kotlin
-// 結果回來前是 null；離開畫面時自動取消
-val serverTime by produceState<Long?>(null, client) {
-    value = client.fetchServerTime()
-}
-
-Text(serverTime?.let { "伺服器時間：$it" } ?: "--")
-```
-
-#### Snapshot
+#### Snapshot 是什麼？
 
 **這是什麼**
 
-- Compose 管理 State 讀寫的機制，像一本記錄本。
-- 讀取追蹤：記下誰讀了哪個 State，寫入才去通知。
-- 寫入要「套用並通知」，別人才看得到。
+Snapshot 是 Compose 管理 State 讀寫的機制，可以想成一本「State 的讀寫記錄本」。它有三個概念：讀取追蹤、寫入要「套用並通知」、同時寫多個 State 要一起生效。
+
+讀取追蹤是：Composable、`derivedStateOf`、`snapshotFlow` 執行時，Compose 記下它們讀了哪些 State，那些 State 之後被寫入，才去通知它們。這就是為什麼「沒有在 lambda 裡讀 State」就收不到變化。
+
+第二個概念是：State 被寫入之後，要先「套用」，別人才看得到新值，同時通知讀過它的人。有 Compose 畫面在跑的時候，Compose 會自動做這件事；沒有 Compose 的環境，例如單元測試，就沒有人做。
 
 **什麼時候用**
 
-- 用：單元測試驗證 `snapshotFlow`；多個 State 要一起生效，用 `Snapshot.withMutableSnapshot { … }`。
-- 用：理解 `SideEffect`，它在組合成功套用後才執行，被放棄的組合不執行（Kotlin07 第 4 題）。
-- 不用：業務邏輯裡自己管理 Snapshot。
+多個 State 要一起生效時，用 `Snapshot.withMutableSnapshot { … }`，離開區塊時一次套用，別人不會看到只改了一半的狀態。寫單元測試驗證 `snapshotFlow` 時，也會用到 Snapshot 的知識。
+
+理解 `SideEffect` 也需要它：`SideEffect` 在這次組合成功並套用到畫面之後才執行，做到一半被放棄的組合不會執行（Kotlin07 第 4 題）。業務邏輯裡不需要自己管理 Snapshot。
 
 **範例**
 
-重設表單，兩個欄位一起生效。
+重設表單，讓兩個欄位一起生效。
 
 ```kotlin
 class OrderFormState {
@@ -1149,7 +1135,7 @@ class OrderFormState {
     var qty by mutableStateOf("")
 
     fun reset() {
-        // 離開區塊時一起生效，別人看不到只改一半
+        // 離開區塊時一起生效，別人不會看到只改了一半
         Snapshot.withMutableSnapshot {
             symbol = "BTC_JPY"
             qty = ""
@@ -1158,67 +1144,90 @@ class OrderFormState {
 }
 ```
 
-**常見錯誤**
+呼叫 `reset()` 之後，讀這兩個欄位的人，看到的要嘛是改之前，要嘛是兩個都改完，不會剛好看到交易對改了、數量還沒清。
 
-- 單元測試裡 `snapshotFlow` 只收到第一筆：沒有 Compose 就沒人套用寫入，要呼叫 `Snapshot.sendApplyNotifications()`（演練 8；實測：呼叫前只收到第一筆，呼叫後收到最後一筆）。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
+- 單元測試裡 `snapshotFlow` 只收到第一筆。因為寫入要「套用並通知」，別人才看得到；有 Compose 畫面在跑時，Compose 自動做這件事，單元測試裡沒有人做，要自己呼叫 `Snapshot.sendApplyNotifications()`（演練 8；實測：呼叫之前只收到第一筆，呼叫之後收到最後一筆）。
 
-- 「讀取追蹤」大致對應 iOS 17 的 Observation：`body` 只依賴讀過的屬性。
-- 「套用並通知」與 `withMutableSnapshot` 沒有對應：`@Observable` 寫入就通知，多個 `@State` 大致合併成一次更新。
+#### 對應到 SwiftUI
+
+SwiftUI 的計算屬性，每次 `body` 重算就算一次，沒有 `derivedStateOf` 這種「結果沒換邊就不通知」的機制；所以 `derivedStateOf` 大致沒有對應。警示線也是 State 時，計算式裡直接讀它就好，不需要 key。
+
+`snapshotFlow` 大致對應 `.onChange(of:initial:)`（`initial` 要 iOS 17 起）。`snapshotFlow` 一定先送目前的值，像 `initial: true`；`.onChange` 預設第一次不執行。想只在變動時做事，Compose 這邊加 `drop(1)`。`produceState` 大致對應 `.task { state = await … }`，差別是它包成回傳 State 的 Composable，不用自己宣告 State。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| 計算屬性 | `derivedStateOf` | 前者每次 `body` 重算；後者結果沒變就不通知 |
+| `.onChange(of:initial:)` | `snapshotFlow` | 後者一定先送目前的值 |
+| `.task { state = await … }` | `produceState` | 後者直接回傳 State |
 
 ```swift
-@Observable
-final class Quote {
-    var price = 0
-    var volume = 0
-}
+struct PriceAlert: View {
+    let quote: Quote
+    let alertLine: Int
 
-// body 只讀了 price：price 變才重算，volume 變不會
-Text("價格：\(quote.price)")
+    // 計算屬性：每次 body 重算就算一次
+    private var isOver: Bool { quote.price > alertLine }
+
+    var body: some View {
+        if isOver {
+            Text("價格超過警示線").foregroundStyle(.red)
+        }
+    }
+}
 ```
 
 ```kotlin
-class Quote {
-    var price by mutableLongStateOf(0L)
-    var volume by mutableLongStateOf(0L)
-}
+@Composable
+fun PriceAlert(price: State<Long>, alertLine: Long) {
+    // 價格每變一次就重算，但只有結果換邊才通知
+    val over by remember(alertLine) {
+        derivedStateOf { price.value > alertLine }
+    }
 
-// 只讀了 price：price 變才重組，volume 變不會
-Text("價格：${quote.price}")
+    if (over) {
+        Text("價格超過警示線", color = Color.Red)
+    }
+}
 ```
 
 > [!TIP]
 > 面試時可以這樣說：「derivedStateOf 追蹤 State 的讀取，輸入頻繁、輸出少變時用，要包 remember。」
 
-### 7. 價格 Flow 退到背景不要收：`collectAsState` 還是 `collectAsStateWithLifecycle`？
+### 7. ViewModel 給的價格 Flow 要顯示在畫面上、退到背景不要收：`collectAsState` 還是 `collectAsStateWithLifecycle`？
 
-**在 Android 畫面上，Flow 變成 State 預設用 `collectAsStateWithLifecycle()`；`collectAsState()` 不管 lifecycle，只要還在 composition（Compose 目前建好的畫面樹）裡就一直收。**
+**在 Android 畫面上，Flow 變成 State 預設用 `collectAsStateWithLifecycle()`；`collectAsState()` 只適合不在乎 Android lifecycle 的情況。** 兩者名字只差 `WithLifecycle` 這幾個字，行為差在 App 退到背景之後：`collectAsState()` 只要畫面還在 composition（Compose 目前建好的畫面樹）裡就一直收，`collectAsStateWithLifecycle()` 會在退到背景時取消收集，回到前景再重新收集。
 
-- Flow 像 `AsyncSequence`；cold Flow 有人收才開始跑、每個收集者各跑一份。`StateFlow` 永遠保存最新值，像 `CurrentValueSubject`；`SharedFlow` 沒有目前值，常廣播一次性事件，像 `PassthroughSubject`。
-- lifecycle 是 Android 畫面各階段；`STARTED` 是「畫面看得到」，退到背景就在它之下。
+先把幾個名詞講清楚：
+
+- **lifecycle（生命週期）** 是 Android 畫面從建立、可見、在前景可操作，到退到背景、銷毀的各個階段。**`STARTED`** 是其中一個：畫面看得到。App 退到背景，lifecycle 就回到 `STARTED` 以下。
+- **Flow** 是 Kotlin 的非同步資料串流，用 `collect` 接收。**cold Flow** 是「有人 `collect` 才開始跑，每個收集者各跑一份」，像按下播放才開始的影片，例如每次收集就重連一次 WebSocket（App 和伺服器之間持續開著的即時連線）的 Flow。**hot Flow** 是「不管有沒有人收都存在」，像廣播電台，收集者只拿到加入之後的資料。
+- **`StateFlow`** 是 hot Flow 的一種：永遠保存最新的一個值，可以讀 `.value`，新的收集者一加入就馬上拿到目前的值。**`SharedFlow`** 是沒有「目前值」的 hot Flow，常用來廣播一次性事件。
+- **`stateIn`** 是把 cold Flow 轉成 `StateFlow` 的運算子。**`WhileSubscribed(5000)`** 是它的設定：沒有人收集之後，再等 5 秒才停掉上游。這 5 秒是為了撐過旋轉螢幕那一瞬間「收集者消失又出現」（Kotlin05 第 5 題）。
+
+兩個 API 並排比較：
 
 | | `collectAsState()` | `collectAsStateWithLifecycle()` |
 |---|---|---|
-| 何時收集 | 進入 composition 就收，離開才停 | lifecycle 至少到 `STARTED`（`minActiveState` 預設值）才收 |
-| 退到背景 | 繼續收，每一筆都讓畫面重組 | 取消收集，回前景重新收集 |
-| 套件 | Compose 本體 | `androidx.lifecycle:lifecycle-runtime-compose`（演練專案用 2.9.4），要自己加依賴 |
+| 來自哪個套件 | Compose 本體 | `androidx.lifecycle:lifecycle-runtime-compose`，要自己加依賴（演練專案用 2.9.4） |
+| 什麼時候收集 | 進入 composition 就開始，離開才停 | lifecycle 至少到 `STARTED`（`minActiveState` 的預設值）才收 |
+| 退到背景 | 繼續收，每一筆都讓畫面重組 | 取消收集，回到前景重新收集 |
+| 適合 | 不是 Android，或刻意要在背景持續更新 | Android 畫面（行情、訂單、餘額） |
 
 #### `collectAsState()`
 
 **這是什麼**
 
-- 把 Flow 變成 State，進入畫面樹就收，離開才停。
-- 不管 Android 的 lifecycle。
+`collectAsState()` 把 Flow 變成 State，畫面進入 composition 就開始收，離開才停。它不管 Android 的 lifecycle，也就不管 App 是否在前景。
 
 **什麼時候用**
 
-- 用：非 Android 環境（如 Compose Multiplatform）；或刻意要背景持續更新。
-- 不用：Android 行情、訂單、餘額畫面，背景持續收集、重組，耗電耗流量。實測（演練 7，每 50 ms 推一筆價格）：背景 0.5 秒，畫面又更新 9 次。
+非 Android 的環境（例如 Compose Multiplatform，同一份 Compose 程式碼跑在多個平台），或是刻意要在背景也持續更新的畫面。Android 的行情、訂單、餘額畫面不要用，因為退到背景後仍會持續收集、持續重組，耗電又耗流量。
 
 **範例**
 
-`StateFlow` 有目前值，不用給 `initial`。
+`StateFlow` 有目前值，所以不用給 `initial`。
 
 ```kotlin
 @Composable
@@ -1229,122 +1238,123 @@ fun LivePriceLine(prices: StateFlow<Long>) {
 }
 ```
 
-**SwiftUI 對照**
+畫面顯示「即時價格：」加上 `StateFlow` 目前的值，每推一筆新價格，這行就更新。如果來源是一般的 Flow，沒有目前值，一定要給 `initial`：`prices.collectAsState(initial = null)`。
 
-- 大致對應 `.task` 裡 `for await`：退到背景 task 也不會自己取消；`@State` 要自己宣告。
+**不這樣寫會怎樣**
 
-```swift
-Text(price.map { "即時價格：\($0)" } ?? "--")
-    // view 消失才取消；退到背景 task 照跑
-    .task {
-        for await value in prices {
-            price = value
-        }
-    }
-```
-
-```kotlin
-// 一般 Flow 沒有目前值，一定要給 initial
-val price by prices.collectAsState(initial = null)
-```
+- 在 Android 畫面用它收行情，App 退到背景後，畫面還在更新。實測（演練 7，伺服器每 50 ms 推一筆價格）：退到背景 0.5 秒，畫面又更新了 9 次，行情還有 1 個收集者在收。因為它只看畫面還在不在 composition 裡，不看 lifecycle。
 
 #### `collectAsStateWithLifecycle()`
 
 **這是什麼**
 
-- 把 Flow 變成 State，跟著 lifecycle 開始與停止。
-- 至少到 `STARTED`（看得到）才收，退到背景就取消，回前景重新收。
+`collectAsStateWithLifecycle()` 把 Flow 變成 State，而且跟著 Android lifecycle 開始與停止收集。lifecycle 至少到 `STARTED`（畫面看得到）才收，退到背景就取消，回到前景再重新收集。
 
 **什麼時候用**
 
-- 用：Android 畫面顯示 Flow 預設用它。實測（同演練 7）：背景 0.5 秒更新 0 次。
-- 不用：`SharedFlow` 的一次性事件（State 只留最新值，連發會漏）；純 JVM 單元測試（在 Android 主執行緒收集）。
+表單上那條即時價格，來源是 ViewModel 的 `StateFlow`。Android 畫面上要顯示 Flow 的資料，預設都用它。兩種情況不適合：`SharedFlow` 的一次性事件，因為 State 只留最新值，快速連發的事件會漏；純 JVM 的單元測試，因為它內部要在 Android 的主執行緒上收集。
 
-| 來源 | 怎麼收 | initial |
+不同來源的收法：
+
+| 來源 | 怎麼收 | initial 怎麼給 |
 |---|---|---|
 | `StateFlow<T>` | `collectAsStateWithLifecycle()` | 不用給，一定有目前值 |
-| 一般 `Flow<T>`（cold） | `collectAsStateWithLifecycle(initialValue)` | 一定要給：第一個值來之前顯示什麼 |
-| `SharedFlow<T>`（事件） | 通常不轉 State，用 `LaunchedEffect` 收 | State 只留最新值，連發的事件會漏 |
+| 一般 `Flow<T>`（cold） | `collectAsStateWithLifecycle(initialValue)` | 一定要給：第一個值來之前，畫面要顯示什麼 |
+| `SharedFlow<T>`（事件） | 通常不轉成 State，用 `LaunchedEffect` 收 | State 只留最新值，連發的事件會漏 |
 
 **範例**
 
-一般 Flow 要自己給 `initialValue`。
+`StateFlow` 直接收；一般 Flow 要自己給 `initialValue`。
 
 ```kotlin
 @Composable
 fun PriceHeader(vm: PriceViewModel) {
     val uiState by vm.uiState.collectAsStateWithLifecycle()
 
-    // 一般 Flow 要自己給 initial
+    // 一般 Flow 沒有目前值：第一個值來之前，先給 null
     val last by vm.priceFlow.collectAsStateWithLifecycle(initialValue = null)
 
+    // null 代表還沒收到，顯示 -- 而不是 0
     Text("${uiState.symbol} ${last ?: "--"}")
 }
 ```
 
-**常見錯誤**
+`PriceViewModel` 是範例假設的類別。沒收到第一筆價格之前顯示「BTC_JPY --」，收到之後顯示價格。同樣的實測（演練 7）：退到背景 0.5 秒，畫面更新 0 次、0 個收集者，回到前景馬上顯示最新價格，因為退到背景時 lifecycle 低於 `STARTED`，收集被取消了。
 
-- cold Flow 回前景會重新收集、上游從頭跑：先在 ViewModel 用 `stateIn` 轉成 `StateFlow`，設 `WhileSubscribed(5000)`（Kotlin05 第 5 題）。
-- `initial` 別給 `0` 這種像真的數字，用 `null` 或 `Loading`。
-- 在 Composable 讀 `stateFlow.value`（`liveData.value` 同理）不會觀察變化；lint 的 `StateFlowValueCalledInComposition` 會警告。
+**不這樣寫會怎樣**
 
-**SwiftUI 對照**
-
-- `@Observable` 屬性在 `body` 直接讀就被追蹤；要「背景就停」得自己看 `scenePhase`，用 `.task(id:)` 重啟。
-- `STARTED` 約等於 `scenePhase != .background`；`minActiveState` 設 `RESUMED` 約等於 `.active`。
-
-```swift
-@Environment(\.scenePhase) private var scenePhase
-
-Text(vm.price.map { "\($0) JPY" } ?? "--")
-    // scenePhase 一變就取消重啟；退到背景就不收
-    .task(id: scenePhase) {
-        guard scenePhase != .background else { return }
-        await vm.startListening()
-    }
-```
-
-```kotlin
-val price by vm.price.collectAsStateWithLifecycle()
-```
+- 把 cold Flow 直接交給它，每次回到前景，上游都從頭再跑一次（例如重開 WebSocket）。因為每次重新收集，cold Flow 都是新的一份；先在 ViewModel 用 `stateIn` 轉成 `StateFlow`，設 `WhileSubscribed(5000)`。
+- `initial` 給 `0` 這種像真的數字，使用者會以為價格真的是 0。用 `null` 或 `Loading` 這種明確的「還沒有資料」。
+- 在 Composable 裡直接讀 `stateFlow.value`，值變了畫面不會更新。因為讀 `.value` 不會觀察變化，lint 的 `StateFlowValueCalledInComposition` 會警告。
 
 #### `LiveData.observeAsState()`
 
 **這是什麼**
 
-- 把 `LiveData`（舊式可觀察資料類別）變成 State。
-- 它本身跟著 lifecycle，沒有 `WithLifecycle` 版。
+舊專案的 ViewModel 如果還在用 `LiveData`（Android 較早的可觀察資料類別），Compose 這邊用 `observeAsState()` 把它變成 State。要加依賴 `androidx.compose.runtime:runtime-livedata`。LiveData 本身就會跟著 lifecycle，只在畫面可見時才送資料，所以沒有 `WithLifecycle` 版本。
 
 **什麼時候用**
 
-- 用：舊 ViewModel 還是 LiveData，不必為統一而大改。
-- 不用：新程式碼，用 `StateFlow`。
+舊畫面的 ViewModel 還是 LiveData，不必為了統一而大改。新寫的程式碼用 `StateFlow`。
 
 **範例**
 
-依賴 `androidx.compose.runtime:runtime-livedata`；沒給 `initial` 時，還沒有值是 `null`。
+沒給 `initial` 時，還沒有值就是 `null`。
 
 ```kotlin
-// 給了 initial（如 initial = 0L），型別就不含 null
-val price by vm.priceLiveData.observeAsState()
+@Composable
+fun LegacyPrice(vm: LegacyPriceViewModel) {
+    // 給了 initial（如 initial = 0L），型別就不含 null
+    val price by vm.priceLiveData.observeAsState()
 
-Text(price?.let { "$it JPY" } ?: "--")
+    Text(price?.let { "$it JPY" } ?: "--")
+}
 ```
 
-**SwiftUI 對照**
+沒收到資料之前畫面顯示「--」，收到之後顯示價格加 JPY。
 
-- 大致對應 `ObservableObject` 搭配 `@Published` 的時代：view 用 `@ObservedObject` 或 `@StateObject` 接。
+**不這樣寫會怎樣**
+
+- 在 Composable 裡直接讀 `liveData.value`，值變了畫面不會更新。因為和 `stateFlow.value` 一樣，讀 `.value` 不會觀察變化。
+
+#### 對應到 SwiftUI
+
+SwiftUI 的 `@Observable` model，屬性在 `body` 裡直接讀就會被追蹤，不用另外「收集」。Compose 的 ViewModel 暴露的是 Flow，要先用 `collectAsStateWithLifecycle()` 變成 State。
+
+退到背景的處理也不同：SwiftUI 的 `.task` 不會自己停，要停得自己看 `scenePhase`；Compose 把「誰負責停」包進 `collectAsStateWithLifecycle()`，預設的 `STARTED` 約等於 `scenePhase != .background`。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| `@Observable` 屬性直接讀 | `collectAsStateWithLifecycle()` | Compose 要先把 Flow 變成 State |
+| `CurrentValueSubject` | `StateFlow` | 都永遠有目前值 |
+| `PassthroughSubject` | `SharedFlow` | 都沒有目前值，適合事件 |
+| `.onReceive`、`.task` | `LaunchedEffect` 加 `collect` | 誰負責停不同 |
 
 ```swift
-final class LegacyPriceViewModel: ObservableObject {
-    @Published var price: Int?
-}
+struct PriceHeader: View {
+    // vm 是 @Observable class
+    let vm: PriceViewModel
+    @Environment(\.scenePhase) private var scenePhase
 
-@ObservedObject var vm: LegacyPriceViewModel
+    var body: some View {
+        Text(vm.price.map { "\($0) JPY" } ?? "--")
+            // 退到背景就不收
+            .task(id: scenePhase) {
+                guard scenePhase != .background else { return }
+                await vm.startListening()
+            }
+    }
+}
 ```
 
 ```kotlin
-val price by vm.priceLiveData.observeAsState()
+@Composable
+fun PriceHeader(vm: PriceViewModel) {
+    // 退到背景自動取消收集，回前景重新收集
+    val price by vm.price.collectAsStateWithLifecycle()
+
+    Text(price?.let { "$it JPY" } ?: "--")
+}
 ```
 
 > [!TIP]
@@ -1352,21 +1362,21 @@ val price by vm.priceLiveData.observeAsState()
 
 ### 8. ViewModel 的畫面狀態用 `mutableStateOf` 還是 `StateFlow`？狀態該放哪一層？
 
-**業務狀態預設放 ViewModel 的 `StateFlow`（內部 `MutableStateFlow`），畫面用 `collectAsStateWithLifecycle()` 收；純畫面元素的狀態留在 Composable 用 `remember`。**
+**畫面的業務狀態預設用 `StateFlow`（對外是 `StateFlow`，內部是 `MutableStateFlow`），畫面端用 `collectAsStateWithLifecycle()` 收；純畫面元素的狀態留在 Composable 用 `remember`。** ViewModel 用 `mutableStateOf` 也能運作，但變化只有 Compose 看得到。
+
+下單表單有三種狀態，放的地方不一樣：數量輸入框的文字只有這個畫面在乎，放在 Composable（`rememberSaveable`）；即時價格和委託是業務資料，要打 API、要撐過旋轉，放 ViewModel 的 `StateFlow`；按下「送出」之後的下單工作必須做完，放 ViewModel 的 `viewModelScope`。
 
 #### `StateFlow`（`MutableStateFlow`）
 
 **這是什麼**
 
-- 永遠保存最新的值，新收集者馬上拿到。
-- 內部可寫，對外用 `asStateFlow()` 唯讀。
-- `update { }` 是原子更新，同時改不會互相蓋掉。
+`StateFlow` 永遠保存最新的值，新的收集者一加入就馬上拿到。慣例是 ViewModel 內部用可寫的 `MutableStateFlow`，對外用 `asStateFlow()` 轉成唯讀。`update { }` 是原子更新：多個 coroutine 同時修改時，不會互相蓋掉彼此的修改。
 
 **什麼時候用**
 
-- 用：ViewModel 的業務狀態（行情、訂單、餘額）預設用它。
-- 用：任何 coroutine 都能 `collect`，Worker、單元測試都用得上。
-- 不用：輸入框的即時文字；繞 Flow 比輸入法晚一步，中文、日文組字時游標可能跳，放畫面自己的 State。
+ViewModel 的業務狀態（行情、訂單、餘額）預設用它。任何 coroutine 都能 `collect` 它，Worker（WorkManager 在背景執行工作的元件）和單元測試也用得上，ViewModel 不用依賴 Compose。
+
+輸入框的即時文字是例外：文字繞一圈非同步的 Flow 再回到畫面，更新比輸入法晚一步，輸入中文、日文這類要組字的輸入法時，游標可能跳動。輸入框的即時文字放在畫面自己的 State，需要時（例如按下送出）才交給 ViewModel。
 
 **範例**
 
@@ -1381,52 +1391,43 @@ class OrderViewModel : ViewModel() {
     val state: StateFlow<OrderUiState> = _state.asStateFlow()
 
     // 原子更新：同時改不會互相蓋掉
-    fun onPrice(price: Long) = _state.update { it.copy(price = price) }
-}
-
-// 畫面端：val state by vm.state.collectAsStateWithLifecycle()
-```
-
-**SwiftUI 對照**
-
-- 大致對應 `@Published`（或 `CurrentValueSubject`），`$state` 可給非 UI 程式訂閱。
-- SwiftUI 沒有 `update { }`，通常用 `@MainActor` 讓寫入排在主執行緒。
-
-```swift
-@MainActor
-final class OrderViewModel: ObservableObject {
-    // 對外唯讀，內部可寫；$state 是一條串流
-    @Published private(set) var state = OrderUiState()
-
-    func onPrice(_ price: Int) {
-        state.price = price
+    fun onPrice(price: Long) {
+        _state.update { it.copy(price = price) }
     }
 }
+
+@Composable
+fun OrderPrice(vm: OrderViewModel = viewModel()) {
+    val state by vm.state.collectAsStateWithLifecycle()
+
+    Text("價格：${state.price ?: "--"}")
+}
 ```
 
-```kotlin
-_state.update { it.copy(price = price) }
-```
+沒收到價格之前顯示「價格：--」；ViewModel 每呼叫一次 `onPrice`，畫面就跟著更新。
+
+**不這樣寫會怎樣**
+
+- 對外直接公開 `MutableStateFlow`，任何地方都能改，出問題時找不到是誰改的。因為可寫的版本沒有被藏起來。
+- 兩個 coroutine 各自 `_state.value = _state.value.copy(…)`，其中一個的修改會被蓋掉。因為「讀、改、寫」不是原子的，要用 `update { }`。
 
 #### ViewModel 裡的 `mutableStateOf`
 
 **這是什麼**
 
-- ViewModel 的屬性直接用 `mutableStateOf`。
-- 畫面讀它就被追蹤，不用 `collect`。
+ViewModel 的屬性直接用 `mutableStateOf`。畫面讀它就被追蹤，不用 `collect`，也不用處理 initial。
 
 **什麼時候用**
 
-- 用：只有 Compose 畫面會讀，專案小、不需要 Flow 運算子。
-- 不用：要被 Worker、單元測試、View 畫面或 KMP（Kotlin Multiplatform，同一份 Kotlin 給多平台用）觀察時。
+只有 Compose 畫面會讀、專案小、不需要 Flow 運算子的時候。要被 Worker、單元測試、傳統 View 畫面，或 KMP（Kotlin Multiplatform，同一份 Kotlin 程式碼給多個平台用）觀察時，不適合。
 
 | | ViewModel 用 `StateFlow` | ViewModel 用 `mutableStateOf` |
 |---|---|---|
 | 非 Compose 的消費者 | 任何 coroutine 都能 `collect` | 只能用 `snapshotFlow`，沒有 Compose 就收不到（演練 8） |
-| Flow 運算子 | `combine`、`debounce` 直接用 | 要先用 `snapshotFlow` 轉 |
-| 原子更新 | `_state.update { … }` | 沒有 |
-| 畫面端 | 要收集並處理 initial | 直接讀 `vm.state` |
-| lifecycle | `WithLifecycle`，背景會停 | 沒有收集，沒有 lifecycle 可停 |
+| Flow 運算子 | `combine`、`debounce` 直接用 | 要先用 `snapshotFlow` 轉一次 |
+| 原子更新 | `_state.update { … }` | 沒有同等的 API |
+| 畫面端 | 要收集並處理 initial | 直接讀 `vm.qty`，最簡單 |
+| lifecycle | `WithLifecycle`，背景會停 | 沒有收集動作，沒有 lifecycle 可停 |
 | 依賴 | 不需要 Compose | 依賴 Compose runtime |
 
 **範例**
@@ -1449,41 +1450,29 @@ fun QtyScreen(vm: FormViewModel = viewModel()) {
 }
 ```
 
-**SwiftUI 對照**
+使用者打字，`onQtyChange` 把字寫進 ViewModel，畫面直接讀 `vm.qty` 就更新；旋轉螢幕時 ViewModel 還活著，字也還在。
 
-- 大致對應 `@Observable` 的屬性：`body` 直接讀，不需訂閱。
-- 缺點也相同：只有 SwiftUI 看得到，不是可組合的串流。
+**不這樣寫會怎樣**
 
-```swift
-@Observable
-final class FormViewModel {
-    private(set) var qty = ""
-}
-
-// body 裡直接讀 vm.qty，不需要訂閱
-Text(vm.qty)
-```
-
-```kotlin
-Text(vm.qty)
-```
+- 在 Worker 或單元測試裡觀察它，收不到後續的變化。因為 `snapshotFlow` 要有 Compose 在跑，才會有人通知它「有寫入了」（演練 8）。
 
 #### state hoisting（狀態提升）
 
 **這是什麼**
 
-- 把狀態移到上層，子 Composable 只收值和 callback。
-- 值往下、事件往上；Compose 沒有 `Binding` 型別。
+state hoisting 是把狀態從子 Composable 移到呼叫它的上層，子 Composable 只收「值」和「事件的 callback」。資料的流向是：值往下、事件往上。
+
+這樣父子之間共用的是同一份狀態，子 Composable 自己不存資料，也比較容易單獨測試。完整的說明在 Kotlin09 第 1 題。
 
 **什麼時候用**
 
-- 用：子元件要重用、單獨測試，或兩個以上兄弟元件共用，如數量輸入框和「預估金額」。
-- 不用：只有一個 Composable 在乎的暫時狀態（展開、收合），用 `remember`。
-- 不用：傳整個 `MutableState` 下去，可行但不建議（Kotlin09 第 1 題）。
+子元件要重用、要單獨測試，或兩個以上的兄弟元件要共用狀態。例如數量輸入框和旁邊的「預估金額」，兩個都要用到數量。
+
+只有一個 Composable 在乎的暫時狀態（例如展開、收合），留在那個 Composable 裡用 `remember` 就好。把整個 `MutableState` 傳下去也行，但不建議，子元件就能隨意寫入。
 
 **範例**
 
-數量放 `OrderForm`，輸入框只顯示與回報。
+數量放在 `OrderForm`，輸入框只負責顯示和回報。
 
 ```kotlin
 @Composable
@@ -1501,9 +1490,72 @@ fun QtyField(qty: String, onQtyChange: (String) -> Unit) {
 }
 ```
 
-**SwiftUI 對照**
+`estimate` 是範例假設的函式。使用者在輸入框打字，`onQtyChange` 把新的字送回 `OrderForm`，`OrderForm` 更新 `qty`，輸入框和「預估金額」同時更新。
 
-- `@Binding var qty` 對應 `qty` 加 `onQtyChange`：Binding 把讀和寫包成一個物件，Compose 拆成值加 callback。
+**不這樣寫會怎樣**
+
+- 每個子元件各自 `remember` 一份數量，輸入框改了，「預估金額」不會動。因為兩邊各是一份獨立的 State，沒有共用。
+
+#### state holder、`rememberCoroutineScope`、`viewModelScope`：狀態放哪一層
+
+**這是什麼**
+
+決定狀態放哪一層，看的是「誰在乎、要活多久」。state holder 是把畫面邏輯收在一起的普通 class。scope 是啟動 coroutine 的範圍，綁在誰身上，就跟著誰一起取消。`rememberCoroutineScope` 的 scope 綁在 Composable，離開畫面就取消；`viewModelScope` 綁在 ViewModel，旋轉螢幕不會取消。
+
+| 這個狀態… | 放哪裡 |
+|---|---|
+| 只有這個 Composable 在乎（展開、選了哪個分頁） | `remember`；要撐過旋轉用 `rememberSaveable` |
+| 兩個以上的兄弟 Composable 共用 | 提到共同的上層 Composable |
+| 畫面邏輯，不牽涉業務規則（捲動、動畫、表單驗證） | state holder，搭配 `rememberXxxState()` |
+| 業務資料（行情、訂單、餘額），要打 API、撐過旋轉 | ViewModel 的 `StateFlow` |
+| 行程被殺後還要還原 | `rememberSaveable` 或 `SavedStateHandle` |
+
+**什麼時候用**
+
+畫面邏輯（捲動、動畫、表單驗證）寫成 state holder，用 `rememberCoroutineScope` 在事件裡啟動 coroutine。送出訂單這種必須做完的工作，放 ViewModel 的 `viewModelScope`（Kotlin07 第 5 題）。不要放在 state holder 裡，它旋轉就重建，scope 離開畫面就取消。
+
+**範例**
+
+把重新整理價格的畫面邏輯寫成 state holder。
+
+```kotlin
+class PriceHolder(
+    private val repo: PriceRepo,
+    private val scope: CoroutineScope,
+) {
+    fun refresh() {
+        scope.launch { repo.refresh() }
+    }
+}
+
+@Composable
+fun rememberPriceHolder(repo: PriceRepo): PriceHolder {
+    // 綁在這個 Composable 上，離開畫面就取消
+    val scope = rememberCoroutineScope()
+
+    return remember(repo, scope) { PriceHolder(repo, scope) }
+}
+```
+
+`PriceRepo` 是範例假設的類別。畫面在事件裡呼叫 `holder.refresh()`，重新整理的工作在畫面存在期間執行，離開畫面時一起取消。
+
+**不這樣寫會怎樣**
+
+- 把送出訂單放在 `rememberCoroutineScope` 裡，使用者一離開畫面，訂單可能只送到一半。因為這個 scope 綁在 Composable 上，離開畫面就取消。
+- 把畫面邏輯 holder 當成業務資料的家，旋轉螢幕後狀態重來。因為 holder 是用 `remember` 建的，旋轉時跟著重建。
+
+#### 對應到 SwiftUI
+
+`@Binding var qty` 對應的是 `qty` 加 `onQtyChange`：Binding 把「讀」和「寫」包成一個物件傳給子 view，Compose 沒有這個型別，拆成一個值加一個 callback。
+
+ViewModel 的部分，`@Observable` 的屬性（或 `ObservableObject` 的 `@Published`）大致對應 `StateFlow` 或 ViewModel 裡的 `mutableStateOf`。SwiftUI 沒有 `update { }` 這種原子更新，通常靠 `@MainActor` 讓寫入排在主執行緒。`@Environment` 往下傳整棵樹共用的值，大致對應 `CompositionLocal`（用 `CompositionLocalProvider` 提供）。
+
+| SwiftUI | Compose | 差異 |
+|---|---|---|
+| `@Binding` | state hoisting：值加 callback | 後者拆成兩個參數，沒有 `Binding` 型別 |
+| `@Observable`、`@Published` | `StateFlow`，或 ViewModel 的 `mutableStateOf` | `StateFlow` 要先收集才讀得到，`mutableStateOf` 直接讀 |
+| `@Environment` | `CompositionLocal` | 都是整棵樹共用的值 |
+| model 裡的 `Task { }` | `viewModelScope.launch` | 都不綁畫面，離開畫面照樣做完 |
 
 ```swift
 struct QtyField: View {
@@ -1526,93 +1578,51 @@ fun QtyField(qty: String, onQtyChange: (String) -> Unit) {
 // 父 Composable：QtyField(qty = qty, onQtyChange = { qty = it })
 ```
 
-#### state holder、`rememberCoroutineScope`、`viewModelScope`：狀態放哪一層
-
-**這是什麼**
-
-- 看「誰在乎、要活多久」決定狀態放哪層。
-- state holder 是收納畫面邏輯的普通 class。
-- scope 是啟動 coroutine 的範圍，綁誰就跟誰取消。
-
-**什麼時候用**
-
-- 用：畫面邏輯（捲動、動畫、表單驗證）寫成 state holder，用 `rememberCoroutineScope` 在事件裡啟動 coroutine。
-- 用：送出訂單這種必須做完的工作放 `viewModelScope`，旋轉不取消（Kotlin07 第 5 題）。
-- 不用：必須做完的工作別放 state holder，它旋轉就重建，scope 離開畫面就取消。
-
-| 這個狀態… | 放哪裡 |
-|---|---|
-| 只有這個 Composable 在乎（展開、選了哪個分頁） | `remember`；要撐過旋轉用 `rememberSaveable` |
-| 兩個以上的兄弟 Composable 共用 | 提到共同的上層 Composable |
-| 畫面邏輯，不依賴 domain（捲動、動畫、表單驗證） | state holder，搭配 `rememberXxxState()` |
-| 業務資料（行情、訂單、餘額），要打 API、撐過旋轉 | ViewModel 的 `StateFlow` |
-| 行程被殺後還要還原 | `rememberSaveable` 或 `SavedStateHandle` |
-
-**範例**
-
-畫面邏輯寫成 state holder，用 `rememberCoroutineScope`。
-
-```kotlin
-class PriceHolder(
-    private val repo: PriceRepo,
-    private val scope: CoroutineScope,
-) {
-    fun refresh() {
-        scope.launch { repo.refresh() }
-    }
-}
-
-@Composable
-fun rememberPriceHolder(repo: PriceRepo): PriceHolder {
-    // 綁在這個 Composable 上，離開畫面就取消
-    val scope = rememberCoroutineScope()
-
-    return remember(repo, scope) { PriceHolder(repo, scope) }
-}
-```
-
-**SwiftUI 對照**
-
-- 大致對應「`@State` 持有的 `@Observable` model」。
-- `.task` 綁 view，像 `rememberCoroutineScope`；model 裡的 `Task { }` 不綁 view，像 `viewModelScope`。
-
-```swift
-func submit(_ order: OrderRow) {
-    // model 裡的 Task 不綁 view：view 消失，它也會做完
-    Task { await api.send(order) }
-}
-```
-
-```kotlin
-fun submit(order: OrderRow) {
-    // viewModelScope 綁 ViewModel：旋轉不會取消，送出會做完
-    viewModelScope.launch { api.send(order) }
-}
-```
-
 > [!TIP]
 > 面試時可以這樣說：「ViewModel 的畫面狀態用 StateFlow，非 Compose 的程式也能收；子畫面改值用 state hoisting。」
 
-### 9. 情境對應 SwiftUI 與 Compose 該用哪個 API？
+### 9. 一張速查表：情境對應該用哪個 API？
 
 **先問三件事：資料從哪來、要活多久、誰要觀察它，再對照下表。**
 
-| 情境 | SwiftUI | Compose（第幾題） |
-|---|---|---|
-| 畫面自己的值（計數、開關） | `@State` | `remember { mutableStateOf(…) }`（1） |
-| 子畫面要改父畫面的值 | `@Binding` | state hoisting：值往下、`onValueChange` 往上（8） |
-| 輸入到一半，要撐過旋轉或被殺 | `@SceneStorage` | `rememberSaveable`，自訂型別給 `Saver`（5） |
-| 清單一筆一筆增減 | `@State var items: [T]` 加 `append` | `mutableStateListOf`，項目用 data class（3） |
-| 價格超過警示線才顯示紅字 | 計算屬性 | `remember(alertLine) { derivedStateOf { … } }`（5、6） |
-| State 變了要做一件事 | `.onChange(of:)` | `LaunchedEffect` 裡 `snapshotFlow`（6） |
-| suspend 或 callback 轉成 State | `.task { state = await … }` | `produceState`（6） |
-| Flow 顯示，背景不要收 | `@Observable` 屬性、`.onReceive`（背景看 `scenePhase`） | `collectAsStateWithLifecycle`，cold Flow 先 `stateIn`（7） |
-| ViewModel 暴露畫面狀態 | `@Observable` 或 `@Published` | `StateFlow` 加 `collectAsStateWithLifecycle`（8） |
-| 送出訂單這種必須做完的工作 | 不綁 view 的 model 裡的 `Task` | ViewModel 的 `viewModelScope`（8） |
-| 整棵樹共用的值（主題、設定） | `@Environment` | `CompositionLocal`，用 `CompositionLocalProvider` 提供 |
+1. **資料從哪來？** 自己產生、從 Flow、從 callback，還是從 suspend 函式？
+2. **要活多久？** 只活過重組、撐過旋轉，還是行程被殺也要還原？
+3. **誰要觀察它？** 只有 Compose 畫面，還是也有 Worker、單元測試、其他畫面？
+
+| 情境 | Compose API（第幾題） |
+|---|---|
+| 計數、開關這類畫面自己的值 | `remember { mutableStateOf(…) }`（1）；普通的 `var` 不會讓畫面更新 |
+| 展開或收合、選了哪個分頁 | `remember { mutableStateOf(false) }`（1）；要撐過旋轉就換 `rememberSaveable`（5） |
+| 表單輸入到一半，要撐過旋轉 | `rememberSaveable`（5）；自訂型別要給 `Saver` |
+| 未讀數、計數器、捲動位置（整數） | `mutableIntStateOf`（2）；用 `intValue` 讀寫，避免 boxing |
+| 以最小單位存的價格（`Long`） | `mutableLongStateOf`（2）；用 `longValue` 讀寫 |
+| 每秒更新很多次的價格，只想重畫那一行 | 傳 `State` 或 lambda 給小的 Composable，在那裡才讀取（2）；不要在上層先讀成 `Long` 再傳 |
+| 自選幣種，一筆一筆增減 | `mutableStateListOf`（3）；項目用 data class，改的時候換掉那一格 |
+| 交易對對最新價格的對照表 | `mutableStateMapOf`（3） |
+| 每秒換一整份訂單簿快照 | `mutableStateOf(不可變的 list)`（3）；整份換掉，不要一筆一筆改 |
+| 同一個物件就地更新後要通知 | `mutableStateOf(obj, neverEqualPolicy())`（4）；每次寫入都重組 |
+| `equals` 不適合判斷畫面要不要更新 | `referentialEqualityPolicy()`，或 UI 用 data class（4） |
+| 計算結果依賴一般參數 | `remember(key) { … }`（5、6） |
+| 長時間運作的 effect 要用最新的 callback | `rememberUpdatedState`（5）；不要放進 key |
+| 價格超過警示線才顯示紅字 | `remember { derivedStateOf { … } }`（6）；一般參數放 `remember` 的 key |
+| 把交易對變化回報給 analytics | `LaunchedEffect` 裡的 `snapshotFlow`（6） |
+| 一次性的 suspend 載入，或 callback 轉成 State | `produceState`（6）；callback 要用 `awaitDispose` 解除 |
+| 同時寫好幾個 State，要一起生效 | `Snapshot.withMutableSnapshot { }`（6） |
+| 每秒幾十筆行情，只在畫面看得到時收 | `collectAsStateWithLifecycle`（7）；搭配 `stateIn(WhileSubscribed(5000))` |
+| 一般的 cold Flow 要顯示 | `collectAsStateWithLifecycle(initialValue)`（7）；或先在 ViewModel 用 `stateIn` |
+| 導航、Toast 這類一次性事件 | 不轉成 State，用 `LaunchedEffect` 收（7）；或做成 state 裡「待處理的事件」（Kotlin05 第 3 題） |
+| 舊專案的 LiveData | `observeAsState()`（7）；要加 `runtime-livedata` 依賴 |
+| ViewModel 暴露畫面狀態 | `StateFlow` 加 `collectAsStateWithLifecycle`（8） |
+| 子畫面要改父畫面的值 | state hoisting：值往下、`onValueChange` 往上（8） |
+| 純畫面邏輯（捲動、表單驗證） | state holder 加 `rememberXxxState()`（8） |
+| 送出訂單這種必須做完的工作 | ViewModel 的 `viewModelScope`（8）；不是 `rememberCoroutineScope` |
+| ViewModel 的狀態要撐過行程被殺 | `SavedStateHandle`（5、8）；只放小量資料 |
+| 整棵樹共用的值（主題、設定） | `CompositionLocal`，用 `CompositionLocalProvider` 提供（8） |
+
+SwiftUI 的對應見各題最後的「對應到 SwiftUI」。
 
 > [!TIP]
-> 面試時可以這樣說：「我先問資料從哪來、要活多久、誰要觀察；@State 是 remember，@SceneStorage 是 rememberSaveable。」
+> 面試時可以這樣說：「我先問資料從哪來、要活多久、誰要觀察；畫面自己的值用 remember，要撐過旋轉用 rememberSaveable。」
 
 ## 實際演練
 
@@ -1878,7 +1888,7 @@ android/solution/kotlin/kotlin11-compose-state/L08_ViewModelState.kt#fixed
 
 ## iOS / Android 對照
 
-整個單元已經是 SwiftUI 對照，完整的「情境、SwiftUI、Compose」三欄速查表在第 9 題。
+第 1 到 8 題的最後各有一節「對應到 SwiftUI」，把那一題的 API 和 SwiftUI 的寫法並排比較；第 9 題的速查表是 Compose 版。
 
 ## 名詞對照
 
