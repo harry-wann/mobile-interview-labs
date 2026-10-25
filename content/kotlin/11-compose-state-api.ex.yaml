@@ -4,7 +4,7 @@
   priority: P0
   tags: [state, recomposition, basics]
   prompt: |
-    下單表單按下「送出」，要顯示「已送出幾筆」。下面的程式，點了按鈕之後 `sent` 的值真的變成 1，畫面卻一直顯示「已送出：0 筆」。為什麼？（見第 1 題）
+    下單表單按下「送出」，要顯示「已送出幾筆」。SwiftUI 裡你會寫 `@State private var sent = 0`，按鈕裡 `sent += 1`，畫面就會跟著變。下面這段 Compose 程式，點了按鈕之後 `sent` 的值真的變成 1，畫面卻一直顯示「已送出：0 筆」。為什麼？（見第 1 題）
   codeLang: kotlin
   code: |
     @Composable
@@ -19,14 +19,15 @@
     - "`sent` 是普通的區域變數，Compose 看不到它。改了它沒有人通知，Composable 不會重新執行，畫面就不會更新"
     - "`onClick` 裡面不能修改變數，所以 `sent++` 根本沒有執行"
     - "`Text` 只會在第一次顯示時讀一次字串，之後不管資料怎麼變都不會更新"
-    - "要在 `sent++` 之後呼叫 `invalidate()` 或 `notifyDataSetChanged()`，畫面才會更新"
+    - "要在 `sent++` 之後呼叫類似 SwiftUI `objectWillChange.send()` 的通知函式，畫面才會更新"
     - "`sent` 應該宣告成 `val`，不是 `var`"
   answer: 0
   explain: |
-    - 第 1 項正確。Compose 的畫面是「Composable 函式描述出來的」，要更新畫面，就是讓函式用新的資料再執行一次（重組）。Compose 只會在它追蹤的 State 被寫入時，才去重新執行讀過那個 State 的 Composable。普通的 `var` Compose 看不到，`sent` 變成 1 了，卻沒有人通知它，函式不會再執行，畫面當然停在 0。修法是 `var sent by remember { mutableIntStateOf(0) }`。
+    這跟 SwiftUI 裡 `ObservableObject` 的屬性忘了加 `@Published` 一樣：值改了，但沒有人通知框架，畫面就不會重算。差別是 SwiftUI 的 struct 裡直接改普通屬性通常編不過，Compose 的區域變數卻能編譯，所以是靜悄悄地失敗。
+    - 第 1 項正確。Compose 的畫面是「Composable 函式描述出來的」，要更新畫面，就是讓函式用新的資料再執行一次（重組）。Compose 只會在它追蹤的 State 被寫入時，才去重新執行讀過那個 State 的 Composable。普通的 `var` Compose 看不到，`sent` 變成 1 了，卻沒有人通知它，函式不會再執行，畫面當然停在 0。修法是 `var sent by remember { mutableIntStateOf(0) }`，對應 SwiftUI 的 `@State`。
     - 第 2 項錯：`onClick` 裡可以修改變數，`sent++` 有執行，`sent` 真的變成 1。問題不在改不改得動，而是改了之後沒有人通知 Compose。
-    - 第 3 項錯：`Text("已送出：$sent 筆")` 是在「描述」畫面，每次 Composable 重新執行，就會用最新的資料描述一次。問題是這個 Composable 根本沒有重新執行。
-    - 第 4 項錯：`invalidate()`、`notifyDataSetChanged()` 是 View 系統「手動通知畫面更新」的做法。Compose 不這樣做，而是把值放進 State，由 Compose 自己追蹤、自己通知。
+    - 第 3 項錯：`Text("已送出：$sent 筆")` 是在「描述」畫面，就像 SwiftUI 的 `body` 每次重算都會用最新的資料描述一次。問題是這個 Composable 根本沒有重新執行。
+    - 第 4 項錯：`objectWillChange.send()`（SwiftUI／Combine）或 Android View 系統的 `invalidate()`，都是「手動通知畫面更新」的做法。Compose 不這樣做，而是把值放進 State，由 Compose 自己追蹤、自己通知。
     - 第 5 項錯：`val` 不能重新指派，`sent++` 會編譯失敗。
 
 - id: kotlin-compose-state-api-22
@@ -35,7 +36,7 @@
   priority: P0
   tags: [state, remember, basics]
   prompt: |
-    把上一題修成 State，但漏了 `remember`。點「送出」好幾次，畫面會怎樣？（見第 1 題）
+    SwiftUI 的 `@State` 由框架替你保存，不用另外處理。把上一題修成 State，但漏了 `remember`。點「送出」好幾次，Compose 的畫面會怎樣？（見第 1 題）
   codeLang: kotlin
   code: |
     @Composable
@@ -54,8 +55,9 @@
     - "App 會當掉，因為 State 不能在 Composable 裡建立"
   answer: 2
   explain: |
+    這是 Compose 獨有的坑，SwiftUI 的 `@State` 沒有：`@State` 的儲存由框架依 view 在樹上的位置保存，body 重算也不會歸零；Compose 的 Composable 只是普通函式，區域變數每次執行都從頭來，要靠 `remember` 才能存起來。
     - 第 3 項正確。Composable 每次執行，裡面的程式碼都會從頭再跑。沒有 `remember`，`mutableIntStateOf(0)` 每次重組都建立一個全新的、值為 0 的 State，上一次寫入的 1 跟著舊的 State 一起被丟掉。所以「有重組、但畫面看起來沒反應」。`remember { … }` 的作用就是：第一次執行時把結果存起來，之後重組直接拿同一個。
-    - 第 1 項錯：沒有 `remember`，值撐不過重組。
+    - 第 1 項錯：沒有 `remember`，值撐不過重組，這正是和 SwiftUI `@State` 不同的地方。
     - 第 2 項錯：這樣寫能編譯，不會報錯；Compose 的 lint `UnrememberedMutableState` 會在編輯器裡提醒你，但不會擋住編譯。
     - 第 4 項錯：連第一次點擊也看不到 1。寫入之後馬上重組，重組時新建的 State 又是 0。
     - 第 5 項錯：在 Composable 裡建立 State 是正常用法，只是要用 `remember` 存起來。
@@ -66,7 +68,7 @@
   priority: P0
   tags: [state-read, recomposition, deferred-read]
   prompt: |
-    下單表單最下面有一條即時價格，`priceState` 每秒更新幾十次。希望價格變的時候，只重新執行顯示價格的那一小塊，表單其他部分（數量輸入框、送出按鈕）完全不動。下列哪一種寫法最能做到？（見第 2 題）
+    下單表單最下面有一條即時價格，`priceState` 每秒更新幾十次。SwiftUI 裡你會把價格那一行拆成小 subview，讓只有它的 `body` 重算。在 Compose 裡，希望價格變的時候，只重新執行顯示價格的那一小塊，表單其他部分（數量輸入框、送出按鈕）完全不動。下列哪一種寫法最能做到？（見第 2 題）
   codeLang: kotlin
   code: |
     // A：價格以 Long 傳進來，在表單裡顯示
@@ -97,7 +99,7 @@
     - "三種寫法一樣，Compose 會自動判斷只重畫價格那一行"
   answer: 1
   explain: |
-    重組的範圍取決於「哪個 Composable 函式讀了 State」。
+    這跟 SwiftUI 把價格拆進小 subview 是同一個思路：重組的範圍取決於「哪個 Composable 函式讀了 State」，差別是 Compose 傳下去的是 State 本身，讀取留在小函式裡。
     - 第 2 項正確。B 把 `State` 本身往下傳，`price.value` 的讀取發生在 `LivePrice` 的函式內容裡，價格變了，Compose 只重新執行 `LivePrice`，`OrderForm` 完全不動。
     - 第 1 項錯：A 的 `Long` 是呼叫端先讀 `priceState.value` 才能傳進來，讀取發生在呼叫端。價格一變，呼叫端和 `OrderForm` 的函式內容都要再跑一遍；沒變的子 Composable 雖然可以被跳過，但已經不是「只有價格那一行動」了。
     - 第 3 項錯：C 的 `val p = price.value` 寫在 `OrderForm` 的函式內容裡，讀取發生在 `OrderForm`，重組的範圍是整個 `OrderForm`。暫存成區域變數不會改變「是誰讀的」。`Column` 的大括號也不會自己成為另一個重組範圍（Kotlin06 第 1 題）。
