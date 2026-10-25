@@ -1,11 +1,17 @@
 // L01：價格閃一下綠色，那一列每個畫面格都在重組（延後讀取：drawBehind）
-// 對應複習站：Kotlin08ComposePerformance 第 2 題「延後讀取（deferred read）是什麼？」
+// 對應複習站：Kotlin08ComposePerformance 第 2 題「延後讀取（deferred read）
+// 是什麼？」
 //
-// 情境：行情列表的一列（TickRow）在價格變動時，背景閃一下綠色，400 ms 內從綠色漸變到透明。
-//        按「價格跳一下」模擬價格變動。畫面上的橘色數字顯示 TickRow 重組了幾次。
-// Bug 版：Modifier.background(Color.Green.copy(alpha = flash.value * 0.3f))。建立 Modifier 的當下就讀了 flash.value，
-//        這個讀取發生在 Composition 階段。動畫的每個畫面格（frame）值都不一樣，TickRow 每一格都重組一次。
-// 修正版：改用 Modifier.drawBehind { drawRect(…) }。大括號裡的讀取延後到 Drawing 階段才發生，
+// 情境：行情列表的一列（TickRow）在價格變動時，背景閃一下綠色，400 ms
+// 內從綠色漸變到透明。
+//        按「價格跳一下」模擬價格變動。畫面上的橘色數字顯示 TickRow
+// 重組了幾次。
+// Bug 版：Modifier.background(Color.Green.copy(alpha = flash.value * 0.3f))。
+// 建立 Modifier 的當下就讀了 flash.value，
+//        這個讀取發生在 Composition 階段。動畫的每個畫面格（frame）值都不一樣，
+// TickRow 每一格都重組一次。
+// 修正版：改用 Modifier.drawBehind { drawRect(…) }。大括號裡的讀取延後到
+// Drawing 階段才發生，
 //        動畫期間只需要重新繪製，TickRow 完全不重組。
 package tw.harry.labs.solution.kotlin08composeperformance
 
@@ -38,15 +44,18 @@ import tw.harry.labs.kit.Variant
 private object L01Bug {
     @Composable
     fun TickRow(symbol: String, price: Long) {
-        val flash = remember { Animatable(0f) }             // 閃色動畫的進度：1 是最亮，0 是透明
-        LaunchedEffect(price) {                             // 價格一變，就播一次閃色動畫
+        // 閃色動畫的進度：1 是最亮，0 是透明
+        val flash = remember { Animatable(0f) }
+        // 價格一變，就播一次閃色動畫
+        LaunchedEffect(price) {
             flash.snapTo(1f)
             flash.animateTo(0f, tween(400))
         }
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(Color.Green.copy(alpha = flash.value * 0.3f))   // 在這裡讀 flash.value：Composition 階段
+                // 在這裡讀 flash.value：Composition 階段
+                .background(Color.Green.copy(alpha = flash.value * 0.3f))
                 .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -68,7 +77,15 @@ private object L01Fixed {
         Row(
             Modifier
                 .fillMaxWidth()
-                .drawBehind { drawRect(Color.Green.copy(alpha = flash.value * 0.3f)) }   // 大括號在 Drawing 階段才執行
+                // 大括號在 Drawing 階段才執行
+                .drawBehind {
+                    drawRect(
+                        Color.Green.copy(
+                            alpha =
+                                flash.value * 0.3f,
+                        ),
+                    )
+                }
                 .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {

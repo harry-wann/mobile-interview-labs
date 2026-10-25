@@ -1,10 +1,14 @@
 // L08：1 BTC 平分給 3 個子帳戶，每個人拿到 0（BigDecimal 的 /）
-// 對應複習站：Kotlin02Functions 第 6 題「BigDecimal("1") / BigDecimal("3") 為什麼是 0？」
+// 對應複習站：Kotlin02Functions 第 6 題「BigDecimal("1") / BigDecimal("3")
+// 為什麼是 0？」
 //
-// 情境：使用者要把 1 BTC 平均分給 3 個子帳戶，BTC 最小單位是 0.00000001（小數 8 位）。
-// Bug 版：用 BigDecimal("1") / BigDecimal("3")。Kotlin 的 / 取被除數的小數位數（1 的 scale 是 0），
+// 情境：使用者要把 1 BTC 平均分給 3 個子帳戶，BTC 最小單位是 0.00000001（小數
+// 8 位）。
+// Bug 版：用 BigDecimal("1") / BigDecimal("3")。Kotlin 的 /
+// 取被除數的小數位數（1 的 scale 是 0），
 //        結果只保留整數，得到 0，而且不會丟例外，1 BTC 默默消失。
-// 修正版：divide(分母, 8, RoundingMode.DOWN)：明確指定小數 8 位、無條件捨去（不會多分出去），
+// 修正版：divide(分母, 8, RoundingMode.DOWN)：明確指定小數 8 位、
+// 無條件捨去（不會多分出去），
 //        每個子帳戶 0.33333333，剩下的 0.00000001 留在原帳戶。
 package tw.harry.labs.solution.kotlin02functions
 
@@ -17,7 +21,9 @@ import tw.harry.labs.kit.Variant
 private val total = BigDecimal("1")
 private val accounts = BigDecimal("3")
 
-/** 分完之後：每個子帳戶拿到多少、三個加起來多少、原帳戶剩下多少（兩個版本共用） */
+/**
+ * 分完之後：每個子帳戶拿到多少、三個加起來多少、原帳戶剩下多少（兩個版本共用）
+ */
 private fun report(log: LabLog, share: BigDecimal) {
     val distributed = share * accounts
     log("每個子帳戶：${share.toPlainString()}")
@@ -28,7 +34,8 @@ private fun report(log: LabLog, share: BigDecimal) {
 // MARK: - Bug 版
 private object L08Bug {
     fun run(log: LabLog) {
-        val share = total / accounts                       // 取被除數的 scale（0）：1 ÷ 3 = 0
+        // 取被除數的 scale（0）：1 ÷ 3 = 0
+        val share = total / accounts
         report(log, share)
     }
 }
@@ -36,7 +43,8 @@ private object L08Bug {
 // MARK: - 修正版
 private object L08Fixed {
     fun run(log: LabLog) {
-        val share = total.divide(accounts, 8, RoundingMode.DOWN)   // 小數 8 位，無條件捨去
+        // 小數 8 位，無條件捨去
+        val share = total.divide(accounts, 8, RoundingMode.DOWN)
         report(log, share)
     }
 }

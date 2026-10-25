@@ -1,18 +1,29 @@
-// L03：行情推進來的同時下單，兩邊都卡住不動（持鎖時呼叫 callback，兩把鎖的順序相反造成 deadlock）
+// L03：行情推進來的同時下單，兩邊都卡住不動（持鎖時呼叫 callback，
+// 兩把鎖的順序相反造成 deadlock）
 // 對應複習站：Advanced04Races 第 4 題「deadlock 是什麼？怎麼避免、怎麼診斷？」
 //
-// 情境：價格表 PriceStore 有自己的鎖（價格鎖），委託管理 OrderManager 有自己的鎖（委託鎖）。
-//        1. WebSocket 執行緒：PriceStore.update 寫入新價格，接著通知 listener（OrderManager.onPrice）去更新持倉的估值，onPrice 需要委託鎖。
-//        2. 畫面執行緒：OrderManager.placeOrder 下單，先拿委託鎖，再向 PriceStore 查最新價（latest），latest 需要價格鎖。
-//        兩條執行緒同時進來：A 拿著價格鎖等委託鎖，B 拿著委託鎖等價格鎖，互相等對方放開，誰也動不了。
-//        （演練用 NSLock 的 lock(before:) 設 300 毫秒逾時當保險，逾時就放棄並記錄，不會真的把 App 卡死。真的 App 沒有這個保險，就是整個凍住。）
+// 情境：價格表 PriceStore 有自己的鎖（價格鎖），委託管理 OrderManager
+// 有自己的鎖（委託鎖）。
+//        1. WebSocket 執行緒：PriceStore.update 寫入新價格，接著通知
+// listener（OrderManager.onPrice）去更新持倉的估值，onPrice 需要委託鎖。
+//        2. 畫面執行緒：OrderManager.placeOrder 下單，先拿委託鎖，再向
+// PriceStore 查最新價（latest），latest 需要價格鎖。
+//        兩條執行緒同時進來：A 拿著價格鎖等委託鎖，B 拿著委託鎖等價格鎖，
+// 互相等對方放開，誰也動不了。
+//        （演練用 NSLock 的 lock(before:) 設 300 毫秒逾時當保險，
+// 逾時就放棄並記錄，不會真的把 App 卡死。真的 App 沒有這個保險，
+// 就是整個凍住。）
 // Bug 版：update 持有價格鎖的時候，直接呼叫 listener（callback 在鎖裡面）。
-// 修正版：持鎖期間只做資料的讀寫，把要通知的資料複製出來；放掉鎖之後，才呼叫 listener。這樣沒有任何一條執行緒同時拿著兩把鎖。
+// 修正版：持鎖期間只做資料的讀寫，把要通知的資料複製出來；放掉鎖之後，才呼叫
+// listener。這樣沒有任何一條執行緒同時拿著兩把鎖。
 import Foundation
 import LabKit
 
-/// 拿鎖，最多等 300 毫秒；拿不到就記錄「疑似 deadlock」並回傳 false（兩個版本共用）
-private func timedLock(_ lock: NSLock, name: String, who: String, log: LabLog) -> Bool {
+/// 拿鎖，最多等 300 毫秒；拿不到就記錄「疑似 deadlock」並回傳
+/// false（兩個版本共用）
+private func timedLock(
+    _ lock: NSLock, name: String, who: String, log: LabLog
+) -> Bool {
     if lock.lock(before: Date(timeIntervalSinceNow: 0.3)) { return true }
     log("\(who)：等\(name)等了 300 ms 還拿不到，疑似 deadlock，放棄")
     return false
@@ -22,13 +33,17 @@ private func timedLock(_ lock: NSLock, name: String, who: String, log: LabLog) -
 private func work() { Thread.sleep(forTimeInterval: 0.03) }
 
 /// 演練流程（兩個版本共用）：兩條執行緒同時進來，等兩邊都結束
-private func scenario(_ log: LabLog, update: @escaping () -> Void, placeOrder: @escaping () -> Void) {
+private func scenario(
+    _ log: LabLog, update: @escaping () -> Void,
+    placeOrder: @escaping () -> Void
+) {
     let group = DispatchGroup()
     let start = DispatchSemaphore(value: 0)
     for body in [update, placeOrder] {
         group.enter()
         Thread {
-            start.wait()                                        // 兩條執行緒同時開始
+            // 兩條執行緒同時開始
+            start.wait()
             body()
             group.leave()
         }.start()
@@ -47,15 +62,19 @@ private enum L03Bug {
         init(log: LabLog) { self.log = log }
 
         func update(_ symbol: String, _ price: Int) {
-            guard timedLock(lock, name: "價格鎖", who: "WebSocket 執行緒", log: log) else { return }
+            guard timedLock(lock, name: "價格鎖", who: "WebSocket 執行緒", log: log)
+            else { return }
             defer { lock.unlock() }
             prices[symbol] = price
             work()
-            listener?(symbol, price)                            // 還拿著價格鎖，就呼叫 callback：callback 裡面會去拿委託鎖
+            // 還拿著價格鎖，就呼叫 callback：callback 裡面會去拿委託鎖
+            listener?(symbol, price)
         }
 
         func latest(_ symbol: String, who: String) -> Int? {
-            guard timedLock(lock, name: "價格鎖", who: who, log: log) else { return nil }
+            guard timedLock(lock, name: "價格鎖", who: who, log: log) else {
+                return nil
+            }
             defer { lock.unlock() }
             return prices[symbol]
         }
@@ -71,16 +90,20 @@ private enum L03Bug {
         }
 
         func onPrice(_ symbol: String, _ price: Int) {
-            guard timedLock(lock, name: "委託鎖", who: "WebSocket 執行緒", log: log) else { return }
+            guard timedLock(lock, name: "委託鎖", who: "WebSocket 執行緒", log: log)
+            else { return }
             defer { lock.unlock() }
             log("WebSocket 執行緒：更新持倉估值 \(symbol) \(price)")
         }
 
         func placeOrder(_ symbol: String) {
-            guard timedLock(lock, name: "委託鎖", who: "畫面執行緒", log: log) else { return }
+            guard timedLock(lock, name: "委託鎖", who: "畫面執行緒", log: log) else {
+                return
+            }
             defer { lock.unlock() }
             work()
-            if let price = store.latest(symbol, who: "畫面執行緒") {      // 拿著委託鎖，去拿價格鎖
+            // 拿著委託鎖，去拿價格鎖
+            if let price = store.latest(symbol, who: "畫面執行緒") {
                 log("畫面執行緒：下單成功，用價格 \(price)")
             }
         }
@@ -91,7 +114,9 @@ private enum L03Bug {
             let store = PriceStore(log: log)
             let orders = OrderManager(store: store, log: log)
             store.listener = { orders.onPrice($0, $1) }
-            scenario(log, update: { store.update("BTC/JPY", 15_100_000) }, placeOrder: { orders.placeOrder("BTC/JPY") })
+            scenario(
+                log, update: { store.update("BTC/JPY", 15_100_000) },
+                placeOrder: { orders.placeOrder("BTC/JPY") })
         }.value
     }
 }
@@ -106,16 +131,21 @@ private enum L03Fixed {
         init(log: LabLog) { self.log = log }
 
         func update(_ symbol: String, _ price: Int) {
-            guard timedLock(lock, name: "價格鎖", who: "WebSocket 執行緒", log: log) else { return }
+            guard timedLock(lock, name: "價格鎖", who: "WebSocket 執行緒", log: log)
+            else { return }
             prices[symbol] = price
             work()
-            let callback = listener                             // 把要通知的東西複製出來
-            lock.unlock()                                       // 先放掉鎖
-            callback?(symbol, price)                            // 再呼叫 callback：不再同時拿著兩把鎖
+            // 把要通知的東西複製出來
+            let callback = listener
+            lock.unlock()  // 先放掉鎖
+            // 再呼叫 callback：不再同時拿著兩把鎖
+            callback?(symbol, price)
         }
 
         func latest(_ symbol: String, who: String) -> Int? {
-            guard timedLock(lock, name: "價格鎖", who: who, log: log) else { return nil }
+            guard timedLock(lock, name: "價格鎖", who: who, log: log) else {
+                return nil
+            }
             defer { lock.unlock() }
             return prices[symbol]
         }
@@ -131,13 +161,16 @@ private enum L03Fixed {
         }
 
         func onPrice(_ symbol: String, _ price: Int) {
-            guard timedLock(lock, name: "委託鎖", who: "WebSocket 執行緒", log: log) else { return }
+            guard timedLock(lock, name: "委託鎖", who: "WebSocket 執行緒", log: log)
+            else { return }
             defer { lock.unlock() }
             log("WebSocket 執行緒：更新持倉估值 \(symbol) \(price)")
         }
 
         func placeOrder(_ symbol: String) {
-            guard timedLock(lock, name: "委託鎖", who: "畫面執行緒", log: log) else { return }
+            guard timedLock(lock, name: "委託鎖", who: "畫面執行緒", log: log) else {
+                return
+            }
             defer { lock.unlock() }
             work()
             if let price = store.latest(symbol, who: "畫面執行緒") {
@@ -151,7 +184,9 @@ private enum L03Fixed {
             let store = PriceStore(log: log)
             let orders = OrderManager(store: store, log: log)
             store.listener = { orders.onPrice($0, $1) }
-            scenario(log, update: { store.update("BTC/JPY", 15_100_000) }, placeOrder: { orders.placeOrder("BTC/JPY") })
+            scenario(
+                log, update: { store.update("BTC/JPY", 15_100_000) },
+                placeOrder: { orders.placeOrder("BTC/JPY") })
         }.value
     }
 }
@@ -169,8 +204,10 @@ extension Advanced04Races {
             "診斷練習：在真的 App 卡住時，Xcode 按暫停，左邊每一條執行緒的呼叫堆疊裡，一條停在 NSLock.lock 的是 listener 那一層，另一條停在 PriceStore.latest 那一層，追出「誰在等誰」就是一個循環。",
             "想一想：另一個解法是兩邊都固定「先拿價格鎖、再拿委託鎖」的順序。為什麼「持鎖時不呼叫外部程式碼」通常比固定順序更好維護？（見這個單元的第 4 題）",
         ],
-        expectBug: "「WebSocket 執行緒：等委託鎖等了 300 ms 還拿不到，疑似 deadlock，放棄」（也可能是畫面執行緒等價格鎖逾時）；其中一邊放棄之後另一邊才拿得到鎖，晚了 300 ms 才完成。真的 App 沒有逾時保險，就是兩邊永遠卡住。",
-        expectFixed: "沒有任何「疑似 deadlock」；log 有「WebSocket 執行緒：更新持倉估值 BTC/JPY 15100000」與「畫面執行緒：下單成功，用價格 …」。",
+        expectBug:
+            "「WebSocket 執行緒：等委託鎖等了 300 ms 還拿不到，疑似 deadlock，放棄」（也可能是畫面執行緒等價格鎖逾時）；其中一邊放棄之後另一邊才拿得到鎖，晚了 300 ms 才完成。真的 App 沒有逾時保險，就是兩邊永遠卡住。",
+        expectFixed:
+            "沒有任何「疑似 deadlock」；log 有「WebSocket 執行緒：更新持倉估值 BTC/JPY 15100000」與「畫面執行緒：下單成功，用價格 …」。",
         run: { variant, log in
             switch variant {
             case .bug: await L03Bug.run(log)
@@ -179,13 +216,22 @@ extension Advanced04Races {
         },
         checkBug: { lines in
             let timeouts = lines.filter { $0.contains("疑似 deadlock") }.count
-            if timeouts == 0 { return "Bug 還沒重現：update 要在持有價格鎖的時候呼叫 listener（callback 在鎖裡面）" }
+            if timeouts == 0 {
+                return "Bug 還沒重現：update 要在持有價格鎖的時候呼叫 listener（callback 在鎖裡面）"
+            }
             return nil
         },
         checkFixed: { lines in
-            if lines.contains(where: { $0.contains("疑似 deadlock") }) { return "還是 deadlock：update 要先把 listener 複製出來、unlock() 之後才呼叫它" }
-            if !lines.contains(where: { $0.hasPrefix("WebSocket 執行緒：更新持倉估值") }) { return "listener 沒有被呼叫：放掉鎖之後要呼叫 callback?(symbol, price)" }
-            if !lines.contains(where: { $0.hasPrefix("畫面執行緒：下單成功") }) { return "下單沒有成功" }
+            if lines.contains(where: { $0.contains("疑似 deadlock") }) {
+                return "還是 deadlock：update 要先把 listener 複製出來、unlock() 之後才呼叫它"
+            }
+            if !lines.contains(where: { $0.hasPrefix("WebSocket 執行緒：更新持倉估值") })
+            {
+                return "listener 沒有被呼叫：放掉鎖之後要呼叫 callback?(symbol, price)"
+            }
+            if !lines.contains(where: { $0.hasPrefix("畫面執行緒：下單成功") }) {
+                return "下單沒有成功"
+            }
             return nil
         }
     )

@@ -1,8 +1,10 @@
 // L05：扣手續費時順便通知畫面，App 直接當掉（exclusivity）
-// 對應複習站：Swift01ValueSemantics 第 5 題「inout 與 exclusivity：同一個變數不能同時被兩個地方修改」
+// 對應複習站：Swift01ValueSemantics 第 5 題「inout 與 exclusivity：
+// 同一個變數不能同時被兩個地方修改」
 //
 // 情境：用 inout 扣手續費，扣的同時呼叫 callback 通知畫面更新，畫面會讀餘額。
-// Bug 版：餘額正被 inout 修改的期間，callback 又去讀同一個屬性。Swift 在執行時檢查到「同時存取」，直接讓 App 當掉。
+// Bug 版：餘額正被 inout 修改的期間，callback 又去讀同一個屬性。Swift
+// 在執行時檢查到「同時存取」，直接讓 App 當掉。
 // 修正版：先扣完，修改結束後再通知；不要在修改期間回頭讀正在被修改的屬性。
 import LabKit
 
@@ -16,7 +18,8 @@ private enum L05Bug {
     /// 扣手續費，扣完呼叫 onChange 通知畫面
     static func applyFee(to amount: inout Int, onChange: () -> Void) {
         amount -= 10
-        onChange()                         // 這時 inout 的存取還沒結束
+        // 這時 inout 的存取還沒結束
+        onChange()
     }
 
     static func run(_ log: LabLog) async {
@@ -40,7 +43,8 @@ private enum L05Fixed {
     static func run(_ log: LabLog) async {
         let wallet = Wallet()
         log("扣款前：\(wallet.balance)")
-        applyFee(to: &wallet.balance)      // inout 的存取在這一行結束
+        // inout 的存取在這一行結束
+        applyFee(to: &wallet.balance)
         log("通知畫面：餘額 \(wallet.balance)")
         log("扣款後：\(wallet.balance)")
     }
@@ -59,7 +63,8 @@ extension Swift01ValueSemantics {
             "在左邊的 Debug navigator 往下找，會看到 run 裡讀 wallet.balance 的那一行。",
             "按 ■ 停止，重新執行，選「修正版」比較。",
         ],
-        expectBug: "App 當掉，主控台：Simultaneous accesses to 0x…, but modification requires exclusive access.",
+        expectBug:
+            "App 當掉，主控台：Simultaneous accesses to 0x…, but modification requires exclusive access.",
         expectFixed: "依序印出扣款前 1000、通知畫面 990、扣款後 990。",
         bugCrashes: true,
         run: { variant, log in
@@ -73,7 +78,8 @@ extension Swift01ValueSemantics {
             "App 沒有當掉：要在 applyFee 的 callback 裡讀 wallet.balance"
         },
         checkFixed: { lines in
-            lines == ["扣款前：1000", "通知畫面：餘額 990", "扣款後：990"] ? nil : "應該依序印出扣款前 1000、通知畫面 990、扣款後 990"
+            lines == ["扣款前：1000", "通知畫面：餘額 990", "扣款後：990"]
+                ? nil : "應該依序印出扣款前 1000、通知畫面 990、扣款後 990"
         }
     )
 }

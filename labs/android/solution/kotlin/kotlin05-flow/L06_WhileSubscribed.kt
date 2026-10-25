@@ -1,11 +1,16 @@
 // L06：旋轉螢幕時行情連線被重連（stateIn 的 WhileSubscribed）
-// 對應複習站：Kotlin05Flow 第 5 題「stateIn(WhileSubscribed(5000)) 是什麼？為什麼是 5 秒？」
+// 對應複習站：Kotlin05Flow 第 5 題「stateIn(WhileSubscribed(5000))
+// 是什麼？為什麼是 5 秒？」
 //
-// 情境：ViewModel 用 stateIn 把行情（cold flow，上游是一條 WebSocket）轉成 hot flow 給畫面。
-//        演練模擬旋轉螢幕：畫面（collector）消失 200 ms 後，新的畫面又開始收集。
-// Bug 版：started 用 WhileSubscribed(0)（沒有人收集就立刻停上游）。旋轉的瞬間 collector 數量降到 0，
+// 情境：ViewModel 用 stateIn 把行情（cold flow，上游是一條 WebSocket）轉成 hot
+// flow 給畫面。
+//        演練模擬旋轉螢幕：畫面（collector）消失 200 ms 後，
+// 新的畫面又開始收集。
+// Bug 版：started 用 WhileSubscribed(0)（沒有人收集就立刻停上游）。旋轉的瞬間
+// collector 數量降到 0，
 //        上游馬上停掉，新畫面一出現又重新啟動，WebSocket 重連了一次。
-// 修正版：started 用 WhileSubscribed(5_000)：沒有人收集之後再等 5 秒才停。旋轉通常遠短於 5 秒，上游不會被打斷。
+// 修正版：started 用 WhileSubscribed(5_000)：沒有人收集之後再等 5 秒才停。
+// 旋轉通常遠短於 5 秒，上游不會被打斷。
 package tw.harry.labs.solution.kotlin05flow
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -26,7 +31,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 行情來源：開始收集就「開一條 WebSocket」，每 50 ms 一個價格；停止收集就「關閉」 */
+/**
+ * 行情來源：開始收集就「開一條 WebSocket」，每 50 ms 一個價格；
+ * 停止收集就「關閉」
+ */
 private class LiveTickerRepo(private val log: LabLog) {
     val starts = AtomicInteger(0)
     val running = AtomicBoolean(false)
@@ -47,14 +55,25 @@ private class LiveTickerRepo(private val log: LabLog) {
     }
 }
 
-/** 演練流程（兩個版本共用）：畫面收集 300 ms → 旋轉（消失 200 ms）→ 新畫面收集 300 ms → 離開 2 秒 */
-private suspend fun scenario(log: LabLog, repo: LiveTickerRepo, prices: StateFlow<Int>) {
-    val screenBeforeRotate = CoroutineScope(Dispatchers.Default).launch { prices.collect { } }
+/**
+ * 演練流程（兩個版本共用）：畫面收集 300 ms → 旋轉（消失 200 ms）→ 新畫面收集
+ * 300 ms → 離開 2 秒
+ */
+private suspend fun scenario(
+    log: LabLog,
+    repo: LiveTickerRepo,
+    prices: StateFlow<Int>,
+) {
+    val screenBeforeRotate = CoroutineScope(Dispatchers.Default).launch {
+        prices.collect { }
+    }
     delay(300)
     screenBeforeRotate.cancelAndJoin()
     log("旋轉：畫面消失")
     delay(200)
-    val screenAfterRotate = CoroutineScope(Dispatchers.Default).launch { prices.collect { } }
+    val screenAfterRotate = CoroutineScope(Dispatchers.Default).launch {
+        prices.collect { }
+    }
     log("旋轉：新畫面出現")
     delay(300)
     screenAfterRotate.cancelAndJoin()
@@ -68,9 +87,15 @@ private suspend fun scenario(log: LabLog, repo: LiveTickerRepo, prices: StateFlo
 private object L06Bug {
     suspend fun run(log: LabLog) {
         val repo = LiveTickerRepo(log)
-        val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val viewModelScope =
+            CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
-            val prices = repo.tickers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(0), 0)   // 沒人收集就立刻停
+            // 沒人收集就立刻停
+            val prices = repo.tickers().stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(0),
+                0,
+            )
             scenario(log, repo, prices)
         } finally {
             viewModelScope.cancel()
@@ -82,9 +107,15 @@ private object L06Bug {
 private object L06Fixed {
     suspend fun run(log: LabLog) {
         val repo = LiveTickerRepo(log)
-        val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val viewModelScope =
+            CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
-            val prices = repo.tickers().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0) // 沒人收集後再等 5 秒才停
+            // 沒人收集後再等 5 秒才停
+            val prices = repo.tickers().stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                0,
+            )
             scenario(log, repo, prices)
         } finally {
             viewModelScope.cancel()

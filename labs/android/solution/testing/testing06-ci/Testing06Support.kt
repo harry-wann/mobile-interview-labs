@@ -9,11 +9,21 @@ import java.security.MessageDigest
 
 // L01：CI 檢查結果
 
-/** 一個 CI job 的結果。CANCELLED 是被取消（例如逾時），SKIPPED 是被略過（例如條件不符、或前一個 job 失敗） */
+/**
+ * 一個 CI job 的結果。CANCELLED 是被取消（例如逾時），SKIPPED
+ * 是被略過（例如條件不符、或前一個 job 失敗）
+ */
 enum class T06JobResult { SUCCESS, FAILURE, CANCELLED, SKIPPED }
 
-/** required：是不是合併 PR 必須通過的檢查（branch protection 的 required checks） */
-class T06Check(val name: String, val result: T06JobResult, val required: Boolean = true)
+/**
+ * required：是不是合併 PR 必須通過的檢查（branch protection 的 required
+ * checks）
+ */
+class T06Check(
+    val name: String,
+    val result: T06JobResult,
+    val required: Boolean = true,
+)
 
 // L02：測試檔與耗時
 
@@ -42,8 +52,11 @@ class T06TestFile(val name: String, val seconds: Int) {
 
 object T06Hash {
     /** 內容的 SHA-256，取前 12 個十六進位字元。內容只要差一個字，結果就不同 */
-    fun shortHash(text: String): String =
-        MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }.take(12)
+    fun shortHash(text: String): String = MessageDigest.getInstance(
+        "SHA-256",
+    ).digest(text.toByteArray()).joinToString("") {
+        "%02x".format(it)
+    }.take(12)
 }
 
 /** CI 的快取：用 key 存、用 key 取 */
@@ -57,7 +70,10 @@ class T06Cache {
 }
 
 object T06Lockfile {
-    /** 套件鎖定檔（相當於 gradle.lockfile 或 Package.resolved）的內容，這裡簡化成「套件@版本」 */
+    /**
+     * 套件鎖定檔（相當於 gradle.lockfile 或 Package.resolved）的內容，
+     * 這裡簡化成「套件@版本」
+     */
     fun content(version: String) = "okhttp@$version"
 
     /** 從鎖定檔讀出版本 */
@@ -68,7 +84,8 @@ object T06Lockfile {
 
 class T06Stats(val sessions: Int, val crashFreeSessions: Int) {
     /** crash-free session 比例（百分比） */
-    val crashFreeRate: Double get() = crashFreeSessions.toDouble() / sessions * 100
+    val crashFreeRate: Double get() = crashFreeSessions.toDouble() / sessions *
+        100
 }
 
 enum class T06Decision(val title: String) {

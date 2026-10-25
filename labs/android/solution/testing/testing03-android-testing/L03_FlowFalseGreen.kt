@@ -1,13 +1,20 @@
 // L03：行情資料流少發了一筆資料，測試卻顯示通過（斷言寫在 collect 裡）
-// 對應複習站：Testing03AndroidTesting 第 3 題「Flow 發出的一連串值，要怎麼檢查？」
+// 對應複習站：Testing03AndroidTesting 第 3 題「Flow 發出的一連串值，
+// 要怎麼檢查？」
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 solution/testing/test/Testing03L03Test.kt。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// solution/testing/test/Testing03L03Test.kt。
 //
-// 情境：T03PriceStream 的行情資料流應該「先發 Loading，再發 Data(15_000_000)」。
-//       演練把同一個測試，分別對三個實作各跑一次：正確的、漏發 Data 的、價格算錯（Data(0)）的。
-// Bug 版：測試用 launch { stream.collect { if (it is Data) assertEquals(15_000_000, it.price) } }。
-//        漏發 Data 的實作，collect 裡的 assertEquals 一次都沒有執行，測試照樣通過（假的綠燈）；價格算錯的有抓到。
-// 修正版：用 Turbine：stream.test { awaitItem() 是 Loading、awaitItem() 是 Data(15_000_000)、awaitComplete() }。
+// 情境：T03PriceStream 的行情資料流應該「先發 Loading，再發
+// Data(15_000_000)」。
+//       演練把同一個測試，分別對三個實作各跑一次：正確的、漏發 Data 的、
+// 價格算錯（Data(0)）的。
+// Bug 版：測試用 launch { stream.collect { if (it is Data)
+// assertEquals(15_000_000, it.price) } }。
+//        漏發 Data 的實作，collect 裡的 assertEquals 一次都沒有執行，
+// 測試照樣通過（假的綠燈）；價格算錯的有抓到。
+// 修正版：用 Turbine：stream.test { awaitItem() 是 Loading、awaitItem() 是
+// Data(15_000_000)、awaitComplete() }。
 //        漏發 Data 時，第二個 awaitItem() 遇到的是「資料流結束」，測試失敗。
 package tw.harry.labs.solution.testing03androidtesting
 

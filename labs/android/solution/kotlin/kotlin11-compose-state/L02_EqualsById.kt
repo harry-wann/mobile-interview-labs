@@ -1,12 +1,19 @@
-// L02：訂單狀態變成 Filled，畫面卻停在 New（structuralEqualityPolicy 與 referentialEqualityPolicy）
-// 對應複習站：Kotlin11ComposeState 第 4 題「mutableStateOf 怎麼判斷『值變了』？什麼時候要換 policy？」
+// L02：訂單狀態變成 Filled，畫面卻停在 New（structuralEqualityPolicy 與
+// referentialEqualityPolicy）
+// 對應複習站：Kotlin11ComposeState 第 4 題「mutableStateOf 怎麼判斷『值變了』
+// ？什麼時候要換 policy？」
 //
-// 情境：領域模型 Order 的 equals 只比 id（Room 的 entity 和領域物件常見這樣寫）。同一筆訂單 A1 的狀態從 New 變成 Filled，
+// 情境：領域模型 Order 的 equals 只比 id（Room 的 entity
+// 和領域物件常見這樣寫）。同一筆訂單 A1 的狀態從 New 變成 Filled，
 //        要把新的 Order 寫進 State。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
-// Bug 版：mutableStateOf(Order(…))，用預設的比較方式 structuralEqualityPolicy（用 equals 比）。
-//        新舊兩個 Order 的 id 一樣，equals 說「相等」，這次寫入被當成「值沒變」直接丟掉，連 State 裡存的都還是舊的 Order。
-// 修正版：mutableStateOf(Order(…), referentialEqualityPolicy())。只有「換成另一個物件」才算變了（用 === 比），
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
+// Bug 版：mutableStateOf(Order(…))，用預設的比較方式
+// structuralEqualityPolicy（用 equals 比）。
+//        新舊兩個 Order 的 id 一樣，equals 說「相等」，這次寫入被當成「值沒變」
+// 直接丟掉，連 State 裡存的都還是舊的 Order。
+// 修正版：mutableStateOf(Order(…), referentialEqualityPolicy())。
+// 只有「換成另一個物件」才算變了（用 === 比），
 //        新的 Order 是另一個物件，寫入生效，畫面重組。
 package tw.harry.labs.solution.kotlin11composestate
 
@@ -28,11 +35,17 @@ private class L02Order(val id: String, val status: String) {
 }
 
 @Composable
-private fun L02OrderStatus(order: MutableState<L02Order>, onShow: (String) -> Unit) {
+private fun L02OrderStatus(
+    order: MutableState<L02Order>,
+    onShow: (String) -> Unit,
+) {
     HeadlessText("訂單 ${order.value}", onShow)
 }
 
-/** 演練流程（兩個版本共用）：組合畫面 → 同一筆訂單 A1 的狀態變成 Filled，寫進 State → 看 State 裡存的和畫面顯示的 */
+/**
+ * 演練流程（兩個版本共用）：組合畫面 → 同一筆訂單 A1 的狀態變成 Filled，寫進
+ * State → 看 State 裡存的和畫面顯示的
+ */
 private suspend fun scenario(log: LabLog, order: MutableState<L02Order>) {
     var shown = ""
     var shows = 0
@@ -40,7 +53,8 @@ private suspend fun scenario(log: LabLog, order: MutableState<L02Order>) {
         setContent { L02OrderStatus(order) { shown = it; shows++ } }
         settle()
         log("更新前，畫面顯示：$shown")
-        order.value = L02Order("A1", "Filled")                      // 同一筆訂單 A1，狀態變成 Filled
+        // 同一筆訂單 A1，狀態變成 Filled
+        order.value = L02Order("A1", "Filled")
         settle()
         log("更新後，State 裡的訂單：${order.value}")
         log("更新後，畫面顯示：$shown")
@@ -51,7 +65,8 @@ private suspend fun scenario(log: LabLog, order: MutableState<L02Order>) {
 // MARK: - Bug 版
 private object L02Bug {
     suspend fun run(log: LabLog) {
-        val order = mutableStateOf(L02Order("A1", "New"))           // 預設用 equals 判斷「值有沒有變」
+        // 預設用 equals 判斷「值有沒有變」
+        val order = mutableStateOf(L02Order("A1", "New"))
         scenario(log, order)
     }
 }
@@ -59,7 +74,9 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     suspend fun run(log: LabLog) {
-        val order = mutableStateOf(L02Order("A1", "New"), referentialEqualityPolicy())   // 換成另一個物件才算變了
+        // 換成另一個物件才算變了
+        val order =
+            mutableStateOf(L02Order("A1", "New"), referentialEqualityPolicy())
         scenario(log, order)
     }
 }

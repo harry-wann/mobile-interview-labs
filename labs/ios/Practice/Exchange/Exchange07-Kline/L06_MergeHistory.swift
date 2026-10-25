@@ -1,14 +1,22 @@
-// L06：切換週期之後，圖表一片空白（歷史資料和暫存的推送直接串起來，id 重複、順序亂）
-// 對應複習站：Exchange07Kline 第 5 題「切換週期、接上即時推送時，歷史資料和推送怎麼接起來？」
+// L06：切換週期之後，圖表一片空白（歷史資料和暫存的推送直接串起來，id 重複、
+// 順序亂）
+// 對應複習站：Exchange07Kline 第 5 題「切換週期、接上即時推送時，
+// 歷史資料和推送怎麼接起來？」
 //
-// 情境：使用者切換週期。App 先訂閱新週期的推送並暫存，再用 REST 抓歷史，最後把兩邊合併，一次交給圖表（`setData`）。
+// 情境：使用者切換週期。App 先訂閱新週期的推送並暫存，再用 REST 抓歷史，
+// 最後把兩邊合併，一次交給圖表（`setData`）。
 //       歷史（REST，已由舊到新）：id 60 收 1、id 120 收 2、id 180 收 3。
-//       暫存的推送（訂閱後收到）：id 120 收 99（比歷史最後一根舊的舊資料）、id 180 收 30（同一根的最新資料）、id 240 收 4（新的一根）。
-//       正確的合併：60:1、120:2、180:30、240:4。圖表的 `setData` 和 Lightweight Charts 一樣，要求資料「嚴格由舊到新」，id 不能重複，否則丟出例外。
+//       暫存的推送（訂閱後收到）：id 120 收 99（比歷史最後一根舊的舊資料）、id
+// 180 收 30（同一根的最新資料）、id 240 收 4（新的一根）。
+//       正確的合併：60:1、120:2、180:30、240:4。圖表的 `setData` 和
+// Lightweight Charts 一樣，要求資料「嚴格由舊到新」，id 不能重複，
+// 否則丟出例外。
 //
 // 你要寫：
-//   ① Bug 版（L06Bug.run 的 merge 閉包）：(history + buffered) 直接接在一起，依 id 排序。
-//   ② 修正版（L06Fixed.run 的 merge 閉包）：比歷史最後一根 id 更舊的推送丟掉；相同 id 以推送為準；最後依 id 排序。
+//   ① Bug 版（L06Bug.run 的 merge 閉包）：(history + buffered) 直接接在一起，
+// 依 id 排序。
+//   ② 修正版（L06Fixed.run 的 merge 閉包）：比歷史最後一根 id 更舊的推送丟掉；
+// 相同 id 以推送為準；最後依 id 排序。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange07-Kline/L06_MergeHistory.swift
 import Foundation
@@ -28,8 +36,12 @@ private final class FakeChart {
     private(set) var candles: [Candle] = []
 
     func setData(_ data: [Candle]) throws {
-        for (previous, next) in zip(data, data.dropFirst()) where next.id <= previous.id {
-            throw ChartError(message: "data must be asc ordered by time（id \(next.id) 沒有比前一根 \(previous.id) 新）")
+        for (previous, next) in zip(data, data.dropFirst())
+        where next.id <= previous.id {
+            throw ChartError(
+                message:
+                    "data must be asc ordered by time（id \(next.id) 沒有比前一根 \(previous.id) 新）"
+            )
         }
         candles = data
     }
@@ -40,9 +52,18 @@ private func text(_ candles: [Candle]) -> String {
 }
 
 /// 演練流程（兩個版本共用）：合併之後一次 setData
-private func scenario(_ log: LabLog, merge: (_ history: [Candle], _ buffered: [Candle]) -> [Candle]) {
-    let history = [Candle(id: 60, close: 1), Candle(id: 120, close: 2), Candle(id: 180, close: 3)]
-    let buffered = [Candle(id: 120, close: 99), Candle(id: 180, close: 30), Candle(id: 240, close: 4)]
+private func scenario(
+    _ log: LabLog,
+    merge: (_ history: [Candle], _ buffered: [Candle]) -> [Candle]
+) {
+    let history = [
+        Candle(id: 60, close: 1), Candle(id: 120, close: 2),
+        Candle(id: 180, close: 3),
+    ]
+    let buffered = [
+        Candle(id: 120, close: 99), Candle(id: 180, close: 30),
+        Candle(id: 240, close: 4),
+    ]
     let merged = merge(history, buffered)
     log("合併後：\(text(merged))")
     let chart = FakeChart()
@@ -54,14 +75,17 @@ private func scenario(_ log: LabLog, merge: (_ history: [Candle], _ buffered: [C
     } catch {
         log("圖表 setData：失敗")
     }
-    log("最後：圖表有 \(chart.candles.count) 根\(chart.candles.isEmpty ? "" : "：" + text(chart.candles))（正確答案：60:1、120:2、180:30、240:4）")
+    log(
+        "最後：圖表有 \(chart.candles.count) 根\(chart.candles.isEmpty ? "" : "：" + text(chart.candles))（正確答案：60:1、120:2、180:30、240:4）"
+    )
 }
 
 // MARK: - Bug 版
 private enum L06Bug {
     static func run(_ log: LabLog) async {
         scenario(log) { history, buffered in
-            // TODO ①：把 history + buffered 直接接在一起，依 id 排序（sorted），不去重、不丟舊的。目前只回傳 history 是佔位
+            // TODO ①：把 history + buffered 直接接在一起，依 id
+            // 排序（sorted），不去重、不丟舊的。目前只回傳 history 是佔位
             history
         }
     }
@@ -71,8 +95,10 @@ private enum L06Bug {
 private enum L06Fixed {
     static func run(_ log: LabLog) async {
         scenario(log) { history, buffered in
-            // TODO ②：先把 history 做成「id → Candle」的字典；buffered 裡 id 不小於歷史最後一根 id 的，放進字典（相同 id 以推送為準），
-            //        比歷史最後一根更舊的丟掉；最後把字典的值依 id 排序後回傳。目前只回傳 history 是佔位
+            // TODO ②：先把 history 做成「id → Candle」的字典；buffered 裡 id
+            // 不小於歷史最後一根 id 的，放進字典（相同 id 以推送為準），
+            //        比歷史最後一根更舊的丟掉；最後把字典的值依 id 排序後回傳。
+            // 目前只回傳 history 是佔位
             return history
         }
     }
@@ -84,7 +110,8 @@ extension Exchange07Kline {
         id: "L06",
         title: "切換週期之後，圖表一片空白",
         question: "第 5 題：切換週期、接上即時推送時，歷史資料和推送怎麼接起來？",
-        goal: "歷史與暫存的推送要依 id 合併：比歷史最後一根更舊的推送丟掉，相同 id 以推送為準，最後依 id 由舊到新排序，一次交給圖表。先寫出直接把歷史和推送接在一起的 Bug 版，再寫修正版。",
+        goal:
+            "歷史與暫存的推送要依 id 合併：比歷史最後一根更舊的推送丟掉，相同 id 以推送為準，最後依 id 由舊到新排序，一次交給圖表。先寫出直接把歷史和推送接在一起的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Exchange/Exchange07-Kline/L06_MergeHistory.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，看合併後的資料有哪些 id 重複，圖表的 setData 回報什麼錯誤。",
@@ -92,8 +119,10 @@ extension Exchange07Kline {
             "寫 TODO ②（修正版），選「修正版」執行，圖表要有 4 根：60:1、120:2、180:30、240:4。",
             "進階：為什麼要先訂閱推送並暫存，再抓歷史？（和訂單簿「先暫存增量、再取快照」是同一個道理，Exchange04 L05、Platform01 L07 練過）",
         ],
-        expectBug: "合併後「60:1、120:2、120:99、180:3、180:30、240:4」，圖表 setData 失敗：「最後：圖表有 0 根」。",
-        expectFixed: "合併後「60:1、120:2、180:30、240:4」，「最後：圖表有 4 根：60:1、120:2、180:30、240:4」。",
+        expectBug:
+            "合併後「60:1、120:2、120:99、180:3、180:30、240:4」，圖表 setData 失敗：「最後：圖表有 0 根」。",
+        expectFixed:
+            "合併後「60:1、120:2、180:30、240:4」，「最後：圖表有 4 根：60:1、120:2、180:30、240:4」。",
         run: { variant, log in
             switch variant {
             case .bug: await L06Bug.run(log)
@@ -101,12 +130,19 @@ extension Exchange07Kline {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("最後") }) { return "演練沒有跑完：要用 scenario(log, merge:) 執行" }
-            if !lines.contains("合併後：60:1、120:2、120:99、180:3、180:30、240:4") { return "Bug 版要把 history + buffered 直接接在一起，再依 id 排序（不去重、不丟舊的）" }
-            return lines.contains(where: { $0.hasPrefix("最後：圖表有 0 根") }) ? nil : "Bug 還沒重現：id 重複的資料交給圖表，setData 應該失敗"
+            if !lines.contains(where: { $0.hasPrefix("最後") }) {
+                return "演練沒有跑完：要用 scenario(log, merge:) 執行"
+            }
+            if !lines.contains("合併後：60:1、120:2、120:99、180:3、180:30、240:4") {
+                return "Bug 版要把 history + buffered 直接接在一起，再依 id 排序（不去重、不丟舊的）"
+            }
+            return lines.contains(where: { $0.hasPrefix("最後：圖表有 0 根") })
+                ? nil : "Bug 還沒重現：id 重複的資料交給圖表，setData 應該失敗"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("最後") }) { return "演練沒有跑完：要用 scenario(log, merge:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("最後") }) {
+                return "演練沒有跑完：要用 scenario(log, merge:) 執行"
+            }
             return lines.contains("合併後：60:1、120:2、180:30、240:4")
                 ? nil : "比歷史最後一根（id 180）更舊的推送丟掉；相同 id 以推送為準；新的 id 加進來；最後依 id 排序"
         }

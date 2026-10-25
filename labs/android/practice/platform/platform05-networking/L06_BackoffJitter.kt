@@ -1,12 +1,17 @@
 // L06：伺服器剛恢復，1000 支手機在同一瞬間一起湧入（重試要加 jitter）
-// 對應複習站：Platform05Networking 第 5 題「網路請求失敗要重試嗎？下單逾時為什麼不能直接重送？」（指數退避與 jitter）
+// 對應複習站：Platform05Networking 第 5
+// 題「網路請求失敗要重試嗎？下單逾時為什麼不能直接重送？」（指數退避與 jitter）
 //
-// 情境：伺服器短暫當機，1000 支手機同時斷線，各自用「指數退避」決定第 3 次重試要等多久。
-//        演練把這 1000 個等待時間依 100 ms 分組，看同一個 100 ms 內最多有幾支手機一起重連。
+// 情境：伺服器短暫當機，1000 支手機同時斷線，各自用「指數退避」決定第 3
+// 次重試要等多久。
+//        演練把這 1000 個等待時間依 100 ms 分組，看同一個 100 ms
+// 內最多有幾支手機一起重連。
 //
 // 你要寫：
-//   ① Bug 版：backoffMillis 回傳 min(capMs, baseMs 乘以 2 的 attempt 次方)，只有指數退避。
-//   ② 修正版：先算出上限 ceiling，再用 random.nextLong(0, ceiling + 1) 回傳一個隨機的等待時間。
+//   ① Bug 版：backoffMillis 回傳 min(capMs, baseMs 乘以 2 的 attempt 次方)，
+// 只有指數退避。
+//   ② 修正版：先算出上限 ceiling，再用 random.nextLong(0, ceiling + 1)
+// 回傳一個隨機的等待時間。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform05-networking/L06_BackoffJitter.kt
 package tw.harry.labs.practice.platform05networking
@@ -17,40 +22,67 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 演練流程（兩個版本共用）：1000 支手機各自算第 3 次重試的等待時間。亂數用固定種子，結果每次一樣 */
-private fun scenario(log: LabLog, backoffMillis: (attempt: Int, random: Random) -> Long) {
+/**
+ * 演練流程（兩個版本共用）：1000 支手機各自算第 3 次重試的等待時間。
+ * 亂數用固定種子，結果每次一樣
+ */
+private fun scenario(
+    log: LabLog,
+    backoffMillis: (attempt: Int, random: Random) -> Long,
+) {
     val random = Random(2026)
     val delays = List(1000) { backoffMillis(3, random) }
     val buckets = delays.groupingBy { it / 100 }.eachCount()
     fun seconds(ms: Long) = String.format(Locale.US, "%.1f", ms / 1000.0)
-    log("第 3 次重試：等待時間上限 8 秒，實際在 ${seconds(delays.min())} 到 ${seconds(delays.max())} 秒之間")
+    log(
+        "第 3 次重試：等待時間上限 8 秒，實際在 ${seconds(
+            delays.min(),
+        )} 到 ${seconds(delays.max())} 秒之間",
+    )
     log("1000 支手機裡，同一個 0.1 秒內湧入最多的有 ${buckets.values.max()} 支")
 }
 
 // MARK: - Bug 版
 private object L06Bug {
-    /** attempt：第幾次重試（從 0 開始）。上限依序是 1、2、4、8 秒……最多 30 秒 */
-    fun backoffMillis(attempt: Int, random: Random, baseMs: Long = 1_000, capMs: Long = 30_000): Long =
-        // TODO ①：回傳 minOf(capMs, baseMs * (1L shl attempt))，不加任何亂數
+    /**
+     * attempt：第幾次重試（從 0 開始）。上限依序是 1、2、4、8 秒……最多 30 秒
+     */
+    fun backoffMillis(
+        attempt: Int,
+        random: Random,
+        baseMs: Long = 1_000,
+        capMs: Long = 30_000,
+    ): Long = // TODO ①：回傳 minOf(capMs, baseMs * (1L shl attempt))，不加任何亂數
         0
 
-    suspend fun run(log: LabLog) = scenario(log) { attempt, random -> backoffMillis(attempt, random) }
+    suspend fun run(log: LabLog) = scenario(log) { attempt, random ->
+        backoffMillis(attempt, random)
+    }
 }
 
 // MARK: - 修正版
 private object L06Fixed {
-    fun backoffMillis(attempt: Int, random: Random, baseMs: Long = 1_000, capMs: Long = 30_000): Long {
+    fun backoffMillis(
+        attempt: Int,
+        random: Random,
+        baseMs: Long = 1_000,
+        capMs: Long = 30_000,
+    ): Long {
         val ceiling = minOf(capMs, baseMs * (1L shl attempt))
-        // TODO ②：在 0 到 ceiling 之間隨機挑一個時間回傳（random.nextLong(from, until)，until 不含，所以要 +1）
+        // TODO ②：在 0 到 ceiling 之間隨機挑一個時間回傳（random.
+        // nextLong(from, until)，until 不含，所以要 +1）
         return 0
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { attempt, random -> backoffMillis(attempt, random) }
+    suspend fun run(log: LabLog) = scenario(log) { attempt, random ->
+        backoffMillis(attempt, random)
+    }
 }
 
 // MARK: - 演練設定
-private fun peak(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("1000 支手機裡") }?.let { Regex("(\\d+) 支$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun peak(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("1000 支手機裡")
+}?.let { Regex("(\\d+) 支$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l06 = Lab(
     id = "L06",
@@ -76,8 +108,13 @@ val l06 = Lab(
         val n = peak(lines)
         when {
             n == null -> "演練沒有跑完：要用 scenario(log) { … } 執行"
-            lines.none { "實際在 8.0 到 8.0 秒之間" in it } -> "第 3 次重試的等待時間應該是 min(30 秒, 2 的 3 次方) = 8 秒"
+
+            lines.none {
+                "實際在 8.0 到 8.0 秒之間" in it
+            } -> "第 3 次重試的等待時間應該是 min(30 秒, 2 的 3 次方) = 8 秒"
+
             n < 900 -> "Bug 還沒重現：只用指數退避、不加亂數，1000 支手機的等待時間應該一模一樣（目前最多 $n 支）"
+
             else -> null
         }
     },

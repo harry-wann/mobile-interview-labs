@@ -1,13 +1,18 @@
 // L06：停利單成交了，停損單還在，後來又被觸發，賣掉了根本沒有的 BTC（OCO）
-// 對應複習站：Exchange01Orders 第 4 題「OCO、IFD、IFDOCO 這些組合單是怎麼運作的？」
+// 對應複習站：Exchange01Orders 第 4 題「OCO、IFD、IFDOCO
+// 這些組合單是怎麼運作的？」
 //
-// 情境：使用者持有 0.1 BTC，掛了一組 OCO（二選一）：賣出指値 10,300,000 円（停利）加賣出逆指値、觸發價 9,500,000 円（停損），各 0.1 BTC。
-//        價格先漲到停利價，停利單成交；之後價格暴跌到停損價。OCO 的規則：其中一張成交，另一張要自動取消。
-//        （這是組合單的狀態機：伺服器用它決定每一張單的狀態，App 用同一套規則顯示。）
+// 情境：使用者持有 0.1 BTC，掛了一組 OCO（二選一）：賣出指値 10,300,000
+// 円（停利）加賣出逆指値、觸發價 9,500,000 円（停損），各 0.1 BTC。
+//        價格先漲到停利價，停利單成交；之後價格暴跌到停損價。OCO 的規則：
+// 其中一張成交，另一張要自動取消。
+//        （這是組合單的狀態機：伺服器用它決定每一張單的狀態，App
+// 用同一套規則顯示。）
 //
 // 你要寫：
 //   ① Bug 版（L06Bug.onFilled）：成交的那一張標成 FILLED，其他什麼都不做。
-//   ② 修正版（L06Fixed.onFilled）：成交的那一張標成 FILLED；另一張如果還是 ACTIVE，改成 CANCELLED。
+//   ② 修正版（L06Fixed.onFilled）：成交的那一張標成 FILLED；另一張如果還是
+// ACTIVE，改成 CANCELLED。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange01-orders/L06_OcoCancel.kt
 package tw.harry.labs.practice.exchange01orders
@@ -17,44 +22,73 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 private enum class Leg { TAKE_PROFIT, STOP_LOSS }
-private enum class LegStatus(val text: String) { ACTIVE("active"), FILLED("filled"), CANCELLED("cancelled") }
+private enum class LegStatus(val text: String) {
+    ACTIVE(
+        "active",
+    ),
+    FILLED("filled"),
+    CANCELLED("cancelled"),
+}
 
 /** OCO 組合單的狀態 */
 private class OcoGroup {
     var takeProfit = LegStatus.ACTIVE
     var stopLoss = LegStatus.ACTIVE
 
-    operator fun get(leg: Leg) = if (leg == Leg.TAKE_PROFIT) takeProfit else stopLoss
+    operator fun get(leg: Leg) = if (leg ==
+        Leg.TAKE_PROFIT
+    ) {
+        takeProfit
+    } else {
+        stopLoss
+    }
     operator fun set(leg: Leg, value: LegStatus) {
         if (leg == Leg.TAKE_PROFIT) takeProfit = value else stopLoss = value
     }
 }
 
-/** 演練流程（兩個版本共用）：價格依序變動，每一張還在 active 的單檢查有沒有觸發 */
+/**
+ * 演練流程（兩個版本共用）：價格依序變動，每一張還在 active 的單檢查有沒有觸發
+ */
 private fun scenario(log: LabLog, onFilled: (OcoGroup, Leg) -> Unit) {
     val group = OcoGroup()
-    var position = e01("0.1")                               // 持有的 BTC
-    val prices = listOf("10000000", "10300000", "9800000", "9500000").map { e01(it) }
+    var position = e01("0.1") // 持有的 BTC
+    val prices = listOf("10000000", "10300000", "9800000", "9500000").map {
+        e01(it)
+    }
     log("持有 0.1 BTC，OCO：停利 10300000 ／ 停損 9500000")
     for (price in prices) {
         if (group.takeProfit == LegStatus.ACTIVE && price >= e01("10300000")) {
             position -= e01("0.1")
             onFilled(group, Leg.TAKE_PROFIT)
-            log("價格 ${e01Text(price)}：停利單成交，賣出 0.1 BTC，持倉 ${e01Text(position)} BTC")
+            log(
+                "價格 ${e01Text(
+                    price,
+                )}：停利單成交，賣出 0.1 BTC，持倉 ${e01Text(position)} BTC",
+            )
         }
         if (group.stopLoss == LegStatus.ACTIVE && price <= e01("9500000")) {
             position -= e01("0.1")
             onFilled(group, Leg.STOP_LOSS)
-            log("價格 ${e01Text(price)}：停損單被觸發，賣出 0.1 BTC，持倉 ${e01Text(position)} BTC")
+            log(
+                "價格 ${e01Text(
+                    price,
+                )}：停損單被觸發，賣出 0.1 BTC，持倉 ${e01Text(position)} BTC",
+            )
         }
     }
-    log("最後狀態：停利 ${group.takeProfit.text}、停損 ${group.stopLoss.text}，持倉 ${e01Text(position)} BTC")
+    log(
+        "最後狀態：停利 ${group.takeProfit.text}、停損 ${group.stopLoss.text}，持倉 ${e01Text(
+            position,
+        )} BTC",
+    )
 }
 
 // MARK: - Bug 版
 private object L06Bug {
     fun onFilled(group: OcoGroup, leg: Leg) {
-        // TODO ①：把成交的這一張（group[leg]）標成 LegStatus.FILLED，其他什麼都不做
+        // TODO ①：把成交的這一張（group[leg]）標成 LegStatus.FILLED，
+        // 其他什麼都不做
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::onFilled)
@@ -64,7 +98,8 @@ private object L06Bug {
 private object L06Fixed {
     fun onFilled(group: OcoGroup, leg: Leg) {
         // TODO ②-1：把成交的這一張（group[leg]）標成 LegStatus.FILLED
-        // TODO ②-2：找出另一張（停利的另一張是停損，停損的另一張是停利），如果它還是 ACTIVE，改成 CANCELLED
+        // TODO ②-2：找出另一張（停利的另一張是停損，停損的另一張是停利），
+        // 如果它還是 ACTIVE，改成 CANCELLED
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::onFilled)
@@ -94,15 +129,23 @@ val l06 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後狀態") } -> "演練沒有跑完：要用 scenario(log, ::onFilled) 執行"
+            lines.none {
+                it.startsWith("最後狀態")
+            } -> "演練沒有跑完：要用 scenario(log, ::onFilled) 執行"
+
             "最後狀態：停利 filled、停損 filled，持倉 -0.1 BTC" !in lines -> "Bug 還沒重現：onFilled 只把成交的那一張標成 FILLED，另一張維持 ACTIVE，後來會被再次觸發"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後狀態") } -> "演練沒有跑完：要用 scenario(log, ::onFilled) 執行"
+            lines.none {
+                it.startsWith("最後狀態")
+            } -> "演練沒有跑完：要用 scenario(log, ::onFilled) 執行"
+
             "最後狀態：停利 filled、停損 cancelled，持倉 0 BTC" !in lines -> "一張成交時，另一張如果還是 ACTIVE，要改成 CANCELLED"
+
             else -> null
         }
     },

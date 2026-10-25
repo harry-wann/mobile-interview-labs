@@ -1,12 +1,18 @@
-// L09：App 退到背景，行情還一直在收（lifecycleScope.launch { collect } 與 repeatOnLifecycle）
-// 對應複習站：Kotlin05Flow 第 7 題「怎麼讓 Flow 的收集跟著畫面的生命週期停啟？」
+// L09：App 退到背景，行情還一直在收（lifecycleScope.launch { collect } 與
+// repeatOnLifecycle）
+// 對應複習站：Kotlin05Flow 第 7 題「怎麼讓 Flow
+// 的收集跟著畫面的生命週期停啟？」
 //
-// 情境：行情畫面收集價格（每 50 ms 一筆）。這個演練用 FakeScreen 模擬畫面的 lifecycle：
-//        出現（STARTED）0.3 秒 → 退到背景（STOPPED）0.5 秒 → 回到前景 0.3 秒 → 離開（DESTROYED）。
+// 情境：行情畫面收集價格（每 50 ms 一筆）。這個演練用 FakeScreen 模擬畫面的
+// lifecycle：
+//        出現（STARTED）0.3 秒 → 退到背景（STOPPED）0.5 秒 → 回到前景 0.3 秒 →
+// 離開（DESTROYED）。
 //        要在手機上執行（repeatOnLifecycle 需要 Android 的主執行緒）。
-// Bug 版：在 lifecycleScope.launch { prices.collect { } } 裡直接收集。畫面退到背景後仍然持續收集，
+// Bug 版：在 lifecycleScope.launch { prices.collect { } } 裡直接收集。
+// 畫面退到背景後仍然持續收集，
 //        要等畫面 DESTROYED 才停，背景還在更新畫面、耗電、耗流量。
-// 修正版：用 repeatOnLifecycle(Lifecycle.State.STARTED) 包住收集：離開 STARTED 就取消，回到前景再重新開始。
+// 修正版：用 repeatOnLifecycle(Lifecycle.State.STARTED) 包住收集：離開 STARTED
+// 就取消，回到前景再重新開始。
 //        （Compose 裡對應的是 collectAsStateWithLifecycle()）
 package tw.harry.labs.solution.kotlin05flow
 
@@ -40,15 +46,26 @@ private fun prices(): Flow<Int> = flow {
     }
 }
 
-/** 演練流程（兩個版本共用）：[collectIn] 決定「怎麼收集」；收到價格時，記下畫面是不是在背景 */
-private suspend fun scenario(log: LabLog, collectIn: (FakeScreen, onPrice: () -> Unit) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：[collectIn] 決定「怎麼收集」；收到價格時，
+ * 記下畫面是不是在背景
+ */
+private suspend fun scenario(
+    log: LabLog,
+    collectIn: (FakeScreen, onPrice: () -> Unit) -> Unit,
+) {
     val screen = FakeScreen()
     var inBackground = 0
     screen.move(Lifecycle.Event.ON_CREATE)
     screen.move(Lifecycle.Event.ON_START)
     log("畫面出現（前景）")
     collectIn(screen) {
-        if (!screen.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) inBackground++
+        if (!screen.lifecycle.currentState.isAtLeast(
+                Lifecycle.State.STARTED,
+            )
+        ) {
+            inBackground++
+        }
     }
     delay(300)
     screen.move(Lifecycle.Event.ON_STOP)
@@ -67,7 +84,8 @@ private object L09Bug {
     suspend fun run(log: LabLog) {
         scenario(log) { screen, onPrice ->
             screen.lifecycleScope.launch {
-                prices().collect { onPrice() }              // 直接收集：背景也不會停，要等 DESTROYED
+                // 直接收集：背景也不會停，要等 DESTROYED
+                prices().collect { onPrice() }
             }
         }
     }
@@ -78,7 +96,8 @@ private object L09Fixed {
     suspend fun run(log: LabLog) {
         scenario(log) { screen, onPrice ->
             screen.lifecycleScope.launch {
-                screen.repeatOnLifecycle(Lifecycle.State.STARTED) {   // 離開 STARTED 就取消，回來重新收集
+                // 離開 STARTED 就取消，回來重新收集
+                screen.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     prices().collect { onPrice() }
                 }
             }
@@ -87,8 +106,9 @@ private object L09Fixed {
 }
 
 // MARK: - 演練設定
-private fun inBackground(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("在背景時仍然收到 ") }?.removePrefix("在背景時仍然收到 ")?.removeSuffix(" 筆價格")?.toIntOrNull()
+private fun inBackground(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("在背景時仍然收到 ")
+}?.removePrefix("在背景時仍然收到 ")?.removeSuffix(" 筆價格")?.toIntOrNull()
 
 val l09 = Lab(
     id = "L09",

@@ -17,19 +17,25 @@ internal class LinkCollector {
  */
 internal object Wallet {
     const val ADDRESS = "0x1234abcd5678ef90"
-    private val key = SecretKeySpec("wallet-private-key".toByteArray(), "HmacSHA256")
+    private val key =
+        SecretKeySpec("wallet-private-key".toByteArray(), "HmacSHA256")
 
     fun sign(message: String): String {
         val mac = Mac.getInstance("HmacSHA256").apply { init(key) }
-        return mac.doFinal(message.toByteArray()).joinToString("") { "%02x".format(it) }
+        return mac.doFinal(message.toByteArray()).joinToString("") {
+            "%02x".format(it)
+        }
     }
 
     /** 伺服器端的驗證：簽章是不是這個錢包對這段訊息簽的 */
-    fun verify(message: String, signature: String): Boolean = sign(message) == signature
+    fun verify(message: String, signature: String): Boolean =
+        sign(message) == signature
 }
 
 internal object Siwe {
     /** 從訊息裡取出「欄位名稱: 值」那一行的值，例如 field("Nonce", message) */
     fun field(name: String, message: String): String? =
-        message.lines().firstOrNull { it.startsWith("$name: ") }?.removePrefix("$name: ")
+        message.lines().firstOrNull {
+            it.startsWith("$name: ")
+        }?.removePrefix("$name: ")
 }

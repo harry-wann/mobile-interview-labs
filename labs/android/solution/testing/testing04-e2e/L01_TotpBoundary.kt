@@ -1,13 +1,20 @@
-// L01：登入的 E2E 測試偶爾失敗，而且只發生在 30 秒的最後幾秒（驗證碼先算好，送出時已經換新的了）
+// L01：登入的 E2E 測試偶爾失敗，而且只發生在 30 秒的最後幾秒（驗證碼先算好，
+// 送出時已經換新的了）
 // 對應複習站：Testing04E2E 第 2 題「交易所 App 的測試環境要注意什麼？」
 //
-// 情境：測試帳號用固定的 TOTP 密鑰，測試程式自己用同樣的算法（T04Totp.code，RFC 6238）算出驗證碼。
-//       登入流程：輸入帳號密碼（2.5 秒）→ 等兩步驟驗證畫面出現（1.5 秒）→ 送出驗證碼（0.5 秒送到伺服器）。
-//       伺服器很嚴格，只接受「現在這個 30 秒」的驗證碼。時間用假的時鐘推進，不會真的等。
-//       演練把同一個登入測試跑 4 次，分別從某個 30 秒區間的第 3、12、22、27.5 秒開始。
-// Bug 版：一開始就算好驗證碼，才去做後面的步驟。從第 27.5 秒開始的那次，送出時已經是下一個 30 秒，被伺服器拒絕。
+// 情境：測試帳號用固定的 TOTP 密鑰，測試程式自己用同樣的算法（T04Totp.code，
+// RFC 6238）算出驗證碼。
+//       登入流程：輸入帳號密碼（2.5 秒）→ 等兩步驟驗證畫面出現（1.5 秒）→
+// 送出驗證碼（0.5 秒送到伺服器）。
+//       伺服器很嚴格，只接受「現在這個 30 秒」的驗證碼。時間用假的時鐘推進，
+// 不會真的等。
+//       演練把同一個登入測試跑 4 次，分別從某個 30 秒區間的第 3、12、22、27.5
+// 秒開始。
+// Bug 版：一開始就算好驗證碼，才去做後面的步驟。從第 27.5 秒開始的那次，
+// 送出時已經是下一個 30 秒，被伺服器拒絕。
 //        其他三次都通過，所以這個測試「大約每 30 次有 4 次」失敗，很難重現。
-// 修正版：等兩步驟驗證畫面出現後，才算驗證碼；如果這個 30 秒只剩不到 5 秒，先等到下一個區間再算（送出還要 0.5 秒）。
+// 修正版：等兩步驟驗證畫面出現後，才算驗證碼；如果這個 30 秒只剩不到 5 秒，
+// 先等到下一個區間再算（送出還要 0.5 秒）。
 //        4 次都通過。
 package tw.harry.labs.solution.testing04e2e
 
@@ -16,16 +23,30 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 演練流程（兩個版本共用）：同一個登入測試從不同的時間點開始跑 4 次 */
-private suspend fun scenario(log: LabLog, login: suspend (T04FakeLoginUI, T04Clock) -> Unit) {
+private suspend fun scenario(
+    log: LabLog,
+    login: suspend (T04FakeLoginUI, T04Clock) -> Unit,
+) {
     log("TOTP 算法對照 RFC 6238 的測試向量：${if (T04Totp.selfCheck()) "正確" else "不正確"}")
-    val windowStart = 1_700_000_010.0                              // 某個 30 秒區間的起點（30 的倍數）
+    // 某個 30 秒區間的起點（30 的倍數）
+    val windowStart = 1_700_000_010.0
     val suite = T04Suite()
-    for ((label, offset) in listOf("第 3 秒" to 3.0, "第 12 秒" to 12.0, "第 22 秒" to 22.0, "第 27.5 秒" to 27.5)) {
+    for ((label, offset) in listOf(
+        "第 3 秒" to 3.0,
+        "第 12 秒" to 12.0,
+        "第 22 秒" to 22.0,
+        "第 27.5 秒" to 27.5,
+    )) {
         suite.test("從 30 秒區間的${label}開始登入") { t ->
             val clock = T04Clock(windowStart + offset)
             val ui = T04FakeLoginUI(clock, T04FakeAuthServer(clock))
             login(ui, clock)
-            t.isTrue(ui.loggedIn, "登入失敗：${ui.errorMessage.ifEmpty { "沒有送出驗證碼" }}")
+            t.isTrue(
+                ui.loggedIn,
+                "登入失敗：${ui.errorMessage.ifEmpty {
+                    "沒有送出驗證碼"
+                }}",
+            )
         }
     }
     suite.run("登入測試", log)
@@ -34,10 +55,12 @@ private suspend fun scenario(log: LabLog, login: suspend (T04FakeLoginUI, T04Clo
 // MARK: - Bug 版
 private object L01Bug {
     suspend fun login(ui: T04FakeLoginUI, clock: T04Clock) {
-        val code = T04Totp.code(clock.now)                         // 一開始就算好驗證碼
+        // 一開始就算好驗證碼
+        val code = T04Totp.code(clock.now)
         ui.typeCredentials()
         ui.waitForTwoFactorScreen()
-        ui.submitCode(code)                                        // 送出時，這個驗證碼可能已經過期
+        // 送出時，這個驗證碼可能已經過期
+        ui.submitCode(code)
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::login)
@@ -49,8 +72,10 @@ private object L01Fixed {
         ui.typeCredentials()
         ui.waitForTwoFactorScreen()
         val left = T04Totp.secondsLeft(clock.now)
-        if (left < 5) clock.advance(left + 0.1)                    // 這個 30 秒快結束了：等到下一個區間（真實測試裡是 delay 或 sleep）
-        ui.submitCode(T04Totp.code(clock.now))                     // 在要用之前才算驗證碼
+        // 這個 30 秒快結束了：等到下一個區間（真實測試裡是 delay 或 sleep）
+        if (left < 5) clock.advance(left + 0.1)
+        // 在要用之前才算驗證碼
+        ui.submitCode(T04Totp.code(clock.now))
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::login)

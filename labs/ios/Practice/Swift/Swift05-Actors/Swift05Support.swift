@@ -14,14 +14,18 @@ extension Swift05Actors {
         func start() {
             last = DispatchTime.now()
             longestGap = 0
-            timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] _ in
+            timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true)
+            { [weak self] _ in
                 MainActor.assumeIsolated { self?.tick() }
             }
         }
 
         private func tick() {
             let now = DispatchTime.now()
-            longestGap = max(longestGap, Double(now.uptimeNanoseconds - last.uptimeNanoseconds) / 1_000_000)
+            longestGap = max(
+                longestGap,
+                Double(now.uptimeNanoseconds - last.uptimeNanoseconds)
+                    / 1_000_000)
             last = now
         }
 
@@ -33,6 +37,7 @@ extension Swift05Actors {
         }
     }
 
-    /// 目前是不是在主執行緒（Thread.isMainThread 不能直接寫在 async 函式裡，包成同步函式）
+    /// 目前是不是在主執行緒（Thread.isMainThread 不能直接寫在 async 函式裡，
+    /// 包成同步函式）
     static func onMainThread() -> Bool { Thread.isMainThread }
 }

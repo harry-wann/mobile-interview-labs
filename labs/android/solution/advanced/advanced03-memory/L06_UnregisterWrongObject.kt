@@ -1,13 +1,22 @@
-// L06：以為 unregister 了，Activity 還是被抓著（unregister 傳進去的是另一個 lambda）
-// 對應複習站：Advanced03Memory 第 4 題「Android 有垃圾回收，為什麼還會洩漏？」（匿名內部類別與 lambda 會隱含持有外部類別）
+// L06：以為 unregister 了，Activity 還是被抓著（unregister 傳進去的是另一個
+// lambda）
+// 對應複習站：Advanced03Memory 第 4 題「Android 有垃圾回收，為什麼還會洩漏？」
+// （匿名內部類別與 lambda 會隱含持有外部類別）
 //
-// 情境：行情畫面在 onCreate 向單例 PriceFeed 註冊 listener 接收報價，onDestroy 有呼叫 unregister，看起來該做的都做了。
+// 情境：行情畫面在 onCreate 向單例 PriceFeed 註冊 listener 接收報價，onDestroy
+// 有呼叫 unregister，看起來該做的都做了。
 //        和 L03 的差別：L03 是「忘了解除」，這裡是「以為解除了，其實沒有」。
-//        （JVM 單元測試沒有 Activity，所以用假的畫面物件，背一份 1 MB 資料代表整棵 view 樹。
-//          真的 SharedPreferences.registerOnSharedPreferenceChangeListener 用 WeakHashMap 存 listener，不會因此洩漏，
-//          反而是 listener 沒存成欄位會被 GC 回收；所以演練用自己寫的單例 PriceFeed，它和多數自製的 callback 清單一樣，用一般的 list 強持有 listener。）
-// Bug 版：onCreate 與 onDestroy 各寫一個 { price -> render(price) }。lambda 用到 this，每寫一次就是一個新物件，
-//         unregister 找不到註冊時的那一個（移除 0 個），listener 還留在 PriceFeed 裡抓著 Activity。
+//        （JVM 單元測試沒有 Activity，所以用假的畫面物件，背一份 1 MB
+// 資料代表整棵 view 樹。
+//          真的 SharedPreferences.registerOnSharedPreferenceChangeListener 用
+// WeakHashMap 存 listener，不會因此洩漏，
+//          反而是 listener 沒存成欄位會被 GC 回收；所以演練用自己寫的單例
+// PriceFeed，它和多數自製的 callback 清單一樣，用一般的 list 強持有
+// listener。）
+// Bug 版：onCreate 與 onDestroy 各寫一個 { price -> render(price) }。lambda
+// 用到 this，每寫一次就是一個新物件，
+//         unregister 找不到註冊時的那一個（移除 0 個），listener 還留在
+// PriceFeed 裡抓著 Activity。
 // 修正版：listener 存成欄位，register 和 unregister 傳同一個參考。
 package tw.harry.labs.solution.advanced03memory
 
@@ -24,12 +33,19 @@ private class L06ViewTree {
     val pixels = ByteArray(1_000_000)
 }
 
-/** 價格 listener：只有一個方法的 interface，Kotlin 可以直接用 lambda 代替它（SAM 轉換，single abstract method conversion），和 OnClickListener 的用法一樣（兩個版本共用） */
+/**
+ * 價格 listener：只有一個方法的 interface，Kotlin 可以直接用 lambda
+ * 代替它（SAM 轉換，single abstract method conversion），和 OnClickListener
+ * 的用法一樣（兩個版本共用）
+ */
 private fun interface L06PriceListener {
     fun onPrice(price: Double)
 }
 
-/** 單例：活得比任何一個畫面都久（兩個版本共用）。unregister 找不到就不會移除，和 MutableList.remove 一樣比對「同一個物件」 */
+/**
+ * 單例：活得比任何一個畫面都久（兩個版本共用）。unregister 找不到就不會移除，
+ * 和 MutableList.remove 一樣比對「同一個物件」
+ */
 private object L06PriceFeed {
     private val listeners = mutableListOf<L06PriceListener>()
     var unregisterCalls = 0
@@ -64,8 +80,14 @@ private interface L06Screen {
     fun onDestroy()
 }
 
-/** 演練流程（兩個版本共用）：打開再關閉畫面，關閉後推一筆新價格，最後用 WeakReference 加 GC 檢查有沒有洩漏 */
-private suspend fun scenario(log: LabLog, newScreen: (rendered: AtomicInteger) -> L06Screen) = withContext(Dispatchers.Default) {
+/**
+ * 演練流程（兩個版本共用）：打開再關閉畫面，關閉後推一筆新價格，最後用
+ * WeakReference 加 GC 檢查有沒有洩漏
+ */
+private suspend fun scenario(
+    log: LabLog,
+    newScreen: (rendered: AtomicInteger) -> L06Screen,
+) = withContext(Dispatchers.Default) {
     L06PriceFeed.reset()
     val rendered = AtomicInteger()
     fun openAndCloseScreen(): WeakReference<L06Screen> {
@@ -76,7 +98,9 @@ private suspend fun scenario(log: LabLog, newScreen: (rendered: AtomicInteger) -
         return WeakReference(screen)
     }
     val ref = openAndCloseScreen()
-    log("onDestroy 呼叫了 unregister ${L06PriceFeed.unregisterCalls} 次，真的移除了 ${L06PriceFeed.removed} 個")
+    log(
+        "onDestroy 呼叫了 unregister ${L06PriceFeed.unregisterCalls} 次，真的移除了 ${L06PriceFeed.removed} 個",
+    )
     log("關閉畫面後，PriceFeed 還有 ${L06PriceFeed.listenerCount} 個 listener")
     L06PriceFeed.publish(15_000_000.0)
     log("關閉畫面後推一筆新價格，已經關掉的畫面又重畫了 ${rendered.get()} 次")
@@ -91,20 +115,25 @@ private object L06Bug {
         var lastPrice = 0.0
 
         override fun onCreate() {
-            L06PriceFeed.register { price -> render(price) }          // 這個 lambda 用到 this，是第 1 個物件
+            // 這個 lambda 用到 this，是第 1 個物件
+            L06PriceFeed.register { price -> render(price) }
         }
 
         override fun onDestroy() {
-            L06PriceFeed.unregister { price -> render(price) }        // 又寫了一次：這是第 2 個物件，PriceFeed 裡找不到它
+            // 又寫了一次：這是第 2 個物件，PriceFeed 裡找不到它
+            L06PriceFeed.unregister { price -> render(price) }
         }
 
         private fun render(price: Double) {
             lastPrice = price
-            rendered.incrementAndGet()                                // 真的 App 裡這裡會更新畫面
+            // 真的 App 裡這裡會更新畫面
+            rendered.incrementAndGet()
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { rendered -> FakeQuoteActivity(rendered) }
+    suspend fun run(log: LabLog) = scenario(log) { rendered ->
+        FakeQuoteActivity(rendered)
+    }
 }
 
 // MARK: - 修正版
@@ -112,14 +141,17 @@ private object L06Fixed {
     class FakeQuoteActivity(private val rendered: AtomicInteger) : L06Screen {
         val viewTree = L06ViewTree()
         var lastPrice = 0.0
-        private val listener = L06PriceListener { price -> render(price) }   // 存成欄位：從頭到尾只有這一個物件
+
+        // 存成欄位：從頭到尾只有這一個物件
+        private val listener = L06PriceListener { price -> render(price) }
 
         override fun onCreate() {
             L06PriceFeed.register(listener)
         }
 
         override fun onDestroy() {
-            L06PriceFeed.unregister(listener)                         // 傳同一個參考，PriceFeed 才找得到、移得掉
+            // 傳同一個參考，PriceFeed 才找得到、移得掉
+            L06PriceFeed.unregister(listener)
         }
 
         private fun render(price: Double) {
@@ -128,7 +160,9 @@ private object L06Fixed {
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { rendered -> FakeQuoteActivity(rendered) }
+    suspend fun run(log: LabLog) = scenario(log) { rendered ->
+        FakeQuoteActivity(rendered)
+    }
 }
 
 // MARK: - 演練設定

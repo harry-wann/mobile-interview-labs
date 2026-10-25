@@ -1,9 +1,12 @@
 // L05：移動平均每加一筆價格，就把最近 200 筆重新加一次（O(期數)）
 // 對應複習站：Coding02TimeStreams 第 5 題「移動平均怎麼做到每加一筆都很快？」
 //
-// 情境：K 線圖的 MA200（最近 200 根收盤價的平均），收盤價一根一根進來，共 2000 根。演練用計數器數「做了幾次加減」。
-// Bug 版：用環狀緩衝區記住最近 200 筆，但每次 add 都把緩衝區全部重新加一次，每筆 200 次加法，2000 筆接近 40 萬次。
-// 修正版：維持「最近 200 筆的總和」：緩衝區滿了先減掉即將被覆蓋的最舊值，再加上新值，每筆只做 2 次加減，O(1)。
+// 情境：K 線圖的 MA200（最近 200 根收盤價的平均），收盤價一根一根進來，共 2000
+// 根。演練用計數器數「做了幾次加減」。
+// Bug 版：用環狀緩衝區記住最近 200 筆，但每次 add 都把緩衝區全部重新加一次，
+// 每筆 200 次加法，2000 筆接近 40 萬次。
+// 修正版：維持「最近 200 筆的總和」：緩衝區滿了先減掉即將被覆蓋的最舊值，
+// 再加上新值，每筆只做 2 次加減，O(1)。
 package tw.harry.labs.solution.coding02timestreams
 
 import kotlin.math.abs
@@ -27,7 +30,10 @@ private interface L05Sma {
     fun add(price: Double): Double?
 }
 
-/** 演練流程（兩個版本共用）：2000 筆價格一筆一筆加，數加減次數，並和標準答案比對最後一筆的平均 */
+/**
+ * 演練流程（兩個版本共用）：2000 筆價格一筆一筆加，數加減次數，
+ * 並和標準答案比對最後一筆的平均
+ */
 private fun scenario(log: LabLog, make: (Int, C02Counter) -> L05Sma) {
     val prices = makePrices()
     val counter = C02Counter()
@@ -36,16 +42,29 @@ private fun scenario(log: LabLog, make: (Int, C02Counter) -> L05Sma) {
     for (price in prices) last = sma.add(price)
     val exact = prices.takeLast(PERIOD).sum() / PERIOD
     log("${prices.size} 筆價格、期數 $PERIOD：做了 ${counter.steps} 次加減")
-    log("最後一筆的平均和標準答案相差不到 0.01：${if (last != null && abs(last - exact) < 0.01) "是" else "否"}")
+    log(
+        "最後一筆的平均和標準答案相差不到 0.01：${if (last != null && abs(
+                last - exact,
+            ) < 0.01
+        ) {
+            "是"
+        } else {
+            "否"
+        }}",
+    )
 }
 
 /** 從「…做了 N 次加減」取出 N（自動檢查用） */
-private fun steps(lines: List<String>): Int? =
-    lines.firstOrNull { it.contains("做了 ") && it.endsWith(" 次加減") }?.substringAfter("做了 ")?.removeSuffix(" 次加減")?.toIntOrNull()
+private fun steps(lines: List<String>): Int? = lines.firstOrNull {
+    it.contains("做了 ") && it.endsWith(" 次加減")
+}?.substringAfter("做了 ")?.removeSuffix(" 次加減")?.toIntOrNull()
 
 // MARK: - Bug 版
 private object L05Bug {
-    class RecomputeSma(private val period: Int, private val counter: C02Counter) : L05Sma {
+    class RecomputeSma(
+        private val period: Int,
+        private val counter: C02Counter,
+    ) : L05Sma {
         private val buffer = DoubleArray(period)
         private var index = 0
         private var count = 0
@@ -55,7 +74,8 @@ private object L05Bug {
             index = (index + 1) % period
             if (count < period) count++
             var sum = 0.0
-            for (i in 0 until count) {                          // 每次都把緩衝區全部重新加一次
+            // 每次都把緩衝區全部重新加一次
+            for (i in 0 until count) {
                 sum += buffer[i]
                 counter.steps++
             }
@@ -63,12 +83,17 @@ private object L05Bug {
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { period, counter -> RecomputeSma(period, counter) }
+    suspend fun run(log: LabLog) = scenario(log) { period, counter ->
+        RecomputeSma(period, counter)
+    }
 }
 
 // MARK: - 修正版
 private object L05Fixed {
-    class RunningSumSma(private val period: Int, private val counter: C02Counter) : L05Sma {
+    class RunningSumSma(
+        private val period: Int,
+        private val counter: C02Counter,
+    ) : L05Sma {
         private val buffer = DoubleArray(period)
         private var index = 0
         private var count = 0
@@ -76,20 +101,24 @@ private object L05Fixed {
 
         override fun add(price: Double): Double? {
             if (count == period) {
-                sum -= buffer[index]                            // 緩衝區已滿：先減掉即將被覆蓋的最舊值
+                // 緩衝區已滿：先減掉即將被覆蓋的最舊值
+                sum -= buffer[index]
                 counter.steps++
             } else {
                 count++
             }
             buffer[index] = price
-            sum += price                                        // 再加上新的一筆
+            // 再加上新的一筆
+            sum += price
             counter.steps++
-            index = (index + 1) % period                        // 繞回開頭
+            index = (index + 1) % period // 繞回開頭
             return if (count == period) sum / period else null
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { period, counter -> RunningSumSma(period, counter) }
+    suspend fun run(log: LabLog) = scenario(log) { period, counter ->
+        RunningSumSma(period, counter)
+    }
 }
 
 // MARK: - 演練設定

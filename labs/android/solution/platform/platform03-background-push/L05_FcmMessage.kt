@@ -1,15 +1,22 @@
-// L05：伺服器發了價格提醒，App 在背景時 onMessageReceived 沒有被呼叫，Doze 時還被延後（FCM 的訊息種類與優先權）
-// 對應複習站：Platform03BackgroundPush 第 5 題「APNs 和 FCM 的訊息有哪幾種？優先權、collapse、TTL 是什麼？」
+// L05：伺服器發了價格提醒，App 在背景時 onMessageReceived 沒有被呼叫，Doze
+// 時還被延後（FCM 的訊息種類與優先權）
+// 對應複習站：Platform03BackgroundPush 第 5 題「APNs 和 FCM
+// 的訊息有哪幾種？優先權、collapse、TTL 是什麼？」
 //
-// 情境：伺服器要把價格提醒推到使用者的手機。App 需要在 onMessageReceived 裡把提醒存進資料庫，再自己顯示通知。
-//        手機現在的狀態：App 在背景、手機在 Doze（靜止、沒充電、螢幕關閉一段時間）。你要寫的是 buildPriceAlert()：組出 FCM 訊息。
+// 情境：伺服器要把價格提醒推到使用者的手機。App 需要在 onMessageReceived
+// 裡把提醒存進資料庫，再自己顯示通知。
+//        手機現在的狀態：App 在背景、手機在 Doze（靜止、沒充電、
+// 螢幕關閉一段時間）。你要寫的是 buildPriceAlert()：組出 FCM 訊息。
 //        FakeFcm 依 Google 文件上的規則決定訊息怎麼送：
-//        · notification 訊息：App 在背景時由系統直接顯示通知，onMessageReceived 不會被呼叫；
+//        · notification 訊息：App 在背景時由系統直接顯示通知，
+// onMessageReceived 不會被呼叫；
 //        · data 訊息：不論 App 在前景或背景都會呼叫 onMessageReceived；
 //        · 優先權 NORMAL 在 Doze 時會被延後，HIGH 可以喚醒手機。
 //        （真的 FCM 要用伺服器金鑰連線，演練只檢查你組出來的東西。）
-// Bug 版：訊息帶 notification（以為這樣最簡單，系統會幫忙顯示），優先權用預設的 NORMAL，沒有 collapse_key 與 ttl。
-// 修正版：只帶 data（顯示的方式由 App 決定），優先權 HIGH，collapse_key 讓舊提醒被新的取代，ttl 設 10 分鐘（價格過了幾分鐘的提醒沒有意義）。
+// Bug 版：訊息帶 notification（以為這樣最簡單，系統會幫忙顯示），
+// 優先權用預設的 NORMAL，沒有 collapse_key 與 ttl。
+// 修正版：只帶 data（顯示的方式由 App 決定），優先權 HIGH，collapse_key
+// 讓舊提醒被新的取代，ttl 設 10 分鐘（價格過了幾分鐘的提醒沒有意義）。
 package tw.harry.labs.solution.platform03backgroundpush
 
 import tw.harry.labs.kit.Lab
@@ -20,18 +27,24 @@ import tw.harry.labs.kit.Variant
 private class L05FcmMessage(
     val notification: Map<String, String>?,
     val data: Map<String, String>,
-    val priority: String,              // "NORMAL" 或 "HIGH"
+    // "NORMAL" 或 "HIGH"
+    val priority: String,
     val collapseKey: String?,
     val ttlSeconds: Int?,
 )
 
 /** 假的 FCM（兩個版本共用）：App 在背景、手機在 Doze 時，這則訊息怎麼送 */
 private object L05FakeFcm {
-    class Result(val delayedByDoze: Boolean, val onMessageReceivedCalled: Boolean)
+    class Result(
+        val delayedByDoze: Boolean,
+        val onMessageReceivedCalled: Boolean,
+    )
 
     fun deliver(message: L05FcmMessage): Result {
-        val delayed = message.priority != "HIGH"                       // Doze：只有 HIGH 能喚醒
-        val called = message.notification == null                      // 背景：notification 訊息由系統顯示，不會呼叫 onMessageReceived
+        // Doze：只有 HIGH 能喚醒
+        val delayed = message.priority != "HIGH"
+        // 背景：notification 訊息由系統顯示，不會呼叫 onMessageReceived
+        val called = message.notification == null
         return Result(delayedByDoze = delayed, onMessageReceivedCalled = called)
     }
 }
@@ -40,19 +53,34 @@ private object L05FakeFcm {
 private fun scenario(log: LabLog, build: (alertId: String) -> L05FcmMessage) {
     val message = build("a1b2c3")
     val result = L05FakeFcm.deliver(message)
-    log("訊息種類：${if (message.notification != null) "notification 訊息" else "data 訊息"}、優先權 ${message.priority}")
-    log("App 在背景、手機在 Doze：訊息${if (result.delayedByDoze) "被 Doze 延後" else "立刻到達"}")
-    log("onMessageReceived 被呼叫：${if (result.onMessageReceivedCalled) "是" else "否"}")
-    log("collapse_key：${message.collapseKey ?: "（沒有）"}、ttl：${message.ttlSeconds?.let { "$it 秒" } ?: "（沒有）"}")
+    log(
+        "訊息種類：${if (message.notification != null) "notification 訊息" else "data 訊息"}、優先權 ${message.priority}",
+    )
+    log(
+        "App 在背景、手機在 Doze：訊息${if (result.delayedByDoze) "被 Doze 延後" else "立刻到達"}",
+    )
+    log(
+        "onMessageReceived 被呼叫：${if (result.onMessageReceivedCalled) "是" else "否"}",
+    )
+    log(
+        "collapse_key：${message.collapseKey ?: "（沒有）"}、ttl：${message.ttlSeconds?.let {
+            "$it 秒"
+        } ?: "（沒有）"}",
+    )
 }
 
 // MARK: - Bug 版
 private object L05Bug {
     /** 組出價格提醒的 FCM 訊息 */
     fun buildPriceAlert(alertId: String) = L05FcmMessage(
-        notification = mapOf("title" to "價格提醒", "body" to "BTC/JPY 到達 10,000,000"),     // 帶 notification：背景時系統直接顯示
+        // 帶 notification：背景時系統直接顯示
+        notification = mapOf(
+            "title" to "價格提醒",
+            "body" to "BTC/JPY 到達 10,000,000",
+        ),
         data = mapOf("type" to "price_alert", "alertId" to alertId),
-        priority = "NORMAL",                                                                     // 預設優先權
+        // 預設優先權
+        priority = "NORMAL",
         collapseKey = null,
         ttlSeconds = null,
     )
@@ -63,11 +91,19 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     fun buildPriceAlert(alertId: String) = L05FcmMessage(
-        notification = null,                                                                     // 只帶 data：一定會進 onMessageReceived
-        data = mapOf("type" to "price_alert", "symbol" to "btcjpy", "alertId" to alertId),
-        priority = "HIGH",                                                                       // 使用者要立刻看到：HIGH 可以喚醒 Doze
-        collapseKey = "price_alert_btcjpy",                                                      // 新的取代舊的
-        ttlSeconds = 600,                                                                        // 10 分鐘還沒送到就丟掉
+        // 只帶 data：一定會進 onMessageReceived
+        notification = null,
+        data = mapOf(
+            "type" to "price_alert",
+            "symbol" to "btcjpy",
+            "alertId" to alertId,
+        ),
+        // 使用者要立刻看到：HIGH 可以喚醒 Doze
+        priority = "HIGH",
+        // 新的取代舊的
+        collapseKey = "price_alert_btcjpy",
+        // 10 分鐘還沒送到就丟掉
+        ttlSeconds = 600,
     )
 
     fun run(log: LabLog) = scenario(log, ::buildPriceAlert)
@@ -96,17 +132,35 @@ val l05 = Lab(
     checkBug = { lines ->
         when {
             lines.none { it.startsWith("訊息種類：") } -> "演練沒有跑完"
-            !lines.contains("onMessageReceived 被呼叫：否") -> "Bug 還沒重現：Bug 版要帶 notification（title 與 body），背景時由系統顯示，onMessageReceived 就不會被呼叫"
+
+            !lines.contains(
+                "onMessageReceived 被呼叫：否",
+            ) -> "Bug 還沒重現：Bug 版要帶 notification（title 與 body），背景時由系統顯示，onMessageReceived 就不會被呼叫"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
             lines.none { it.startsWith("訊息種類：") } -> "演練沒有跑完"
-            !lines.contains("onMessageReceived 被呼叫：是") -> "onMessageReceived 沒有被呼叫：不要帶 notification，只帶 data"
-            !lines.contains("App 在背景、手機在 Doze：訊息立刻到達") -> "訊息被 Doze 延後了：優先權要設 HIGH"
-            lines.none { it.startsWith("collapse_key：") && !it.startsWith("collapse_key：（沒有）") } -> "要設 collapse_key，讓舊的價格提醒被新的取代"
-            lines.none { it.contains("、ttl：") && !it.endsWith("ttl：（沒有）") } -> "要設 ttl：價格過了幾分鐘的提醒沒有意義，超過就丟掉"
+
+            !lines.contains(
+                "onMessageReceived 被呼叫：是",
+            ) -> "onMessageReceived 沒有被呼叫：不要帶 notification，只帶 data"
+
+            !lines.contains(
+                "App 在背景、手機在 Doze：訊息立刻到達",
+            ) -> "訊息被 Doze 延後了：優先權要設 HIGH"
+
+            lines.none {
+                it.startsWith("collapse_key：") &&
+                    !it.startsWith("collapse_key：（沒有）")
+            } -> "要設 collapse_key，讓舊的價格提醒被新的取代"
+
+            lines.none {
+                it.contains("、ttl：") && !it.endsWith("ttl：（沒有）")
+            } -> "要設 ttl：價格過了幾分鐘的提醒沒有意義，超過就丟掉"
+
             else -> null
         }
     },

@@ -1,16 +1,27 @@
 // L06：日本使用者輸入全形的 １２３．５，數量變成 0（輸入的正規化與嚴格解析）
-// 對應複習站：Exchange13Localization 第 6 題「日本使用者輸入全形數字時，要怎麼解析？」
+// 對應複習站：Exchange13Localization 第 6 題「日本使用者輸入全形數字時，
+// 要怎麼解析？」
 //
-// 情境：日文輸入法可能輸入全形的數字與符號，例如 １２３．５。下單的數量欄位要解析成數字。規則：先做 NFKC 正規化（全形轉半形），
-//        再用嚴格的格式解析（只接受數字加最多一個小數點），不合法的一律拒絕並顯示錯誤，不可以悄悄採用部分結果，更不可以把失敗當成 0。
-//        parse 回傳解析出的數字字串，拒絕時回傳 null。八筆輸入：１２３．５、123.5、０．００１２、1,234.5abc、−5（U+2212 的負號）、空字串、1 000（中間有空白）、12.5.3。
-//        （各個內建函式的行為不一致：本機 JDK 21 實測，NumberFormat.getInstance(Locale.JAPAN).parse("１２３．５") 得到 123，在全形小數點處悄悄截斷；
-//         parse("1,234.5abc") 得到 1234.5，忽略尾端的垃圾；這正是要自己先正規化、再嚴格驗證的原因。Android 的行為要另外實測。）
+// 情境：日文輸入法可能輸入全形的數字與符號，例如 １２３．５。
+// 下單的數量欄位要解析成數字。規則：先做 NFKC 正規化（全形轉半形），
+//        再用嚴格的格式解析（只接受數字加最多一個小數點），
+// 不合法的一律拒絕並顯示錯誤，不可以悄悄採用部分結果，更不可以把失敗當成 0。
+//        parse 回傳解析出的數字字串，拒絕時回傳 null。八筆輸入：１２３．５、
+// 123.5、０．００１２、1,234.5abc、−5（U+2212 的負號）、空字串、1
+// 000（中間有空白）、12.5.3。
+//        （各個內建函式的行為不一致：本機 JDK 21 實測，NumberFormat.
+// getInstance(Locale.JAPAN).parse("１２３．５") 得到 123，
+// 在全形小數點處悄悄截斷；
+//         parse("1,234.5abc") 得到 1234.5，忽略尾端的垃圾；
+// 這正是要自己先正規化、再嚴格驗證的原因。Android 的行為要另外實測。）
 //
 // 你要寫：
-//   ① Bug 版（L06Bug.parse）：回傳 (text.toBigDecimalOrNull() ?: BigDecimal.ZERO).toPlainString()。
-//   ② 修正版（L06Fixed.parse）：text 先 trim，做 NFKC 正規化（java.text.Normalizer.normalize(…, Normalizer.Form.NFKC)），
-//      用 Regex("[0-9]+(\\.[0-9]+)?").matches(normalized) 檢查，不符合回傳 null；符合就回傳 BigDecimal(normalized).toPlainString()。
+//   ① Bug 版（L06Bug.parse）：回傳 (text.toBigDecimalOrNull() ?: BigDecimal.
+// ZERO).toPlainString()。
+//   ② 修正版（L06Fixed.parse）：text 先 trim，做 NFKC 正規化（java.text.
+// Normalizer.normalize(…, Normalizer.Form.NFKC)），
+//      用 Regex("[0-9]+(\\.[0-9]+)?").matches(normalized) 檢查，不符合回傳
+// null；符合就回傳 BigDecimal(normalized).toPlainString()。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange13-localization/L06_FullWidth.kt
 package tw.harry.labs.practice.exchange13localization
@@ -22,7 +33,11 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** （描述, 使用者輸入, 正確的結果；null 代表要拒絕） */
-private class L06Case(val name: String, val input: String, val expected: String?)
+private class L06Case(
+    val name: String,
+    val input: String,
+    val expected: String?,
+)
 
 private val cases = listOf(
     L06Case("全形的 123.5", "１２３．５", "123.5"),
@@ -54,7 +69,8 @@ private fun scenario(log: LabLog, parse: (String) -> String?) {
 // MARK: - Bug 版
 private object L06Bug {
     fun parse(text: String): String? {
-        // TODO ①：回傳 (text.toBigDecimalOrNull() ?: BigDecimal.ZERO).toPlainString()
+        // TODO ①：回傳 (text.toBigDecimalOrNull() ?: BigDecimal.ZERO).
+        // toPlainString()
         return null
     }
 
@@ -64,8 +80,10 @@ private object L06Bug {
 // MARK: - 修正版
 private object L06Fixed {
     fun parse(text: String): String? {
-        // TODO ②：normalized = text.trim() 做 NFKC 正規化（Normalizer.normalize(…, Normalizer.Form.NFKC)）；
-        //        Regex("[0-9]+(\\.[0-9]+)?").matches(normalized) 不成立就回傳 null；成立就回傳 BigDecimal(normalized).toPlainString()
+        // TODO ②：normalized = text.trim() 做 NFKC 正規化（Normalizer.
+        // normalize(…, Normalizer.Form.NFKC)）；
+        //        Regex("[0-9]+(\\.[0-9]+)?").matches(normalized) 不成立就回傳
+        // null；成立就回傳 BigDecimal(normalized).toPlainString()
         return null
     }
 
@@ -73,8 +91,9 @@ private object L06Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 8 筆") }?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 8 筆")
+}?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l06 = Lab(
     id = "L06",

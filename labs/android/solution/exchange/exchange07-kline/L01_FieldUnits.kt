@@ -1,11 +1,16 @@
-// L01：K 線的日期跑到 1970 年，成交量差了好幾個數量級（`id` 的單位是秒；`vol` 是日圓金額、`amount` 才是 BTC 數量）
-// 對應複習站：Exchange07Kline 第 1 題「這套交易所 API 的 K 線資料長什麼樣子？每個欄位是什麼意思？」
+// L01：K 線的日期跑到 1970 年，成交量差了好幾個數量級（`id` 的單位是秒；`vol`
+// 是日圓金額、`amount` 才是 BTC 數量）
+// 對應複習站：Exchange07Kline 第 1 題「這套交易所 API 的 K
+// 線資料長什麼樣子？每個欄位是什麼意思？」
 //
 // 情境：REST 的日 K 回應（數字是為了說明編的，格式依文件），新的在前：
-//        第 1 根 id 1632931200（2021-09-29 16:00 UTC），amount 6.63（BTC 的數量），vol 31208129（日圓的成交金額）；
-//        第 2 根 id 1632844800（2021-09-28 16:00 UTC），amount 5.1，vol 23900000。
+//        第 1 根 id 1632931200（2021-09-29 16:00 UTC），amount 6.63（BTC
+// 的數量），vol 31208129（日圓的成交金額）；
+//        第 2 根 id 1632844800（2021-09-28 16:00 UTC），amount 5.1，vol
+// 23900000。
 //        畫面要顯示每根 K 線的起點時間（UTC）與「成交量（BTC）」。
-// Bug 版：把 `id` 當成毫秒，直接 Date(id)（變成 1970-01-19）；成交量直接顯示 `vol`（日圓金額），卻標成 BTC。
+// Bug 版：把 `id` 當成毫秒，直接 Date(id)（變成 1970-01-19）；成交量直接顯示
+// `vol`（日圓金額），卻標成 BTC。
 // 修正版：`id` 是起點時間，單位是秒，直接轉成日期；成交量（BTC）用 `amount`。
 package tw.harry.labs.solution.exchange07kline
 
@@ -55,16 +60,29 @@ private interface L01KlineMapper {
 private fun scenario(log: LabLog, mapper: L01KlineMapper) {
     val bars = Gson().fromJson(JSON, L01Response::class.java).data
     bars.forEachIndexed { index, bar ->
-        log("第 ${index + 1} 根：${utcText(mapper.date(bar.id))} UTC，成交量 ${String.format(Locale.ROOT, "%.2f", mapper.volumeBTC(bar))} BTC")
+        log(
+            "第 ${index + 1} 根：${utcText(
+                mapper.date(bar.id),
+            )} UTC，成交量 ${String.format(
+                Locale.ROOT,
+                "%.2f",
+                mapper.volumeBTC(bar),
+            )} BTC",
+        )
     }
-    log("最後：共 ${bars.size} 根（正確答案：第 1 根 2021-09-29 16:00 UTC、6.63 BTC；第 2 根 2021-09-28 16:00 UTC、5.10 BTC）")
+    log(
+        "最後：共 ${bars.size} 根（正確答案：第 1 根 2021-09-29 16:00 UTC、6.63 BTC；第 2 根 2021-09-28 16:00 UTC、5.10 BTC）",
+    )
 }
 
 // MARK: - Bug 版
 private object L01Bug {
     class Mapper : L01KlineMapper {
-        override fun date(id: Long) = Date(id)                          // 把秒當成毫秒（Date 的單位是毫秒）
-        override fun volumeBTC(bar: L01RawBar) = bar.vol                // vol 是日圓金額
+        // 把秒當成毫秒（Date 的單位是毫秒）
+        override fun date(id: Long) = Date(id)
+
+        // vol 是日圓金額
+        override fun volumeBTC(bar: L01RawBar) = bar.vol
     }
 
     suspend fun run(log: LabLog) = scenario(log, Mapper())
@@ -73,8 +91,11 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     class Mapper : L01KlineMapper {
-        override fun date(id: Long) = Date(id * 1000)                   // id 的單位是秒，Date 要毫秒
-        override fun volumeBTC(bar: L01RawBar) = bar.amount             // amount 才是 BTC 的數量
+        // id 的單位是秒，Date 要毫秒
+        override fun date(id: Long) = Date(id * 1000)
+
+        // amount 才是 BTC 的數量
+        override fun volumeBTC(bar: L01RawBar) = bar.amount
     }
 
     suspend fun run(log: LabLog) = scenario(log, Mapper())
@@ -103,17 +124,29 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, mapper) 執行"
-            "第 1 根：1970-01-19 21:35 UTC，成交量 31208129.00 BTC" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, mapper) 執行"
+            }
+
+            "第 1 根：1970-01-19 21:35 UTC，成交量 31208129.00 BTC" !in lines -> {
                 "Bug 還沒重現：date 要直接 Date(id)（把秒當成毫秒）；volumeBTC 要回傳 bar.vol（日圓金額）"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, mapper) 執行"
+            lines.none {
+                it.startsWith("最後")
+            } -> "演練沒有跑完：要用 scenario(log, mapper) 執行"
+
             "第 1 根：2021-09-29 16:00 UTC，成交量 6.63 BTC" !in lines -> "date 要用 id * 1000（id 的單位是秒，Date 要毫秒）；volumeBTC 要回傳 bar.amount（BTC 的數量），不是 vol"
+
             "第 2 根：2021-09-28 16:00 UTC，成交量 5.10 BTC" !in lines -> "第 2 根也要一樣處理"
+
             else -> null
         }
     },

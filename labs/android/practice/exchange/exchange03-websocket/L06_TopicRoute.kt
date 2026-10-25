@@ -1,13 +1,21 @@
-// L06：BTC/JPY 的行情頁混進別的交易對，5 分鐘 K 線混進 15 分鐘的（用字串比對 topic）
-// 對應複習站：Exchange03WebSocket 第 6 題「收到訊息後怎麼分派？斷線重連後要做什麼？」
+// L06：BTC/JPY 的行情頁混進別的交易對，5 分鐘 K 線混進 15 分鐘的（用字串比對
+// topic）
+// 對應複習站：Exchange03WebSocket 第 6
+// 題「收到訊息後怎麼分派？斷線重連後要做什麼？」
 //
-// 情境：收到推送後，要依 ch（topic）決定交給哪一個畫面。兩個畫面：行情頁要 market.btcjpy.bbo，K 線頁要 market.btcjpy.kline.5min。
-//        連線上同時有這幾個 topic 的推送（交易對 wbtcjpy 是演練假設的，不代表交易所有上架）：
-//        market.btcjpy.bbo、market.wbtcjpy.bbo、market.btcjpy.kline.5min、market.btcjpy.kline.15min、market.wbtcjpy.kline.5min、market.btcjpy.depth.step0
+// 情境：收到推送後，要依 ch（topic）決定交給哪一個畫面。兩個畫面：行情頁要
+// market.btcjpy.bbo，K 線頁要 market.btcjpy.kline.5min。
+//        連線上同時有這幾個 topic 的推送（交易對 wbtcjpy 是演練假設的，
+// 不代表交易所有上架）：
+//        market.btcjpy.bbo、market.wbtcjpy.bbo、market.btcjpy.kline.5min、
+// market.btcjpy.kline.15min、market.wbtcjpy.kline.5min、market.btcjpy.depth.
+// step0
 //
 // 你要寫：
-//   ① Bug 版（L06Bug.matches）：用字串「包含」比對：topic 含有 symbol、含有 kind，有 param 的話也要含有 param。
-//   ② 修正版（L06Fixed.matches）：用 "." 拆開，市場、交易對、種類、參數每一段都用 == 比對。
+//   ① Bug 版（L06Bug.matches）：用字串「包含」比對：topic 含有 symbol、含有
+// kind，有 param 的話也要含有 param。
+//   ② 修正版（L06Fixed.matches）：用 "." 拆開，市場、交易對、種類、
+// 參數每一段都用 == 比對。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange03-websocket/L06_TopicRoute.kt
 package tw.harry.labs.practice.exchange03websocket
@@ -26,7 +34,15 @@ private val incoming = listOf(
 )
 
 /** 演練流程（兩個版本共用）：每個推送問兩個畫面「是不是給你的」，統計誤收的 */
-private fun scenario(log: LabLog, matches: (topic: String, symbol: String, kind: String, param: String?) -> Boolean) {
+private fun scenario(
+    log: LabLog,
+    matches: (
+        topic: String,
+        symbol: String,
+        kind: String,
+        param: String?,
+    ) -> Boolean,
+) {
     var tickerAll = 0
     var tickerWrong = 0
     var klineAll = 0
@@ -42,16 +58,26 @@ private fun scenario(log: LabLog, matches: (topic: String, symbol: String, kind:
             klineAll++
             val wrong = topic != "market.btcjpy.kline.5min"
             if (wrong) klineWrong++
-            log("K 線頁收下 $topic${if (wrong) "  ← 這不是 BTC/JPY 的 5 分鐘 K 線" else ""}")
+            log(
+                "K 線頁收下 $topic${if (wrong) "  ← 這不是 BTC/JPY 的 5 分鐘 K 線" else ""}",
+            )
         }
     }
-    log("行情頁收到 $tickerAll 則（錯的 $tickerWrong 則），K 線頁收到 $klineAll 則（錯的 $klineWrong 則）")
+    log(
+        "行情頁收到 $tickerAll 則（錯的 $tickerWrong 則），K 線頁收到 $klineAll 則（錯的 $klineWrong 則）",
+    )
 }
 
 // MARK: - Bug 版
 private object L06Bug {
-    fun matches(topic: String, symbol: String, kind: String, param: String?): Boolean {
-        // TODO ①：用 in（或 contains）比對：topic 要含有 symbol 和 kind；param 不是 null 的話，還要含有 param；都符合回傳 true
+    fun matches(
+        topic: String,
+        symbol: String,
+        kind: String,
+        param: String?,
+    ): Boolean {
+        // TODO ①：用 in（或 contains）比對：topic 要含有 symbol 和 kind；param
+        // 不是 null 的話，還要含有 param；都符合回傳 true
         return false
     }
 
@@ -60,10 +86,17 @@ private object L06Bug {
 
 // MARK: - 修正版
 private object L06Fixed {
-    fun matches(topic: String, symbol: String, kind: String, param: String?): Boolean {
-        // TODO ②：把 topic 用 "." 拆成清單（例如 market.btcjpy.kline.5min → [market, btcjpy, kline, 5min]）：
+    fun matches(
+        topic: String,
+        symbol: String,
+        kind: String,
+        param: String?,
+    ): Boolean {
+        // TODO ②：把 topic 用 "." 拆成清單（例如 market.btcjpy.kline.5min →
+        // [market, btcjpy, kline, 5min]）：
         //   第 1 段要是 "market"、第 2 段 == symbol、第 3 段 == kind；
-        //   param 不是 null 的話要剛好 4 段而且第 4 段 == param；param 是 null 的話要剛好 3 段
+        //   param 不是 null 的話要剛好 4 段而且第 4 段 == param；param 是 null
+        // 的話要剛好 3 段
         return false
     }
 
@@ -94,18 +127,32 @@ val l06 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("行情頁收到") } -> "演練沒有跑完：要用 scenario(log, ::matches) 執行"
-            "行情頁收到 2 則（錯的 1 則），K 線頁收到 3 則（錯的 2 則）" !in lines ->
+            lines.none { it.startsWith("行情頁收到") } -> {
+                "演練沒有跑完：要用 scenario(log, ::matches) 執行"
+            }
+
+            "行情頁收到 2 則（錯的 1 則），K 線頁收到 3 則（錯的 2 則）" !in lines -> {
                 "Bug 還沒重現：用 symbol in topic、kind in topic、param in topic 比對，wbtcjpy 與 15min 都會被放進來"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("行情頁收到") } -> "演練沒有跑完：要用 scenario(log, ::matches) 執行"
-            "行情頁收到 1 則（錯的 0 則），K 線頁收到 1 則（錯的 0 則）" !in lines ->
+            lines.none { it.startsWith("行情頁收到") } -> {
+                "演練沒有跑完：要用 scenario(log, ::matches) 執行"
+            }
+
+            "行情頁收到 1 則（錯的 0 則），K 線頁收到 1 則（錯的 0 則）" !in lines -> {
                 "把 topic 用 \".\" 拆開，交易對、種類、參數各自用 == 比對（K 線有 4 段，BBO 有 3 段）"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

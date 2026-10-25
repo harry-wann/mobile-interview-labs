@@ -1,11 +1,15 @@
 // L09：連按兩次買入，下了兩張單（先鎖住按鈕，再開始非同步工作）
-// 對應複習站：Platform02Threading 第 6 題「行情每秒推幾百筆，執行緒要怎麼設計？」（下單按鈕要立即回饋）
+// 對應複習站：Platform02Threading 第 6 題「行情每秒推幾百筆，
+// 執行緒要怎麼設計？」（下單按鈕要立即回饋）
 //
-// 情境：按下「買入」之後，要先向伺服器取最新報價（約 100 ms），再送出委託。使用者看沒有反應，30 ms 之後又按了一次。
+// 情境：按下「買入」之後，要先向伺服器取最新報價（約 100 ms），再送出委託。
+// 使用者看沒有反應，30 ms 之後又按了一次。
 //
 // 你要寫：
-//   ① Bug 版（L09Bug）：取到報價之後才把 isSubmitting 設成 true。取報價的 100 ms 內第二次按下去也通過檢查。
-//   ② 修正版（L09Fixed）：檢查通過後，在 launch 之前先把 isSubmitting 設成 true，做完再放開。
+//   ① Bug 版（L09Bug）：取到報價之後才把 isSubmitting 設成 true。取報價的 100
+// ms 內第二次按下去也通過檢查。
+//   ② 修正版（L09Fixed）：檢查通過後，在 launch 之前先把 isSubmitting 設成
+// true，做完再放開。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform02-threading/L09_DoubleTap.kt
 package tw.harry.labs.practice.platform02threading
@@ -28,17 +32,23 @@ private class L09Exchange {
         return 15_000_000
     }
 
-    fun place(@Suppress("UNUSED_PARAMETER") price: Int) {
+    fun place(
+        @Suppress("UNUSED_PARAMETER") price: Int,
+    ) {
         orders++
     }
 }
 
 /** 演練流程（兩個版本共用）：按下買入，30 ms 後又按一次 */
-private suspend fun scenario(log: LabLog, tap: (CoroutineScope, L09Exchange) -> Unit) = coroutineScope {
+private suspend fun scenario(
+    log: LabLog,
+    tap: (CoroutineScope, L09Exchange) -> Unit,
+) = coroutineScope {
     val exchange = L09Exchange()
     tap(this, exchange)
     delay(30)
-    tap(this, exchange)                                 // 使用者看沒有反應，又按了一次
+    // 使用者看沒有反應，又按了一次
+    tap(this, exchange)
     delay(300)
     log("連按兩次買入，伺服器收到 ${exchange.orders} 張委託")
 }
@@ -49,7 +59,8 @@ private object L09Bug {
 
     fun tapBuy(scope: CoroutineScope, exchange: L09Exchange) {
         if (isSubmitting) return
-        // TODO ①：用 scope.launch 開協程：先 exchange.fetchQuote() 取報價；取到之後才把 isSubmitting 設成 true（太晚才鎖），
+        // TODO ①：用 scope.launch 開協程：先 exchange.fetchQuote() 取報價；
+        // 取到之後才把 isSubmitting 設成 true（太晚才鎖），
         //        再呼叫 exchange.place(quote)，最後把 isSubmitting 設回 false
     }
 
@@ -65,8 +76,10 @@ private object L09Fixed {
 
     fun tapBuy(scope: CoroutineScope, exchange: L09Exchange) {
         if (isSubmitting) return
-        // TODO ②：先把 isSubmitting 設成 true（在任何 suspend 函式之前），再 scope.launch：exchange.fetchQuote() 取報價、
-        //        exchange.place(quote)；用 try／finally 在最後把 isSubmitting 設回 false（失敗也要放開）
+        // TODO ②：先把 isSubmitting 設成 true（在任何 suspend 函式之前），再
+        // scope.launch：exchange.fetchQuote() 取報價、
+        //        exchange.place(quote)；用 try／finally 在最後把 isSubmitting
+        // 設回 false（失敗也要放開）
     }
 
     suspend fun run(log: LabLog) {

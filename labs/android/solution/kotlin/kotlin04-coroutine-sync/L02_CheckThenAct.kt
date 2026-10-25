@@ -1,10 +1,14 @@
 // L02：10 個地方同時要餘額，API 被打了 10 次（check-then-act）
-// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，怎麼選工具？」
+// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，
+// 怎麼選工具？」
 //
-// 情境：資產畫面有 10 個元件同時呼叫 BalanceRepo.getBalance()。餘額有快取：有快取就直接回傳，沒有才打 API（約 100 ms）。
-// Bug 版：「檢查有沒有快取」和「打 API 存快取」之間，API 呼叫會暫停。10 個 coroutine 都在快取還是 null 時通過檢查，
+// 情境：資產畫面有 10 個元件同時呼叫 BalanceRepo.getBalance()。餘額有快取：
+// 有快取就直接回傳，沒有才打 API（約 100 ms）。
+// Bug 版：「檢查有沒有快取」和「打 API 存快取」之間，API 呼叫會暫停。10 個
+// coroutine 都在快取還是 null 時通過檢查，
 //        於是 API 被呼叫 10 次，快取也被寫了 10 次。
-// 修正版：用 Mutex，把檢查和動作放在同一個 withLock 裡。第一個進去的去呼叫 API，其他 9 個等鎖，進來時快取已經有了。
+// 修正版：用 Mutex，把檢查和動作放在同一個 withLock 裡。第一個進去的去呼叫
+// API，其他 9 個等鎖，進來時快取已經有了。
 package tw.harry.labs.solution.kotlin04coroutinesync
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -36,8 +40,10 @@ private object L02Bug {
         private var cache: Long? = null
 
         suspend fun getBalance(): Long {
-            cache?.let { return it }                        // 檢查：有快取就直接回傳
-            val fresh = api.fetchBalance()                  // 動作：suspend，等待期間別的 coroutine 也通過了上面的檢查
+            // 檢查：有快取就直接回傳
+            cache?.let { return it }
+            // 動作：suspend，等待期間別的 coroutine 也通過了上面的檢查
+            val fresh = api.fetchBalance()
             cache = fresh
             return fresh
         }
@@ -46,7 +52,12 @@ private object L02Bug {
     suspend fun run(log: LabLog) {
         val api = BalanceApi()
         val repo = BalanceRepo(api)
-        val results = coroutineScope { List(10) { async(Dispatchers.Default) { repo.getBalance() } }.awaitAll() }
+        val results =
+            coroutineScope {
+                List(10) {
+                    async(Dispatchers.Default) { repo.getBalance() }
+                }.awaitAll()
+            }
         log("10 個元件都拿到 ${results.toSet()}")
         log("API 被呼叫 ${api.calls.get()} 次")
     }
@@ -58,7 +69,8 @@ private object L02Fixed {
         private var cache: Long? = null
         private val mutex = Mutex()
 
-        suspend fun getBalance(): Long = mutex.withLock {   // 檢查與動作都在鎖裡面
+        // 檢查與動作都在鎖裡面
+        suspend fun getBalance(): Long = mutex.withLock {
             cache ?: api.fetchBalance().also { cache = it }
         }
     }
@@ -66,7 +78,12 @@ private object L02Fixed {
     suspend fun run(log: LabLog) {
         val api = BalanceApi()
         val repo = BalanceRepo(api)
-        val results = coroutineScope { List(10) { async(Dispatchers.Default) { repo.getBalance() } }.awaitAll() }
+        val results =
+            coroutineScope {
+                List(10) {
+                    async(Dispatchers.Default) { repo.getBalance() }
+                }.awaitAll()
+            }
         log("10 個元件都拿到 ${results.toSet()}")
         log("API 被呼叫 ${api.calls.get()} 次")
     }

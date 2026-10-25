@@ -1,11 +1,17 @@
-// L02：按「全部賣出」，數量卻被進位，伺服器說餘額不足（數量要往下對齊 step size）
-// 對應複習站：Exchange02Precision 第 2 題「交易所對價格和數量有哪些規則？App 要怎麼對齊？」
+// L02：按「全部賣出」，數量卻被進位，伺服器說餘額不足（數量要往下對齊 step
+// size）
+// 對應複習站：Exchange02Precision 第 2 題「交易所對價格和數量有哪些規則？App
+// 要怎麼對齊？」
 //
-// 情境：交易對的 step size（數量最小單位）是 0.0001 BTC，最小下單量也是 0.0001 BTC。
-//        使用者按「全部賣出」，App 要把持有量對齊 step size 再送出。兩種情況：持有 0.12349999 BTC、持有 0.00009 BTC。
+// 情境：交易對的 step size（數量最小單位）是 0.0001 BTC，最小下單量也是 0.0001
+// BTC。
+//        使用者按「全部賣出」，App 要把持有量對齊 step size 再送出。兩種情況：
+// 持有 0.12349999 BTC、持有 0.00009 BTC。
 //        假伺服器：數量超過持有量就拒絕（餘額不足）。
-// Bug 版：用四捨五入對齊：0.12349999 → 0.1235，比持有量多，被伺服器拒絕；0.00009 → 0.0001，也比持有量多，被拒絕。
-// 修正版：往下對齊：0.12349999 → 0.1234，可以成交；0.00009 → 0，不到最小下單量，App 直接提示使用者，不送出。
+// Bug 版：用四捨五入對齊：0.12349999 → 0.1235，比持有量多，被伺服器拒絕；0.
+// 00009 → 0.0001，也比持有量多，被拒絕。
+// 修正版：往下對齊：0.12349999 → 0.1234，可以成交；0.00009 → 0，
+// 不到最小下單量，App 直接提示使用者，不送出。
 package tw.harry.labs.solution.exchange02precision
 
 import java.math.BigDecimal
@@ -18,7 +24,10 @@ private val step = e02("0.0001")
 private val minQty = e02("0.0001")
 
 /** 演練流程（兩個版本共用）：兩種持有量各按一次「全部賣出」 */
-private fun scenario(log: LabLog, align: (BigDecimal, BigDecimal) -> BigDecimal) {
+private fun scenario(
+    log: LabLog,
+    align: (BigDecimal, BigDecimal) -> BigDecimal,
+) {
     var sent = 0
     var refused = 0
     var blocked = 0
@@ -27,7 +36,13 @@ private fun scenario(log: LabLog, align: (BigDecimal, BigDecimal) -> BigDecimal)
         val qty = align(holding, step)
         if (qty < minQty) {
             blocked++
-            log("持有 ${e02Text(holding)} BTC，對齊後 ${e02Text(qty)}：不到最小下單量 ${e02Text(minQty)}，App 提示使用者，不送出")
+            log(
+                "持有 ${e02Text(
+                    holding,
+                )} BTC，對齊後 ${e02Text(
+                    qty,
+                )}：不到最小下單量 ${e02Text(minQty)}，App 提示使用者，不送出",
+            )
             continue
         }
         sent++
@@ -44,7 +59,8 @@ private fun scenario(log: LabLog, align: (BigDecimal, BigDecimal) -> BigDecimal)
 // MARK: - Bug 版
 private object L02Bug {
     fun align(qty: BigDecimal, step: BigDecimal): BigDecimal {
-        val units = qty.divide(step, 0, RoundingMode.HALF_UP)   // 四捨五入：1234.9999 → 1235
+        // 四捨五入：1234.9999 → 1235
+        val units = qty.divide(step, 0, RoundingMode.HALF_UP)
         return units.multiply(step)
     }
 
@@ -54,7 +70,8 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun align(qty: BigDecimal, step: BigDecimal): BigDecimal {
-        val units = qty.divide(step, 0, RoundingMode.DOWN)      // 往下取整：1234.9999 → 1234
+        // 往下取整：1234.9999 → 1234
+        val units = qty.divide(step, 0, RoundingMode.DOWN)
         return units.multiply(step)
     }
 
@@ -84,18 +101,32 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("送到伺服器") } -> "演練沒有跑完：要用 scenario(log, ::align) 執行"
-            "送到伺服器 2 筆，被拒絕 2 筆，App 端提示最小下單量 0 次" !in lines ->
+            lines.none { it.startsWith("送到伺服器") } -> {
+                "演練沒有跑完：要用 scenario(log, ::align) 執行"
+            }
+
+            "送到伺服器 2 筆，被拒絕 2 筆，App 端提示最小下單量 0 次" !in lines -> {
                 "Bug 還沒重現：用 divide(step, 0, RoundingMode.HALF_UP) 四捨五入，兩種持有量對齊後都會比持有量大，兩筆都被伺服器拒絕"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("送到伺服器") } -> "演練沒有跑完：要用 scenario(log, ::align) 執行"
-            "送到伺服器 1 筆，被拒絕 0 筆，App 端提示最小下單量 1 次" !in lines ->
+            lines.none { it.startsWith("送到伺服器") } -> {
+                "演練沒有跑完：要用 scenario(log, ::align) 執行"
+            }
+
+            "送到伺服器 1 筆，被拒絕 0 筆，App 端提示最小下單量 1 次" !in lines -> {
                 "要往下對齊（RoundingMode.DOWN）：0.12349999 → 0.1234 可以成交，0.00009 → 0 要在 App 端提示"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

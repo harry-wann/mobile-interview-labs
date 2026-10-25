@@ -1,13 +1,20 @@
-// L02：價格一跳，被選取的那一列就取消選取了（列表用「包含價格的整個 data class」當識別）
+// L02：價格一跳，被選取的那一列就取消選取了（列表用「包含價格的整個 data
+// class」當識別）
 // 對應複習站：Exchange06RealtimeUI 第 4 題「列表怎麼只更新有變動的列？」
 //
-// 情境：行情列表有三列（BTC_JPY、ETH_JPY、XRP_JPY）。使用者點了 ETH_JPY，那一列變成選取狀態（狀態存在「列」這個物件上）。
-//        接著價格更新三次：第 1 次 BTC 和 ETH 變、第 2 次三檔都變、第 3 次只有 ETH 變。
-//        列表用「識別」（identity）決定新的一份資料對應到哪一個既有的列：對得上就沿用那一列（只換內容），對不上就新建一列。
-//        （Compose 的 key、DiffUtil 的 areItemsTheSame、iOS 的 diffable data source，都是這個意思；列表沒給 key 的問題，Kotlin06 L07、Kotlin08 L03 練過。）
+// 情境：行情列表有三列（BTC_JPY、ETH_JPY、XRP_JPY）。使用者點了 ETH_JPY，
+// 那一列變成選取狀態（狀態存在「列」這個物件上）。
+//        接著價格更新三次：第 1 次 BTC 和 ETH 變、第 2 次三檔都變、第 3 次只有
+// ETH 變。
+//        列表用「識別」（identity）決定新的一份資料對應到哪一個既有的列：
+// 對得上就沿用那一列（只換內容），對不上就新建一列。
+//        （Compose 的 key、DiffUtil 的 areItemsTheSame、iOS 的 diffable data
+// source，都是這個意思；列表沒給 key 的問題，Kotlin06 L07、Kotlin08 L03
+// 練過。）
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.run）：識別 = 整個 Row（交易對代號加價格），例如 row.toString()。
+//   ① Bug 版（L02Bug.run）：識別 = 整個 Row（交易對代號加價格），例如 row.
+// toString()。
 //   ② 修正版（L02Fixed.run）：識別 = row.symbol（交易對代號）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange06-realtime-ui/L02_RowIdentity.kt
@@ -20,7 +27,9 @@ import tw.harry.labs.kit.Variant
 
 private data class L02Row(val symbol: String, val price: BigDecimal)
 
-/** 列表上的一列（物件）：選取狀態存在這裡，換內容時沿用，新建時從沒有選取開始 */
+/**
+ * 列表上的一列（物件）：選取狀態存在這裡，換內容時沿用，新建時從沒有選取開始
+ */
 private class L02Cell(var row: L02Row) {
     var selected = false
 }
@@ -40,16 +49,19 @@ private class L02ListView {
         for (row in rows) {
             val id = identity(row)
             if (id in next) {
-                duplicates++                    // 兩列的識別一樣：這不是正常的寫法
+                // 兩列的識別一樣：這不是正常的寫法
+                duplicates++
                 continue
             }
             val cell = cells[id]
             if (cell != null) {
-                cell.row = row                  // 識別對得上：沿用既有的列，只換內容
+                // 識別對得上：沿用既有的列，只換內容
+                cell.row = row
                 reused++
                 next[id] = cell
             } else {
-                next[id] = L02Cell(row)         // 對不上：新建一列（沒有選取狀態）
+                // 對不上：新建一列（沒有選取狀態）
+                next[id] = L02Cell(row)
                 created++
             }
         }
@@ -60,11 +72,15 @@ private class L02ListView {
         cells.values.firstOrNull { it.row.symbol == symbol }?.selected = true
     }
 
-    val selectedSymbol: String? get() = cells.values.firstOrNull { it.selected }?.row?.symbol
+    val selectedSymbol: String? get() = cells.values.firstOrNull {
+        it.selected
+    }?.row?.symbol
 }
 
 private fun rows(btc: String, eth: String, xrp: String) = listOf(
-    L02Row("BTC_JPY", e06(btc)), L02Row("ETH_JPY", e06(eth)), L02Row("XRP_JPY", e06(xrp)),
+    L02Row("BTC_JPY", e06(btc)),
+    L02Row("ETH_JPY", e06(eth)),
+    L02Row("XRP_JPY", e06(xrp)),
 )
 
 /** 演練流程（兩個版本共用）：`identity` 決定新的一份資料對應到哪一個既有的列 */
@@ -73,21 +89,31 @@ private fun scenario(log: LabLog, identity: (L02Row) -> String) {
     list.apply(rows("10000000", "400000", "80"), identity)
     list.select("ETH_JPY")
     log("開始：選取 ${list.selectedSymbol ?: "沒有"}")
-    val updates = listOf(rows("10000100", "400100", "80"), rows("10000200", "400200", "80.3"), rows("10000200", "400300", "80.3"))
+    val updates =
+        listOf(
+            rows("10000100", "400100", "80"),
+            rows("10000200", "400200", "80.3"),
+            rows("10000200", "400300", "80.3"),
+        )
     val before = list.created
     updates.forEachIndexed { index, update ->
         val createdBefore = list.created
         val reusedBefore = list.reused
         list.apply(update, identity)
-        log("第 ${index + 1} 次更新：新建 ${list.created - createdBefore} 列，沿用 ${list.reused - reusedBefore} 列，選取 ${list.selectedSymbol ?: "沒有"}")
+        log(
+            "第 ${index + 1} 次更新：新建 ${list.created - createdBefore} 列，沿用 ${list.reused - reusedBefore} 列，選取 ${list.selectedSymbol ?: "沒有"}",
+        )
     }
-    log("最後：選取 ${list.selectedSymbol ?: "沒有"}，更新期間共新建 ${list.created - before} 列，沿用 ${list.reused} 列，識別重複 ${list.duplicates} 次")
+    log(
+        "最後：選取 ${list.selectedSymbol ?: "沒有"}，更新期間共新建 ${list.created - before} 列，沿用 ${list.reused} 列，識別重複 ${list.duplicates} 次",
+    )
 }
 
 // MARK: - Bug 版
 private object L02Bug {
     suspend fun run(log: LabLog) = scenario(log) { row ->
-        // TODO ①：回傳整個 row（交易對代號加價格）轉成的字串當識別，例如 row.toString()。目前回傳空字串只是佔位，要改掉
+        // TODO ①：回傳整個 row（交易對代號加價格）轉成的字串當識別，例如 row.
+        // toString()。目前回傳空字串只是佔位，要改掉
         ""
     }
 }
@@ -95,7 +121,8 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     suspend fun run(log: LabLog) = scenario(log) { row ->
-        // TODO ②：回傳 row.symbol（交易對代號）當識別。目前回傳空字串只是佔位，要改掉
+        // TODO ②：回傳 row.symbol（交易對代號）當識別。目前回傳空字串只是佔位，
+        // 要改掉
         ""
     }
 }
@@ -124,18 +151,32 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, identity) 執行"
-            "最後：選取 沒有，更新期間共新建 6 列，沿用 3 列，識別重複 0 次" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, identity) 執行"
+            }
+
+            "最後：選取 沒有，更新期間共新建 6 列，沿用 3 列，識別重複 0 次" !in lines -> {
                 "Bug 還沒重現：識別要把整個 Row 都放進去（例如 row.toString()，包含交易對代號和價格），價格有變的列才會被新建"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, identity) 執行"
-            "最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列，識別重複 0 次" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, identity) 執行"
+            }
+
+            "最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列，識別重複 0 次" !in lines -> {
                 "識別要用 row.symbol（交易對代號）：每一列的識別不同，價格變了還是對得上既有的列"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

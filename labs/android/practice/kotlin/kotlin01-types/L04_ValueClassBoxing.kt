@@ -1,11 +1,14 @@
 // L04：把 value class 放進 List 存 K 線，記憶體比預期大好幾倍（boxing）
 // 對應複習站：Kotlin01Types 第 4 題「value class 是什麼？它是零成本嗎？」
 //
-// 情境：行情畫面要把最近 30 萬筆成交價存在記憶體裡畫 K 線。為了防止價格和數量傳錯，價格包成 value class TickPrice。
+// 情境：行情畫面要把最近 30 萬筆成交價存在記憶體裡畫 K 線。
+// 為了防止價格和數量傳錯，價格包成 value class TickPrice。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug）：用 List<TickPrice> 存 30 萬筆。value class 放進泛型就必須變成真的物件，每筆都多配置一個物件。
-//   ② 修正版（L04Fixed）：PriceSeries 內部用 LongArray 存原始的 Long，對外的 get 才包成 TickPrice。
+//   ① Bug 版（L04Bug）：用 List<TickPrice> 存 30 萬筆。value class
+// 放進泛型就必須變成真的物件，每筆都多配置一個物件。
+//   ② 修正版（L04Fixed）：PriceSeries 內部用 LongArray 存原始的 Long，對外的
+// get 才包成 TickPrice。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin01-types/L04_ValueClassBoxing.kt
 package tw.harry.labs.practice.kotlin01types
@@ -14,7 +17,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 價格（最小單位的整數）。包成 value class 的好處：編譯器擋得住「把數量當價格傳」 */
+/**
+ * 價格（最小單位的整數）。包成 value class 的好處：
+ * 編譯器擋得住「把數量當價格傳」
+ */
 @JvmInline
 private value class TickPrice(val raw: Long)
 
@@ -27,7 +33,10 @@ private fun usedBytes(): Long {
     return runtime.totalMemory() - runtime.freeMemory()
 }
 
-/** 建立資料並量它佔了多少記憶體，回傳資料本身（讓它留在記憶體裡直到量完）與每筆約幾 bytes */
+/**
+ * 建立資料並量它佔了多少記憶體，回傳資料本身（讓它留在記憶體裡直到量完）
+ * 與每筆約幾 bytes
+ */
 private fun <T : Any> measure(build: () -> T): Pair<T, Double> {
     val before = usedBytes()
     val data = build()
@@ -38,8 +47,10 @@ private fun <T : Any> measure(build: () -> T): Pair<T, Double> {
 /** 兩個版本共用：先看 value class 轉成 Any 時會不會變成物件 */
 private fun showBoxing(log: LabLog) {
     val p = TickPrice(1)
-    val a: Any = p                                          // 轉成 Any：這裡才真的配置一個 TickPrice 物件
-    val b: Any = p                                          // 再轉一次：又配置一個
+    // 轉成 Any：這裡才真的配置一個 TickPrice 物件
+    val a: Any = p
+    // 再轉一次：又配置一個
+    val b: Any = p
     log("同一個價格轉成 Any 兩次：${if (a === b) "同一個物件" else "兩個不同的物件（每次都 boxing）"}")
 }
 
@@ -48,7 +59,8 @@ private object L04Bug {
     fun run(log: LabLog) {
         showBoxing(log)
         val (history, bytes) = measure {
-            // TODO ①：回傳 List(COUNT) { TickPrice(1_000_000L + it) }，用 List<TickPrice> 存（泛型：每個 TickPrice 都會被包成物件）
+            // TODO ①：回傳 List(COUNT) { TickPrice(1_000_000L + it) }，用
+            // List<TickPrice> 存（泛型：每個 TickPrice 都會被包成物件）
             emptyList<TickPrice>()
         }
         log("第 123 筆價格 = ${runCatching { history[123].raw }.getOrNull()}")
@@ -67,7 +79,8 @@ private object L04Fixed {
     fun run(log: LabLog) {
         showBoxing(log)
         val (history, bytes) = measure {
-            // TODO ②-2：用 LongArray(COUNT) { 1_000_000L + it } 建立 PriceSeries（資料是原始的 Long，沒有物件）
+            // TODO ②-2：用 LongArray(COUNT) { 1_000_000L + it } 建立
+            // PriceSeries（資料是原始的 Long，沒有物件）
             PriceSeries(LongArray(0))
         }
         log("第 123 筆價格 = ${runCatching { history[123].raw }.getOrNull()}")
@@ -76,8 +89,9 @@ private object L04Fixed {
 }
 
 // MARK: - 演練設定
-private fun bytesPerItem(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("存 $COUNT 筆，每筆約 ") }?.substringAfter("每筆約 ")?.substringBefore(" bytes")?.toIntOrNull()
+private fun bytesPerItem(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("存 $COUNT 筆，每筆約 ")
+}?.substringAfter("每筆約 ")?.substringBefore(" bytes")?.toIntOrNull()
 
 val l04 = Lab(
     id = "L04",

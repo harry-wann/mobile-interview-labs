@@ -1,12 +1,18 @@
 // L06：記憶體不足的次數看起來是 crash 的好幾倍（背景被 lmkd 回收不算 OOM）
-// 對應複習站：Advanced06Crash 第 4 題「ANR、watchdog、OOM 是什麼？為什麼它們常常沒有一般的 crash 報告？」（ApplicationExitInfo）
+// 對應複習站：Advanced06Crash 第 4 題「ANR、watchdog、OOM
+// 是什麼？為什麼它們常常沒有一般的 crash 報告？」（ApplicationExitInfo）
 //
-// 情境：Android 11 起，ActivityManager.getHistoricalProcessExitReasons 會回傳 App 行程最近幾次結束的原因（ApplicationExitInfo），
-//       每一筆有 reason（原因）與 importance（結束當下行程的重要性：前景 100、可見 200、快取 400…）。
+// 情境：Android 11 起，ActivityManager.getHistoricalProcessExitReasons 會回傳
+// App 行程最近幾次結束的原因（ApplicationExitInfo），
+//       每一筆有 reason（原因）與 importance（結束當下行程的重要性：前景 100、
+// 可見 200、快取 400…）。
 //       演練有 12 筆紀錄，其中真正在前景被記憶體不足終止的只有 2 筆。
-//       lmkd（low memory killer daemon）會一直回收「快取中的背景行程」，這是 Android 的正常行為，使用者根本不會發現。
-// Bug 版：只看 reason：凡是 REASON_LOW_MEMORY 都算 OOM。背景快取行程被回收的 4 筆也被算進來，OOM 數字膨脹成 3 倍。
-// 修正版：REASON_LOW_MEMORY 還要看 importance：行程在前景或可見的時候被終止（importance ≤ 200）才算使用者遇到的 OOM。
+//       lmkd（low memory killer daemon）會一直回收「快取中的背景行程」，這是
+// Android 的正常行為，使用者根本不會發現。
+// Bug 版：只看 reason：凡是 REASON_LOW_MEMORY 都算 OOM。背景快取行程被回收的 4
+// 筆也被算進來，OOM 數字膨脹成 3 倍。
+// 修正版：REASON_LOW_MEMORY 還要看 importance：
+// 行程在前景或可見的時候被終止（importance ≤ 200）才算使用者遇到的 OOM。
 package tw.harry.labs.solution.advanced06crash
 
 import android.app.ActivityManager.RunningAppProcessInfo
@@ -15,22 +21,77 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 一筆結束紀錄（對應 ApplicationExitInfo 的 reason 與 importance，兩個版本共用） */
-private class L06ExitRecord(val note: String, val reason: Int, val importance: Int)
+/**
+ * 一筆結束紀錄（對應 ApplicationExitInfo 的 reason 與 importance，
+ * 兩個版本共用）
+ */
+private class L06ExitRecord(
+    val note: String,
+    val reason: Int,
+    val importance: Int,
+)
 
 private val history = listOf(
-    L06ExitRecord("背景快取行程被 lmkd 回收", ApplicationExitInfo.REASON_LOW_MEMORY, RunningAppProcessInfo.IMPORTANCE_CACHED),
-    L06ExitRecord("背景快取行程被 lmkd 回收", ApplicationExitInfo.REASON_LOW_MEMORY, RunningAppProcessInfo.IMPORTANCE_CACHED),
-    L06ExitRecord("背景快取行程被 lmkd 回收", ApplicationExitInfo.REASON_LOW_MEMORY, RunningAppProcessInfo.IMPORTANCE_CACHED),
-    L06ExitRecord("背景快取行程被 lmkd 回收", ApplicationExitInfo.REASON_LOW_MEMORY, RunningAppProcessInfo.IMPORTANCE_CACHED),
-    L06ExitRecord("從最近使用畫面滑掉", ApplicationExitInfo.REASON_USER_REQUESTED, RunningAppProcessInfo.IMPORTANCE_CACHED),
-    L06ExitRecord("自己呼叫 finish 結束", ApplicationExitInfo.REASON_EXIT_SELF, RunningAppProcessInfo.IMPORTANCE_FOREGROUND),
-    L06ExitRecord("版本更新", ApplicationExitInfo.REASON_PACKAGE_UPDATED, RunningAppProcessInfo.IMPORTANCE_CACHED),
-    L06ExitRecord("crash", ApplicationExitInfo.REASON_CRASH, RunningAppProcessInfo.IMPORTANCE_FOREGROUND),
-    L06ExitRecord("native crash", ApplicationExitInfo.REASON_CRASH_NATIVE, RunningAppProcessInfo.IMPORTANCE_FOREGROUND),
-    L06ExitRecord("ANR", ApplicationExitInfo.REASON_ANR, RunningAppProcessInfo.IMPORTANCE_FOREGROUND),
-    L06ExitRecord("前景被記憶體不足終止", ApplicationExitInfo.REASON_LOW_MEMORY, RunningAppProcessInfo.IMPORTANCE_FOREGROUND),
-    L06ExitRecord("前景被記憶體不足終止", ApplicationExitInfo.REASON_LOW_MEMORY, RunningAppProcessInfo.IMPORTANCE_VISIBLE),
+    L06ExitRecord(
+        "背景快取行程被 lmkd 回收",
+        ApplicationExitInfo.REASON_LOW_MEMORY,
+        RunningAppProcessInfo.IMPORTANCE_CACHED,
+    ),
+    L06ExitRecord(
+        "背景快取行程被 lmkd 回收",
+        ApplicationExitInfo.REASON_LOW_MEMORY,
+        RunningAppProcessInfo.IMPORTANCE_CACHED,
+    ),
+    L06ExitRecord(
+        "背景快取行程被 lmkd 回收",
+        ApplicationExitInfo.REASON_LOW_MEMORY,
+        RunningAppProcessInfo.IMPORTANCE_CACHED,
+    ),
+    L06ExitRecord(
+        "背景快取行程被 lmkd 回收",
+        ApplicationExitInfo.REASON_LOW_MEMORY,
+        RunningAppProcessInfo.IMPORTANCE_CACHED,
+    ),
+    L06ExitRecord(
+        "從最近使用畫面滑掉",
+        ApplicationExitInfo.REASON_USER_REQUESTED,
+        RunningAppProcessInfo.IMPORTANCE_CACHED,
+    ),
+    L06ExitRecord(
+        "自己呼叫 finish 結束",
+        ApplicationExitInfo.REASON_EXIT_SELF,
+        RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+    ),
+    L06ExitRecord(
+        "版本更新",
+        ApplicationExitInfo.REASON_PACKAGE_UPDATED,
+        RunningAppProcessInfo.IMPORTANCE_CACHED,
+    ),
+    L06ExitRecord(
+        "crash",
+        ApplicationExitInfo.REASON_CRASH,
+        RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+    ),
+    L06ExitRecord(
+        "native crash",
+        ApplicationExitInfo.REASON_CRASH_NATIVE,
+        RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+    ),
+    L06ExitRecord(
+        "ANR",
+        ApplicationExitInfo.REASON_ANR,
+        RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+    ),
+    L06ExitRecord(
+        "前景被記憶體不足終止",
+        ApplicationExitInfo.REASON_LOW_MEMORY,
+        RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+    ),
+    L06ExitRecord(
+        "前景被記憶體不足終止",
+        ApplicationExitInfo.REASON_LOW_MEMORY,
+        RunningAppProcessInfo.IMPORTANCE_VISIBLE,
+    ),
 )
 
 /** 演練流程（兩個版本共用） */
@@ -43,8 +104,8 @@ private fun scenario(log: LabLog, isOom: (L06ExitRecord) -> Boolean) {
 
 // MARK: - Bug 版
 private object L06Bug {
-    fun isOom(record: L06ExitRecord): Boolean =
-        record.reason == ApplicationExitInfo.REASON_LOW_MEMORY      // 只看原因，不看行程當時在不在前景
+    fun isOom(record: L06ExitRecord): Boolean = // 只看原因，不看行程當時在不在前景
+        record.reason == ApplicationExitInfo.REASON_LOW_MEMORY
 
     suspend fun run(log: LabLog) = scenario(log, ::isOom)
 }
@@ -53,7 +114,8 @@ private object L06Bug {
 private object L06Fixed {
     fun isOom(record: L06ExitRecord): Boolean =
         record.reason == ApplicationExitInfo.REASON_LOW_MEMORY &&
-            record.importance <= RunningAppProcessInfo.IMPORTANCE_VISIBLE   // 前景或可見的時候被終止，使用者才有感覺
+            // 前景或可見的時候被終止，使用者才有感覺
+            record.importance <= RunningAppProcessInfo.IMPORTANCE_VISIBLE
 
     suspend fun run(log: LabLog) = scenario(log, ::isOom)
 }

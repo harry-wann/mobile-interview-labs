@@ -1,12 +1,16 @@
 // L07：載入設定失敗後，每次讀取都再打一次伺服器（lazy 初始化丟例外）
-// 對應複習站：Kotlin02Functions 第 5 題「lazy 的三種模式差在哪？初始化丟例外會怎樣？」
+// 對應複習站：Kotlin02Functions 第 5 題「lazy
+// 的三種模式差在哪？初始化丟例外會怎樣？」
 //
-// 情境：畫面一次繪製會讀 3 次 config（手續費率、最小下單量、維護公告都在裡面）。config 用 by lazy 向伺服器要，
+// 情境：畫面一次繪製會讀 3 次 config（手續費率、最小下單量、
+// 維護公告都在裡面）。config 用 by lazy 向伺服器要，
 //        這時伺服器連不上，初始化器丟出 IOException。
 //
 // 你要寫：
-//   ① Bug 版（L07Bug）：by lazy { remote.loadFromServer() }。初始化丟例外時，lazy 不會記住失敗，每次讀取都重跑一次。
-//   ② 修正版（L07Fixed）：初始化器用 runCatching 接住例外，回傳 Result，成功或失敗都被快取起來。
+//   ① Bug 版（L07Bug）：by lazy { remote.loadFromServer() }。初始化丟例外時，
+// lazy 不會記住失敗，每次讀取都重跑一次。
+//   ② 修正版（L07Fixed）：初始化器用 runCatching 接住例外，回傳 Result，
+// 成功或失敗都被快取起來。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin02-functions/L07_LazyException.kt
 package tw.harry.labs.practice.kotlin02functions
@@ -31,14 +35,16 @@ private class RemoteConfig(private val log: LabLog) {
 // MARK: - Bug 版
 private object L07Bug {
     class ConfigHolder(remote: RemoteConfig) {
-        // TODO ①：改成 val config by lazy { remote.loadFromServer() }（丟例外時，lazy 不會記住失敗）
+        // TODO ①：改成 val config by lazy { remote.loadFromServer()
+        // }（丟例外時，lazy 不會記住失敗）
         val config: String get() = "（還沒寫）"
     }
 
     fun run(log: LabLog) {
         val remote = RemoteConfig(log)
         val holder = ConfigHolder(remote)
-        repeat(3) { i ->                                             // 畫面一次繪製讀 3 次
+        // 畫面一次繪製讀 3 次
+        repeat(3) { i ->
             try {
                 holder.config
             } catch (e: IOException) {
@@ -52,7 +58,8 @@ private object L07Bug {
 // MARK: - 修正版
 private object L07Fixed {
     class ConfigHolder(remote: RemoteConfig) {
-        // TODO ②：改成 val config by lazy { runCatching { remote.loadFromServer() } }（回傳 Result，成功或失敗都存起來）
+        // TODO ②：改成 val config by lazy { runCatching { remote.
+        // loadFromServer() } }（回傳 Result，成功或失敗都存起來）
         val config: Result<String> get() = Result.success("（還沒寫）")
     }
 
@@ -89,16 +96,27 @@ val l07 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("共向伺服器要了 ") } -> "演練沒有跑完：要讀 3 次 holder.config"
+            lines.none {
+                it.startsWith("共向伺服器要了 ")
+            } -> "演練沒有跑完：要讀 3 次 holder.config"
+
             "共向伺服器要了 3 次" !in lines -> "Bug 版每次讀取都要重新向伺服器要（共 3 次）：用 by lazy { remote.loadFromServer() }"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("共向伺服器要了 ") } -> "演練沒有跑完：要讀 3 次 holder.config"
+            lines.none {
+                it.startsWith("共向伺服器要了 ")
+            } -> "演練沒有跑完：要讀 3 次 holder.config"
+
             "共向伺服器要了 1 次" !in lines -> "只應該向伺服器要 1 次：lazy 的初始化器改用 runCatching 接住例外，連失敗一起快取"
-            lines.count { it.contains("次讀取失敗") } != 3 -> "3 次讀取都要印出失敗：讀 holder.config 時用 onFailure"
+
+            lines.count {
+                it.contains("次讀取失敗")
+            } != 3 -> "3 次讀取都要印出失敗：讀 holder.config 時用 onFailure"
+
             else -> null
         }
     },

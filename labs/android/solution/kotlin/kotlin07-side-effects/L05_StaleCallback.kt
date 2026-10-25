@@ -1,12 +1,19 @@
 // L05：計時器響的時候，呼叫的是舊的 callback（rememberUpdatedState）
-// 對應複習站：Kotlin07SideEffects 第 3 題「長時間運作的 effect，怎麼拿到最新的 callback？」
+// 對應複習站：Kotlin07SideEffects 第 3 題「長時間運作的 effect，怎麼拿到最新的
+// callback？」
 //
-// 情境：IdleTimer 在進入畫面 400 ms 後呼叫 onTimeout。畫面進入 250 ms 時，父層換了一個新的 onTimeout
-//        （新的 lambda 抓到的設定版本從 1 變成 2）。計時器響的時候，應該呼叫版本 2，而且不能因此重新計時。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
-// Bug 版：LaunchedEffect(Unit) 只啟動一次，裡面呼叫的 onTimeout 是第一次組合時傳進來的版本 1（stale closure，用到舊的值）。
-// 修正版：val currentOnTimeout by rememberUpdatedState(onTimeout)，effect 裡呼叫 currentOnTimeout()。
-//        它永遠指向最新的 callback，而且不需要把 onTimeout 當 key，計時不會重啟。
+// 情境：IdleTimer 在進入畫面 400 ms 後呼叫 onTimeout。畫面進入 250 ms 時，
+// 父層換了一個新的 onTimeout
+//        （新的 lambda 抓到的設定版本從 1 變成 2）。計時器響的時候，
+// 應該呼叫版本 2，而且不能因此重新計時。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
+// Bug 版：LaunchedEffect(Unit) 只啟動一次，裡面呼叫的 onTimeout
+// 是第一次組合時傳進來的版本 1（stale closure，用到舊的值）。
+// 修正版：val currentOnTimeout by rememberUpdatedState(onTimeout)，effect
+// 裡呼叫 currentOnTimeout()。
+//        它永遠指向最新的 callback，而且不需要把 onTimeout 當 key，
+// 計時不會重啟。
 package tw.harry.labs.solution.kotlin07sideeffects
 
 import androidx.compose.runtime.Composable
@@ -20,8 +27,14 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 import tw.harry.labs.kit.withHeadlessCompose
 
-/** 演練流程（兩個版本共用）：400 ms 的計時器；250 ms 時父層換了新的 onTimeout；等計時器響 */
-private suspend fun scenario(log: LabLog, timer: @Composable (onTimeout: () -> Unit) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：400 ms 的計時器；250 ms 時父層換了新的 onTimeout；
+ * 等計時器響
+ */
+private suspend fun scenario(
+    log: LabLog,
+    timer: @Composable (onTimeout: () -> Unit) -> Unit,
+) {
     var firedVersion = 0
     var firedAtMs = -1L
     val start = System.nanoTime()
@@ -29,7 +42,8 @@ private suspend fun scenario(log: LabLog, timer: @Composable (onTimeout: () -> U
         val version = mutableIntStateOf(1)
         setContent {
             val v = version.intValue
-            timer {                                         // 每次 v 變了，就是一個新的 onTimeout
+            // 每次 v 變了，就是一個新的 onTimeout
+            timer {
                 firedVersion = v
                 firedAtMs = (System.nanoTime() - start) / 1_000_000
             }
@@ -47,33 +61,43 @@ private suspend fun scenario(log: LabLog, timer: @Composable (onTimeout: () -> U
 private object L05Bug {
     @Composable
     fun IdleTimer(onTimeout: () -> Unit) {
-        LaunchedEffect(Unit) {                              // key 是 Unit：只啟動一次
+        // key 是 Unit：只啟動一次
+        LaunchedEffect(Unit) {
             delay(400)
-            onTimeout()                                     // 這是第一次組合時傳進來的 onTimeout
+            // 這是第一次組合時傳進來的 onTimeout
+            onTimeout()
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { onTimeout -> IdleTimer(onTimeout) }
+    suspend fun run(log: LabLog) = scenario(log) { onTimeout ->
+        IdleTimer(onTimeout)
+    }
 }
 
 // MARK: - 修正版
 private object L05Fixed {
     @Composable
     fun IdleTimer(onTimeout: () -> Unit) {
-        val currentOnTimeout by rememberUpdatedState(onTimeout)    // 永遠指向最新一次組合傳進來的值
-        LaunchedEffect(Unit) {                              // 計時不會因為 onTimeout 換掉而重啟
+        // 永遠指向最新一次組合傳進來的值
+        val currentOnTimeout by rememberUpdatedState(onTimeout)
+        // 計時不會因為 onTimeout 換掉而重啟
+        LaunchedEffect(Unit) {
             delay(400)
             currentOnTimeout()
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { onTimeout -> IdleTimer(onTimeout) }
+    suspend fun run(log: LabLog) = scenario(log) { onTimeout ->
+        IdleTimer(onTimeout)
+    }
 }
 
 // MARK: - 演練設定
 private fun firedVersion(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("計時器響的時候，呼叫的是版本 ") }
-        ?.removePrefix("計時器響的時候，呼叫的是版本 ")?.removeSuffix(" 的 onTimeout")?.toIntOrNull()
+        ?.removePrefix(
+            "計時器響的時候，呼叫的是版本 ",
+        )?.removeSuffix(" 的 onTimeout")?.toIntOrNull()
 
 private fun firedAtMs(lines: List<String>): Long? =
     lines.firstOrNull { it.startsWith("計時器響在進入畫面後 ") }
@@ -107,9 +131,22 @@ val l05 = Lab(
     },
     checkFixed = { lines ->
         when {
-            firedVersion(lines) == 0 -> "計時器沒有響：LaunchedEffect(Unit) 裡要 delay(400)，再呼叫 currentOnTimeout()"
-            firedVersion(lines) != 2 -> "呼叫的還是舊的版本：用 val currentOnTimeout by rememberUpdatedState(onTimeout)，effect 裡呼叫 currentOnTimeout()"
-            (firedAtMs(lines) ?: 0L) >= 640 -> "計時器被重啟了（${firedAtMs(lines)} ms 才響）：不要把 onTimeout 當 LaunchedEffect 的 key，key 維持 Unit"
+            firedVersion(
+                lines,
+            ) == 0 -> "計時器沒有響：LaunchedEffect(Unit) 裡要 delay(400)，再呼叫 currentOnTimeout()"
+
+            firedVersion(
+                lines,
+            ) != 2 -> "呼叫的還是舊的版本：用 val currentOnTimeout by rememberUpdatedState(onTimeout)，effect 裡呼叫 currentOnTimeout()"
+
+            (
+                firedAtMs(
+                    lines,
+                ) ?: 0L
+            ) >= 640 -> "計時器被重啟了（${firedAtMs(
+                lines,
+            )} ms 才響）：不要把 onTimeout 當 LaunchedEffect 的 key，key 維持 Unit"
+
             else -> null
         }
     },

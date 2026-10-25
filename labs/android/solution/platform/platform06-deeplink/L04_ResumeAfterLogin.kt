@@ -1,10 +1,15 @@
 // L04：點推播登入後卻停在首頁（未登入時要先記下目標，登入後再繼續）
-// 對應複習站：Platform06DeepLink 第 5 題「怎麼避免外部連結觸發下單這類敏感操作？」（登入與權限）
+// 對應複習站：Platform06DeepLink 第 5
+// 題「怎麼避免外部連結觸發下單這類敏感操作？」（登入與權限）
 //
-// 情境：價格提醒的連結 /alert/{編號} 要登入才能看。未登入的使用者點了推播，Router 要求先登入。
-//        演練的劇本：使用者點推播 → 看到登入畫面 → 登入成功。接著他登出，過幾天再正常登入一次（沒有連結）。
-// Bug 版：Router 只要求顯示登入畫面，沒有記下原本要去哪裡。登入成功後停在首頁，使用者得自己再找一次。
-// 修正版：Router 把原本的連結存進 pendingLink。登入成功後取出來繼續處理，而且取出來就清掉，
+// 情境：價格提醒的連結 /alert/{編號} 要登入才能看。未登入的使用者點了推播，
+// Router 要求先登入。
+//        演練的劇本：使用者點推播 → 看到登入畫面 → 登入成功。接著他登出，
+// 過幾天再正常登入一次（沒有連結）。
+// Bug 版：Router 只要求顯示登入畫面，沒有記下原本要去哪裡。登入成功後停在首頁，
+// 使用者得自己再找一次。
+// 修正版：Router 把原本的連結存進 pendingLink。登入成功後取出來繼續處理，
+// 而且取出來就清掉，
 //        下一次單純的登入不會又被帶去同一個提醒頁。
 package tw.harry.labs.solution.platform06deeplink
 
@@ -22,14 +27,16 @@ private object L04Bug {
 
         fun handle(url: String, isLoggedIn: Boolean) {
             if ("/alert/" in url && !isLoggedIn) {
-                screen = "登入畫面"                              // 只要求登入，沒有記下原本的連結
+                // 只要求登入，沒有記下原本的連結
+                screen = "登入畫面"
             } else if ("/alert/" in url) {
                 screen = "提醒 ab12cd34"
             }
         }
 
         fun onLoginSuccess() {
-            screen = "首頁"                                     // 登入完成：不知道原本要去哪
+            // 登入完成：不知道原本要去哪
+            screen = "首頁"
         }
     }
 
@@ -49,11 +56,14 @@ private object L04Fixed {
     class Navigator {
         var screen = "首頁"
             private set
-        private var pendingLink: String? = null                 // 登入前先記下的目標
+
+        // 登入前先記下的目標
+        private var pendingLink: String? = null
 
         fun handle(url: String, isLoggedIn: Boolean) {
             if ("/alert/" in url && !isLoggedIn) {
-                pendingLink = url                               // 先記下來，登入完成再繼續
+                // 先記下來，登入完成再繼續
+                pendingLink = url
                 screen = "登入畫面"
             } else if ("/alert/" in url) {
                 screen = "提醒 ab12cd34"
@@ -63,7 +73,8 @@ private object L04Fixed {
         fun onLoginSuccess() {
             screen = "首頁"
             pendingLink?.let { link ->
-                pendingLink = null                              // 取出來就清掉：只用一次
+                // 取出來就清掉：只用一次
+                pendingLink = null
                 handle(link, isLoggedIn = true)
             }
         }

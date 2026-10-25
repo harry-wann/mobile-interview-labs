@@ -1,11 +1,16 @@
 // L04：每一檔行情的列都跟著重算（傳 closure 的子 view 沒辦法比較）
-// 對應複習站：Swift08SwiftUIIdentity 第 4 題「怎麼讓沒有變的子 view 被跳過，不要白做工？」
+// 對應複習站：Swift08SwiftUIIdentity 第 4 題「怎麼讓沒有變的子 view 被跳過，
+// 不要白做工？」
 //
-// 情境：行情列表有 3 檔，每一列有一個 onTap closure，內容會用到父層「目前更新了幾次」。每次更新只有 BTC 的價格在變，ETH、XRP 都沒變。
+// 情境：行情列表有 3 檔，每一列有一個 onTap closure，
+// 內容會用到父層「目前更新了幾次」。每次更新只有 BTC 的價格在變，ETH、XRP
+// 都沒變。
 //
 // 你要寫：
-//   ① Bug 版：每一列的 onTap closure 捕獲每次都在變的 updates，讓 SwiftUI 沒辦法比較。
-//   ② 修正版：TickerRow 遵守 Equatable，只比較 ticker，並用 .equatable() 告訴 SwiftUI。
+//   ① Bug 版：每一列的 onTap closure 捕獲每次都在變的 updates，讓 SwiftUI
+// 沒辦法比較。
+//   ② 修正版：TickerRow 遵守 Equatable，只比較 ticker，並用 equatable() 告訴
+// SwiftUI。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Swift/Swift08-SwiftUIIdentity/L04_EquatableRow.swift
 import SwiftUI
@@ -22,7 +27,12 @@ private final class QuoteClock: ObservableObject {
     func tick() { updates += 1 }
 
     /// 目前的 3 檔行情：每次更新只有 BTC 的價格在變
-    var tickers: [Ticker] { [Ticker(id: "BTC", price: 1_000 + updates), Ticker(id: "ETH", price: 500), Ticker(id: "XRP", price: 60)] }
+    var tickers: [Ticker] {
+        [
+            Ticker(id: "BTC", price: 1_000 + updates),
+            Ticker(id: "ETH", price: 500), Ticker(id: "XRP", price: 60),
+        ]
+    }
 }
 
 /// 演練流程（兩個版本共用）：父層更新 3 次，看每一列的 body 一共算了幾次
@@ -64,7 +74,8 @@ private struct L04Demo: View {
 private enum L04Bug {
     struct TickerRow: View {
         let ticker: Ticker
-        let onTap: () -> Void                      // closure 沒辦法比較
+        // closure 沒辦法比較
+        let onTap: () -> Void
 
         var body: some View {
             let _ = BodyCount.tick("L04 \(ticker.id) 列")
@@ -84,8 +95,11 @@ private enum L04Bug {
             let updates = clock.updates
             VStack {
                 ForEach(clock.tickers) { t in
-                    // TODO ①：onTap 的 closure 現在是空的，不會有 bug。在 closure 裡呼叫 SwiftUILabProbe.note("L04 最後一次點擊", …)，
-                    //        內容要用到上面的 updates（closure 捕獲每次都在變的值，SwiftUI 就沒辦法比較它）
+                    // TODO ①：onTap 的 closure 現在是空的，不會有 bug。在
+                    // closure 裡呼叫 SwiftUILabProbe.note("L04 最後一次點擊",
+                    // …)，
+                    //        內容要用到上面的 updates（closure
+                    // 捕獲每次都在變的值，SwiftUI 就沒辦法比較它）
                     TickerRow(ticker: t) {
                     }
                 }
@@ -96,7 +110,8 @@ private enum L04Bug {
 
 // MARK: - 修正版
 private enum L04Fixed {
-    // TODO ②-1：讓 TickerRow 遵守 Equatable，寫 == 只比較 ticker（closure 不比）；提醒：View 預設在主執行緒，== 前面加 nonisolated
+    // TODO ②-1：讓 TickerRow 遵守 Equatable，寫 == 只比較 ticker（closure
+    // 不比）；提醒：View 預設在主執行緒，== 前面加 nonisolated
     struct TickerRow: View {
         let ticker: Ticker
         let onTap: () -> Void
@@ -119,9 +134,11 @@ private enum L04Fixed {
             let updates = clock.updates
             VStack {
                 ForEach(clock.tickers) { t in
-                    // TODO ②-2：在 TickerRow 後面加上 modifier，告訴 SwiftUI 比較時用你定義的 ==
+                    // TODO ②-2：在 TickerRow 後面加上 modifier，告訴 SwiftUI
+                    // 比較時用你定義的 ==
                     TickerRow(ticker: t) {
-                        SwiftUILabProbe.note("L04 最後一次點擊", "\(t.id)，第 \(updates) 次更新時")
+                        SwiftUILabProbe.note(
+                            "L04 最後一次點擊", "\(t.id)，第 \(updates) 次更新時")
                     }
                 }
             }
@@ -143,8 +160,10 @@ extension Swift08SwiftUIIdentity {
             "寫 TODO ②，選「修正版」，同樣操作：只有 BTC 那一列增加，ETH、XRP 維持 1 次。",
             "對照兩個版本的 TickerRow：修正版多了 Equatable 與 .equatable()。",
         ],
-        expectBug: "父層更新 3 次後，BTC、ETH、XRP 三列的 body 都算了 4 次：closure 每次都不一樣，SwiftUI 沒辦法比較。",
-        expectFixed: "BTC 那一列算了 4 次（價格每次都變），ETH、XRP 各只算 1 次：== 只比較 ticker，沒變的列被跳過。",
+        expectBug:
+            "父層更新 3 次後，BTC、ETH、XRP 三列的 body 都算了 4 次：closure 每次都不一樣，SwiftUI 沒辦法比較。",
+        expectFixed:
+            "BTC 那一列算了 4 次（價格每次都變），ETH、XRP 各只算 1 次：== 只比較 ticker，沒變的列被跳過。",
         run: { variant, log in
             switch variant {
             case .bug: await scenario(log) { L04Bug.Screen(clock: $0) }
@@ -153,15 +172,29 @@ extension Swift08SwiftUIIdentity {
         },
         demo: { variant, _ in AnyView(L04Demo(variant: variant)) },
         checkBug: { lines in
-            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") { return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次" }
-            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 4 次") { return "Bug 還沒重現：ETH 沒變，但它的 body 也要每次都重算（4 次）：TickerRow 要傳一個會捕獲 updates 的 closure" }
-            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 4 次") { return "Bug 還沒重現：XRP 沒變，但它的 body 也要每次都重算（4 次）" }
+            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") {
+                return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次"
+            }
+            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 4 次") {
+                return
+                    "Bug 還沒重現：ETH 沒變，但它的 body 也要每次都重算（4 次）：TickerRow 要傳一個會捕獲 updates 的 closure"
+            }
+            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 4 次") {
+                return "Bug 還沒重現：XRP 沒變，但它的 body 也要每次都重算（4 次）"
+            }
             return nil
         },
         checkFixed: { lines in
-            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") { return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次" }
-            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 1 次") { return "ETH 沒變，它的 body 應該只算 1 次：TickerRow 遵守 Equatable、== 只比較 ticker，並加上 .equatable()" }
-            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 1 次") { return "XRP 沒變，它的 body 應該只算 1 次" }
+            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") {
+                return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次"
+            }
+            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 1 次") {
+                return
+                    "ETH 沒變，它的 body 應該只算 1 次：TickerRow 遵守 Equatable、== 只比較 ticker，並加上 .equatable()"
+            }
+            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 1 次") {
+                return "XRP 沒變，它的 body 應該只算 1 次"
+            }
             return nil
         }
     )

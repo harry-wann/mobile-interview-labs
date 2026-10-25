@@ -1,24 +1,37 @@
-// L03：沒有設定 Face ID 的手機、驗證失敗太多次的人，鎖定畫面直接放行（生物辨識失敗後的降級流程）
-// 對應複習站：Exchange10AccountSecurity 第 3 題「生物辨識只看『成功』為什麼不夠安全？」
-//        （生物辨識綁在金鑰上、不能只看布林值，Platform04 的演練 6 已經練過；這題練的是「失敗、不能用、金鑰失效」之後怎麼辦。）
+// L03：沒有設定 Face ID 的手機、驗證失敗太多次的人，
+// 鎖定畫面直接放行（生物辨識失敗後的降級流程）
+// 對應複習站：Exchange10AccountSecurity 第 3 題「生物辨識只看『成功』
+// 為什麼不夠安全？」
+//        （生物辨識綁在金鑰上、不能只看布林值，Platform04 的演練 6 已經練過；
+// 這題練的是「失敗、不能用、金鑰失效」之後怎麼辦。）
 //
-// 情境：鎖定畫面要求生物辨識才能解鎖。系統會回報 7 種結果：成功、失敗（第 N 次）、使用者按了取消、被系統鎖定（嘗試太多次）、
-//       金鑰失效（使用者新增了別人的指紋或臉部）、這支手機不能用生物辨識（沒設定或被關閉）。
-//       每一種結果都要決定下一步：放行、再試一次、維持鎖定、改用密碼加兩步驟驗證（2FA）、或要求密碼加 2FA 之後重新註冊金鑰。
-//       規則：只有「成功」可以放行；失敗累積 3 次、被鎖定、不能用，都改用密碼加 2FA；金鑰失效要重新註冊，而且重新註冊本身也要密碼加 2FA。
-// Bug 版：成功放行、失敗就再試、取消維持鎖定，其他的「錯誤」一律放行（想著「不要卡住使用者」）。
-//        結果：沒設定生物辨識的手機、被系統鎖定的人、金鑰失效的人，鎖定畫面形同虛設；失敗也可以無限再試。
-// 修正版：每一種結果都明確對應一個決定，沒有「其他一律放行」的分支（Swift 的 switch 不寫 default，新增結果時編譯器會提醒）。
+// 情境：鎖定畫面要求生物辨識才能解鎖。系統會回報 7 種結果：成功、失敗（第 N
+// 次）、使用者按了取消、被系統鎖定（嘗試太多次）、
+//       金鑰失效（使用者新增了別人的指紋或臉部）、
+// 這支手機不能用生物辨識（沒設定或被關閉）。
+//       每一種結果都要決定下一步：放行、再試一次、維持鎖定、
+// 改用密碼加兩步驟驗證（2FA）、或要求密碼加 2FA 之後重新註冊金鑰。
+//       規則：只有「成功」可以放行；失敗累積 3 次、被鎖定、不能用，
+// 都改用密碼加 2FA；金鑰失效要重新註冊，而且重新註冊本身也要密碼加 2FA。
+// Bug 版：成功放行、失敗就再試、取消維持鎖定，其他的「錯誤」
+// 一律放行（想著「不要卡住使用者」）。
+//        結果：沒設定生物辨識的手機、被系統鎖定的人、金鑰失效的人，
+// 鎖定畫面形同虛設；失敗也可以無限再試。
+// 修正版：每一種結果都明確對應一個決定，沒有「其他一律放行」的分支（Swift 的
+// switch 不寫 default，新增結果時編譯器會提醒）。
 import Foundation
 import LabKit
 
 private enum BioResult {
     case success
-    case failed(attempt: Int)       // 這是第幾次失敗
+    case failed(attempt: Int)  // 這是第幾次失敗
     case userCancelled
-    case lockedOut                  // 嘗試太多次，系統鎖定生物辨識
-    case keyInvalidated             // 使用者新增了指紋或臉部，綁定的金鑰失效
-    case unavailable                // 沒設定生物辨識，或被關閉
+    // 嘗試太多次，系統鎖定生物辨識
+    case lockedOut
+    // 使用者新增了指紋或臉部，綁定的金鑰失效
+    case keyInvalidated
+    // 沒設定生物辨識，或被關閉
+    case unavailable
 }
 
 private enum Decision: String {
@@ -61,9 +74,11 @@ private enum L03Bug {
     fileprivate static func decide(_ result: BioResult) -> Decision {
         switch result {
         case .success: return .unlock
-        case .failed: return .retry                  // 失敗就再試，沒有次數上限
+        // 失敗就再試，沒有次數上限
+        case .failed: return .retry
         case .userCancelled: return .stayLocked
-        default: return .unlock                      // 「其他錯誤不要卡住使用者」：鎖定、金鑰失效、沒設定，全部放行
+        // 「其他錯誤不要卡住使用者」：鎖定、金鑰失效、沒設定，全部放行
+        default: return .unlock
         }
     }
 
@@ -77,10 +92,14 @@ private enum L03Fixed {
     fileprivate static func decide(_ result: BioResult) -> Decision {
         switch result {
         case .success: return .unlock
-        case .failed(let attempt): return attempt >= 3 ? .passwordAnd2FA : .retry   // 累積 3 次失敗就不要再讓他猜了
+        // 累積 3 次失敗就不要再讓他猜了
+        case .failed(let attempt):
+            return attempt >= 3 ? .passwordAnd2FA : .retry
         case .userCancelled: return .stayLocked
-        case .lockedOut, .unavailable: return .passwordAnd2FA                       // 不能用生物辨識：只能走密碼加 2FA，不能放行
-        case .keyInvalidated: return .reenroll                                      // 金鑰失效：重新註冊本身也要密碼加 2FA
+        // 不能用生物辨識：只能走密碼加 2FA，不能放行
+        case .lockedOut, .unavailable: return .passwordAnd2FA
+        // 金鑰失效：重新註冊本身也要密碼加 2FA
+        case .keyInvalidated: return .reenroll
         }
     }
 
@@ -91,8 +110,12 @@ private enum L03Fixed {
 
 // MARK: - 演練設定
 private func counts(_ lines: [String]) -> (wrong: Int, unlocks: Int)? {
-    guard let line = lines.first(where: { $0.hasPrefix("7 種結果") }) else { return nil }
-    let numbers = line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+    guard let line = lines.first(where: { $0.hasPrefix("7 種結果") }) else {
+        return nil
+    }
+    let numbers = line.split(whereSeparator: { !$0.isNumber }).compactMap {
+        Int($0)
+    }
     guard numbers.count >= 3 else { return nil }
     return (numbers[1], numbers[2])
 }
@@ -102,15 +125,18 @@ extension Exchange10AccountSecurity {
         id: "L03",
         title: "沒設定生物辨識的手機，鎖定畫面直接放行",
         question: "第 3 題：生物辨識只看「成功」為什麼不夠安全？",
-        goal: "生物辨識失敗、不能用、金鑰失效時，只能改走密碼加 2FA 或重新註冊，不能放行；每一種結果都要明確對應一個決定，不要用「其他一律放行」。",
+        goal:
+            "生物辨識失敗、不能用、金鑰失效時，只能改走密碼加 2FA 或重新註冊，不能放行；每一種結果都要明確對應一個決定，不要用「其他一律放行」。",
         steps: [
             "選「Bug 版」執行，看哪幾種結果被錯誤放行了，哪一種該改用密碼卻讓他無限再試。",
             "想一想：「金鑰失效」代表什麼？如果這時候直接放行，或只用生物辨識就讓他重新註冊，攻擊者把自己的指紋加進借來的手機會怎樣？",
             "選「修正版」執行，7 種結果的決定都要和規則一致，「不該放行卻放行」是 0。",
             "進階：Android 的 BiometricPrompt 回呼分 onAuthenticationFailed（沒認出來，可以再試）和 onAuthenticationError（錯誤碼，例如鎖定、沒有設定），不要混為一談。",
         ],
-        expectBug: "「被系統鎖定 → 放行 ✗」「金鑰失效 → 放行 ✗」「這支手機沒有設定生物辨識 → 放行 ✗」，第 3 次失敗還在「再試一次 ✗」：「7 種結果，判斷錯的有 4 種，其中不該放行卻放行的有 3 種」。",
-        expectFixed: "每一種都 ✓：被鎖定與沒設定 → 改用密碼加 2FA，金鑰失效 → 密碼加 2FA 後重新註冊，「7 種結果，判斷錯的有 0 種，其中不該放行卻放行的有 0 種」。",
+        expectBug:
+            "「被系統鎖定 → 放行 ✗」「金鑰失效 → 放行 ✗」「這支手機沒有設定生物辨識 → 放行 ✗」，第 3 次失敗還在「再試一次 ✗」：「7 種結果，判斷錯的有 4 種，其中不該放行卻放行的有 3 種」。",
+        expectFixed:
+            "每一種都 ✓：被鎖定與沒設定 → 改用密碼加 2FA，金鑰失效 → 密碼加 2FA 後重新註冊，「7 種結果，判斷錯的有 0 種，其中不該放行卻放行的有 0 種」。",
         run: { variant, log in
             switch variant {
             case .bug: await L03Bug.run(log)
@@ -118,14 +144,26 @@ extension Exchange10AccountSecurity {
             }
         },
         checkBug: { lines in
-            guard let c = counts(lines) else { return "演練沒有跑完：要用 scenario(log, decide:) 執行" }
-            if !lines.contains("第 1 次失敗 → 再試一次 ✓") { return "Bug 版的失敗要「再試一次」（不限次數）" }
-            if c.unlocks != 3 { return "Bug 還沒重現：其他的錯誤（被鎖定、金鑰失效、沒設定）一律放行，應該有 3 種不該放行卻放行（目前 \(c.unlocks) 種）" }
-            return c.wrong == 4 ? nil : "Bug 版應該判斷錯 4 種（3 種錯誤放行，加上第 3 次失敗還在再試），目前 \(c.wrong) 種"
+            guard let c = counts(lines) else {
+                return "演練沒有跑完：要用 scenario(log, decide:) 執行"
+            }
+            if !lines.contains("第 1 次失敗 → 再試一次 ✓") {
+                return "Bug 版的失敗要「再試一次」（不限次數）"
+            }
+            if c.unlocks != 3 {
+                return
+                    "Bug 還沒重現：其他的錯誤（被鎖定、金鑰失效、沒設定）一律放行，應該有 3 種不該放行卻放行（目前 \(c.unlocks) 種）"
+            }
+            return c.wrong == 4
+                ? nil : "Bug 版應該判斷錯 4 種（3 種錯誤放行，加上第 3 次失敗還在再試），目前 \(c.wrong) 種"
         },
         checkFixed: { lines in
-            guard let c = counts(lines) else { return "演練沒有跑完：要用 scenario(log, decide:) 執行" }
-            return c.wrong == 0 ? nil : "還有 \(c.wrong) 種判斷錯（其中 \(c.unlocks) 種錯誤放行）：每一種結果都要明確對應規則，不要寫 default 放行"
+            guard let c = counts(lines) else {
+                return "演練沒有跑完：要用 scenario(log, decide:) 執行"
+            }
+            return c.wrong == 0
+                ? nil
+                : "還有 \(c.wrong) 種判斷錯（其中 \(c.unlocks) 種錯誤放行）：每一種結果都要明確對應規則，不要寫 default 放行"
         }
     )
 }

@@ -28,7 +28,8 @@ import kotlin.coroutines.coroutineContext
  * withHeadlessCompose {
  *     val price = mutableLongStateOf(0)
  *     setContent { Ticker(price.longValue) }     // Composable
- *     price.longValue = 1                        // 改 State，會自動觸發重組
+ // 改 State，會自動觸發重組
+ *     price.longValue = 1
  *     settle()                                   // 等重組做完
  * }
  * ```
@@ -40,7 +41,8 @@ class HeadlessCompose internal constructor(private val recomposer: Recomposer) {
     private val composition = Composition(UnitApplier, recomposer)
 
     /** 開始組合。畫面上的東西可以在 [content] 裡用 `if` 控制出現與離開 */
-    fun setContent(content: @Composable () -> Unit) = composition.setContent(content)
+    fun setContent(content: @Composable () -> Unit) =
+        composition.setContent(content)
 
     /** 等目前排隊的重組都做完，以及 effect 啟動的 coroutine 排到第一次執行 */
     suspend fun settle() {
@@ -65,40 +67,48 @@ private object UnitApplier : AbstractApplier<Unit>(Unit) {
 
 /** 有重組要做就立刻做，不等螢幕的下一格 */
 private object ImmediateFrameClock : MonotonicFrameClock {
-    override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(System.nanoTime())
+    override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R =
+        onFrame(System.nanoTime())
 }
 
 /**
  * 在 [block] 裡使用 [HeadlessCompose]。離開時會結束 composition（觸發 DisposableEffect 的 onDispose）並停掉所有 effect。
  */
-suspend fun <T> withHeadlessCompose(block: suspend HeadlessCompose.() -> T): T = coroutineScope {
-    val context = coroutineContext + ImmediateFrameClock
-    val recomposer = Recomposer(context)
-    val host = HeadlessCompose(recomposer)
+suspend fun <T> withHeadlessCompose(block: suspend HeadlessCompose.() -> T): T =
+    coroutineScope {
+        val context = coroutineContext + ImmediateFrameClock
+        val recomposer = Recomposer(context)
+        val host = HeadlessCompose(recomposer)
 
-    // State 一被寫入，就通知 Compose 去重組（App 裡這件事由 GlobalSnapshotManager 做，沒有畫面時要自己做）
-    val writes = Channel<Unit>(Channel.CONFLATED)
-    val writeObserver = Snapshot.registerGlobalWriteObserver { writes.trySend(Unit) }
-    val notifier = launch {
-        writes.consumeEach { Snapshot.sendApplyNotifications() }
-    }
-    val recompose = launch(ImmediateFrameClock, start = CoroutineStart.UNDISPATCHED) {
-        recomposer.runRecomposeAndApplyChanges()
+        // State 一被寫入，就通知 Compose 去重組（App 裡這件事由
+        // GlobalSnapshotManager 做，沒有畫面時要自己做）
+        val writes = Channel<Unit>(Channel.CONFLATED)
+        val writeObserver = Snapshot.registerGlobalWriteObserver {
+            writes.trySend(Unit)
+        }
+        val notifier = launch {
+            writes.consumeEach { Snapshot.sendApplyNotifications() }
+        }
+        val recompose =
+            launch(ImmediateFrameClock, start = CoroutineStart.UNDISPATCHED) {
+                recomposer.runRecomposeAndApplyChanges()
+            }
+
+        try {
+            host.block()
+        } finally {
+            host.dispose()
+            writeObserver.dispose()
+            writes.close()
+            recomposer.cancel()
+            recompose.cancelAndJoin()
+            notifier.cancelAndJoin()
+        }
     }
 
-    try {
-        host.block()
-    } finally {
-        host.dispose()
-        writeObserver.dispose()
-        writes.close()
-        recomposer.cancel()
-        recompose.cancelAndJoin()
-        notifier.cancelAndJoin()
-    }
-}
-
-/** 沒有畫面時 Text 的替身：每次畫面更新完成後，把現在畫面上的文字交給 [onShow] */
+/**
+ * 沒有畫面時 Text 的替身：每次畫面更新完成後，把現在畫面上的文字交給 [onShow]
+ */
 @Composable
 fun HeadlessText(text: String, onShow: (String) -> Unit = {}) {
     SideEffect { onShow(text) }

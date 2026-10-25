@@ -2,9 +2,12 @@
 // 對應複習站：Kotlin03Coroutines 第 1 題「什麼是 structured concurrency？」
 //
 // 情境：行情畫面打開時開始每 100 ms 輪詢一次價格，離開畫面時應該停止。
-// Bug 版：用 GlobalScope.launch 開 coroutine，它不屬於任何畫面，沒有人能取消它，離開畫面後照樣在跑。
-// 修正版：畫面有自己的 scope，coroutine 開在這個 scope 裡；離開畫面時取消 scope，底下的工作一起停。
-//        （在真正的 App 裡，這個 scope 就是 viewModelScope 或 lifecycleScope。）
+// Bug 版：用 GlobalScope.launch 開 coroutine，它不屬於任何畫面，
+// 沒有人能取消它，離開畫面後照樣在跑。
+// 修正版：畫面有自己的 scope，coroutine 開在這個 scope 裡；離開畫面時取消
+// scope，底下的工作一起停。
+//        （在真正的 App 裡，這個 scope 就是 viewModelScope 或
+// lifecycleScope。）
 @file:OptIn(DelicateCoroutinesApi::class)
 
 package tw.harry.labs.solution.kotlin03coroutines
@@ -22,8 +25,16 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 演練流程（兩個版本共用）：打開畫面 → 350 ms 後離開 → 再等 500 ms，看離開後還輪詢了幾次 */
-private suspend fun scenario(log: LabLog, open: () -> Unit, close: () -> Unit, polls: () -> Int) {
+/**
+ * 演練流程（兩個版本共用）：打開畫面 → 350 ms 後離開 → 再等 500 ms，
+ * 看離開後還輪詢了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    open: () -> Unit,
+    close: () -> Unit,
+    polls: () -> Int,
+) {
     open()
     delay(350)
     log("離開前輪詢了 ${polls()} 次")
@@ -47,11 +58,13 @@ private object L01Bug {
         }
 
         fun onOpen() {
-            GlobalScope.launch(Dispatchers.Default) { pollLoop() }   // 不屬於任何畫面
+            // 不屬於任何畫面
+            GlobalScope.launch(Dispatchers.Default) { pollLoop() }
         }
 
         fun onClose() {
-            log("離開畫面")                                         // 手上沒有任何東西可以取消
+            // 手上沒有任何東西可以取消
+            log("離開畫面")
         }
     }
 
@@ -67,7 +80,8 @@ private object L01Fixed {
         val polls = AtomicInteger(0)
 
         // 畫面自己的 scope：畫面在，工作才在
-        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val scope =
+            CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         private suspend fun pollLoop() {
             repeat(20) {
@@ -82,7 +96,8 @@ private object L01Fixed {
 
         fun onClose() {
             log("離開畫面")
-            scope.cancel()                                          // 底下所有的 coroutine 一起取消
+            // 底下所有的 coroutine 一起取消
+            scope.cancel()
         }
     }
 
@@ -94,7 +109,9 @@ private object L01Fixed {
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
 
 val l01 = Lab(
     id = "L01",
@@ -117,14 +134,28 @@ val l01 = Lab(
     checkBug = { lines ->
         when {
             (count(lines, "離開前輪詢了 ") ?: 0) == 0 -> "離開畫面前沒有輪詢：onOpen 還沒開始輪詢"
-            (count(lines, "離開畫面後又輪詢了 ") ?: 0) == 0 -> "離開畫面後就停了：Bug 還沒重現（要讓輪詢在離開後繼續跑）"
+
+            (
+                count(
+                    lines,
+                    "離開畫面後又輪詢了 ",
+                ) ?: 0
+            ) == 0 -> "離開畫面後就停了：Bug 還沒重現（要讓輪詢在離開後繼續跑）"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
             (count(lines, "離開前輪詢了 ") ?: 0) == 0 -> "離開畫面前沒有輪詢：onOpen 還沒開始輪詢"
-            (count(lines, "離開畫面後又輪詢了 ") ?: 0) != 0 -> "離開畫面後還在輪詢：onClose 要取消 scope"
+
+            (
+                count(
+                    lines,
+                    "離開畫面後又輪詢了 ",
+                ) ?: 0
+            ) != 0 -> "離開畫面後還在輪詢：onClose 要取消 scope"
+
             else -> null
         }
     },

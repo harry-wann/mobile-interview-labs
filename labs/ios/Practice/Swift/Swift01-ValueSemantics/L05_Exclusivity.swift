@@ -1,12 +1,15 @@
 // L05：扣手續費時順便通知畫面，App 直接當掉（exclusivity）
-// 對應複習站：Swift01ValueSemantics 第 5 題「inout 與 exclusivity：同一個變數不能同時被兩個地方修改」
+// 對應複習站：Swift01ValueSemantics 第 5 題「inout 與 exclusivity：
+// 同一個變數不能同時被兩個地方修改」
 //
 // 情境：用 inout 扣手續費，扣的同時呼叫 callback 通知畫面更新，畫面會讀餘額。
 //
 // 你要寫：
-//   ① Bug 版：applyFee 扣完錢後呼叫 onChange；呼叫端在 onChange 裡讀 wallet.balance。從 Xcode 執行，App 會當掉。
+//   ① Bug 版：applyFee 扣完錢後呼叫 onChange；呼叫端在 onChange 裡讀 wallet.
+// balance。從 Xcode 執行，App 會當掉。
 //   ② 修正版：applyFee 只扣款、不呼叫外部程式；扣完之後再通知畫面。
-// 只改有 TODO 的地方。解答：Solution/Swift/Swift01-ValueSemantics/L05_Exclusivity.swift
+// 只改有 TODO 的地方。解答：
+// Solution/Swift/Swift01-ValueSemantics/L05_Exclusivity.swift
 import LabKit
 
 /// 錢包（已寫好）
@@ -24,7 +27,8 @@ private enum L05Bug {
     static func run(_ log: LabLog) async {
         let wallet = Wallet()
         log("扣款前：\(wallet.balance)")
-        // TODO ①-2：呼叫 applyFee(to: &wallet.balance) { … }，在大括號裡 log("通知畫面：餘額 \(wallet.balance)")
+        // TODO ①-2：呼叫 applyFee(to: &wallet.balance) { … }，在大括號裡
+        // log("通知畫面：餘額 \(wallet.balance)")
         log("扣款後：\(wallet.balance)")
     }
 }
@@ -39,7 +43,8 @@ private enum L05Fixed {
     static func run(_ log: LabLog) async {
         let wallet = Wallet()
         log("扣款前：\(wallet.balance)")
-        // TODO ②-2：呼叫 applyFee(to: &wallet.balance)，這一行結束後再 log("通知畫面：餘額 \(wallet.balance)")
+        // TODO ②-2：呼叫 applyFee(to: &wallet.balance)，這一行結束後再
+        // log("通知畫面：餘額 \(wallet.balance)")
         log("扣款後：\(wallet.balance)")
     }
 }
@@ -57,7 +62,8 @@ extension Swift01ValueSemantics {
             "在左邊的 Debug navigator 往下找，會看到 run 裡讀 wallet.balance 的那一行。",
             "按 ■ 停止，寫 TODO ②，重新執行，選「修正版」。",
         ],
-        expectBug: "App 當掉，主控台：Simultaneous accesses to 0x…, but modification requires exclusive access.",
+        expectBug:
+            "App 當掉，主控台：Simultaneous accesses to 0x…, but modification requires exclusive access.",
         expectFixed: "依序印出扣款前 1000、通知畫面 990、扣款後 990。",
         bugCrashes: true,
         run: { variant, log in
@@ -71,7 +77,8 @@ extension Swift01ValueSemantics {
             "App 沒有當掉：要在 applyFee 的 callback 裡讀 wallet.balance"
         },
         checkFixed: { lines in
-            lines == ["扣款前：1000", "通知畫面：餘額 990", "扣款後：990"] ? nil : "應該依序印出扣款前 1000、通知畫面 990、扣款後 990"
+            lines == ["扣款前：1000", "通知畫面：餘額 990", "扣款後：990"]
+                ? nil : "應該依序印出扣款前 1000、通知畫面 990、扣款後 990"
         }
     )
 }

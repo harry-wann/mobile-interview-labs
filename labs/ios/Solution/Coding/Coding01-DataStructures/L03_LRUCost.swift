@@ -1,10 +1,15 @@
-// L03：快取容量變 10 倍，每次 get 的成本也變 10 倍（用陣列記使用順序，不是 O(1)）
-// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put 都很快？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
+// L03：快取容量變 10 倍，每次 get 的成本也變 10 倍（用陣列記使用順序，不是
+// O(1)）
+// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put
+// 都很快？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
 //
-// 情境：圖示快取。容量 100 與容量 1000 各做 1000 次 get（每次都讀得到），數「每次 get 平均碰了幾個元素」，看容量變大時成本怎麼變。
-// Bug 版：用陣列記使用順序。get 要先在陣列裡一個一個找到 key（O(n)），拿出來時後面的元素往前搬，再放到最前面時全部元素往後搬。
+// 情境：圖示快取。容量 100 與容量 1000 各做 1000 次 get（每次都讀得到），
+// 數「每次 get 平均碰了幾個元素」，看容量變大時成本怎麼變。
+// Bug 版：用陣列記使用順序。get 要先在陣列裡一個一個找到 key（O(n)），
+// 拿出來時後面的元素往前搬，再放到最前面時全部元素往後搬。
 //        容量變 10 倍，每次 get 碰到的元素也變 10 倍。
-// 修正版：字典加雙向鏈結串列。字典直接找到節點，串列上拿出來、放到最前面只改 6 個指標，容量再大成本都一樣。
+// 修正版：字典加雙向鏈結串列。字典直接找到節點，串列上拿出來、放到最前面只改 6
+// 個指標，容量再大成本都一樣。
 import Foundation
 import LabKit
 
@@ -16,7 +21,9 @@ private protocol Cache: AnyObject {
 }
 
 /// 演練流程（兩個版本共用）：把快取放滿，再做 1000 次 get，數平均成本
-private func averageCost(_ log: LabLog, capacity: Int, make: (Int) -> Cache) -> Double {
+private func averageCost(
+    _ log: LabLog, capacity: Int, make: (Int) -> Cache
+) -> Double {
     let cache = make(capacity)
     for i in 0..<capacity { cache.put("K\(i)", i) }
     let before = cache.cost
@@ -41,7 +48,8 @@ private enum L03Bug {
     final class ArrayCache: Cache {
         private let capacity: Int
         private var values: [String: Int] = [:]
-        private var order: [String] = []               // 由「最近」到「最久」
+        // 由「最近」到「最久」
+        private var order: [String] = []
         private(set) var cost = 0
 
         init(capacity: Int) {
@@ -50,11 +58,11 @@ private enum L03Bug {
 
         /// 把 key 移到最前面
         private func touch(_ key: String) {
-            let index = order.firstIndex(of: key) ?? 0     // 從頭一個一個找
+            let index = order.firstIndex(of: key) ?? 0  // 從頭一個一個找
             cost += index + 1
-            order.remove(at: index)                        // 後面的元素往前搬
+            order.remove(at: index)  // 後面的元素往前搬
             cost += order.count - index
-            order.insert(key, at: 0)                       // 全部元素往後搬
+            order.insert(key, at: 0)  // 全部元素往後搬
             cost += order.count
         }
 
@@ -96,8 +104,8 @@ private enum L03Fixed {
 
         func get(_ key: String) -> Int? {
             guard let node = map[key] else { return nil }
-            list.unlink(node)                              // 改 2 個指標
-            list.insertAfterHead(node)                     // 改 4 個指標
+            list.unlink(node)  // 改 2 個指標
+            list.insertAfterHead(node)  // 改 4 個指標
             return node.value
         }
 
@@ -111,7 +119,9 @@ private enum L03Fixed {
             let node = C01Node(key: key, value: value)
             map[key] = node
             list.insertAfterHead(node)
-            if map.count > capacity, let oldest = list.removeLast() { map[oldest.key] = nil }
+            if map.count > capacity, let oldest = list.removeLast() {
+                map[oldest.key] = nil
+            }
         }
     }
 
@@ -132,7 +142,8 @@ extension Coding01DataStructures {
             "選「修正版」執行，比較兩個容量的數字。",
             "對照第 2 題的表格：O(1)、O(n) 在這裡各是什麼樣子？",
         ],
-        expectBug: "容量 100 約碰 200 個元素，容量 1000 約碰 2000 個：「容量變 10 倍，每次 get 的成本變成 10.0 倍」。",
+        expectBug:
+            "容量 100 約碰 200 個元素，容量 1000 約碰 2000 個：「容量變 10 倍，每次 get 的成本變成 10.0 倍」。",
         expectFixed: "不管容量多大，每次都只改 6 個指標：「容量變 10 倍，每次 get 的成本變成 1.0 倍」。",
         run: { variant, log in
             switch variant {
@@ -141,18 +152,24 @@ extension Coding01DataStructures {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("容量 1000：1000 次 get 命中 1000 次") }) {
+            if !lines.contains(where: {
+                $0.hasPrefix("容量 1000：1000 次 get 命中 1000 次")
+            }) {
                 return "get 還沒寫好：1000 次 get 應該全部命中"
             }
             return lines.contains("容量變 10 倍，每次 get 的成本變成 10.0 倍")
-                ? nil : "Bug 還沒重現：要用陣列記順序，get 時從頭找 key、remove(at:)、insert(at: 0)，成本才會跟著容量成長"
+                ? nil
+                : "Bug 還沒重現：要用陣列記順序，get 時從頭找 key、remove(at:)、insert(at: 0)，成本才會跟著容量成長"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("容量 1000：1000 次 get 命中 1000 次") }) {
+            if !lines.contains(where: {
+                $0.hasPrefix("容量 1000：1000 次 get 命中 1000 次")
+            }) {
                 return "get 還沒寫好：1000 次 get 應該全部命中"
             }
             return lines.contains("容量變 10 倍，每次 get 的成本變成 1.0 倍")
-                ? nil : "get 要用字典找到節點，再 list.unlink、list.insertAfterHead：成本不能跟著容量成長"
+                ? nil
+                : "get 要用字典找到節點，再 list.unlink、list.insertAfterHead：成本不能跟著容量成長"
         }
     )
 }

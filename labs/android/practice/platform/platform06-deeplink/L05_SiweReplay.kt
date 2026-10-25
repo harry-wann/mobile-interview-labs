@@ -1,15 +1,25 @@
-// L05：簽章被偷走之後，攻擊者原封不動重送也能登入（簽名訊息要帶 nonce 與到期時間）
-// 對應複習站：Platform06DeepLink 第 6 題「錢包 App 回跳（WalletConnect）怎麼運作？」
+// L05：簽章被偷走之後，攻擊者原封不動重送也能登入（簽名訊息要帶 nonce
+// 與到期時間）
+// 對應複習站：Platform06DeepLink 第 6 題「錢包 App 回跳（WalletConnect）
+// 怎麼運作？」
 //
-// 情境：使用者用錢包簽一段訊息，證明自己擁有某個錢包地址，伺服器驗證簽章後讓他登入。
-//        簽章曾經外洩（網路紀錄、釣魚網站…），攻擊者拿到「同一份訊息和簽章」，原封不動送給伺服器。
-//        （真實的錢包簽章是橢圓曲線簽章，伺服器只需要錢包地址就能驗證；演練用 HMAC 代替簽章，重點是「簽的訊息裡有什麼」。）
-//        劇本：1. 使用者簽名登入；2. 攻擊者 1 分鐘後重放同一份簽章；3. 另一份簽好、但使用者還沒送出的訊息，10 分鐘後才被攻擊者送出。
+// 情境：使用者用錢包簽一段訊息，證明自己擁有某個錢包地址，
+// 伺服器驗證簽章後讓他登入。
+//        簽章曾經外洩（網路紀錄、釣魚網站…），攻擊者拿到「同一份訊息和簽章」，
+// 原封不動送給伺服器。
+//        （真實的錢包簽章是橢圓曲線簽章，伺服器只需要錢包地址就能驗證；演練用
+// HMAC 代替簽章，重點是「簽的訊息裡有什麼」。）
+//        劇本：1. 使用者簽名登入；2. 攻擊者 1 分鐘後重放同一份簽章；3.
+// 另一份簽好、但使用者還沒送出的訊息，10 分鐘後才被攻擊者送出。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug.Server）：challenge 每次回傳固定的 "Sign in to Example Exchange"；login 只用 Wallet.verify 驗簽章，對就回傳 "成功"，不對回傳 "拒絕：簽章不正確"。
-//   ② 修正版（L05Fixed.Server）：challenge 產生 SIWE 風格的訊息（網域、地址、Nonce、Issued At、Expiration Time = 簽發後 300 秒），並記下發出的 nonce；
-//      login 依序檢查簽章、nonce 是不是發出過的、有沒有過期、nonce 有沒有用過（用過就拒絕，沒用過就記進 usedNonces）。
+//   ① Bug 版（L05Bug.Server）：challenge 每次回傳固定的 "Sign in to Example
+// Exchange"；login 只用 Wallet.verify 驗簽章，對就回傳 "成功"，不對回傳 "拒絕：
+// 簽章不正確"。
+//   ② 修正版（L05Fixed.Server）：challenge 產生 SIWE 風格的訊息（網域、地址、
+// Nonce、Issued At、Expiration Time = 簽發後 300 秒），並記下發出的 nonce；
+//      login 依序檢查簽章、nonce 是不是發出過的、有沒有過期、nonce
+// 有沒有用過（用過就拒絕，沒用過就記進 usedNonces）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform06-deeplink/L05_SiweReplay.kt
 package tw.harry.labs.practice.platform06deeplink
@@ -19,7 +29,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 登入伺服器（兩個版本各自實作）：challenge 產生要簽的訊息，login 驗證並回傳結果文字。時間用「秒」 */
+/**
+ * 登入伺服器（兩個版本各自實作）：challenge 產生要簽的訊息，login
+ * 驗證並回傳結果文字。時間用「秒」
+ */
 private interface LoginServer {
     fun challenge(address: String, nowSeconds: Long): String
     fun login(message: String, signature: String, nowSeconds: Long): String
@@ -45,8 +58,13 @@ private object L05Bug {
         // TODO ①-1：每次都回傳同一段固定的文字："Sign in to Example Exchange"
         override fun challenge(address: String, nowSeconds: Long): String = ""
 
-        // TODO ①-2：只驗簽章：Wallet.verify(message, signature) 對就回傳 "成功"，不對回傳 "拒絕：簽章不正確"
-        override fun login(message: String, signature: String, nowSeconds: Long): String = "拒絕：還沒寫"
+        // TODO ①-2：只驗簽章：Wallet.verify(message, signature) 對就回傳
+        // "成功"，不對回傳 "拒絕：簽章不正確"
+        override fun login(
+            message: String,
+            signature: String,
+            nowSeconds: Long,
+        ): String = "拒絕：還沒寫"
     }
 
     suspend fun run(log: LabLog) = scenario(log, Server())
@@ -55,23 +73,37 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     class Server : LoginServer {
-        private val issuedNonces = mutableSetOf<String>()       // 伺服器發出去的 nonce
-        private val usedNonces = mutableSetOf<String>()         // 已經用過的 nonce
+        // 伺服器發出去的 nonce
+        private val issuedNonces = mutableSetOf<String>()
+
+        // 已經用過的 nonce
+        private val usedNonces = mutableSetOf<String>()
 
         override fun challenge(address: String, nowSeconds: Long): String {
-            // TODO ②-1：1. val nonce = UUID.randomUUID().toString()，存進 issuedNonces
-            //          2. 回傳多行訊息（可以用 """…""".trimIndent()），每一行依序是：
-            //             "www.example.com wants you to sign in with your wallet:"、地址、"Nonce: <nonce>"、
-            //             "Issued At: <nowSeconds>"、"Expiration Time: <nowSeconds + 300>"
+            // TODO ②-1：1. val nonce = UUID.randomUUID().toString()，存進
+            // issuedNonces
+            //          2. 回傳多行訊息（可以用 """…""".trimIndent()），
+            // 每一行依序是：
+            //             "www.example.com wants you to sign in with your
+            // wallet:"、地址、"Nonce: <nonce>"、
+            //             "Issued At: <nowSeconds>"、"Expiration Time:
+            // <nowSeconds + 300>"
             return ""
         }
 
-        override fun login(message: String, signature: String, nowSeconds: Long): String {
-            // TODO ②-2：依序檢查，不通過就回傳對應的文字（Siwe.field("名稱", message) 可以取出欄位的值）：
+        override fun login(
+            message: String,
+            signature: String,
+            nowSeconds: Long,
+        ): String {
+            // TODO ②-2：依序檢查，不通過就回傳對應的文字（Siwe.field("名稱",
+            // message) 可以取出欄位的值）：
             //          1. 簽章（Wallet.verify）不對 → "拒絕：簽章不正確"
-            //          2. Nonce 不在 issuedNonces → "拒絕：nonce 不是伺服器發的"
+            //          2. Nonce 不在 issuedNonces → "拒絕：nonce
+            // 不是伺服器發的"
             //          3. nowSeconds 超過 Expiration Time → "拒絕：訊息已過期"
-            //          4. nonce 已經在 usedNonces → "拒絕：nonce 已經用過"（沒用過就記進去：usedNonces.add）
+            //          4. nonce 已經在 usedNonces → "拒絕：nonce
+            // 已經用過"（沒用過就記進去：usedNonces.add）
             //          5. 都通過 → "成功"
             usedNonces.size
             return "拒絕：還沒寫"
@@ -111,12 +143,21 @@ val l05 = Lab(
     },
     checkFixed = { lines ->
         when {
-            "使用者簽名登入：成功" !in lines -> "使用者簽名登入要成功"
-            "攻擊者 1 分鐘後重放同一份簽章：拒絕：nonce 已經用過" !in lines ->
+            "使用者簽名登入：成功" !in lines -> {
+                "使用者簽名登入要成功"
+            }
+
+            "攻擊者 1 分鐘後重放同一份簽章：拒絕：nonce 已經用過" !in lines -> {
                 "重放要被擋下：驗證通過後把 nonce 記進 usedNonces，第二次用同一個 nonce 就拒絕"
-            "另一份簽好但沒送出的簽章，10 分鐘後被攻擊者送出：拒絕：訊息已過期" !in lines ->
+            }
+
+            "另一份簽好但沒送出的簽章，10 分鐘後被攻擊者送出：拒絕：訊息已過期" !in lines -> {
                 "超過 Expiration Time 的訊息要拒絕：challenge 把到期時間（簽發時間加 300 秒）放進訊息，login 比對現在時間"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

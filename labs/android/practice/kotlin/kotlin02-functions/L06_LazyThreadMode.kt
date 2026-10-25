@@ -1,12 +1,16 @@
 // L06：兩個執行緒同時第一次用，建立了兩條連線（lazy 的執行緒模式）
-// 對應複習站：Kotlin02Functions 第 5 題「lazy 的三種模式差在哪？初始化丟例外會怎樣？」
+// 對應複習站：Kotlin02Functions 第 5 題「lazy
+// 的三種模式差在哪？初始化丟例外會怎樣？」
 //
-// 情境：Gateway 用 by lazy 延後建立交易所的連線，建立一次要 100 ms。畫面載入時，行情和下單兩個地方
+// 情境：Gateway 用 by lazy 延後建立交易所的連線，建立一次要 100 ms。
+// 畫面載入時，行情和下單兩個地方
 //        同時（在不同的執行緒）第一次用到 socket。
 //
 // 你要寫：
-//   ① Bug 版（L06Bug）：socket 用 by lazy(LazyThreadSafetyMode.NONE)。NONE 沒有任何鎖，兩個執行緒各建立一條連線。
-//   ② 修正版（L06Fixed）：socket 用預設的 by lazy { }（SYNCHRONIZED），初始化器最多只執行一次。
+//   ① Bug 版（L06Bug）：socket 用 by lazy(LazyThreadSafetyMode.NONE)。NONE
+// 沒有任何鎖，兩個執行緒各建立一條連線。
+//   ② 修正版（L06Fixed）：socket 用預設的 by lazy { }（SYNCHRONIZED），
+// 初始化器最多只執行一次。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin02-functions/L06_LazyThreadMode.kt
 package tw.harry.labs.practice.kotlin02functions
@@ -33,7 +37,11 @@ private class Dialer(private val log: LabLog) {
 }
 
 /** 演練流程（兩個版本共用）：行情和下單同時第一次用 socket */
-private suspend fun scenario(log: LabLog, dialer: Dialer, socket: () -> String) {
+private suspend fun scenario(
+    log: LabLog,
+    dialer: Dialer,
+    socket: () -> String,
+) {
     withContext(Dispatchers.Default) {
         coroutineScope {
             val market = async { socket() }
@@ -47,7 +55,8 @@ private suspend fun scenario(log: LabLog, dialer: Dialer, socket: () -> String) 
 // MARK: - Bug 版
 private object L06Bug {
     class Gateway(dialer: Dialer) {
-        // TODO ①：改成 val socket by lazy(LazyThreadSafetyMode.NONE) { dialer.connect() }
+        // TODO ①：改成 val socket by lazy(LazyThreadSafetyMode.NONE) { dialer.
+        // connect() }
         val socket: String get() = "（還沒連線）"
     }
 
@@ -95,16 +104,25 @@ val l06 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("共建立 ") } -> "演練沒有跑完：兩邊都要讀 gateway.socket"
+            lines.none {
+                it.startsWith("共建立 ")
+            } -> "演練沒有跑完：兩邊都要讀 gateway.socket"
+
             "共建立 2 條連線" !in lines -> "Bug 版要建立兩條連線：socket 用 by lazy(LazyThreadSafetyMode.NONE)"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("共建立 ") } -> "演練沒有跑完：兩邊都要讀 gateway.socket"
+            lines.none {
+                it.startsWith("共建立 ")
+            } -> "演練沒有跑完：兩邊都要讀 gateway.socket"
+
             "共建立 1 條連線" !in lines -> "還是建立了不只一條連線：socket 改用預設的 by lazy { }"
+
             "行情拿到 socket-1，下單拿到 socket-1" !in lines -> "兩邊要拿到同一條連線 socket-1"
+
             else -> null
         }
     },

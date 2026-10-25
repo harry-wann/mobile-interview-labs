@@ -1,13 +1,20 @@
 // L03：行情一多，伺服器就把連線切斷（心跳排在行情處理的後面）
-// 對應複習站：Exchange03WebSocket 第 3 題「心跳 ping／pong 是什麼？為什麼要最先處理？」
+// 對應複習站：Exchange03WebSocket 第 3 題「心跳 ping／pong
+// 是什麼？為什麼要最先處理？」
 //
-// 情境：伺服器一次推來 20 則行情，緊接著送一則 {"ping":N}，並規定 0.5 秒內要收到 {"pong":N}，否則切斷連線。
-//       每則行情要在「畫面佇列」上處理，一則花 40 毫秒（用 Thread.sleep 代表列表正在忙著畫畫面）。
-//       訊息從 socket 的背景佇列進來；畫面佇列是另一條序列佇列，一次只做一件事。（演練的時限是為了縮短等待而假設的，真正的伺服器約每 5 秒送一次 ping。）
+// 情境：伺服器一次推來 20 則行情，緊接著送一則 {"ping":N}，並規定 0.5
+// 秒內要收到 {"pong":N}，否則切斷連線。
+//       每則行情要在「畫面佇列」上處理，一則花 40 毫秒（用 Thread.sleep
+// 代表列表正在忙著畫畫面）。
+//       訊息從 socket 的背景佇列進來；畫面佇列是另一條序列佇列，
+// 一次只做一件事。（演練的時限是為了縮短等待而假設的，真正的伺服器約每 5
+// 秒送一次 ping。）
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.makeHandler）：每一則訊息（包括 ping）都丟到畫面佇列 ui.async 裡處理。
-//   ② 修正版（L03Fixed.makeHandler）：先在 socket 的背景佇列檢查心跳，ping 立刻回 pong；只有行情才丟到畫面佇列。
+//   ① Bug 版（L03Bug.makeHandler）：每一則訊息（包括 ping）都丟到畫面佇列 ui.
+// async 裡處理。
+//   ② 修正版（L03Fixed.makeHandler）：先在 socket 的背景佇列檢查心跳，ping
+// 立刻回 pong；只有行情才丟到畫面佇列。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange03-WebSocket/L03_HeartbeatQueue.swift
 import Foundation
@@ -21,9 +28,15 @@ private final class Stopwatch: @unchecked Sendable {
     private var pongAt: Double?
     private var pongText: String?
 
-    func nowMs() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000 }
+    func nowMs() -> Double {
+        Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+            / 1_000_000
+    }
     func markPingSent() { lock.lock(); pingSentAt = nowMs(); lock.unlock() }
-    func markPong(_ text: String) { lock.lock(); if pongAt == nil { pongAt = nowMs(); pongText = text }; lock.unlock() }
+    func markPong(_ text: String) {
+        lock.lock(); if pongAt == nil { pongAt = nowMs(); pongText = text };
+        lock.unlock()
+    }
     var result: (elapsedMs: Double?, text: String?) {
         lock.lock(); defer { lock.unlock() }
         guard let sent = pingSentAt, let at = pongAt else { return (nil, nil) }
@@ -31,15 +44,23 @@ private final class Stopwatch: @unchecked Sendable {
     }
 }
 
-/// 演練流程（兩個版本共用）：socket 佇列依序送進 20 則行情與 1 則 ping，等 1.3 秒，看 pong 什麼時候到
-private func scenario(_ log: LabLog, makeHandler: @escaping (_ ui: DispatchQueue, _ send: @escaping (String) -> Void) -> (Data) -> Void) async {
+/// 演練流程（兩個版本共用）：socket 佇列依序送進 20 則行情與 1 則 ping，等 1.3
+/// 秒，看 pong 什麼時候到
+private func scenario(
+    _ log: LabLog,
+    makeHandler:
+        @escaping (_ ui: DispatchQueue, _ send: @escaping (String) -> Void) -> (
+            Data
+        ) -> Void
+) async {
     let clock = Stopwatch()
     let socketQueue = DispatchQueue(label: "e03.socket")
     let uiQueue = DispatchQueue(label: "e03.ui")
     let handle = makeHandler(uiQueue) { text in clock.markPong(text) }
     log("伺服器：送出 20 則行情，接著送 {\"ping\":777}，要求 0.5 秒內回 pong")
     for i in 1...20 {
-        let frame = E03Wire.frame("{\"ch\":\"market.btcjpy.bbo\",\"tick\":{\"seqId\":\(i)}}")
+        let frame = E03Wire.frame(
+            "{\"ch\":\"market.btcjpy.bbo\",\"tick\":{\"seqId\":\(i)}}")
         socketQueue.async { handle(frame) }
     }
     let pingFrame = E03Wire.frame("{\"ping\":777}")
@@ -66,10 +87,14 @@ private func renderQuote() { Thread.sleep(forTimeInterval: 0.04) }
 
 // MARK: - Bug 版
 private enum L03Bug {
-    static func makeHandler(ui: DispatchQueue, send: @escaping (String) -> Void) -> (Data) -> Void {
+    static func makeHandler(
+        ui: DispatchQueue, send: @escaping (String) -> Void
+    ) -> (Data) -> Void {
         { frame in
-            // TODO ①：把整個處理流程都丟到 ui.async { … } 裡（Bug：ping 也要排在行情後面）。在 ui.async 裡：
-            //   用 E03Wire.text(of: frame) 解壓、e03Parse 解析；有 "ping" 的數字 N 就呼叫 send("{\"pong\":N}")，否則呼叫 renderQuote()
+            // TODO ①：把整個處理流程都丟到 ui.async { … } 裡（Bug：ping
+            // 也要排在行情後面）。在 ui.async 裡：
+            //   用 E03Wire.text(of: frame) 解壓、e03Parse 解析；有 "ping"
+            // 的數字 N 就呼叫 send("{\"pong\":N}")，否則呼叫 renderQuote()
         }
     }
 
@@ -80,10 +105,14 @@ private enum L03Bug {
 
 // MARK: - 修正版
 private enum L03Fixed {
-    static func makeHandler(ui: DispatchQueue, send: @escaping (String) -> Void) -> (Data) -> Void {
+    static func makeHandler(
+        ui: DispatchQueue, send: @escaping (String) -> Void
+    ) -> (Data) -> Void {
         { frame in
-            guard let text = E03Wire.text(of: frame), let json = e03Parse(text) else { return }
-            // TODO ②-1：是 ping（有 "ping" 的數字 N），就立刻在這裡（socket 的背景佇列）send("{\"pong\":N}")，N 原樣回傳，然後 return
+            guard let text = E03Wire.text(of: frame), let json = e03Parse(text)
+            else { return }
+            // TODO ②-1：是 ping（有 "ping" 的數字 N），就立刻在這裡（socket
+            // 的背景佇列）send("{\"pong\":N}")，N 原樣回傳，然後 return
             // TODO ②-2：不是 ping 的行情，才丟到 ui.async { renderQuote() }
         }
     }
@@ -95,8 +124,14 @@ private enum L03Fixed {
 
 // MARK: - 演練設定
 private func elapsedMs(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasPrefix("收到 ") && $0.contains("在 ping 送出後") }) else { return nil }
-    return line.components(separatedBy: "送出後 ").last.flatMap { Int($0.replacingOccurrences(of: " ms", with: "")) }
+    guard
+        let line = lines.first(where: {
+            $0.hasPrefix("收到 ") && $0.contains("在 ping 送出後")
+        })
+    else { return nil }
+    return line.components(separatedBy: "送出後 ").last.flatMap {
+        Int($0.replacingOccurrences(of: " ms", with: ""))
+    }
 }
 
 extension Exchange03WebSocket {
@@ -104,7 +139,8 @@ extension Exchange03WebSocket {
         id: "L03",
         title: "行情一多，伺服器就把連線切斷",
         question: "第 3 題：心跳 ping／pong 是什麼？為什麼要最先處理？",
-        goal: "心跳要在背景最先處理，不能排在行情處理的後面。ping 來了就立刻原樣回 pong。先寫出心跳被排在後面的 Bug 版，再寫修正版。",
+        goal:
+            "心跳要在背景最先處理，不能排在行情處理的後面。ping 來了就立刻原樣回 pong。先寫出心跳被排在後面的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Exchange/Exchange03-WebSocket/L03_HeartbeatQueue.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，（約 1.3 秒），看 pong 在 ping 送出後幾毫秒才到、伺服器有沒有切斷連線。",
@@ -112,7 +148,8 @@ extension Exchange03WebSocket {
             "寫 TODO ②（修正版），選「修正版」執行，pong 應該在幾毫秒內就回去，而且數字和 ping 一模一樣。",
             "進階：真實的做法是解壓與解碼都在 socket 的背景佇列做，心跳是不依賴任何狀態的純函式；行情處理再交給別的佇列。",
         ],
-        expectBug: "「收到 {\"pong\":777}，在 ping 送出後 870 到 920 ms」（一定超過 800 ms），「伺服器：沒有在 0.5 秒內收到正確的 pong，切斷連線」。",
+        expectBug:
+            "「收到 {\"pong\":777}，在 ping 送出後 870 到 920 ms」（一定超過 800 ms），「伺服器：沒有在 0.5 秒內收到正確的 pong，切斷連線」。",
         expectFixed: "pong 在幾毫秒內就回去（遠小於 500 ms），「伺服器：pong 準時，連線維持」。",
         run: { variant, log in
             switch variant {
@@ -121,14 +158,25 @@ extension Exchange03WebSocket {
             }
         },
         checkBug: { lines in
-            guard lines.contains(where: { $0.hasPrefix("伺服器：送出 20 則行情") }) else { return "演練沒有跑完：要用 scenario(log, makeHandler:) 執行" }
-            guard let ms = elapsedMs(lines) else { return "Bug 版也要回 pong：解壓、解析之後，收到 ping 就回 {\"pong\":N}" }
-            return ms > 500 ? nil : "Bug 還沒重現：ping 要和行情一樣丟到畫面佇列（ui.async）處理，才會排在 20 則行情後面（目前 \(ms) ms 就回了）"
+            guard lines.contains(where: { $0.hasPrefix("伺服器：送出 20 則行情") })
+            else { return "演練沒有跑完：要用 scenario(log, makeHandler:) 執行" }
+            guard let ms = elapsedMs(lines) else {
+                return "Bug 版也要回 pong：解壓、解析之後，收到 ping 就回 {\"pong\":N}"
+            }
+            return ms > 500
+                ? nil
+                : "Bug 還沒重現：ping 要和行情一樣丟到畫面佇列（ui.async）處理，才會排在 20 則行情後面（目前 \(ms) ms 就回了）"
         },
         checkFixed: { lines in
-            guard lines.contains(where: { $0.hasPrefix("伺服器：送出 20 則行情") }) else { return "演練沒有跑完：要用 scenario(log, makeHandler:) 執行" }
-            guard let ms = elapsedMs(lines) else { return "沒有回 pong：解壓、解析之後，收到 ping 要馬上回 {\"pong\":N}" }
-            if !lines.contains("伺服器：pong 準時，連線維持") { return "pong 太晚才回（\(ms) ms）：ping 不要丟到畫面佇列，在 socket 的背景佇列直接回；數字要和 ping 一模一樣" }
+            guard lines.contains(where: { $0.hasPrefix("伺服器：送出 20 則行情") })
+            else { return "演練沒有跑完：要用 scenario(log, makeHandler:) 執行" }
+            guard let ms = elapsedMs(lines) else {
+                return "沒有回 pong：解壓、解析之後，收到 ping 要馬上回 {\"pong\":N}"
+            }
+            if !lines.contains("伺服器：pong 準時，連線維持") {
+                return
+                    "pong 太晚才回（\(ms) ms）：ping 不要丟到畫面佇列，在 socket 的背景佇列直接回；數字要和 ping 一模一樣"
+            }
             return nil
         }
     )

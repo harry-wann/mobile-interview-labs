@@ -1,14 +1,25 @@
-// L05：付款連結的備註 a+b 變成「a b」，不完整的百分比編碼也解出亂碼（BIP21 的百分比解碼）
-// 對應複習站：Exchange12Wallet 第 4 題「掃描 QR 得到的付款連結（BIP21）要怎麼解析？」
+// L05：付款連結的備註 a+b 變成「a b」，不完整的百分比編碼也解出亂碼（BIP21
+// 的百分比解碼）
+// 對應複習站：Exchange12Wallet 第 4 題「掃描 QR 得到的付款連結（BIP21）
+// 要怎麼解析？」
 //
-// 情境：BIP21 的參數值用百分比編碼（RFC 3986）：`%XX` 是一個位元組，中文等字元是 UTF-8 的位元組。**`+` 在這裡是字面的加號，不是空白**
-//        （網頁表單的規則才是 + 當空白，Java 的 URLDecoder 就是用表單的規則）。解碼後必須是合法的 UTF-8，不完整的 `%` 序列要視為無效。
-//        連結的切分（scheme、地址、query）已經寫好在 Exchange12Support.kt，這題只寫「單一個參數值怎麼解碼」。
-//        演練檢查 7 個值：Luke-Jr、Donation%20for%20project%20xyz、a+b、%E5%92%96%E5%95%A1（咖啡）、
-//        %E5%92（UTF-8 只有一半）、100%（% 後面沒有兩個十六進位字元）、%zz（不是十六進位）。
-// Bug 版：用 Java 的 URLDecoder.decode(raw, "UTF-8")（表單的規則）：a+b 變成「a b」，備註被悄悄改掉；
-//        只有半個字元的 %E5%92 不會丟例外，而是被解成替代字元 U+FFFD（畫面上是一個菱形問號）；只有不完整的 % 序列才會丟例外（這裡當成無效）。
-// 修正版：自己逐個位元組掃描：遇到 % 就讀兩個十六進位字元還原成位元組，+ 原樣保留；最後用嚴格的 UTF-8 解碼器檢查，不合法就回傳 null。
+// 情境：BIP21 的參數值用百分比編碼（RFC 3986）：`%XX` 是一個位元組，
+// 中文等字元是 UTF-8 的位元組。**`+` 在這裡是字面的加號，不是空白**
+//        （網頁表單的規則才是 + 當空白，Java 的 URLDecoder 就是用表單的規則）。
+// 解碼後必須是合法的 UTF-8，不完整的 `%` 序列要視為無效。
+//        連結的切分（scheme、地址、query）已經寫好在 Exchange12Support.kt，
+// 這題只寫「單一個參數值怎麼解碼」。
+//        演練檢查 7 個值：Luke-Jr、Donation%20for%20project%20xyz、a+b、
+// %E5%92%96%E5%95%A1（咖啡）、
+//        %E5%92（UTF-8 只有一半）、100%（% 後面沒有兩個十六進位字元）、
+// %zz（不是十六進位）。
+// Bug 版：用 Java 的 URLDecoder.decode(raw, "UTF-8")（表單的規則）：a+b
+// 變成「a b」，備註被悄悄改掉；
+//        只有半個字元的 %E5%92 不會丟例外，而是被解成替代字元
+// U+FFFD（畫面上是一個菱形問號）；只有不完整的 %
+// 序列才會丟例外（這裡當成無效）。
+// 修正版：自己逐個位元組掃描：遇到 % 就讀兩個十六進位字元還原成位元組，+
+// 原樣保留；最後用嚴格的 UTF-8 解碼器檢查，不合法就回傳 null。
 package tw.harry.labs.solution.exchange12wallet
 
 import java.net.URLDecoder
@@ -50,7 +61,8 @@ private fun scenario(log: LabLog, decode: (String) -> String?) {
 // MARK: - Bug 版
 private object L05Bug {
     fun decode(raw: String): String? {
-        return runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()      // 表單的規則：+ 變成空白；半個字元變成亂碼
+        // 表單的規則：+ 變成空白；半個字元變成亂碼
+        return runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()
     }
 
     suspend fun run(log: LabLog) = scenario(log) { decode(it) }
@@ -64,19 +76,23 @@ private object L05Fixed {
         var i = 0
         while (i < input.size) {
             val b = input[i].toInt() and 0xFF
-            if (b == 0x25) {                                                    // %：後面要有兩個十六進位字元
+            // %：後面要有兩個十六進位字元
+            if (b == 0x25) {
                 if (i + 2 >= input.size) return null
-                val high = hexValue(input[i + 1].toInt() and 0xFF) ?: return null
+                val high =
+                    hexValue(input[i + 1].toInt() and 0xFF) ?: return null
                 val low = hexValue(input[i + 2].toInt() and 0xFF) ?: return null
                 bytes.write(high * 16 + low)
                 i += 3
             } else {
-                bytes.write(b)                                                  // 其他位元組（包含 +）原樣保留
+                // 其他位元組（包含 +）原樣保留
+                bytes.write(b)
                 i += 1
             }
         }
         val decoder = Charsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)                         // 不合法的 UTF-8（例如只有半個字元）要報錯，不要變成亂碼
+            // 不合法的 UTF-8（例如只有半個字元）要報錯，不要變成亂碼
+            .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
         return try {
             decoder.decode(ByteBuffer.wrap(bytes.toByteArray())).toString()
@@ -96,8 +112,9 @@ private object L05Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 7 個值") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 7 個值")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l05 = Lab(
     id = "L05",

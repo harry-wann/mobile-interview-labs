@@ -1,12 +1,19 @@
-// L03：想每 1 分鐘檢查一次價格，WorkManager 實際只會 15 分鐘一次（週期性工作的下限）
-// 對應複習站：Platform03BackgroundPush 第 3 題「Android 有哪些背景執行的機制？Doze 和 App Standby 是什麼？」
+// L03：想每 1 分鐘檢查一次價格，WorkManager 實際只會 15
+// 分鐘一次（週期性工作的下限）
+// 對應複習站：Platform03BackgroundPush 第 3 題「Android
+// 有哪些背景執行的機制？Doze 和 App Standby 是什麼？」
 //
-// 情境：價格提醒想用 WorkManager 的週期性工作「每 1 分鐘檢查一次價格」。WorkManager 不會報錯，
-//        但週期性工作的最短間隔是 15 分鐘，設得比較短會被默默提高成 15 分鐘（而且還是不準時，Doze 時更會被延後）。
-//        演練不真的執行工作，只檢查你組出來的 WorkRequest：用 request.workSpec 看實際排的間隔、是不是加急（expedited）。
+// 情境：價格提醒想用 WorkManager 的週期性工作「每 1 分鐘檢查一次價格」。
+// WorkManager 不會報錯，
+//        但週期性工作的最短間隔是 15 分鐘，設得比較短會被默默提高成 15
+// 分鐘（而且還是不準時，Doze 時更會被延後）。
+//        演練不真的執行工作，只檢查你組出來的 WorkRequest：用 request.workSpec
+// 看實際排的間隔、是不是加急（expedited）。
 //        （Doze、App Standby 要用 adb 觀察，見複習站的說明。）
-// Bug 版：用 PeriodicWorkRequestBuilder 要求每 1 分鐘執行一次來檢查價格；收到推播時只是排一個一般的一次性工作。
-// 修正版：週期性工作只用來做「可以延遲的同步」，間隔給 15 分鐘；價格提醒改由伺服器推播，收到推播時排一個加急（expedited）的一次性工作，
+// Bug 版：用 PeriodicWorkRequestBuilder 要求每 1 分鐘執行一次來檢查價格；
+// 收到推播時只是排一個一般的一次性工作。
+// 修正版：週期性工作只用來做「可以延遲的同步」，間隔給 15 分鐘；
+// 價格提醒改由伺服器推播，收到推播時排一個加急（expedited）的一次性工作，
 //        帶著 alertId 讓工作知道要處理哪個提醒。
 package tw.harry.labs.solution.platform03backgroundpush
 
@@ -27,16 +34,21 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 檢查價格的工作（只用來組 WorkRequest，演練不真的執行，兩個版本共用） */
-private class L03PriceCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+private class L03PriceCheckWorker(context: Context, params: WorkerParameters) :
+    CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = Result.success()
 }
 
 /** 處理一個價格提醒的工作（兩個版本共用） */
-private class L03AlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+private class L03AlertWorker(context: Context, params: WorkerParameters) :
+    CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = Result.success()
 }
 
-/** 演練流程（兩個版本共用）：要求的間隔交給 [periodic] 組成 WorkRequest，再看實際排的間隔；收到推播時用 [onPush] 組工作 */
+/**
+ * 演練流程（兩個版本共用）：要求的間隔交給 [periodic] 組成 WorkRequest，
+ * 再看實際排的間隔；收到推播時用 [onPush] 組工作
+ */
 private fun scenario(
     log: LabLog,
     requestedMinutes: Long,
@@ -56,7 +68,9 @@ private fun scenario(
     } else {
         val expedited = work.workSpec.expedited
         val alertId = work.workSpec.input.getString("alertId")
-        log("收到推播時排的工作：加急（expedited）${if (expedited) "是" else "否"}，帶著 alertId ${if (alertId == "a1b2c3") "是" else "否"}")
+        log(
+            "收到推播時排的工作：加急（expedited）${if (expedited) "是" else "否"}，帶著 alertId ${if (alertId == "a1b2c3") "是" else "否"}",
+        )
     }
 }
 
@@ -66,10 +80,15 @@ private object L03Bug {
         log,
         requestedMinutes = 1,
         periodic = { minutes ->
-            PeriodicWorkRequestBuilder<L03PriceCheckWorker>(minutes, TimeUnit.MINUTES).build()     // 要每 1 分鐘檢查價格
+            // 要每 1 分鐘檢查價格
+            PeriodicWorkRequestBuilder<L03PriceCheckWorker>(
+                minutes,
+                TimeUnit.MINUTES,
+            ).build()
         },
         onPush = { _ ->
-            OneTimeWorkRequestBuilder<L03AlertWorker>().build()                                      // 一般的一次性工作，沒有加急
+            // 一般的一次性工作，沒有加急
+            OneTimeWorkRequestBuilder<L03AlertWorker>().build()
         },
     )
 }
@@ -80,14 +99,28 @@ private object L03Fixed {
         log,
         requestedMinutes = 15,
         periodic = { minutes ->
-            PeriodicWorkRequestBuilder<L03PriceCheckWorker>(minutes, TimeUnit.MINUTES)               // 只做可延遲的同步：15 分鐘就是下限
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            // 只做可延遲的同步：15 分鐘就是下限
+            PeriodicWorkRequestBuilder<L03PriceCheckWorker>(
+                minutes,
+                TimeUnit.MINUTES,
+            )
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(
+                        NetworkType.CONNECTED,
+                    ).build(),
+                )
                 .build()
         },
         onPush = { alertId ->
             OneTimeWorkRequestBuilder<L03AlertWorker>()
-                .setInputData(Data.Builder().putString("alertId", alertId).build())                   // 帶著 alertId
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)                     // 加急；配額用完時退回一般工作
+                // 帶著 alertId
+                .setInputData(
+                    Data.Builder().putString("alertId", alertId).build(),
+                )
+                // 加急；配額用完時退回一般工作
+                .setExpedited(
+                    OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST,
+                )
                 .build()
         },
     )
@@ -95,9 +128,15 @@ private object L03Fixed {
 
 // MARK: - 演練設定
 private fun intervals(lines: List<String>): Pair<Long, Long>? {
-    val line = lines.firstOrNull { it.startsWith("要求每 ") && it.contains("實際排的間隔是 ") } ?: return null
-    val requested = line.removePrefix("要求每 ").substringBefore(" 分鐘").toLongOrNull() ?: return null
-    val actual = line.substringAfter("實際排的間隔是 ").substringBefore(" 分鐘").toLongOrNull() ?: return null
+    val line =
+        lines.firstOrNull { it.startsWith("要求每 ") && it.contains("實際排的間隔是 ") }
+            ?: return null
+    val requested =
+        line.removePrefix("要求每 ").substringBefore(" 分鐘").toLongOrNull()
+            ?: return null
+    val actual =
+        line.substringAfter("實際排的間隔是 ").substringBefore(" 分鐘").toLongOrNull()
+            ?: return null
     return requested to actual
 }
 
@@ -123,22 +162,43 @@ val l03 = Lab(
     checkBug = { lines ->
         val pair = intervals(lines)
         when {
-            lines.any { it.contains("還沒有建立週期性工作") } -> "還沒有建立週期性工作：用 PeriodicWorkRequestBuilder<L03PriceCheckWorker>(minutes, TimeUnit.MINUTES).build()"
+            lines.any {
+                it.contains("還沒有建立週期性工作")
+            } -> "還沒有建立週期性工作：用 PeriodicWorkRequestBuilder<L03PriceCheckWorker>(minutes, TimeUnit.MINUTES).build()"
+
             pair == null -> "演練沒有跑完"
+
             pair.first >= pair.second -> "Bug 還沒重現：要求的間隔要比 15 分鐘短（用傳進來的 minutes，也就是 1 分鐘）"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         val pair = intervals(lines)
         when {
-            lines.any { it.contains("還沒有建立週期性工作") } -> "還沒有建立週期性工作：用 PeriodicWorkRequestBuilder<L03PriceCheckWorker>(minutes, TimeUnit.MINUTES).build()"
-            pair == null -> "演練沒有跑完"
-            pair.first != pair.second -> "要求 ${pair.first} 分鐘，實際是 ${pair.second} 分鐘：週期性工作的間隔不能低於 15 分鐘"
-            lines.any { it.contains("收到推播時排的工作：還沒有建立") } -> "收到推播時要排一個一次性工作：OneTimeWorkRequestBuilder<L03AlertWorker>()"
-            !lines.contains("收到推播時排的工作：加急（expedited）是，帶著 alertId 是") ->
+            lines.any { it.contains("還沒有建立週期性工作") } -> {
+                "還沒有建立週期性工作：用 PeriodicWorkRequestBuilder<L03PriceCheckWorker>(minutes, TimeUnit.MINUTES).build()"
+            }
+
+            pair == null -> {
+                "演練沒有跑完"
+            }
+
+            pair.first != pair.second -> {
+                "要求 ${pair.first} 分鐘，實際是 ${pair.second} 分鐘：週期性工作的間隔不能低於 15 分鐘"
+            }
+
+            lines.any { it.contains("收到推播時排的工作：還沒有建立") } -> {
+                "收到推播時要排一個一次性工作：OneTimeWorkRequestBuilder<L03AlertWorker>()"
+            }
+
+            !lines.contains("收到推播時排的工作：加急（expedited）是，帶著 alertId 是") -> {
                 "收到推播時排的工作要加急並帶著 alertId：.setInputData(Data.Builder().putString(\"alertId\", alertId).build())，再 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

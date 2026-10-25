@@ -1,14 +1,17 @@
 // L03：升級了套件，CI 卻還在用舊版本編出來的東西（快取的 key 沒有隨鎖定檔改變）
 // 對應複習站：Testing06CI 第 2 題「CI 太慢的時候，怎麼讓它變快？」（快取）
 //
-// 情境：CI 把「編好的套件」存進快取，下次有同樣的 key 就直接拿來用，省下重新編譯的時間。
+// 情境：CI 把「編好的套件」存進快取，下次有同樣的 key 就直接拿來用，
+// 省下重新編譯的時間。
 //       cacheKey(os, lockfile) 決定快取的 key。三天的情況：
 //       第 1 天：鎖定檔寫 okhttp@4.11.0，第一次建置，沒有快取，編好後存進去。
 //       第 2 天：有人把套件升級到 4.12.0，鎖定檔改了。
 //       第 3 天：鎖定檔沒有再改。
-// Bug 版：key 是固定的字串 "gradle-linux"。第 2 天套件已經升到 4.12.0，key 沒變，快取命中，CI 拿到的是 4.11.0 編出來的舊東西；
+// Bug 版：key 是固定的字串 "gradle-linux"。第 2 天套件已經升到 4.12.0，key
+// 沒變，快取命中，CI 拿到的是 4.11.0 編出來的舊東西；
 //        PR 在 CI 上測的是舊版本的套件。
-// 修正版：key 加上鎖定檔內容的雜湊（T06Hash.shortHash）：gradle-linux-<雜湊>。鎖定檔一改 key 就變，第 2 天沒命中、重新編譯成 4.12.0；
+// 修正版：key 加上鎖定檔內容的雜湊（T06Hash.shortHash）：gradle-linux-<雜湊>。
+// 鎖定檔一改 key 就變，第 2 天沒命中、重新編譯成 4.12.0；
 //        第 3 天鎖定檔沒變，命中，而且用的是 4.12.0。
 package tw.harry.labs.solution.testing06ci
 
@@ -16,31 +19,43 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 演練流程（兩個版本共用）：三天的建置，印出每天快取有沒有命中、用的是哪個版本 */
-private fun scenario(log: LabLog, cacheKey: (os: String, lockfile: String) -> String) {
+/**
+ * 演練流程（兩個版本共用）：三天的建置，印出每天快取有沒有命中、用的是哪個版本
+ */
+private fun scenario(
+    log: LabLog,
+    cacheKey: (os: String, lockfile: String) -> String,
+) {
     val cache = T06Cache()
     for ((day, wanted) in listOf(1 to "4.11.0", 2 to "4.12.0", 3 to "4.12.0")) {
         val lockfile = T06Lockfile.content(wanted)
         val key = cacheKey("linux", lockfile)
         val cached = cache.restore(key)
-        val artifact = cached ?: "用 ${T06Lockfile.version(lockfile)} 編出來的套件".also { cache.save(key, it) }   // 沒命中：重新編譯
-        log("第 $day 天：快取${if (cached != null) "命中" else "沒命中"}，CI 拿到的是「$artifact」")
+        // 沒命中：重新編譯
+        val artifact =
+            cached
+                ?: "用 ${T06Lockfile.version(lockfile)} 編出來的套件".also {
+                    cache.save(key, it)
+                }
+        log(
+            "第 $day 天：快取${if (cached != null) "命中" else "沒命中"}，CI 拿到的是「$artifact」",
+        )
         if (wanted !in artifact) log("  ⚠ 鎖定檔要的是 $wanted，但 CI 用的是舊的產物")
     }
 }
 
 // MARK: - Bug 版
 private object L03Bug {
-    fun cacheKey(os: String, lockfile: String): String =
-        "gradle-$os"                                               // key 永遠一樣
+    fun cacheKey(os: String, lockfile: String): String = // key 永遠一樣
+        "gradle-$os"
 
     fun run(log: LabLog) = scenario(log, ::cacheKey)
 }
 
 // MARK: - 修正版
 private object L03Fixed {
-    fun cacheKey(os: String, lockfile: String): String =
-        "gradle-$os-${T06Hash.shortHash(lockfile)}"                // 鎖定檔一改，key 就跟著變
+    fun cacheKey(os: String, lockfile: String): String = // 鎖定檔一改，key 就跟著變
+        "gradle-$os-${T06Hash.shortHash(lockfile)}"
 
     fun run(log: LabLog) = scenario(log, ::cacheKey)
 }

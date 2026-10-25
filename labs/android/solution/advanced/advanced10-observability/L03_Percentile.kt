@@ -1,10 +1,16 @@
-// L03：看板上平均延遲 311 ms 很健康，但每 100 個使用者就有 6 個等了 3 秒（平均值掩蓋長尾，要看 p95／p99）
-// 對應複習站：Advanced10Observability 第 2 題「上線之後要監控哪些指標？用什麼工具？」（p95 與業務指標）
+// L03：看板上平均延遲 311 ms 很健康，但每 100 個使用者就有 6 個等了 3
+// 秒（平均值掩蓋長尾，要看 p95／p99）
+// 對應複習站：Advanced10Observability 第 2
+// 題「上線之後要監控哪些指標？用什麼工具？」（p95 與業務指標）
 //
-// 情境：新版本放量時，release gate 看「下單 API 的延遲」。演練有 200 筆下單請求的延遲：188 筆在 100 到 180 毫秒之間，
-//       12 筆（6%）因為伺服器逾時重試，花了 3000 毫秒。gate 的門檻是 1000 毫秒，超過就暫停放量。
-// Bug 版：看板顯示平均延遲。平均 311 ms，低於門檻，gate 通過；但 6% 的使用者下單時要乾等 3 秒。
-// 修正版：看 p95（95th percentile：95% 的請求比這個數字快）。用 nearest-rank 法：排序後取第 ⌈0.95 × 筆數⌉ 筆。
+// 情境：新版本放量時，release gate 看「下單 API 的延遲」。演練有 200
+// 筆下單請求的延遲：188 筆在 100 到 180 毫秒之間，
+//       12 筆（6%）因為伺服器逾時重試，花了 3000 毫秒。gate 的門檻是 1000
+// 毫秒，超過就暫停放量。
+// Bug 版：看板顯示平均延遲。平均 311 ms，低於門檻，gate 通過；但 6%
+// 的使用者下單時要乾等 3 秒。
+// 修正版：看 p95（95th percentile：95% 的請求比這個數字快）。用 nearest-rank
+// 法：排序後取第 ⌈0.95 × 筆數⌉ 筆。
 //        p95 是 3000 ms，超過門檻，gate 不通過，暫停放量。
 package tw.harry.labs.solution.advanced10observability
 
@@ -14,22 +20,27 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 200 筆延遲（毫秒）：188 筆正常、12 筆 3000 */
-private val latencies: List<Int> = (0 until 188).map { 100 + (it % 9) * 10 } + List(12) { 3_000 }
+private val latencies: List<Int> =
+    (0 until 188).map { 100 + (it % 9) * 10 } + List(12) { 3_000 }
 private const val GATE_THRESHOLD_MS = 1_000
 
 /** 演練流程（兩個版本共用）：dashboard 回傳看板顯示的指標名稱與數值（毫秒） */
 private fun scenario(log: LabLog, dashboard: (List<Int>) -> Pair<String, Int>) {
     val slow = latencies.count { it >= 3_000 }
-    log("實際情況：${latencies.size} 筆請求裡有 $slow 筆（${slow * 100 / latencies.size}%）等了 3000 ms")
+    log(
+        "實際情況：${latencies.size} 筆請求裡有 $slow 筆（${slow * 100 / latencies.size}%）等了 3000 ms",
+    )
     val (name, value) = dashboard(latencies)
     log("看板顯示：$name $value ms")
-    log("release gate（門檻 $GATE_THRESHOLD_MS ms）：${if (value < GATE_THRESHOLD_MS) "通過，繼續放量" else "不通過，暫停放量"}")
+    log(
+        "release gate（門檻 $GATE_THRESHOLD_MS ms）：${if (value < GATE_THRESHOLD_MS) "通過，繼續放量" else "不通過，暫停放量"}",
+    )
 }
 
 // MARK: - Bug 版
 private object L03Bug {
     fun dashboard(latencies: List<Int>): Pair<String, Int> =
-        "平均" to latencies.sum() / latencies.size              // 平均值
+        "平均" to latencies.sum() / latencies.size // 平均值
 
     suspend fun run(log: LabLog) = scenario(log, ::dashboard)
 }
@@ -43,7 +54,8 @@ private object L03Fixed {
         return sorted[maxOf(rank, 1) - 1]
     }
 
-    fun dashboard(latencies: List<Int>): Pair<String, Int> = "p95" to percentile(latencies, 95)
+    fun dashboard(latencies: List<Int>): Pair<String, Int> =
+        "p95" to percentile(latencies, 95)
 
     suspend fun run(log: LabLog) = scenario(log, ::dashboard)
 }

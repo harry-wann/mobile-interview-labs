@@ -8,6 +8,10 @@ val unit = LabUnit(
     code = "Platform04SecureStorage",
     title = "安全儲存與資料庫",
     labs = listOf(
-        l01, l04, l05, l06, l08,
+        l01,
+        l04,
+        l05,
+        l06,
+        l08,
     ),
 )

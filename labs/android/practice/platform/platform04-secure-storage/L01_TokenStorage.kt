@@ -1,14 +1,22 @@
-// L01：把 token 明文存進 DataStore（或 SharedPreferences），備份檔一翻就看到（要用 Tink 加密後再存）
-// 對應複習站：Platform04SecureStorage 第 1 題「token 要存在哪裡？為什麼不能放 UserDefaults 或 SharedPreferences？」
+// L01：把 token 明文存進 DataStore（或 SharedPreferences），
+// 備份檔一翻就看到（要用 Tink 加密後再存）
+// 對應複習站：Platform04SecureStorage 第 1 題「token 要存在哪裡？為什麼不能放
+// UserDefaults 或 SharedPreferences？」
 //
-// 情境：登入之後，App 要把 access token 存在手機上，下次開啟就不用重新登入。演練檢查兩件事：
-//        ① App 自己讀得回 token；② 模擬攻擊者拿到手機備份（或 root 之後能讀 App 的資料夾）：直接讀存 token 的檔案，看看找不找得到明文 token。
-//        Android 的 Keystore 只保管金鑰、不存資料，所以要先用 Tink 的 AEAD（AES-256-GCM）把 token 加密，再存進檔案。
-//        （正式的 App 用 AndroidKeysetManager，讓 Keystore 裡的 master key 保護 keyset；JVM 單元測試沒有 Keystore，演練改用記憶體裡的 keyset，加密的做法一樣。）
+// 情境：登入之後，App 要把 access token 存在手機上，下次開啟就不用重新登入。
+// 演練檢查兩件事：
+//        ① App 自己讀得回 token；② 模擬攻擊者拿到手機備份（或 root 之後能讀
+// App 的資料夾）：直接讀存 token 的檔案，看看找不找得到明文 token。
+//        Android 的 Keystore 只保管金鑰、不存資料，所以要先用 Tink 的
+// AEAD（AES-256-GCM）把 token 加密，再存進檔案。
+//        （正式的 App 用 AndroidKeysetManager，讓 Keystore 裡的 master key
+// 保護 keyset；JVM 單元測試沒有 Keystore，演練改用記憶體裡的 keyset，
+// 加密的做法一樣。）
 //
 // 你要寫：
 //   ① Bug 版（L01Bug）：token 直接存進 DataStore（明文）。
-//   ② 修正版（L01Fixed）：先用 aead.encrypt 加密，轉成 Base64 再存；讀回來時 aead.decrypt。
+//   ② 修正版（L01Fixed）：先用 aead.encrypt 加密，轉成 Base64 再存；讀回來時
+// aead.decrypt。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform04-secure-storage/L01_TokenStorage.kt
 package tw.harry.labs.practice.platform04securestorage
@@ -43,25 +51,42 @@ private interface L01TokenStore {
     suspend fun load(): String?
 }
 
-/** 取得 AEAD（兩個版本共用）：正式 App 用 AndroidKeysetManager；這裡用記憶體裡的 keyset */
+/**
+ * 取得 AEAD（兩個版本共用）：正式 App 用 AndroidKeysetManager；
+ * 這裡用記憶體裡的 keyset
+ */
 private fun newAead(): Aead {
     AeadConfig.register()
     val keyset = KeysetHandle.generateNew(KeyTemplates.get("AES256_GCM"))
     return keyset.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
 }
 
-/** 演練流程（兩個版本共用）：存 token → App 自己讀得回來嗎 → 攻擊者直接讀檔案 */
-private suspend fun scenario(log: LabLog, makeStore: (DataStore<Preferences>) -> L01TokenStore) {
-    val dir = File(System.getProperty("java.io.tmpdir"), "labs-l01-${UUID.randomUUID()}").apply { mkdirs() }
+/**
+ * 演練流程（兩個版本共用）：存 token → App 自己讀得回來嗎 → 攻擊者直接讀檔案
+ */
+private suspend fun scenario(
+    log: LabLog,
+    makeStore: (DataStore<Preferences>) -> L01TokenStore,
+) {
+    val dir = File(
+        System.getProperty("java.io.tmpdir"),
+        "labs-l01-${UUID.randomUUID()}",
+    ).apply {
+        mkdirs()
+    }
     val file = File(dir, "tokens.preferences_pb")
     val scope = CoroutineScope(Dispatchers.IO + Job())
     try {
-        val dataStore = PreferenceDataStoreFactory.create(scope = scope) { file }
+        val dataStore = PreferenceDataStoreFactory.create(scope = scope) {
+            file
+        }
         val store = makeStore(dataStore)
         val token = "eyJ.${UUID.randomUUID()}"
         store.save(token)
         log("App 自己讀得回 token：${if (store.load() == token) "是" else "否"}")
-        val leaked = file.exists() && String(file.readBytes(), Charsets.ISO_8859_1).contains(token)
+        val leaked =
+            file.exists() &&
+                String(file.readBytes(), Charsets.ISO_8859_1).contains(token)
         log("攻擊者拿到備份，直接讀存 token 的檔案，看到明文 token：${if (leaked) "是" else "否"}")
     } finally {
         scope.cancel()
@@ -72,7 +97,8 @@ private suspend fun scenario(log: LabLog, makeStore: (DataStore<Preferences>) ->
 // MARK: - Bug 版
 private object L01Bug {
     class Store(private val dataStore: DataStore<Preferences>) : L01TokenStore {
-        // TODO ①-1：save 用 dataStore.edit { it[tokenKey] = token } 把 token 直接存進去（不加密）
+        // TODO ①-1：save 用 dataStore.edit { it[tokenKey] = token } 把 token
+        // 直接存進去（不加密）
         override suspend fun save(token: String) {}
 
         // TODO ①-2：load 用 dataStore.data.first()[tokenKey] 讀回來
@@ -84,13 +110,21 @@ private object L01Bug {
 
 // MARK: - 修正版
 private object L01Fixed {
-    class Store(private val dataStore: DataStore<Preferences>, private val aead: Aead) : L01TokenStore {
-        private val associatedData = "access_token".toByteArray()    // 綁定用途：換成別的用途就解不開
+    class Store(
+        private val dataStore: DataStore<Preferences>,
+        private val aead: Aead,
+    ) : L01TokenStore {
+        // 綁定用途：換成別的用途就解不開
+        private val associatedData = "access_token".toByteArray()
 
-        // TODO ②-1：save 先用 aead.encrypt(token.toByteArray(), associatedData) 加密，再用 Base64.getEncoder().encodeToString 轉成字串，存進 dataStore（tokenKey）
+        // TODO ②-1：save 先用 aead.encrypt(token.toByteArray(),
+        // associatedData) 加密，再用 Base64.getEncoder().encodeToString
+        // 轉成字串，存進 dataStore（tokenKey）
         override suspend fun save(token: String) {}
 
-        // TODO ②-2：load 從 dataStore 取出字串（沒有就回傳 null），用 Base64.getDecoder().decode 轉回 bytes，再用 aead.decrypt(…, associatedData) 解開，轉成 String
+        // TODO ②-2：load 從 dataStore 取出字串（沒有就回傳 null），用 Base64.
+        // getDecoder().decode 轉回 bytes，再用 aead.decrypt(…, associatedData)
+        // 解開，轉成 String
         override suspend fun load(): String? = null
     }
 
@@ -123,15 +157,27 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            !lines.contains("App 自己讀得回 token：是") -> "App 自己要讀得回 token：save 要把 token 存進 DataStore（tokenKey），load 要讀出來"
-            !lines.contains("攻擊者拿到備份，直接讀存 token 的檔案，看到明文 token：是") -> "Bug 還沒重現：Bug 版要把 token 直接存進 DataStore，不加密"
+            !lines.contains(
+                "App 自己讀得回 token：是",
+            ) -> "App 自己要讀得回 token：save 要把 token 存進 DataStore（tokenKey），load 要讀出來"
+
+            !lines.contains(
+                "攻擊者拿到備份，直接讀存 token 的檔案，看到明文 token：是",
+            ) -> "Bug 還沒重現：Bug 版要把 token 直接存進 DataStore，不加密"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            !lines.contains("App 自己讀得回 token：是") -> "App 自己要讀得回 token：save 用 aead.encrypt 加密（再轉 Base64）存，load 用 aead.decrypt 解開"
-            !lines.contains("攻擊者拿到備份，直接讀存 token 的檔案，看到明文 token：否") -> "檔案裡還找得到明文 token：先用 aead.encrypt 加密，只存密文"
+            !lines.contains(
+                "App 自己讀得回 token：是",
+            ) -> "App 自己要讀得回 token：save 用 aead.encrypt 加密（再轉 Base64）存，load 用 aead.decrypt 解開"
+
+            !lines.contains(
+                "攻擊者拿到備份，直接讀存 token 的檔案，看到明文 token：否",
+            ) -> "檔案裡還找得到明文 token：先用 aead.encrypt 加密，只存密文"
+
             else -> null
         }
     },

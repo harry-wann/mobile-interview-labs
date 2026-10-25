@@ -1,15 +1,23 @@
 // L04：把停止旗標設成 false 了，背景迴圈卻停不下來（可見性：@Volatile）
-// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）在規範什麼？什麼是可見性？」
+// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）
+// 在規範什麼？什麼是可見性？」
 //
-// 情境：Poller 在背景執行緒用 while (running) 持續輪詢行情，另一條執行緒呼叫 stop() 把 running 設成 false 要它停下來。
+// 情境：Poller 在背景執行緒用 while (running) 持續輪詢行情，另一條執行緒呼叫
+// stop() 把 running 設成 false 要它停下來。
 //        演練先讓迴圈跑 100 ms，呼叫 stop()，再等 300 ms，看迴圈結束了沒有。
-//        為了不讓 Bug 版一直空轉，迴圈最多跑 10 億圈（約 1 到 3 秒）就自己結束。
-// Bug 版：var running 沒有加 @Volatile。JIT（執行時才編譯程式碼的編譯器）發現迴圈裡沒有人改 running，
-//        可能把它的讀取移到迴圈外，只讀一次；另一條執行緒寫入的 false 這條執行緒永遠看不到，迴圈停不下來。
-// 修正版：@Volatile var running。每次讀都讀最新的值，寫入立刻讓其他執行緒看得到，stop() 之後迴圈很快結束。
+//        為了不讓 Bug 版一直空轉，迴圈最多跑 10 億圈（約 1 到 3 秒）
+// 就自己結束。
+// Bug 版：var running 沒有加 @Volatile。JIT（執行時才編譯程式碼的編譯器）
+// 發現迴圈裡沒有人改 running，
+//        可能把它的讀取移到迴圈外，只讀一次；另一條執行緒寫入的 false
+// 這條執行緒永遠看不到，迴圈停不下來。
+// 修正版：@Volatile var running。每次讀都讀最新的值，
+// 寫入立刻讓其他執行緒看得到，stop() 之後迴圈很快結束。
 //
-// 注意：這個 bug 取決於 JIT 有沒有最佳化這個迴圈。HotSpot JVM（電腦上）幾乎每次都會停不下來，
-//        Android 的 ART 不一定，所以 Bug 版沒有自動檢查，要看 log 判斷（跑幾次，或讓迴圈先熱身一下）。
+// 注意：這個 bug 取決於 JIT 有沒有最佳化這個迴圈。HotSpot JVM（電腦上）
+// 幾乎每次都會停不下來，
+//        Android 的 ART 不一定，所以 Bug 版沒有自動檢查，要看 log
+// 判斷（跑幾次，或讓迴圈先熱身一下）。
 package tw.harry.labs.solution.kotlin10javainterop
 
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,14 +50,15 @@ private suspend fun scenario(log: LabLog, loop: () -> Unit, stop: () -> Unit) {
 // MARK: - Bug 版
 private object L04Bug {
     class Poller {
-        var running = true                                  // 沒有 @Volatile
+        var running = true // 沒有 @Volatile
         var spins = 0L
 
         fun loop() {
             var hash = 1L
             var i = 0L
-            while (running && i < MAX_SPINS) {              // JIT 可能把 running 的讀取移到迴圈外
-                hash = hash * 31 + i                        // 模擬輪詢的工作
+            // JIT 可能把 running 的讀取移到迴圈外
+            while (running && i < MAX_SPINS) {
+                hash = hash * 31 + i // 模擬輪詢的工作
                 i++
             }
             spins = i + hash
@@ -69,8 +78,9 @@ private object L04Bug {
 // MARK: - 修正版
 private object L04Fixed {
     class Poller {
+        // 每次讀都讀最新的值
         @Volatile
-        var running = true                                  // 每次讀都讀最新的值
+        var running = true
         var spins = 0L
 
         fun loop() {

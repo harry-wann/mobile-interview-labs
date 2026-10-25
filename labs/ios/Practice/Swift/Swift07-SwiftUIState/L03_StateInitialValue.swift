@@ -1,11 +1,15 @@
 // L03：換了一筆委託單，輸入框卻還顯示上一筆的價格（用參數初始化 @State）
-// 對應複習站：Swift07SwiftUIState 第 3 題「為什麼用參數去初始化 @State，上層改了值，子層卻沒有跟著變？」
+// 對應複習站：Swift07SwiftUIState 第 3 題「為什麼用參數去初始化 @State，
+// 上層改了值，子層卻沒有跟著變？」
 //
-// 情境：委託單列表旁邊有一個改價畫面，輸入框的初始值是上層傳進來的價格。使用者點另一筆委託單，上層傳了新的價格，輸入框卻沒變。
+// 情境：委託單列表旁邊有一個改價畫面，輸入框的初始值是上層傳進來的價格。
+// 使用者點另一筆委託單，上層傳了新的價格，輸入框卻沒變。
 //
 // 你要寫：
-//   ① Bug 版：改價畫面的輸入框，要用上層傳進來的價格當初始值（用 @State 保管輸入框的值）。
-//   ② 修正版：改選另一筆委託單時，要讓 SwiftUI 把舊的改價畫面丟掉、重新建立一個。想想要在 PriceEditor 後面加什麼。
+//   ① Bug 版：改價畫面的輸入框，要用上層傳進來的價格當初始值（用 @State
+// 保管輸入框的值）。
+//   ② 修正版：改選另一筆委託單時，要讓 SwiftUI 把舊的改價畫面丟掉、
+// 重新建立一個。想想要在 PriceEditor 後面加什麼。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Swift/Swift07-SwiftUIState/L03_StateInitialValue.swift
 import SwiftUI
@@ -16,8 +20,12 @@ private struct Order {
     let id: String
     let price: Int
 
-    static let all = [Order(id: "A", price: 15_000_000), Order(id: "B", price: 16_000_000)]
-    static func with(id: String) -> Order { all.first { $0.id == id } ?? all[0] }
+    static let all = [
+        Order(id: "A", price: 15_000_000), Order(id: "B", price: 16_000_000),
+    ]
+    static func with(id: String) -> Order {
+        all.first { $0.id == id } ?? all[0]
+    }
 }
 
 /// 目前選中的委託單（兩個版本共用）
@@ -27,7 +35,9 @@ private final class OrderSelection: ObservableObject {
 
 /// 演練流程（兩個版本共用）：先選第一筆，再改選第二筆
 @MainActor
-private func scenario(_ log: LabLog, screen: (OrderSelection) -> some View) async {
+private func scenario(
+    _ log: LabLog, screen: (OrderSelection) -> some View
+) async {
     SwiftUILabProbe.reset()
     let selection = OrderSelection()
     let stage = SwiftUILabStage(screen(selection))
@@ -63,13 +73,17 @@ private struct L03Demo: View {
 private enum L03Bug {
     struct PriceEditor: View {
         let orderID: String
-        let price: Int                        // 上層傳進來的價格，每次都是最新的
-        @State private var local: Int         // 輸入框正在編輯的值
+        // 上層傳進來的價格，每次都是最新的
+        let price: Int
+        // 輸入框正在編輯的值
+        @State private var local: Int
 
         init(orderID: String, price: Int) {
             self.orderID = orderID
             self.price = price
-            // TODO ①：用傳進來的 price 當 local 的初始值（用 State(initialValue:) 建立 _local）。現在寫的是 0，輸入框一開始就不對
+            // TODO ①：用傳進來的 price 當 local 的初始值（用
+            // State(initialValue:) 建立 _local）。現在寫的是 0，
+            // 輸入框一開始就不對
             _local = State(initialValue: 0)
         }
 
@@ -90,7 +104,8 @@ private enum L03Bug {
 
         var body: some View {
             let order = Order.with(id: selection.id)
-            PriceEditor(orderID: order.id, price: order.price)      // 沒有 .id：換了一筆，還是同一個 view
+            // 沒有 .id：換了一筆，還是同一個 view
+            PriceEditor(orderID: order.id, price: order.price)
         }
     }
 }
@@ -126,7 +141,8 @@ private enum L03Fixed {
         var body: some View {
             let order = Order.with(id: selection.id)
             PriceEditor(orderID: order.id, price: order.price)
-            // TODO ②：在上一行後面加一個 modifier，用委託單的 id 告訴 SwiftUI「id 不同就是不同的 view」
+            // TODO ②：在上一行後面加一個 modifier，用委託單的 id 告訴
+            // SwiftUI「id 不同就是不同的 view」
         }
     }
 }
@@ -155,14 +171,25 @@ extension Swift07SwiftUIState {
         },
         demo: { variant, _ in AnyView(L03Demo(variant: variant)) },
         checkBug: { lines in
-            if !lines.contains("選第一筆（A）：輸入框顯示 15000000") { return "輸入框一開始要顯示上層傳進來的價格 15000000：用 State(initialValue:) 把價格複製成 @State" }
-            if !lines.contains("改選第二筆（B）：上層傳進來的價格是 16000000") { return "改選之後，上層傳進來的價格應該是 16000000" }
-            if !lines.contains("改選第二筆（B）：輸入框顯示 15000000") { return "Bug 還沒重現：改選 B 之後，輸入框應該還停在 A 的價格 15000000" }
+            if !lines.contains("選第一筆（A）：輸入框顯示 15000000") {
+                return
+                    "輸入框一開始要顯示上層傳進來的價格 15000000：用 State(initialValue:) 把價格複製成 @State"
+            }
+            if !lines.contains("改選第二筆（B）：上層傳進來的價格是 16000000") {
+                return "改選之後，上層傳進來的價格應該是 16000000"
+            }
+            if !lines.contains("改選第二筆（B）：輸入框顯示 15000000") {
+                return "Bug 還沒重現：改選 B 之後，輸入框應該還停在 A 的價格 15000000"
+            }
             return nil
         },
         checkFixed: { lines in
-            if !lines.contains("選第一筆（A）：輸入框顯示 15000000") { return "輸入框一開始要顯示上層傳進來的價格 15000000" }
-            if !lines.contains("改選第二筆（B）：輸入框顯示 16000000") { return "改選 B 之後，輸入框應該換成 16000000：想想怎麼讓 SwiftUI 把舊的改價畫面丟掉重建" }
+            if !lines.contains("選第一筆（A）：輸入框顯示 15000000") {
+                return "輸入框一開始要顯示上層傳進來的價格 15000000"
+            }
+            if !lines.contains("改選第二筆（B）：輸入框顯示 16000000") {
+                return "改選 B 之後，輸入框應該換成 16000000：想想怎麼讓 SwiftUI 把舊的改價畫面丟掉重建"
+            }
             return nil
         }
     )

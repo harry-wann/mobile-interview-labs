@@ -1,13 +1,20 @@
-// L04：最近 500 毫秒的最高價，每筆成交都往回掃 249 筆（暴力法，處理次數是 n 乘以視窗大小）
-// 對應複習站：Coding02TimeStreams 第 4 題「「最近 N 毫秒內的最高價」怎麼做到每筆資料只處理一次？」
+// L04：最近 500 毫秒的最高價，每筆成交都往回掃 249 筆（暴力法，處理次數是 n
+// 乘以視窗大小）
+// 對應複習站：Coding02TimeStreams 第 4 題「「最近 N 毫秒內的最高價」
+// 怎麼做到每筆資料只處理一次？」
 //
-// 情境：成交依時間排序，每 2 毫秒一筆，共 3000 筆。對每一筆成交，算出時間在 (t − 500, t] 之內的最高價。
-//       演練用計數器數「處理了幾次」，同時和標準答案比對（兩種做法算出來的結果是一樣的，差的是成本）。
+// 情境：成交依時間排序，每 2 毫秒一筆，共 3000 筆。對每一筆成交，算出時間在 (t
+// − 500, t] 之內的最高價。
+//       演練用計數器數「處理了幾次」，
+// 同時和標準答案比對（兩種做法算出來的結果是一樣的，差的是成本）。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.windowMax）：每一筆成交都往回看，直到時間不在 (t − window, t] 之內；每看一筆 counter.steps++，找出最大的價格。
-//   ② 修正版（L04Fixed.windowMax）：單調佇列。queue（ArrayDeque）存索引、價格由大到小。
-//      新成交進來：尾端價格 <= 新價格的丟掉（removeLast）、新的放進去（addLast）、前端時間 <= t − window 的丟掉（removeFirst）；
+//   ① Bug 版（L04Bug.windowMax）：每一筆成交都往回看，直到時間不在 (t −
+// window, t] 之內；每看一筆 counter.steps++，找出最大的價格。
+//   ② 修正版（L04Fixed.windowMax）：單調佇列。queue（ArrayDeque）存索引、
+// 價格由大到小。
+//      新成交進來：尾端價格 <= 新價格的丟掉（removeLast）、
+// 新的放進去（addLast）、前端時間 <= t − window 的丟掉（removeFirst）；
 //      每丟掉或放進去一次，counter.steps++；前端那筆的價格就是答案。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/coding/coding02-time-streams/L04_WindowMax.kt
@@ -29,18 +36,25 @@ private fun makeTrades(): List<C02Tick> {
 }
 
 /** 標準答案（不計次數的暴力法） */
-private fun reference(trades: List<C02Tick>, window: Int): List<Int> = trades.indices.map { i ->
-    var best = trades[i].price
-    var back = i - 1
-    while (back >= 0 && trades[back].time > trades[i].time - window) {
-        best = maxOf(best, trades[back].price)
-        back--
+private fun reference(trades: List<C02Tick>, window: Int): List<Int> =
+    trades.indices.map { i ->
+        var best = trades[i].price
+        var back = i - 1
+        while (back >= 0 && trades[back].time > trades[i].time - window) {
+            best = maxOf(best, trades[back].price)
+            back--
+        }
+        best
     }
-    best
-}
 
-/** 演練流程（兩個版本共用）：算每一筆成交的視窗最高價，數處理次數，並和標準答案比對 */
-private fun scenario(log: LabLog, windowMax: (List<C02Tick>, Int, C02Counter) -> List<Int>) {
+/**
+ * 演練流程（兩個版本共用）：算每一筆成交的視窗最高價，數處理次數，
+ * 並和標準答案比對
+ */
+private fun scenario(
+    log: LabLog,
+    windowMax: (List<C02Tick>, Int, C02Counter) -> List<Int>,
+) {
     val trades = makeTrades()
     val counter = C02Counter()
     val result = windowMax(trades, WINDOW_MS, counter)
@@ -49,16 +63,23 @@ private fun scenario(log: LabLog, windowMax: (List<C02Tick>, Int, C02Counter) ->
 }
 
 /** 從「…處理了 N 次」取出 N（自動檢查用） */
-private fun steps(lines: List<String>): Int? =
-    lines.firstOrNull { it.contains("處理了 ") && it.endsWith(" 次") }?.substringAfter("處理了 ")?.removeSuffix(" 次")?.toIntOrNull()
+private fun steps(lines: List<String>): Int? = lines.firstOrNull {
+    it.contains("處理了 ") && it.endsWith(" 次")
+}?.substringAfter("處理了 ")?.removeSuffix(" 次")?.toIntOrNull()
 
 // MARK: - Bug 版
 private object L04Bug {
-    fun windowMax(trades: List<C02Tick>, window: Int, counter: C02Counter): List<Int> {
+    fun windowMax(
+        trades: List<C02Tick>,
+        window: Int,
+        counter: C02Counter,
+    ): List<Int> {
         val result = ArrayList<Int>()
         for ((index, trade) in trades.withIndex()) {
-            // TODO ①-1：best 從這一筆的價格開始；從 index - 1 往回看（back），直到 back < 0 或 trades[back].time <= trade.time - window
-            // TODO ①-2：每看一筆：counter.steps++，best = maxOf(best, trades[back].price)，back--
+            // TODO ①-1：best 從這一筆的價格開始；從 index - 1 往回看（back），
+            // 直到 back < 0 或 trades[back].time <= trade.time - window
+            // TODO ①-2：每看一筆：counter.steps++，best = maxOf(best,
+            // trades[back].price)，back--
             // TODO ①-3：result.add(best)
         }
         return result
@@ -69,14 +90,23 @@ private object L04Bug {
 
 // MARK: - 修正版
 private object L04Fixed {
-    fun windowMax(trades: List<C02Tick>, window: Int, counter: C02Counter): List<Int> {
+    fun windowMax(
+        trades: List<C02Tick>,
+        window: Int,
+        counter: C02Counter,
+    ): List<Int> {
         val result = ArrayList<Int>()
-        val queue = ArrayDeque<Int>()                                        // 存成交的索引，價格由大到小
+        // 存成交的索引，價格由大到小
+        val queue = ArrayDeque<Int>()
         for ((index, trade) in trades.withIndex()) {
-            // TODO ②-1：尾端的價格 <= 這一筆的價格（而且 queue 不是空的）：queue.removeLast()，counter.steps++，重複到不成立
+            // TODO ②-1：尾端的價格 <= 這一筆的價格（而且 queue 不是空的）：
+            // queue.removeLast()，counter.steps++，重複到不成立
             // TODO ②-2：queue.addLast(index)，counter.steps++
-            // TODO ②-3：前端那筆已經過期（trades[queue.first()].time <= trade.time - window）：queue.removeFirst()，counter.steps++，重複到不成立
-            // TODO ②-4：result.add(trades[queue.first()].price)，前端就是視窗內的最高價
+            // TODO ②-3：前端那筆已經過期（trades[queue.first()].time <= trade.
+            // time - window）：queue.removeFirst()，counter.steps++，
+            // 重複到不成立
+            // TODO ②-4：result.add(trades[queue.first()].price)，
+            // 前端就是視窗內的最高價
         }
         return result
     }
@@ -117,11 +147,21 @@ val l04 = Lab(
     checkFixed = { lines ->
         val count = steps(lines)
         when {
-            count == null -> "演練沒有跑完：要用 scenario(log, windowMax) 執行"
-            "結果和標準答案一致：是" !in lines ->
+            count == null -> {
+                "演練沒有跑完：要用 scenario(log, windowMax) 執行"
+            }
+
+            "結果和標準答案一致：是" !in lines -> {
                 "windowMax 還沒寫對：佇列前端要是視窗內的最高價（尾端價格不大於新價格的先丟掉，前端過期的也丟掉）"
-            count > 9_000 -> "處理了 $count 次，太多了：每筆成交最多進佇列一次、出佇列一次"
-            else -> null
+            }
+
+            count > 9_000 -> {
+                "處理了 $count 次，太多了：每筆成交最多進佇列一次、出佇列一次"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

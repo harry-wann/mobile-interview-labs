@@ -1,10 +1,14 @@
 // L06：取消下單後，委託還掛在交易所（取消後的清理 await 立刻丟錯）
 // 對應複習站：Swift04StructuredConcurrency 第 4 題「Task 的取消是怎麼運作的？」
 //
-// 情境：下單流程送出委託後，等交易所確認（300 毫秒）。使用者在等的時候按取消，流程要把已經送出的委託撤掉（撤單 API 要 50 毫秒）。
-// Bug 版：在 catch CancellationError 裡直接 await 撤單。但 Task 的取消旗子還舉著（catch 不會清掉它），
-//        撤單 API 裡的 Task.sleep 一看到旗子就立刻丟出 CancellationError，撤單根本沒執行，委託還掛在交易所。
-// 修正版：撤單放進一個新的 Task { } 再等它完成。新的 Task 沒有被取消，撤單可以正常做完。
+// 情境：下單流程送出委託後，等交易所確認（300 毫秒）。使用者在等的時候按取消，
+// 流程要把已經送出的委託撤掉（撤單 API 要 50 毫秒）。
+// Bug 版：在 catch CancellationError 裡直接 await 撤單。但 Task
+// 的取消旗子還舉著（catch 不會清掉它），
+//        撤單 API 裡的 Task.sleep 一看到旗子就立刻丟出 CancellationError，
+// 撤單根本沒執行，委託還掛在交易所。
+// 修正版：撤單放進一個新的 Task { } 再等它完成。新的 Task 沒有被取消，
+// 撤單可以正常做完。
 import Foundation
 import LabKit
 
@@ -18,12 +22,13 @@ private final class FakeExchange: @unchecked Sendable {
 
     func place() async throws {
         lock.withLock { open = true }
-        try await Task.sleep(for: .milliseconds(300))        // 等交易所確認
+        try await Task.sleep(for: .milliseconds(300))  // 等交易所確認
     }
 
     func cancelOrder() async throws {
         lock.withLock { attempts += 1 }
-        try await Task.sleep(for: .milliseconds(50))         // 撤單的網路請求；Task 被取消時這裡會立刻丟錯
+        // 撤單的網路請求；Task 被取消時這裡會立刻丟錯
+        try await Task.sleep(for: .milliseconds(50))
         lock.withLock { open = false }
     }
 }
@@ -37,11 +42,12 @@ private enum L06Bug {
                 try await exchange.place()
             } catch is CancellationError {
                 // 取消了：把已經送出的委託撤掉
-                try? await exchange.cancelOrder()            // 旗子還舉著：這裡會立刻丟 CancellationError
+                // 旗子還舉著：這裡會立刻丟 CancellationError
+                try? await exchange.cancelOrder()
             } catch {}
         }
         try? await Task.sleep(for: .milliseconds(100))
-        flow.cancel()                                        // 使用者按下取消
+        flow.cancel()  // 使用者按下取消
         await flow.value
         log("撤單請求被呼叫 \(exchange.cancelAttempts) 次")
         log("取消流程結束後，交易所的委託：\(exchange.hasOpenOrder ? "仍掛在交易所" : "已撤單")")
@@ -89,12 +95,19 @@ extension Swift04StructuredConcurrency {
             }
         },
         checkBug: { lines in
-            guard lines.contains("撤單請求被呼叫 1 次") else { return "取消時要呼叫一次 exchange.cancelOrder()（在 catch is CancellationError 裡）" }
+            guard lines.contains("撤單請求被呼叫 1 次") else {
+                return
+                    "取消時要呼叫一次 exchange.cancelOrder()（在 catch is CancellationError 裡）"
+            }
             return lines.last == "取消流程結束後，交易所的委託：仍掛在交易所"
-                ? nil : "Bug 還沒重現：撤單應該失敗，委託仍掛在交易所（catch 裡直接 await 撤單，不要開新的 Task）"
+                ? nil
+                : "Bug 還沒重現：撤單應該失敗，委託仍掛在交易所（catch 裡直接 await 撤單，不要開新的 Task）"
         },
         checkFixed: { lines in
-            guard lines.contains("撤單請求被呼叫 1 次") else { return "取消時要呼叫一次 exchange.cancelOrder()（在 catch is CancellationError 裡）" }
+            guard lines.contains("撤單請求被呼叫 1 次") else {
+                return
+                    "取消時要呼叫一次 exchange.cancelOrder()（在 catch is CancellationError 裡）"
+            }
             return lines.last == "取消流程結束後，交易所的委託：已撤單"
                 ? nil : "委託應該已撤單：撤單要放進新的 Task { } 再 await 它的 value"
         }

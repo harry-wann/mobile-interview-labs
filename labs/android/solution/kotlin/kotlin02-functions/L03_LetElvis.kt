@@ -1,10 +1,13 @@
 // L03：已經有處理中的訂單，卻又下了一張（x?.let { } ?: y 不等於 if-else）
 // 對應複習站：Kotlin02Functions 第 2 題「let、run、with、apply、also 怎麼選？」
 //
-// 情境：使用者在送出訂單後網路很慢，又按了一次下單。系統先找有沒有處理中的訂單：有就沿用，沒有才送出新的。
+// 情境：使用者在送出訂單後網路很慢，又按了一次下單。
+// 系統先找有沒有處理中的訂單：有就沿用，沒有才送出新的。
 //        處理中的訂單還沒收到交易所的確認，所以 exchangeId 是 null。
-// Bug 版：用 pending?.let { it.exchangeId } ?: placeOrder()。pending 明明不是 null，
-//        但 let 區塊的結果（exchangeId）是 null，?: 也會往右邊走，結果又送出一張新訂單，重複下單。
+// Bug 版：用 pending?.let { it.exchangeId } ?: placeOrder()。pending 明明不是
+// null，
+//        但 let 區塊的結果（exchangeId）是 null，?: 也會往右邊走，
+// 結果又送出一張新訂單，重複下單。
 // 修正版：需要明確的兩條路徑，就用 if (pending != null) … else …。
 package tw.harry.labs.solution.kotlin02functions
 
@@ -23,7 +26,8 @@ private object L03Bug {
             log("送出新訂單")
             return "新訂單"
         }
-        val result = pending?.let { it.exchangeId } ?: placeOrder()    // exchangeId 是 null → 也走到 placeOrder()
+        // exchangeId 是 null → 也走到 placeOrder()
+        val result = pending?.let { it.exchangeId } ?: placeOrder()
         log("$label：結果：$result，共送出 $placed 張新訂單")
         return result
     }
@@ -39,7 +43,8 @@ private object L03Fixed {
             return "新訂單"
         }
         val result = if (pending != null) {
-            pending.exchangeId ?: "處理中（等交易所確認）"                   // 有處理中的訂單：沿用，不再下單
+            // 有處理中的訂單：沿用，不再下單
+            pending.exchangeId ?: "處理中（等交易所確認）"
         } else {
             placeOrder()
         }
@@ -63,12 +68,14 @@ val l03 = Lab(
     expectFixed = "第一次正常送出；「又按一次：結果：處理中（等交易所確認），共送出 0 張新訂單」，沒有重複下單。",
     file = "kotlin02-functions/L03_LetElvis.kt",
     run = { variant, log ->
-        val pending = PendingOrder(clientId = "c-001", exchangeId = null)   // 已送出，但交易所還沒確認
+        // 已送出，但交易所還沒確認
+        val pending = PendingOrder(clientId = "c-001", exchangeId = null)
         when (variant) {
             Variant.BUG -> {
                 L03Bug.submit("第一次按下單", null, log)
                 L03Bug.submit("又按一次", pending, log)
             }
+
             Variant.FIXED -> {
                 L03Fixed.submit("第一次按下單", null, log)
                 L03Fixed.submit("又按一次", pending, log)

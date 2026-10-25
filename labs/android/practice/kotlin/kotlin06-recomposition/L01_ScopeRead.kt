@@ -1,12 +1,17 @@
 // L01：價格每秒跳好幾次，整個畫面都跟著重組（State 在哪裡讀，哪裡就重組）
-// 對應複習站：Kotlin06Recomposition 第 1 題「什麼是重組？State 變了，畫面上哪一塊會重畫？」
+// 對應複習站：Kotlin06Recomposition 第 1 題「什麼是重組？State 變了，
+// 畫面上哪一塊會重畫？」
 //
-// 情境：行情畫面有標題區（ChartHeader）和價格文字。價格每 250 ms 更新一次，共 20 次。畫面上的橘色數字顯示「重組幾次」。
+// 情境：行情畫面有標題區（ChartHeader）和價格文字。價格每 250 ms 更新一次，共
+// 20 次。畫面上的橘色數字顯示「重組幾次」。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug）：在 PriceScreen 的最上層讀 price，並把 Text 寫在 Column { } 裡。Column 是 inline，整個 PriceScreen 每次都重新執行。
-//   ② 修正版（L01Fixed）：把「讀 price」的地方往下推到小的 PriceText。只有 PriceText 重組，PriceScreen 不動。
-// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，看橘色的重組次數（或畫面）是不是照預期。
+//   ① Bug 版（L01Bug）：在 PriceScreen 的最上層讀 price，並把 Text 寫在 Column
+// { } 裡。Column 是 inline，整個 PriceScreen 每次都重新執行。
+//   ② 修正版（L01Fixed）：把「讀 price」的地方往下推到小的 PriceText。只有
+// PriceText 重組，PriceScreen 不動。
+// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，
+// 看橘色的重組次數（或畫面）是不是照預期。
 // 解答：solution/kotlin/kotlin06-recomposition/L01_ScopeRead.kt
 package tw.harry.labs.practice.kotlin06recomposition
 
@@ -42,11 +47,13 @@ private fun ChartHeader(title: String) {
 private object L01Bug {
     @Composable
     fun PriceScreen(prices: StateFlow<Long>) {
-        // TODO ①-1：在這裡讀價格：val price by prices.collectAsState()（PriceScreen 的最上層）
+        // TODO ①-1：在這裡讀價格：val price by prices.collectAsState()
+        // （PriceScreen 的最上層）
         Column {
             RecomposeCounter("PriceScreen")
             ChartHeader("BTC/JPY")
-            // TODO ①-2：顯示 Text("價格：$price")（寫在 Column 裡：Column 是 inline，讀取算在 PriceScreen 身上）
+            // TODO ①-2：顯示 Text("價格：$price")（寫在 Column 裡：Column 是
+            // inline，讀取算在 PriceScreen 身上）
         }
     }
 }
@@ -58,13 +65,15 @@ private object L01Fixed {
         Column {
             RecomposeCounter("PriceScreen")
             ChartHeader("BTC/JPY")
-            // TODO ②-1：呼叫 PriceText(prices)：這裡只傳 Flow，不要在 PriceScreen 裡讀 price
+            // TODO ②-1：呼叫 PriceText(prices)：這裡只傳 Flow，不要在
+            // PriceScreen 裡讀 price
         }
     }
 
     @Composable
     fun PriceText(prices: StateFlow<Long>) {
-        // TODO ②-2：在這個小函式裡讀價格：val price by prices.collectAsState()，並顯示 Text("價格：$price")
+        // TODO ②-2：在這個小函式裡讀價格：val price by prices.
+        // collectAsState()，並顯示 Text("價格：$price")
         RecomposeCounter("PriceText")
     }
 }

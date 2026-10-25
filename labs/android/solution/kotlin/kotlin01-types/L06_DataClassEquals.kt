@@ -1,11 +1,15 @@
 // L06：價格明明沒變，畫面卻一直刷新（data class 的 equals 與 BigDecimal）
 // 對應複習站：Kotlin01Types 第 6 題「data class 的 equals 有哪些容易踩的坑？」
 //
-// 情境：行情畫面收到新報價時，先和上一筆比較，不一樣才刷新畫面。後端傳來的價格字串位數不固定：
+// 情境：行情畫面收到新報價時，先和上一筆比較，不一樣才刷新畫面。
+// 後端傳來的價格字串位數不固定：
 //        "1.0"、"1.00"、"1.000" 數值都是 1，只是小數位數（scale）不同。
-// Bug 版：Quote 是普通的 data class。自動產生的 equals 對 BigDecimal 屬性呼叫 BigDecimal.equals，
-//        它連 scale 都比，"1.0" 和 "1.00" 不相等，每一筆都被當成「價格變了」而刷新。
-// 修正版：自己覆寫 equals／hashCode：價格用 compareTo 比數值大小，hashCode 用 stripTrailingZeros() 之後的值，
+// Bug 版：Quote 是普通的 data class。自動產生的 equals 對 BigDecimal 屬性呼叫
+// BigDecimal.equals，
+//        它連 scale 都比，"1.0" 和 "1.00" 不相等，每一筆都被當成「價格變了」
+// 而刷新。
+// 修正版：自己覆寫 equals／hashCode：價格用 compareTo 比數值大小，hashCode 用
+// stripTrailingZeros() 之後的值，
 //        讓「相等的物件有相同的 hashCode」。
 package tw.harry.labs.solution.kotlin01types
 
@@ -17,7 +21,10 @@ import tw.harry.labs.kit.Variant
 /** 後端依序傳來的 BTC_JPY 價格：前三筆數值都是 1，後兩筆都是 1.5 */
 private val feed = listOf("1.0", "1.00", "1.000", "1.5", "1.50")
 
-/** 先直接比一比：內容完全一樣、1.0 對 1.00，以及放進 HashSet 會剩幾個（兩個版本共用） */
+/**
+ * 先直接比一比：內容完全一樣、1.0 對 1.00，以及放進 HashSet
+ * 會剩幾個（兩個版本共用）
+ */
 private fun showEquality(log: LabLog, one0: Any, one00: Any, anotherOne0: Any) {
     log("內容完全一樣的兩筆報價相等嗎：${one0 == anotherOne0}")
     log("1.0 和 1.00 相等嗎：${one0 == one00}")
@@ -26,15 +33,22 @@ private fun showEquality(log: LabLog, one0: Any, one00: Any, anotherOne0: Any) {
 
 // MARK: - Bug 版
 private object L06Bug {
-    data class Quote(val symbol: String, val price: BigDecimal)   // 自動產生的 equals：BigDecimal 連 scale 一起比
+    // 自動產生的 equals：BigDecimal 連 scale 一起比
+    data class Quote(val symbol: String, val price: BigDecimal)
 
     fun run(log: LabLog) {
-        showEquality(log, Quote("BTC_JPY", BigDecimal("1.0")), Quote("BTC_JPY", BigDecimal("1.00")), Quote("BTC_JPY", BigDecimal("1.0")))
+        showEquality(
+            log,
+            Quote("BTC_JPY", BigDecimal("1.0")),
+            Quote("BTC_JPY", BigDecimal("1.00")),
+            Quote("BTC_JPY", BigDecimal("1.0")),
+        )
         var last: Quote? = null
         var refreshes = 0
         for (raw in feed) {
             val quote = Quote("BTC_JPY", BigDecimal(raw))
-            if (quote != last) {                                  // 和上一筆不一樣才刷新畫面
+            // 和上一筆不一樣才刷新畫面
+            if (quote != last) {
                 refreshes++
                 last = quote
                 log("刷新畫面：$raw")
@@ -47,15 +61,21 @@ private object L06Bug {
 // MARK: - 修正版
 private object L06Fixed {
     data class Quote(val symbol: String, val price: BigDecimal) {
-        override fun equals(other: Any?): Boolean =
-            other is Quote && symbol == other.symbol && price.compareTo(other.price) == 0   // 比數值，不比 scale
+        override fun equals(other: Any?): Boolean = // 比數值，不比 scale
+            other is Quote && symbol == other.symbol &&
+                price.compareTo(other.price) == 0
 
-        override fun hashCode(): Int =
-            31 * symbol.hashCode() + price.stripTrailingZeros().hashCode()                  // 1.0 與 1.00 要有相同的 hashCode
+        override fun hashCode(): Int = // 1.0 與 1.00 要有相同的 hashCode
+            31 * symbol.hashCode() + price.stripTrailingZeros().hashCode()
     }
 
     fun run(log: LabLog) {
-        showEquality(log, Quote("BTC_JPY", BigDecimal("1.0")), Quote("BTC_JPY", BigDecimal("1.00")), Quote("BTC_JPY", BigDecimal("1.0")))
+        showEquality(
+            log,
+            Quote("BTC_JPY", BigDecimal("1.0")),
+            Quote("BTC_JPY", BigDecimal("1.00")),
+            Quote("BTC_JPY", BigDecimal("1.0")),
+        )
         var last: Quote? = null
         var refreshes = 0
         for (raw in feed) {

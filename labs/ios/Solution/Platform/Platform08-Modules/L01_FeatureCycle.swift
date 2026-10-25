@@ -1,13 +1,20 @@
 // L01：測下單頁，卻被迫準備資產頁，還留下記憶體洩漏（Feature 之間不能互相依賴）
-// 對應複習站：Platform08Modules 第 1 題「為什麼要模組化？模組之間的依賴方向要怎麼規劃？」
+// 對應複習站：Platform08Modules 第 1
+// 題「為什麼要模組化？模組之間的依賴方向要怎麼規劃？」
 //
-// 情境：交易所 App 有「下單」和「資產」兩個功能模組。下單成功後要跳到資產頁；資產頁的「入金後去下單」又要跳回下單頁。
-//       演練做兩件事：1. 單獨測試下單頁（onOrderPlaced），看資產頁被牽連多少；2. 兩個畫面都關閉後，看還有幾個 ViewModel 活著。
-// Bug 版：OrderViewModel 直接建立 WalletViewModel（另一個功能的具體型別），WalletViewModel 又直接持有 OrderViewModel。
-//        兩個功能互相依賴：測試下單頁必須準備資產頁需要的 API，onOrderPlaced 真的去打了資產 API；
+// 情境：交易所 App 有「下單」和「資產」兩個功能模組。下單成功後要跳到資產頁；
+// 資產頁的「入金後去下單」又要跳回下單頁。
+//       演練做兩件事：1. 單獨測試下單頁（onOrderPlaced），看資產頁被牽連多少；
+// 2. 兩個畫面都關閉後，看還有幾個 ViewModel 活著。
+// Bug 版：OrderViewModel 直接建立 WalletViewModel（另一個功能的具體型別），
+// WalletViewModel 又直接持有 OrderViewModel。
+//        兩個功能互相依賴：測試下單頁必須準備資產頁需要的 API，onOrderPlaced
+// 真的去打了資產 API；
 //        而且兩個物件互相強參考，關閉畫面後都釋放不掉。
-// 修正版：Feature 只依賴 Core 定義的協定（WalletNavigator、OrderNavigator），不知道對方存在。真正的跳轉由 App 層
-//        （Composition Root）實作並注入，ViewModel 對它只用 weak 參考。測試下單頁只要給一個假的 WalletNavigator。
+// 修正版：Feature 只依賴 Core 定義的協定（WalletNavigator、OrderNavigator），
+// 不知道對方存在。真正的跳轉由 App 層
+//        （Composition Root）實作並注入，ViewModel 對它只用 weak 參考。
+// 測試下單頁只要給一個假的 WalletNavigator。
 import Foundation
 import LabKit
 
@@ -24,13 +31,15 @@ private enum L01Bug {
     /// 下單功能：直接建立、直接持有資產功能的具體型別
     final class OrderViewModel {
         private let walletApi: WalletApi
-        private lazy var wallet = WalletViewModel(order: self, api: walletApi)   // 直接建立另一個功能的具體型別，還把自己傳進去
+        // 直接建立另一個功能的具體型別，還把自己傳進去
+        private lazy var wallet = WalletViewModel(order: self, api: walletApi)
         init(walletApi: WalletApi) {
             self.walletApi = walletApi
             LiveObjects.shared.add("L01Bug.OrderViewModel")
         }
         deinit { LiveObjects.shared.remove("L01Bug.OrderViewModel") }
-        func onOrderPlaced() { wallet.open() }                                   // 下單成功：打開資產頁
+        // 下單成功：打開資產頁
+        func onOrderPlaced() { wallet.open() }
     }
 
     /// 資產功能：入金後要回到下單頁，所以直接持有 OrderViewModel
@@ -43,17 +52,22 @@ private enum L01Bug {
             LiveObjects.shared.add("L01Bug.WalletViewModel")
         }
         deinit { LiveObjects.shared.remove("L01Bug.WalletViewModel") }
-        func open() { api.fetchBalance() }                                       // 打開資產頁：載入餘額
+        // 打開資產頁：載入餘額
+        func open() { api.fetchBalance() }
     }
 
     static func run(_ log: LabLog) async {
         let api = WalletApi()
         do {
-            let order = OrderViewModel(walletApi: api)       // 單獨測試下單頁，卻要準備資產頁的 API
+            // 單獨測試下單頁，卻要準備資產頁的 API
+            let order = OrderViewModel(walletApi: api)
             order.onOrderPlaced()
-        }                                                    // 畫面關閉：離開這個範圍，沒有人再用它們
+            // 畫面關閉：離開這個範圍，沒有人再用它們
+        }
         log("單獨測試下單：資產頁的 API 被呼叫 \(api.calls) 次，導覽請求 0 次")
-        let alive = LiveObjects.shared.count("L01Bug.OrderViewModel") + LiveObjects.shared.count("L01Bug.WalletViewModel")
+        let alive =
+            LiveObjects.shared.count("L01Bug.OrderViewModel")
+            + LiveObjects.shared.count("L01Bug.WalletViewModel")
         log("兩個畫面都關閉後，還活著的 ViewModel：\(alive) 個")
     }
 }
@@ -65,13 +79,15 @@ private enum L01Fixed {
     protocol OrderNavigator: AnyObject { func openOrder() }
 
     final class OrderViewModel {
-        private weak var walletNavigator: WalletNavigator?       // 對 App 層只用 weak 參考
+        // 對 App 層只用 weak 參考
+        private weak var walletNavigator: WalletNavigator?
         init(walletNavigator: WalletNavigator) {
             self.walletNavigator = walletNavigator
             LiveObjects.shared.add("L01Fixed.OrderViewModel")
         }
         deinit { LiveObjects.shared.remove("L01Fixed.OrderViewModel") }
-        func onOrderPlaced() { walletNavigator?.openWallet() }   // 只請 App 層帶使用者去資產頁，不知道資產頁長什麼樣
+        // 只請 App 層帶使用者去資產頁，不知道資產頁長什麼樣
+        func onOrderPlaced() { walletNavigator?.openWallet() }
     }
 
     final class WalletViewModel {
@@ -109,16 +125,21 @@ private enum L01Fixed {
         let api = WalletApi()
         let navigator = FakeWalletNavigator()
         do {
-            let order = OrderViewModel(walletNavigator: navigator)   // 單獨測試下單頁：只要一個假的導覽
+            // 單獨測試下單頁：只要一個假的導覽
+            let order = OrderViewModel(walletNavigator: navigator)
             order.onOrderPlaced()
         }
         log("單獨測試下單：資產頁的 API 被呼叫 \(api.calls) 次，導覽請求 \(navigator.opens) 次")
 
         do {
-            let app = AppCoordinator(api: api)                        // 真的 App：由 App 層組裝兩個功能
+            // 真的 App：由 App 層組裝兩個功能
+            let app = AppCoordinator(api: api)
             app.order.onOrderPlaced()
-        }                                                             // 畫面關閉
-        let alive = LiveObjects.shared.count("L01Fixed.OrderViewModel") + LiveObjects.shared.count("L01Fixed.WalletViewModel")
+            // 畫面關閉
+        }
+        let alive =
+            LiveObjects.shared.count("L01Fixed.OrderViewModel")
+            + LiveObjects.shared.count("L01Fixed.WalletViewModel")
         log("兩個畫面都關閉後，還活著的 ViewModel：\(alive) 個")
     }
 }
@@ -136,8 +157,10 @@ extension Platform08Modules {
             "選「修正版」執行，資產頁的 API 0 次、導覽請求 1 次、沒有物件洩漏。",
             "進階：打開 Debug Memory Graph（Xcode 偵錯列的三個圓圈圖示），在 Bug 版執行後找 L01Bug.OrderViewModel，看它和 WalletViewModel 之間的循環。",
         ],
-        expectBug: "「單獨測試下單：資產頁的 API 被呼叫 1 次，導覽請求 0 次」，「兩個畫面都關閉後，還活著的 ViewModel：2 個」。",
-        expectFixed: "「單獨測試下單：資產頁的 API 被呼叫 0 次，導覽請求 1 次」，「兩個畫面都關閉後，還活著的 ViewModel：0 個」。",
+        expectBug:
+            "「單獨測試下單：資產頁的 API 被呼叫 1 次，導覽請求 0 次」，「兩個畫面都關閉後，還活著的 ViewModel：2 個」。",
+        expectFixed:
+            "「單獨測試下單：資產頁的 API 被呼叫 0 次，導覽請求 1 次」，「兩個畫面都關閉後，還活著的 ViewModel：0 個」。",
         run: { variant, log in
             switch variant {
             case .bug: await L01Bug.run(log)
@@ -145,17 +168,24 @@ extension Platform08Modules {
             }
         },
         checkBug: { lines in
-            guard lines.contains(where: { $0.hasPrefix("兩個畫面都關閉後") }) else { return "演練沒有跑完" }
+            guard lines.contains(where: { $0.hasPrefix("兩個畫面都關閉後") }) else {
+                return "演練沒有跑完"
+            }
             if !lines.contains("單獨測試下單：資產頁的 API 被呼叫 1 次，導覽請求 0 次") {
-                return "Bug 版：OrderViewModel 用 lazy var 直接建立 WalletViewModel(order: self, api:)，onOrderPlaced 呼叫 wallet.open()，資產頁的 API 會被呼叫 1 次"
+                return
+                    "Bug 版：OrderViewModel 用 lazy var 直接建立 WalletViewModel(order: self, api:)，onOrderPlaced 呼叫 wallet.open()，資產頁的 API 會被呼叫 1 次"
             }
             return lines.contains("兩個畫面都關閉後，還活著的 ViewModel：2 個")
-                ? nil : "Bug 還沒重現：WalletViewModel 要用強參考持有 order（let order: OrderViewModel），兩個物件互相持有，關閉後才會洩漏"
+                ? nil
+                : "Bug 還沒重現：WalletViewModel 要用強參考持有 order（let order: OrderViewModel），兩個物件互相持有，關閉後才會洩漏"
         },
         checkFixed: { lines in
-            guard lines.contains(where: { $0.hasPrefix("兩個畫面都關閉後") }) else { return "演練沒有跑完" }
+            guard lines.contains(where: { $0.hasPrefix("兩個畫面都關閉後") }) else {
+                return "演練沒有跑完"
+            }
             if !lines.contains("單獨測試下單：資產頁的 API 被呼叫 0 次，導覽請求 1 次") {
-                return "測試下單頁只用假的 WalletNavigator：onOrderPlaced 呼叫 walletNavigator?.openWallet()，資產頁的 API 不該被呼叫，導覽請求 1 次"
+                return
+                    "測試下單頁只用假的 WalletNavigator：onOrderPlaced 呼叫 walletNavigator?.openWallet()，資產頁的 API 不該被呼叫，導覽請求 1 次"
             }
             return lines.contains("兩個畫面都關閉後，還活著的 ViewModel：0 個")
                 ? nil : "還有 ViewModel 沒釋放：ViewModel 對 App 層（導覽）要用 weak 參考，不要強參考"

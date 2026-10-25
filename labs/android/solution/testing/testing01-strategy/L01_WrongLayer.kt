@@ -1,13 +1,18 @@
 // L01：12 條下單規則全用 UI 測試驗，慢又時過時不過（選錯測試層級）
 // 對應複習站：Testing01Strategy 第 1 題「測試分成哪幾層？每一層測什麼？」
 //
-// 情境：下單有 12 個案例要驗（價格要是 1,000 日圓的倍數、數量不能低於 0.0001 BTC、不能超過 5 BTC…）。
+// 情境：下單有 12 個案例要驗（價格要是 1,000 日圓的倍數、數量不能低於 0.0001
+// BTC、不能超過 5 BTC…）。
 //       規則本身是一個純函式 T01OrderRules.validate（已經寫好）。
-//       UI 測試用 T01FakeOrderScreen 模擬：每個案例要冷啟動加登入 120 ms、輸入 40 ms、點確認 20 ms，
+//       UI 測試用 T01FakeOrderScreen 模擬：每個案例要冷啟動加登入 120 ms、輸入
+// 40 ms、點確認 20 ms，
 //       錯誤訊息要等動畫結束才會出現在畫面上（有的案例動畫超過 100 ms）。
-// Bug 版：12 個案例都走 UI 測試：launch → type → tapConfirm → 固定 delay 100 ms → 讀 errorLabel。
-//        整輪要三秒多，而且動畫比 100 ms 久的案例讀不到訊息，變成失敗（規則其實是對的）。
-// 修正版：規則是純邏輯，直接呼叫 T01OrderRules.validate 驗 12 個案例，不到 5 ms，也不會時過時不過。
+// Bug 版：12 個案例都走 UI 測試：launch → type → tapConfirm → 固定 delay 100
+// ms → 讀 errorLabel。
+//        整輪要三秒多，而且動畫比 100 ms 久的案例讀不到訊息，
+// 變成失敗（規則其實是對的）。
+// 修正版：規則是純邏輯，直接呼叫 T01OrderRules.validate 驗 12 個案例，不到 5
+// ms，也不會時過時不過。
 //        UI 測試只留給「點了確認，畫面真的有顯示錯誤」這類少數案例。
 package tw.harry.labs.solution.testing01strategy
 
@@ -23,11 +28,14 @@ private object L01Bug {
         for (c in T01OrderCase.all) {
             suite.test(c.name) { t ->
                 val screen = T01FakeOrderScreen(c.animationMs)
-                screen.launch()                                              // 冷啟動、登入
+                // 冷啟動、登入
+                screen.launch()
                 screen.type(c.priceJpy, c.amountSatoshi)
                 screen.tapConfirm()
-                delay(100)                                                   // 固定等 100 ms，等畫面
-                t.equal(screen.errorLabel(), c.expected)                     // 動畫比 100 ms 久就讀不到
+                // 固定等 100 ms，等畫面
+                delay(100)
+                // 動畫比 100 ms 久就讀不到
+                t.equal(screen.errorLabel(), c.expected)
             }
         }
         suite.run("UI 層", log)
@@ -40,7 +48,11 @@ private object L01Fixed {
         val suite = T01Suite()
         for (c in T01OrderCase.all) {
             suite.test(c.name) { t ->
-                t.equal(T01OrderRules.validate(c.priceJpy, c.amountSatoshi), c.expected)   // 直接驗純函式
+                // 直接驗純函式
+                t.equal(
+                    T01OrderRules.validate(c.priceJpy, c.amountSatoshi),
+                    c.expected,
+                )
             }
         }
         suite.run("單元層", log)

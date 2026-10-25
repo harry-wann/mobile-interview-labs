@@ -1,12 +1,16 @@
 // L01：10 筆入帳同時進來，餘額少算了（共享可變狀態與 Mutex）
-// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，怎麼選工具？」
+// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，
+// 怎麼選工具？」
 //
-// 情境：10 個 coroutine（例如 10 個畫面元件）各自連續入帳 10 次，每次入帳 1 日圓。入帳流程是：
-//        讀目前餘額 → 呼叫風控檢查（suspend，約 1 ms）→ 把「讀到的餘額 + 入帳金額」寫回去。
+// 情境：10 個 coroutine（例如 10 個畫面元件）各自連續入帳 10 次，每次入帳 1
+// 日圓。入帳流程是：
+//        讀目前餘額 → 呼叫風控檢查（suspend，約 1 ms）→ 把「讀到的餘額 +
+// 入帳金額」寫回去。
 //        預期最後餘額 100 日圓。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug）：不加任何保護，deposit 依序讀餘額、riskCheck()、寫回。風控檢查暫停時別的 coroutine 也讀到舊餘額，入帳被蓋掉。
+//   ① Bug 版（L01Bug）：不加任何保護，deposit 依序讀餘額、riskCheck()、寫回。
+// 風控檢查暫停時別的 coroutine 也讀到舊餘額，入帳被蓋掉。
 //   ② 修正版（L01Fixed）：用 Mutex，把讀、檢查、寫放在同一個 withLock 裡。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin04-coroutine-sync/L01_LostUpdate.kt
@@ -34,14 +38,19 @@ private object L01Bug {
         var balance = 0L
 
         suspend fun deposit(amount: Long) {
-            // TODO ①：不加任何保護，依序：val current = balance（讀）→ riskCheck()（暫停）→ balance = current + amount（寫）
+            // TODO ①：不加任何保護，依序：val current = balance（讀）→
+            // riskCheck()（暫停）→ balance = current + amount（寫）
         }
     }
 
     suspend fun run(log: LabLog) {
         val wallet = Wallet()
         coroutineScope {
-            repeat(WORKERS) { launch(Dispatchers.Default) { repeat(DEPOSITS) { wallet.deposit(1) } } }
+            repeat(WORKERS) {
+                launch(Dispatchers.Default) {
+                    repeat(DEPOSITS) { wallet.deposit(1) }
+                }
+            }
         }
         log("預期餘額 ${WORKERS * DEPOSITS}，實際餘額 ${wallet.balance}")
     }
@@ -61,15 +70,20 @@ private object L01Fixed {
     suspend fun run(log: LabLog) {
         val wallet = Wallet()
         coroutineScope {
-            repeat(WORKERS) { launch(Dispatchers.Default) { repeat(DEPOSITS) { wallet.deposit(1) } } }
+            repeat(WORKERS) {
+                launch(Dispatchers.Default) {
+                    repeat(DEPOSITS) { wallet.deposit(1) }
+                }
+            }
         }
         log("預期餘額 ${WORKERS * DEPOSITS}，實際餘額 ${wallet.balance}")
     }
 }
 
 // MARK: - 演練設定
-private fun actual(lines: List<String>): Long? =
-    lines.firstOrNull { it.startsWith("預期餘額 ") }?.substringAfter("實際餘額 ")?.toLongOrNull()
+private fun actual(lines: List<String>): Long? = lines.firstOrNull {
+    it.startsWith("預期餘額 ")
+}?.substringAfter("實際餘額 ")?.toLongOrNull()
 
 val l01 = Lab(
     id = "L01",

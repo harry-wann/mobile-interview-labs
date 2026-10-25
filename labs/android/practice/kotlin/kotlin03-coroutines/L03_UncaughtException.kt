@@ -1,12 +1,15 @@
 // L03：try／catch 包住 launch，下單失敗時 App 還是當掉（例外怎麼往上傳）
-// 對應複習站：Kotlin03Coroutines 第 3 題「例外怎麼往上傳？launch 和 async 的例外去哪？」
+// 對應複習站：Kotlin03Coroutines 第 3 題「例外怎麼往上傳？launch 和 async
+// 的例外去哪？」
 //
 // 情境：按下「下單」後開一個 coroutine 呼叫下單 API，API 逾時丟出 IOException。
 //
 // 你要寫：
-//   ① Bug 版：在 launch 的「外面」包 try／catch。跑起來 App 會當掉（先打開 Logcat）。
+//   ① Bug 版：在 launch 的「外面」包 try／catch。跑起來 App 會當掉（先打開
+// Logcat）。
 //   ② 修正版：把 try／catch 移到 coroutine 的「裡面」，失敗時顯示錯誤訊息。
-// 只改有 TODO 的地方。解答：solution/kotlin/kotlin03-coroutines/L03_UncaughtException.kt
+// 只改有 TODO 的地方。解答：
+// solution/kotlin/kotlin03-coroutines/L03_UncaughtException.kt
 package tw.harry.labs.practice.kotlin03coroutines
 
 import java.io.IOException
@@ -28,9 +31,11 @@ private suspend fun placeOrder(): String {
 // MARK: - Bug 版
 private object L03Bug {
     suspend fun run(log: LabLog) {
-        val screenScope = CoroutineScope(Job() + Dispatchers.Main)   // 畫面自己的 scope（已寫好）
+        // 畫面自己的 scope（已寫好）
+        val screenScope = CoroutineScope(Job() + Dispatchers.Main)
         try {
-            // TODO ①：用 screenScope.launch { } 呼叫 placeOrder()，成功時 log("下單成功：$id")；
+            // TODO ①：用 screenScope.launch { } 呼叫 placeOrder()，成功時
+            // log("下單成功：$id")；
             //        launch 後面接 .join() 等它結束
         } catch (e: Exception) {
             log("接到例外：${e.message}")
@@ -43,8 +48,10 @@ private object L03Bug {
 private object L03Fixed {
     suspend fun run(log: LabLog) {
         val screenScope = CoroutineScope(Job() + Dispatchers.Main)
-        // TODO ②：一樣用 screenScope.launch { }.join()，但這次把 try／catch 寫在大括號「裡面」：
-        //        成功時 log("下單成功：$id")；接到 IOException 時 log("顯示錯誤：${e.message}，請稍後再試")
+        // TODO ②：一樣用 screenScope.launch { }.join()，但這次把 try／catch
+        // 寫在大括號「裡面」：
+        //        成功時 log("下單成功：$id")；接到 IOException 時
+        // log("顯示錯誤：${e.message}，請稍後再試")
         log("下單流程結束")
     }
 }
@@ -74,8 +81,11 @@ val l03 = Lab(
     },
     checkBug = { lines ->
         // 寫對的話 App 會當掉，不會走到這裡
-        if (lines.any { it.startsWith("接到例外") }) "外面的 catch 接到了：這不是 Bug 版要重現的情況"
-        else "App 沒有當掉：要在 launch 的外面包 try／catch，裡面呼叫 placeOrder()"
+        if (lines.any { it.startsWith("接到例外") }) {
+            "外面的 catch 接到了：這不是 Bug 版要重現的情況"
+        } else {
+            "App 沒有當掉：要在 launch 的外面包 try／catch，裡面呼叫 placeOrder()"
+        }
     },
     checkFixed = { lines ->
         when {

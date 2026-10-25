@@ -1,12 +1,19 @@
-// L03：離開畫面之後，整棵 view 樹還留在記憶體裡（Android 的洩漏：被活得更久的東西意外抓著）
+// L03：離開畫面之後，整棵 view 樹還留在記憶體裡（Android 的洩漏：
+// 被活得更久的東西意外抓著）
 // 對應複習站：Advanced03Memory 第 4 題「Android 有垃圾回收，為什麼還會洩漏？」
 //
-// 情境：Android 有 GC，互相持有沒關係；洩漏是「該被回收的物件，被一個活得更久的東西意外抓著」。LeakCanary 的做法：
-//        畫面銷毀之後，用 WeakReference 觀察它，等一下、做一次 GC，如果 WeakReference 還拿得到物件，就是洩漏。演練用同樣的做法檢查兩種最常見的洩漏
-//        （JVM 單元測試沒有 Activity 與 Fragment，所以用假的畫面物件，各背一份 1 MB 的資料代表整棵 view 樹）：
-//        A. 單例（PriceFeed）的 listener 清單抓著 Activity。 B. Fragment 進了 back stack，view 被銷毀了，Fragment 的 binding 欄位卻還抓著整棵 view 樹。
-// Bug 版：A. Activity 註冊 listener 之後，onDestroy 沒有移除。 B. onDestroyView 沒有把 binding 設成 null。
-// 修正版：A. onDestroy 把自己的 listener 從單例移除。 B. onDestroyView 裡 _binding = null。
+// 情境：Android 有 GC，互相持有沒關係；洩漏是「該被回收的物件，
+// 被一個活得更久的東西意外抓著」。LeakCanary 的做法：
+//        畫面銷毀之後，用 WeakReference 觀察它，等一下、做一次 GC，如果
+// WeakReference 還拿得到物件，就是洩漏。演練用同樣的做法檢查兩種最常見的洩漏
+//        （JVM 單元測試沒有 Activity 與 Fragment，所以用假的畫面物件，各背一份
+// 1 MB 的資料代表整棵 view 樹）：
+//        A. 單例（PriceFeed）的 listener 清單抓著 Activity。 B. Fragment 進了
+// back stack，view 被銷毀了，Fragment 的 binding 欄位卻還抓著整棵 view 樹。
+// Bug 版：A. Activity 註冊 listener 之後，onDestroy 沒有移除。 B.
+// onDestroyView 沒有把 binding 設成 null。
+// 修正版：A. onDestroy 把自己的 listener 從單例移除。 B. onDestroyView 裡
+// _binding = null。
 package tw.harry.labs.solution.advanced03memory
 
 import java.lang.ref.WeakReference
@@ -26,7 +33,9 @@ private object PriceFeed {
     val listeners = mutableListOf<(Double) -> Unit>()
 }
 
-/** 假的 Activity 與 Fragment 的生命週期（兩個版本共用的介面，各版本自己實作） */
+/**
+ * 假的 Activity 與 Fragment 的生命週期（兩個版本共用的介面，各版本自己實作）
+ */
 private interface FakeActivityLike {
     fun onCreate()
     fun onDestroy()
@@ -38,22 +47,35 @@ private interface FakeFragmentLike {
     fun onDestroyView()
 }
 
-/** 像 LeakCanary 一樣檢查：做幾次 GC，WeakReference 還拿得到物件就是洩漏（兩個版本共用） */
+/**
+ * 像 LeakCanary 一樣檢查：做幾次 GC，WeakReference
+ * 還拿得到物件就是洩漏（兩個版本共用）
+ */
 private fun isLeaked(ref: WeakReference<*>): Boolean {
     repeat(5) {
-        a03ForceGc()                                              // 不能只用 System.gc()：在 Android 上它只是提示
+        // 不能只用 System.gc()：在 Android 上它只是提示
+        a03ForceGc()
         if (ref.get() == null) return false
     }
     return true
 }
 
-/** 演練流程（兩個版本共用）：A. 開啟再關閉 Activity，B. Fragment 的 view 被銷毀（Fragment 還在 back stack） */
-private suspend fun scenario(log: LabLog, newActivity: () -> FakeActivityLike, newFragment: () -> FakeFragmentLike) = withContext(Dispatchers.Default) {
+/**
+ * 演練流程（兩個版本共用）：A. 開啟再關閉 Activity，B. Fragment 的 view
+ * 被銷毀（Fragment 還在 back stack）
+ */
+private suspend fun scenario(
+    log: LabLog,
+    newActivity: () -> FakeActivityLike,
+    newFragment: () -> FakeFragmentLike,
+) = withContext(Dispatchers.Default) {
     PriceFeed.listeners.clear()
     fun openAndCloseActivity(): WeakReference<FakeActivityLike> {
         val activity = newActivity()
         activity.onCreate()
-        log("A. 打開 Activity 時，PriceFeed 的 listener 有 ${PriceFeed.listeners.size} 個")
+        log(
+            "A. 打開 Activity 時，PriceFeed 的 listener 有 ${PriceFeed.listeners.size} 個",
+        )
         activity.onDestroy()
         return WeakReference(activity)
     }
@@ -66,13 +88,25 @@ private suspend fun scenario(log: LabLog, newActivity: () -> FakeActivityLike, n
         val tree = FakeViewTree()
         val fragment = newFragment()
         fragment.onViewCreated(tree)
-        log("B. 打開 Fragment 時，Fragment ${if (fragment.hasBinding) "有" else "沒有"}存 binding")
+        log(
+            "B. 打開 Fragment 時，Fragment ${if (fragment.hasBinding) "有" else "沒有"}存 binding",
+        )
         fragment.onDestroyView()
-        backStack += fragment                                        // Fragment 實例還活著（在 back stack 裡）
+        // Fragment 實例還活著（在 back stack 裡）
+        backStack += fragment
         return WeakReference(tree)
     }
     val treeRef = destroyFragmentView()
-    log("B. Fragment 的 view 被銷毀之後：${if (isLeaked(treeRef)) "view 樹還抓得到（洩漏）" else "view 樹已回收"}")
+    log(
+        "B. Fragment 的 view 被銷毀之後：${if (isLeaked(
+                treeRef,
+            )
+        ) {
+            "view 樹還抓得到（洩漏）"
+        } else {
+            "view 樹已回收"
+        }}",
+    )
 }
 
 // MARK: - Bug 版
@@ -82,7 +116,8 @@ private object L03Bug {
         var lastPrice = 0.0
 
         override fun onCreate() {
-            PriceFeed.listeners += { price -> lastPrice = price }     // lambda 抓著 this（Activity）
+            // lambda 抓著 this（Activity）
+            PriceFeed.listeners += { price -> lastPrice = price }
         }
 
         override fun onDestroy() {
@@ -99,11 +134,14 @@ private object L03Bug {
         }
 
         override fun onDestroyView() {
-            // 沒有 _binding = null：Fragment 還在 back stack，它的 view 樹卻放不掉
+            // 沒有 _binding = null：Fragment 還在 back stack，它的 view
+            // 樹卻放不掉
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log, { FakeActivity() }, { FakeFragment() })
+    suspend fun run(log: LabLog) = scenario(log, {
+        FakeActivity()
+    }, { FakeFragment() })
 }
 
 // MARK: - 修正版
@@ -118,7 +156,8 @@ private object L03Fixed {
         }
 
         override fun onDestroy() {
-            PriceFeed.listeners -= listener                          // 畫面銷毀時，把自己從活得更久的單例移除
+            // 畫面銷毀時，把自己從活得更久的單例移除
+            PriceFeed.listeners -= listener
         }
     }
 
@@ -131,11 +170,14 @@ private object L03Fixed {
         }
 
         override fun onDestroyView() {
-            _binding = null                                          // 放掉 view 樹，GC 才能回收它
+            // 放掉 view 樹，GC 才能回收它
+            _binding = null
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log, { FakeActivity() }, { FakeFragment() })
+    suspend fun run(log: LabLog) = scenario(log, {
+        FakeActivity()
+    }, { FakeFragment() })
 }
 
 // MARK: - 演練設定

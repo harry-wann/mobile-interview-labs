@@ -1,13 +1,20 @@
 // L01：測一個會重試的函式，測試真的等了 3 秒（runBlocking 的 delay 是真實時間）
-// 對應複習站：Testing03AndroidTesting 第 1 題「有 delay 的 coroutine，測試時怎麼不用真的等？」
+// 對應複習站：Testing03AndroidTesting 第 1 題「有 delay 的 coroutine，
+// 測試時怎麼不用真的等？」
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 solution/testing/test/Testing03L01Test.kt。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// solution/testing/test/Testing03L01Test.kt。
 //
-// 情境：t03Retry 在遇到 IOException 時，等 1 秒再試、再失敗就等 2 秒再試（每次加倍），最多試 3 次。
-//       假的伺服器 T03FlakyApi 前兩次呼叫逾時、第三次成功，所以整個流程要「等」3 秒。
-// Bug 版：測試用 runBlocking 呼叫 t03Retry。delay 是真實時間，測試真的卡了 3 秒，而且看不到中間的狀態。
-// 修正版：測試改用 runTest：delay 變成虛擬時間，不用真的等。用 runCurrent()、advanceTimeBy() 一步一步推進時鐘，
-//        檢查每個時間點呼叫了幾次。注意 advanceTimeBy(1_000) 不會執行「剛好排在 1_000 這個時間點」的工作，要再呼叫 runCurrent()。
+// 情境：t03Retry 在遇到 IOException 時，等 1 秒再試、再失敗就等 2
+// 秒再試（每次加倍），最多試 3 次。
+//       假的伺服器 T03FlakyApi 前兩次呼叫逾時、第三次成功，所以整個流程要「等」
+// 3 秒。
+// Bug 版：測試用 runBlocking 呼叫 t03Retry。delay 是真實時間，測試真的卡了 3
+// 秒，而且看不到中間的狀態。
+// 修正版：測試改用 runTest：delay 變成虛擬時間，不用真的等。用 runCurrent()、
+// advanceTimeBy() 一步一步推進時鐘，
+//        檢查每個時間點呼叫了幾次。注意 advanceTimeBy(1_000)
+// 不會執行「剛好排在 1_000 這個時間點」的工作，要再呼叫 runCurrent()。
 package tw.harry.labs.solution.testing03androidtesting
 
 import java.io.IOException

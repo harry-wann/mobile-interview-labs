@@ -1,13 +1,24 @@
-// L07：同一個 API 錯誤，三個畫面三種文案，還有畫面在不該重試的錯誤上重試（錯誤處理沒有分層）
-// 對應複習站：Advanced09Architecture 第 4 題「模組化怎麼切才不會切過頭？」（錯誤型別放在哪一層、API 的錯誤碼不能越過 Data 層）、第 5 題「依賴注入（DI）怎麼做？」（Domain 宣告錯誤型別，Data 層實作並翻譯）
+// L07：同一個 API 錯誤，三個畫面三種文案，
+// 還有畫面在不該重試的錯誤上重試（錯誤處理沒有分層）
+// 對應複習站：Advanced09Architecture 第 4 題「模組化怎麼切才不會切過頭？」
+// （錯誤型別放在哪一層、API 的錯誤碼不能越過 Data 層）、第 5 題「依賴注入（DI）
+// 怎麼做？」（Domain 宣告錯誤型別，Data 層實作並翻譯）
 //
-// 情境：下單 API 會失敗的原因有五種（下單帶有 clientOrderId，所以重送不會重複下單）：
-//       {"code": 1043} 餘額不足、HTTP 429 太頻繁（Retry-After 標頭 3 秒）、連線逾時、{"code": 1102} 價格不符合最小跳動單位、{"code": 9999} 沒看過的錯誤碼。
-//       「一般下單」「快速下單」「撤單」三個畫面都會遇到這五種錯誤。演練對同一組五個錯誤，列出三個畫面各自顯示的文案與重試決定。
-// Bug 版：API 的原始錯誤（錯誤碼、HTTP 狀態碼、逾時）一路傳到畫面，三個畫面各自翻譯：
-//        一般下單只認得 1043，其他都顯示「未知錯誤」；快速下單直接顯示原始碼，限流與逾時都立刻重試；撤單的文案縮寫不同，每種錯誤都重試（包含餘額不足）。
-// 修正版：分三層。Data 層把原始錯誤翻成 Domain 的 OrderError（InsufficientBalance、RateLimited(retryAfter)、Network…）；
-//        可不可以重試是業務判斷，由 Domain 的 OrderError.retry 回答；Presentation 層只有一張文案對照表，三個畫面共用。
+// 情境：下單 API 會失敗的原因有五種（下單帶有 clientOrderId，
+// 所以重送不會重複下單）：
+//       {"code": 1043} 餘額不足、HTTP 429 太頻繁（Retry-After 標頭 3 秒）、
+// 連線逾時、{"code": 1102} 價格不符合最小跳動單位、{"code": 9999}
+// 沒看過的錯誤碼。
+//       「一般下單」「快速下單」「撤單」三個畫面都會遇到這五種錯誤。
+// 演練對同一組五個錯誤，列出三個畫面各自顯示的文案與重試決定。
+// Bug 版：API 的原始錯誤（錯誤碼、HTTP 狀態碼、逾時）一路傳到畫面，
+// 三個畫面各自翻譯：
+//        一般下單只認得 1043，其他都顯示「未知錯誤」；快速下單直接顯示原始碼，
+// 限流與逾時都立刻重試；撤單的文案縮寫不同，每種錯誤都重試（包含餘額不足）。
+// 修正版：分三層。Data 層把原始錯誤翻成 Domain 的
+// OrderError（InsufficientBalance、RateLimited(retryAfter)、Network…）；
+//        可不可以重試是業務判斷，由 Domain 的 OrderError.retry 回答；
+// Presentation 層只有一張文案對照表，三個畫面共用。
 package tw.harry.labs.solution.advanced09architecture
 
 import tw.harry.labs.kit.Lab
@@ -16,9 +27,14 @@ import tw.harry.labs.kit.Variant
 
 /** API 回來的原始錯誤（Data 層才看得懂） */
 private sealed interface L07RawError {
-    data class Api(val code: Int) : L07RawError                          // 回應內容 {"code": 1043}
-    data class Http(val status: Int, val retryAfter: Int?) : L07RawError // HTTP 狀態碼；429 會帶 Retry-After 標頭（秒）
-    object Timeout : L07RawError                                         // 連線逾時
+    // 回應內容 {"code": 1043}
+    data class Api(val code: Int) : L07RawError
+
+    // HTTP 狀態碼；429 會帶 Retry-After 標頭（秒）
+    data class Http(val status: Int, val retryAfter: Int?) : L07RawError
+
+    // 連線逾時
+    object Timeout : L07RawError
 
     val label: String
         get() = when (this) {
@@ -30,7 +46,11 @@ private sealed interface L07RawError {
 
 /** 同一組五個錯誤，三個畫面都會遇到 */
 private val L07_RAW_ERRORS: List<L07RawError> = listOf(
-    L07RawError.Api(1043), L07RawError.Http(429, retryAfter = 3), L07RawError.Timeout, L07RawError.Api(1102), L07RawError.Api(9999),
+    L07RawError.Api(1043),
+    L07RawError.Http(429, retryAfter = 3),
+    L07RawError.Timeout,
+    L07RawError.Api(1102),
+    L07RawError.Api(9999),
 )
 
 /** 能不能重試（型別兩個版本共用，差別是「誰決定」） */
@@ -51,11 +71,16 @@ private sealed interface L07Retry {
 private data class L07Shown(val message: String, val retry: L07Retry)
 
 /** 演練流程（兩個版本共用）：同一組五個錯誤，列出三個畫面各自的結果 */
-private fun scenario(log: LabLog, screens: List<Pair<String, (L07RawError) -> L07Shown>>) {
+private fun scenario(
+    log: LabLog,
+    screens: List<Pair<String, (L07RawError) -> L07Shown>>,
+) {
     var consistent = 0
     for (raw in L07_RAW_ERRORS) {
         val results = screens.map { (name, show) ->
-            show(raw).also { log("${raw.label}｜$name｜${it.message}｜${it.retry.text}") }
+            show(raw).also {
+                log("${raw.label}｜$name｜${it.message}｜${it.retry.text}")
+            }
         }
         if (results.all { it == results[0] }) consistent++
     }
@@ -65,11 +90,18 @@ private fun scenario(log: LabLog, screens: List<Pair<String, (L07RawError) -> L0
 // MARK: - Bug 版
 private object L07Bug {
     /** 一般下單：只認得餘額不足，其他都是「未知錯誤」，從不重試 */
-    fun orderScreen(raw: L07RawError): L07Shown =
-        if (raw is L07RawError.Api && raw.code == 1043) L07Shown("餘額不足，請先入金或減少數量", L07Retry.Never)
-        else L07Shown("未知錯誤", L07Retry.Never)
+    fun orderScreen(raw: L07RawError): L07Shown = if (raw is L07RawError.Api &&
+        raw.code == 1043
+    ) {
+        L07Shown("餘額不足，請先入金或減少數量", L07Retry.Never)
+    } else {
+        L07Shown("未知錯誤", L07Retry.Never)
+    }
 
-    /** 快速下單：直接顯示原始碼；HTTP 錯誤與逾時都立刻重試（429 沒看 Retry-After） */
+    /**
+     * 快速下單：直接顯示原始碼；HTTP 錯誤與逾時都立刻重試（429 沒看
+     * Retry-After）
+     */
     fun quickScreen(raw: L07RawError): L07Shown = when (raw) {
         is L07RawError.Api -> L07Shown("錯誤碼 ${raw.code}", L07Retry.Never)
         is L07RawError.Http -> L07Shown("HTTP ${raw.status}", L07Retry.Now)
@@ -83,13 +115,19 @@ private object L07Bug {
             1102 -> L07Shown("價格不符", L07Retry.Now)
             else -> L07Shown("系統錯誤", L07Retry.Now)
         }
+
         is L07RawError.Http -> L07Shown("操作太頻繁", L07Retry.Now)
+
         L07RawError.Timeout -> L07Shown("網路不穩", L07Retry.Now)
     }
 
     suspend fun run(log: LabLog) = scenario(
         log,
-        listOf("一般下單" to L07Bug::orderScreen, "快速下單" to L07Bug::quickScreen, "撤單" to L07Bug::cancelScreen),
+        listOf(
+            "一般下單" to L07Bug::orderScreen,
+            "快速下單" to L07Bug::quickScreen,
+            "撤單" to L07Bug::cancelScreen,
+        ),
     )
 }
 
@@ -103,7 +141,11 @@ private object L07Fixed {
         object InvalidPrice : OrderError
         data class Unknown(val code: Int) : OrderError
 
-        /** 可不可以重試，由 Domain 決定（業務判斷）：餘額不足重試一百次也不會成功；逾時可以重送，因為下單帶有 clientOrderId */
+        /**
+         * 可不可以重試，由 Domain 決定（業務判斷）：
+         * 餘額不足重試一百次也不會成功；逾時可以重送，因為下單帶有
+         * clientOrderId
+         */
         val retry: L07Retry
             get() = when (this) {
                 is RateLimited -> L07Retry.After(retryAfter)
@@ -112,17 +154,32 @@ private object L07Fixed {
             }
     }
 
-    /** Data 層：只有這裡看得到錯誤碼與 HTTP 狀態碼，翻成 Domain 的錯誤再往上傳 */
+    /**
+     * Data 層：只有這裡看得到錯誤碼與 HTTP 狀態碼，翻成 Domain 的錯誤再往上傳
+     */
     object OrderErrorMapper {
         fun map(raw: L07RawError): OrderError = when (raw) {
-            is L07RawError.Api -> when (raw.code) {
-                1043 -> OrderError.InsufficientBalance
-                1102 -> OrderError.InvalidPrice
-                else -> OrderError.Unknown(raw.code)
+            is L07RawError.Api -> {
+                when (raw.code) {
+                    1043 -> OrderError.InsufficientBalance
+                    1102 -> OrderError.InvalidPrice
+                    else -> OrderError.Unknown(raw.code)
+                }
             }
-            is L07RawError.Http ->
-                if (raw.status == 429) OrderError.RateLimited(raw.retryAfter ?: 1) else OrderError.Unknown(raw.status)
-            L07RawError.Timeout -> OrderError.Network
+
+            is L07RawError.Http -> {
+                if (raw.status ==
+                    429
+                ) {
+                    OrderError.RateLimited(raw.retryAfter ?: 1)
+                } else {
+                    OrderError.Unknown(raw.status)
+                }
+            }
+
+            L07RawError.Timeout -> {
+                OrderError.Network
+            }
         }
     }
 
@@ -139,13 +196,18 @@ private object L07Fixed {
 
     /** 三個畫面共用的錯誤顯示：拿到的是 Domain 的 OrderError，不再有原始碼 */
     fun show(raw: L07RawError): L07Shown {
-        val error = OrderErrorMapper.map(raw)                    // Repository 在 Data 層翻譯
+        // Repository 在 Data 層翻譯
+        val error = OrderErrorMapper.map(raw)
         return L07Shown(OrderErrorMessages.text(error), error.retry)
     }
 
     suspend fun run(log: LabLog) = scenario(
         log,
-        listOf("一般下單" to L07Fixed::show, "快速下單" to L07Fixed::show, "撤單" to L07Fixed::show),
+        listOf(
+            "一般下單" to L07Fixed::show,
+            "快速下單" to L07Fixed::show,
+            "撤單" to L07Fixed::show,
+        ),
     )
 }
 
@@ -173,11 +235,18 @@ val l07 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.contains("個錯誤中，三個畫面的文案與重試決定都一致的有") } -> "演練沒有跑完：要用 scenario 執行"
+            lines.none {
+                it.contains("個錯誤中，三個畫面的文案與重試決定都一致的有")
+            } -> "演練沒有跑完：要用 scenario 執行"
+
             "HTTP 429｜一般下單｜未知錯誤｜不重試" !in lines -> "Bug 還沒重現：一般下單只認得 1043，其他錯誤（例如 HTTP 429）都要顯示「未知錯誤」、不重試"
+
             "code 1043｜快速下單｜錯誤碼 1043｜不重試" !in lines -> "Bug 還沒重現：快速下單把原始碼直接顯示出來，Api 要顯示「錯誤碼 1043」"
+
             "code 1043｜撤單｜餘額不足｜可以立刻重試" !in lines -> "Bug 還沒重現：撤單每一種錯誤都重試，包含餘額不足（L07Retry.Now）"
+
             "5 個錯誤中，三個畫面的文案與重試決定都一致的有 0 個" !in lines -> "Bug 還沒重現：三個畫面對同一個錯誤應該都不一樣"
+
             else -> null
         }
     },
@@ -190,14 +259,25 @@ val l07 = Lab(
             Triple("code 9999", "發生未預期的錯誤（9999），請聯絡客服", "不重試"),
         )
         val wrong = expected.firstNotNullOfOrNull { (label, message, retry) ->
-            val matched = lines.count { it.startsWith("$label｜") && it.endsWith("｜$message｜$retry") }
-            if (matched == 3) null
-            else "$label 三個畫面都要顯示「$message」、$retry，現在只有 $matched 個畫面對：檢查 Data 層的對照（OrderErrorMapper）、Domain 的 OrderError.retry、Presentation 的 OrderErrorMessages"
+            val matched = lines.count {
+                it.startsWith("$label｜") &&
+                    it.endsWith("｜$message｜$retry")
+            }
+            if (matched == 3) {
+                null
+            } else {
+                "$label 三個畫面都要顯示「$message」、$retry，現在只有 $matched 個畫面對：檢查 Data 層的對照（OrderErrorMapper）、Domain 的 OrderError.retry、Presentation 的 OrderErrorMessages"
+            }
         }
         when {
-            lines.none { it.contains("個錯誤中，三個畫面的文案與重試決定都一致的有") } -> "演練沒有跑完：要用 scenario 執行"
+            lines.none {
+                it.contains("個錯誤中，三個畫面的文案與重試決定都一致的有")
+            } -> "演練沒有跑完：要用 scenario 執行"
+
             wrong != null -> wrong
+
             "5 個錯誤中，三個畫面的文案與重試決定都一致的有 5 個" !in lines -> "三個畫面都要用同一組對照：Data 層翻譯、Domain 決定重試、Presentation 一張文案表"
+
             else -> null
         }
     },

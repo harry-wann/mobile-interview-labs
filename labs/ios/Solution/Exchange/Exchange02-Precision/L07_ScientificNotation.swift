@@ -1,10 +1,13 @@
 // L07：1 satoshi 的價格顯示成 1e-08（很小的數字變成科學記號）
 // 對應複習站：Exchange02Precision 第 5 題「數字要怎麼顯示？」
 //
-// 情境：行情畫面要顯示三個數字：0.00000001（1 satoshi，BTC 的最小單位）、0.00000015、100.00000000（尾端有多餘的 0）。
+// 情境：行情畫面要顯示三個數字：0.00000001（1 satoshi，BTC 的最小單位）、0.
+// 00000015、100.00000000（尾端有多餘的 0）。
 //       畫面上要看到一般的小數，不能出現科學記號。
-// Bug 版：數字先轉成 Double，再用字串插值顯示："\(double)"。Swift 把很小的 Double 印成科學記號：1e-08、1.5e-07。
-// 修正版：保留 Decimal，用 FormatStyle 指定顯示格式：最多 8 位小數、不用千分位、小數點固定用 .。
+// Bug 版：數字先轉成 Double，再用字串插值顯示："\(double)"。Swift 把很小的
+// Double 印成科學記號：1e-08、1.5e-07。
+// 修正版：保留 Decimal，用 FormatStyle 指定顯示格式：最多 8 位小數、
+// 不用千分位、小數點固定用
 import Foundation
 import LabKit
 
@@ -26,7 +29,8 @@ private func scenario(_ log: LabLog, display: (String) -> String) {
 private enum L07Bug {
     static func display(_ text: String) -> String {
         let value = Double(text) ?? 0
-        return "\(value)"                                       // Double 的字串：很小的數字會變成 1e-08
+        // Double 的字串：很小的數字會變成 1e-08
+        return "\(value)"
     }
 
     static func run(_ log: LabLog) async {
@@ -38,7 +42,9 @@ private enum L07Bug {
 private enum L07Fixed {
     static func display(_ text: String) -> String {
         let value = Decimal(string: text) ?? 0
-        return value.formatted(.number.precision(.fractionLength(0...8)).grouping(.never).locale(Locale(identifier: "en_US_POSIX")))
+        return value.formatted(
+            .number.precision(.fractionLength(0...8)).grouping(.never).locale(
+                Locale(identifier: "en_US_POSIX")))
     }
 
     static func run(_ log: LabLog) async {
@@ -48,8 +54,11 @@ private enum L07Fixed {
 
 // MARK: - 演練設定
 private func scientificCount(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasPrefix("3 個數字裡") }) else { return nil }
-    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.last
+    guard let line = lines.first(where: { $0.hasPrefix("3 個數字裡") }) else {
+        return nil
+    }
+    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        .last
 }
 
 extension Exchange02Precision {
@@ -64,7 +73,8 @@ extension Exchange02Precision {
             "選「修正版」執行，三個數字都要是一般的小數。",
             "進階：Android 的 BigDecimal.toString() 也會用科學記號（0.00000001 印成 1E-8，stripTrailingZeros 之後的 100 印成 1E+2），顯示一律用 toPlainString()。",
         ],
-        expectBug: "「0.00000001 → 畫面顯示 1e-08（科學記號）」「0.00000015 → 畫面顯示 1.5e-07（科學記號）」，「3 個數字裡，顯示成科學記號的有 2 個」。",
+        expectBug:
+            "「0.00000001 → 畫面顯示 1e-08（科學記號）」「0.00000015 → 畫面顯示 1.5e-07（科學記號）」，「3 個數字裡，顯示成科學記號的有 2 個」。",
         expectFixed: "顯示 0.00000001、0.00000015、100，「3 個數字裡，顯示成科學記號的有 0 個」。",
         run: { variant, log in
             switch variant {
@@ -73,13 +83,23 @@ extension Exchange02Precision {
             }
         },
         checkBug: { lines in
-            guard let n = scientificCount(lines) else { return "演練沒有跑完：要用 scenario(log, display:) 執行" }
-            return n == 2 ? nil : "Bug 還沒重現：先轉成 Double，再用 \"\\(value)\" 轉成字串，很小的數字會變成 1e-08（目前科學記號 \(n) 個）"
+            guard let n = scientificCount(lines) else {
+                return "演練沒有跑完：要用 scenario(log, display:) 執行"
+            }
+            return n == 2
+                ? nil
+                : "Bug 還沒重現：先轉成 Double，再用 \"\\(value)\" 轉成字串，很小的數字會變成 1e-08（目前科學記號 \(n) 個）"
         },
         checkFixed: { lines in
-            guard let n = scientificCount(lines) else { return "演練沒有跑完：要用 scenario(log, display:) 執行" }
-            if n != 0 { return "還有 \(n) 個數字顯示成科學記號：保留 Decimal，用 formatted(.number.precision(...)) 指定格式" }
-            return lines.contains("0.00000001 → 畫面顯示 0.00000001") ? nil : "1 satoshi 應該顯示 0.00000001（最多 8 位小數）"
+            guard let n = scientificCount(lines) else {
+                return "演練沒有跑完：要用 scenario(log, display:) 執行"
+            }
+            if n != 0 {
+                return
+                    "還有 \(n) 個數字顯示成科學記號：保留 Decimal，用 formatted(.number.precision(...)) 指定格式"
+            }
+            return lines.contains("0.00000001 → 畫面顯示 0.00000001")
+                ? nil : "1 satoshi 應該顯示 0.00000001（最多 8 位小數）"
         }
     )
 }

@@ -1,13 +1,21 @@
-// L05：進行中的 K 線，EMA 越跳越高（每個 tick 都把算出來的值寫回「上一根的 EMA」）
-// 對應複習站：Exchange07Kline 第 4 題「移動平均（SMA、EMA）和 RSI 怎麼算？即時更新時要注意什麼？」
+// L05：進行中的 K 線，EMA 越跳越高（每個 tick 都把算出來的值寫回「上一根的
+// EMA」）
+// 對應複習站：Exchange07Kline 第 4 題「移動平均（SMA、EMA）和 RSI
+// 怎麼算？即時更新時要注意什麼？」
 //
-// 情境：EMA 週期 9（k = 2 ÷ (9 + 1) = 0.2），公式 ema = prev + k × (價格 − prev)。上一根已收盤的 EMA 是 100。
-//        這一根還在進行中，連續收到三個 tick，價格都是 110；收盤之後，下一根的第一個 tick 價格是 104。
-//        正確的顯示值：三個 tick 都是 102（100 + 0.2 × 10）；收盤後 EMA 固定為 102；下一根第一個 tick：102 + 0.2 × (104 − 102) = 102.4。
+// 情境：EMA 週期 9（k = 2 ÷ (9 + 1) = 0.2），公式 ema = prev + k × (價格 −
+// prev)。上一根已收盤的 EMA 是 100。
+//        這一根還在進行中，連續收到三個 tick，價格都是 110；收盤之後，
+// 下一根的第一個 tick 價格是 104。
+//        正確的顯示值：三個 tick 都是 102（100 + 0.2 × 10）；收盤後 EMA 固定為
+// 102；下一根第一個 tick：102 + 0.2 × (104 − 102) = 102.4。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug.EMA.onTick）：prev = prev + k * (price - prev)，把結果寫回 prev 再回傳。
-//   ② 修正版（L05Fixed.EMA）：onTick：live = prevClosed + k * (price - prevClosed)，回傳 live（不寫回 prevClosed）；onCandleClose：prevClosed = live。
+//   ① Bug 版（L05Bug.EMA.onTick）：prev = prev + k * (price - prev)，
+// 把結果寫回 prev 再回傳。
+//   ② 修正版（L05Fixed.EMA）：onTick：live = prevClosed + k * (price -
+// prevClosed)，回傳 live（不寫回 prevClosed）；onCandleClose：prevClosed =
+// live。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange07-kline/L05_LiveEMA.kt
 package tw.harry.labs.practice.exchange07kline
@@ -39,7 +47,11 @@ private fun scenario(log: LabLog, ema: L05LiveEMA) {
     ema.onCandleClose()
     val next = ema.onTick(e07("104"))
     log("收盤後，下一根的第一個 tick 104 → EMA ${e07Text(next)}")
-    log("最後：三個 tick 的 EMA 是 ${shown.joinToString("、") { e07Text(it) }}，下一根第一個 tick 是 ${e07Text(next)}（正確答案：102、102、102，下一根 102.4）")
+    log(
+        "最後：三個 tick 的 EMA 是 ${shown.joinToString("、") {
+            e07Text(it)
+        }}，下一根第一個 tick 是 ${e07Text(next)}（正確答案：102、102、102，下一根 102.4）",
+    )
 }
 
 // MARK: - Bug 版
@@ -48,7 +60,8 @@ private object L05Bug {
         private var prev = e07("100")
 
         override fun onTick(price: BigDecimal): BigDecimal {
-            // TODO ①：prev = prev + k * (price - prev)：把算出來的值寫回 prev，再回傳 prev。目前回傳 0 只是佔位
+            // TODO ①：prev = prev + k * (price - prev)：把算出來的值寫回 prev，
+            // 再回傳 prev。目前回傳 0 只是佔位
             return BigDecimal.ZERO
         }
 
@@ -61,11 +74,13 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     class EMA : L05LiveEMA {
-        private var prevClosed = e07("100")                 // 上一根「已收盤」的 EMA
+        // 上一根「已收盤」的 EMA
+        private var prevClosed = e07("100")
         private var live = e07("100")
 
         override fun onTick(price: BigDecimal): BigDecimal {
-            // TODO ②-1：live = prevClosed + k * (price - prevClosed)，回傳 live；不要寫回 prevClosed。目前回傳 0 只是佔位
+            // TODO ②-1：live = prevClosed + k * (price - prevClosed)，回傳
+            // live；不要寫回 prevClosed。目前回傳 0 只是佔位
             return BigDecimal.ZERO
         }
 
@@ -101,18 +116,38 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, ema) 執行"
-            lines.none { it.startsWith("最後：三個 tick 的 EMA 是 102、103.6、104.88") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, ema) 執行"
+            }
+
+            lines.none {
+                it.startsWith("最後：三個 tick 的 EMA 是 102、103.6、104.88")
+            } -> {
                 "Bug 還沒重現：onTick 要把算出來的值寫回 prev（prev = prev + k * (price - prev)），再回傳 prev"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, ema) 執行"
-            lines.none { it.startsWith("最後：三個 tick 的 EMA 是 102、102、102，下一根第一個 tick 是 102.4") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, ema) 執行"
+            }
+
+            lines.none {
+                it.startsWith(
+                    "最後：三個 tick 的 EMA 是 102、102、102，下一根第一個 tick 是 102.4",
+                )
+            } -> {
                 "onTick 用 prevClosed 算出 live 再回傳（不寫回 prevClosed）；onCandleClose 才把 prevClosed 換成 live"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

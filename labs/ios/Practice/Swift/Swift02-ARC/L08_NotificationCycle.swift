@@ -1,12 +1,17 @@
-// L08：關掉畫面後，通知一來還是會更新已經不存在的畫面（NotificationCenter 的 closure 版 observer）
-// 對應複習站：Swift02ARC 第 4 題「實務上哪些寫法最容易造成 retain cycle？」（NotificationCenter）
+// L08：關掉畫面後，通知一來還是會更新已經不存在的畫面（NotificationCenter 的
+// closure 版 observer）
+// 對應複習站：Swift02ARC 第 4 題「實務上哪些寫法最容易造成 retain cycle？」
+// （NotificationCenter）
 //
 // 情境：資產畫面的 ViewModel 監聽「報價更新」通知，每收到一次就重新整理。
 //
 // 你要寫：
-//   ① Bug 版：init 裡用 addObserver(forName:object:queue:using:) 監聽 priceUpdated，closure 直接用 self 呼叫 refresh()，不保存 token。
-//   ② 修正版：closure 用 [weak self]，保存 token 到 token 屬性，並在 deinit 裡 removeObserver。
-// 只改有 TODO 的地方。解答：Solution/Swift/Swift02-ARC/L08_NotificationCycle.swift
+//   ① Bug 版：init 裡用 addObserver(forName:object:queue:using:) 監聽
+// priceUpdated，closure 直接用 self 呼叫 refresh()，不保存 token。
+//   ② 修正版：closure 用 [weak self]，保存 token 到 token 屬性，並在 deinit 裡
+// removeObserver。
+// 只改有 TODO 的地方。解答：Solution/Swift/Swift02-ARC/L08_NotificationCycle.
+// swift
 import SwiftUI
 import LabKit
 
@@ -22,7 +27,9 @@ private enum L08Bug {
         init(hits: Swift02ARC.HitCounter) {
             self.hits = hits
             LiveObjects.shared.add(live)
-            // TODO ①：用 NotificationCenter.default.addObserver(forName: priceUpdated, object: nil, queue: .main) { … }，closure 裡直接用 self 呼叫 refresh()
+            // TODO ①：用 NotificationCenter.default.addObserver(forName:
+            // priceUpdated, object: nil, queue: main) { … }，closure 裡直接用
+            // self 呼叫 refresh()
         }
 
         private func refresh() { hits.hit() }
@@ -32,11 +39,15 @@ private enum L08Bug {
 
     static func run(_ log: LabLog) async {
         let hits = Swift02ARC.HitCounter()
-        await Swift02ARC.openThenClose(log, name: live, whileOpen: { (_: AssetViewModel) in
-            NotificationCenter.default.post(name: priceUpdated, object: nil)
-            try? await Task.sleep(for: .milliseconds(100))   // queue: .main 的 closure 要等一下才會執行
-            log("畫面開著時發一次通知，refresh 被呼叫 \(hits.count) 次")
-        }) { AssetViewModel(hits: hits) }
+        await Swift02ARC.openThenClose(
+            log, name: live,
+            whileOpen: { (_: AssetViewModel) in
+                NotificationCenter.default.post(name: priceUpdated, object: nil)
+                // queue: .main 的 closure 要等一下才會執行
+                try? await Task.sleep(for: .milliseconds(100))
+                log("畫面開著時發一次通知，refresh 被呼叫 \(hits.count) 次")
+            }
+        ) { AssetViewModel(hits: hits) }
         NotificationCenter.default.post(name: priceUpdated, object: nil)
         try? await Task.sleep(for: .milliseconds(100))
         log("畫面關掉後又發一次通知，refresh 累計被呼叫 \(hits.count) 次")
@@ -54,24 +65,30 @@ private enum L08Fixed {
         init(hits: Swift02ARC.HitCounter) {
             self.hits = hits
             LiveObjects.shared.add(live)
-            // TODO ②-1：同樣的 addObserver，closure 用 [weak self]，並把回傳值存進 token
+            // TODO ②-1：同樣的 addObserver，closure 用 [weak self]，
+            // 並把回傳值存進 token
         }
 
         private func refresh() { hits.hit() }
 
         deinit {
-            // TODO ②-2：有 token 的話，呼叫 NotificationCenter.default.removeObserver 移除
+            // TODO ②-2：有 token 的話，呼叫 NotificationCenter.default.
+            // removeObserver 移除
             LiveObjects.shared.remove(live)
         }
     }
 
     static func run(_ log: LabLog) async {
         let hits = Swift02ARC.HitCounter()
-        await Swift02ARC.openThenClose(log, name: live, whileOpen: { (_: AssetViewModel) in
-            NotificationCenter.default.post(name: priceUpdated, object: nil)
-            try? await Task.sleep(for: .milliseconds(100))   // queue: .main 的 closure 要等一下才會執行
-            log("畫面開著時發一次通知，refresh 被呼叫 \(hits.count) 次")
-        }) { AssetViewModel(hits: hits) }
+        await Swift02ARC.openThenClose(
+            log, name: live,
+            whileOpen: { (_: AssetViewModel) in
+                NotificationCenter.default.post(name: priceUpdated, object: nil)
+                // queue: .main 的 closure 要等一下才會執行
+                try? await Task.sleep(for: .milliseconds(100))
+                log("畫面開著時發一次通知，refresh 被呼叫 \(hits.count) 次")
+            }
+        ) { AssetViewModel(hits: hits) }
         NotificationCenter.default.post(name: priceUpdated, object: nil)
         try? await Task.sleep(for: .milliseconds(100))
         log("畫面關掉後又發一次通知，refresh 累計被呼叫 \(hits.count) 次")
@@ -84,7 +101,8 @@ extension Swift02ARC {
         id: "L08",
         title: "關掉畫面後通知還在更新畫面",
         question: "第 4 題：實務上哪些寫法最容易造成 retain cycle？",
-        goal: "ViewModel 用 NotificationCenter 的 closure 版 observer 監聽報價更新。找出為什麼畫面關掉後它還在處理通知，並修好。",
+        goal:
+            "ViewModel 用 NotificationCenter 的 closure 版 observer 監聽報價更新。找出為什麼畫面關掉後它還在處理通知，並修好。",
         steps: [
             "寫 TODO ①，選「練習」「Bug 版」執行，看最後兩行：畫面開著時 refresh 被呼叫 1 次，畫面關掉後再發一次通知，累計是 2 次。",
             "看關閉畫面那一行：存活中的 AssetViewModel 是 1，weak 參考還在。",
@@ -101,19 +119,35 @@ extension Swift02ARC {
         },
         demo: { variant, _ in
             switch variant {
-            case .bug: AnyView(ScreenDemo(name: L08Bug.live) { L08Bug.AssetViewModel(hits: HitCounter()) })
-            case .fixed: AnyView(ScreenDemo(name: L08Fixed.live) { L08Fixed.AssetViewModel(hits: HitCounter()) })
+            case .bug:
+                AnyView(
+                    ScreenDemo(name: L08Bug.live) {
+                        L08Bug.AssetViewModel(hits: HitCounter())
+                    })
+            case .fixed:
+                AnyView(
+                    ScreenDemo(name: L08Fixed.live) {
+                        L08Fixed.AssetViewModel(hits: HitCounter())
+                    })
             }
         },
         checkBug: { lines in
-            guard lines.contains("畫面開著時發一次通知，refresh 被呼叫 1 次") else { return "畫面開著時收到通知，refresh 應該被呼叫 1 次：用 addObserver(forName:object:queue:using:) 監聽，closure 裡呼叫 refresh()" }
+            guard lines.contains("畫面開著時發一次通知，refresh 被呼叫 1 次") else {
+                return
+                    "畫面開著時收到通知，refresh 應該被呼叫 1 次：用 addObserver(forName:object:queue:using:) 監聽，closure 裡呼叫 refresh()"
+            }
             return lines.last == "畫面關掉後又發一次通知，refresh 累計被呼叫 2 次"
-                ? nil : "Bug 還沒重現：畫面關掉後 ViewModel 應該還在處理通知（closure 要直接用 self，也不要 removeObserver）"
+                ? nil
+                : "Bug 還沒重現：畫面關掉後 ViewModel 應該還在處理通知（closure 要直接用 self，也不要 removeObserver）"
         },
         checkFixed: { lines in
-            guard lines.contains("畫面開著時發一次通知，refresh 被呼叫 1 次") else { return "畫面開著時收到通知，refresh 應該被呼叫 1 次：用 addObserver(forName:object:queue:using:) 監聽，closure 裡呼叫 refresh()" }
+            guard lines.contains("畫面開著時發一次通知，refresh 被呼叫 1 次") else {
+                return
+                    "畫面開著時收到通知，refresh 應該被呼叫 1 次：用 addObserver(forName:object:queue:using:) 監聽，closure 裡呼叫 refresh()"
+            }
             return lines.last == "畫面關掉後又發一次通知，refresh 累計被呼叫 1 次"
-                ? nil : "畫面關掉後 refresh 不應該再被呼叫：closure 要用 [weak self]，並在 deinit 裡 removeObserver(token)"
+                ? nil
+                : "畫面關掉後 refresh 不應該再被呼叫：closure 要用 [weak self]，並在 deinit 裡 removeObserver(token)"
         }
     )
 }

@@ -33,8 +33,10 @@ public enum LabSource: String, CaseIterable, Identifiable, Sendable {
 /// 一個演練。Practice 與 Solution 各有一份，id 相同。
 ///
 /// - `run`：按「執行」時呼叫，從主執行緒開始。把觀察到的事情寫進 `log`。
-/// - `demo`：需要畫面的演練（SwiftUI 狀態、列表捲動…）放在這裡。切換版本時會重建。
-/// - `checkBug`／`checkFixed`：自動檢查。拿到這次執行的 log，回傳 `nil` 代表「符合預期」，
+/// - `demo`：需要畫面的演練（SwiftUI 狀態、列表捲動…）放在這裡。
+/// 切換版本時會重建。
+/// - `checkBug`／`checkFixed`：自動檢查。拿到這次執行的 log，回傳 `nil`
+/// 代表「符合預期」，
 ///   否則回傳還差什麼。練習時用來告訴你寫對了沒有。
 public struct Lab: Identifiable {
     public let id: String
@@ -44,7 +46,8 @@ public struct Lab: Identifiable {
     public let steps: [String]
     public let expectBug: String
     public let expectFixed: String
-    /// Bug 版會讓 App 當掉（例如 unowned 存取已釋放的物件）。畫面會先提醒，自動檢查會略過 Bug 版。
+    /// Bug 版會讓 App 當掉（例如 unowned 存取已釋放的物件）。畫面會先提醒，
+    /// 自動檢查會略過 Bug 版。
     public let bugCrashes: Bool
     public let run: ((LabVariant, LabLog) async -> Void)?
     public let demo: ((LabVariant, LabLog) -> AnyView)?
@@ -83,9 +86,12 @@ public struct Lab: Identifiable {
         self.filePath = filePath
     }
 
-    /// 相對於 labs/ios 的路徑，例如 Practice/Swift/Swift01-ValueSemantics/L01_StructOrClass.swift
+    /// 相對於 labs/ios 的路徑，例如
+    /// Practice/Swift/Swift01-ValueSemantics/L01_StructOrClass.swift
     public var relativePath: String {
-        if let r = filePath.range(of: "/labs/ios/") { return String(filePath[r.upperBound...]) }
+        if let r = filePath.range(of: "/labs/ios/") {
+            return String(filePath[r.upperBound...])
+        }
         return (filePath as NSString).lastPathComponent
     }
 

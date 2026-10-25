@@ -1,15 +1,21 @@
 // L08：測試 load() 要真的等 2 秒，虛擬時間完全沒用（runTest 與注入 dispatcher）
-// 對應複習站：Kotlin04CoroutineSync 第 5 題「runTest 怎麼測 coroutine？虛擬時間是什麼？」
+// 對應複習站：Kotlin04CoroutineSync 第 5 題「runTest 怎麼測
+// coroutine？虛擬時間是什麼？」
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 practice/kotlin/test/Kotlin04RunTest.kt（已經寫好，不用改）。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// practice/kotlin/test/Kotlin04RunTest.kt（已經寫好，不用改）。
 //
-// 情境：OrderRepo.load() 向伺服器載入訂單，用 withContext 切到背景，約 2 秒（delay(2_000) 代表等伺服器）。
+// 情境：OrderRepo.load() 向伺服器載入訂單，用 withContext 切到背景，約 2
+// 秒（delay(2_000) 代表等伺服器）。
 //        測試用 runTest，希望 delay 不要真的等。
 //
 // 你要寫：
-//   ① Bug 版（L08Bug.OrderRepo）：load() 寫死 withContext(Dispatchers.IO) { delay(2_000); "50 筆訂單" }。測試真的等了 2 秒，虛擬時鐘沒動。
-//   ② 修正版（L08Fixed.OrderRepo）：dispatcher 用建構子注入的 io：withContext(io) { delay(2_000); "50 筆訂單" }。
-//      測試傳入 StandardTestDispatcher(testScheduler)，虛擬時鐘走 2000 ms，瞬間完成。
+//   ① Bug 版（L08Bug.OrderRepo）：load() 寫死 withContext(Dispatchers.IO) {
+// delay(2_000); "50 筆訂單" }。測試真的等了 2 秒，虛擬時鐘沒動。
+//   ② 修正版（L08Fixed.OrderRepo）：dispatcher 用建構子注入的 io：
+// withContext(io) { delay(2_000); "50 筆訂單" }。
+//      測試傳入 StandardTestDispatcher(testScheduler)，虛擬時鐘走 2000 ms，
+// 瞬間完成。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin04-coroutine-sync/L08_RunTest.kt
 package tw.harry.labs.practice.kotlin04coroutinesync
@@ -23,15 +29,18 @@ import tw.harry.labs.kit.Lab
 // MARK: - Bug 版
 internal object L08Bug {
     class OrderRepo {
-        // TODO ①：load() 寫死 withContext(Dispatchers.IO) { … }，裡面 delay(2_000)（代表等伺服器），最後回傳 "50 筆訂單"
+        // TODO ①：load() 寫死 withContext(Dispatchers.IO) { … }，裡面
+        // delay(2_000)（代表等伺服器），最後回傳 "50 筆訂單"
         suspend fun load(): String = "（還沒寫）"
     }
 }
 
 // MARK: - 修正版
 internal object L08Fixed {
-    class OrderRepo(private val io: CoroutineDispatcher) {          // dispatcher 用建構子注入
-        // TODO ②：load() 改用注入的 io：withContext(io) { delay(2_000); "50 筆訂單" }（目前寫死 Dispatchers.IO，虛擬時間不會生效）
+    // dispatcher 用建構子注入
+    class OrderRepo(private val io: CoroutineDispatcher) {
+        // TODO ②：load() 改用注入的 io：withContext(io) { delay(2_000); "50
+        // 筆訂單" }（目前寫死 Dispatchers.IO，虛擬時間不會生效）
         suspend fun load(): String = withContext(Dispatchers.IO) {
             delay(2_000)
             "50 筆訂單"

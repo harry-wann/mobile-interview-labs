@@ -1,13 +1,20 @@
-// L02：警示標籤淡入淡出，連父層的卡片也每格重組（把動畫值傳給子層，改傳 () -> Float）
-// 對應複習站：Kotlin08ComposePerformance 第 2 題「延後讀取（deferred read）是什麼？」
+// L02：警示標籤淡入淡出，連父層的卡片也每格重組（把動畫值傳給子層，改傳 () ->
+// Float）
+// 對應複習站：Kotlin08ComposePerformance 第 2 題「延後讀取（deferred read）
+// 是什麼？」
 //
-// 情境：交易卡片（TradeCard）有一個警示標籤（AlertBadge），按「切換警示」時，標籤用 600 ms 淡入或淡出。
+// 情境：交易卡片（TradeCard）有一個警示標籤（AlertBadge），按「切換警示」時，
+// 標籤用 600 ms 淡入或淡出。
 //        畫面上的橘色數字顯示 TradeCard 與 AlertBadge 各重組了幾次。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug）：TradeCard 用 val alpha by animateFloatAsState(…) 取得 alpha，把 Float 傳給 AlertBadge，AlertBadge 用 Modifier.alpha(alpha)。
-//   ② 修正版（L02Fixed）：TradeCard 用 val alpha = animateFloatAsState(…)（不加 by），傳 { alpha.value } 給 AlertBadge；AlertBadge 在 graphicsLayer { } 裡呼叫它。
-// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，看橘色的重組次數是不是照預期。
+//   ① Bug 版（L02Bug）：TradeCard 用 val alpha by animateFloatAsState(…) 取得
+// alpha，把 Float 傳給 AlertBadge，AlertBadge 用 Modifier.alpha(alpha)。
+//   ② 修正版（L02Fixed）：TradeCard 用 val alpha = animateFloatAsState(…)
+// （不加 by），傳 { alpha.value } 給 AlertBadge；AlertBadge 在 graphicsLayer {
+// } 裡呼叫它。
+// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，
+// 看橘色的重組次數是不是照預期。
 // 解答：solution/kotlin/kotlin08-compose-performance/L02_AlphaLambda.kt
 package tw.harry.labs.practice.kotlin08composeperformance
 
@@ -38,10 +45,13 @@ import tw.harry.labs.kit.Variant
 private object L02Bug {
     @Composable
     fun TradeCard(alert: Boolean) {
-        // TODO ①-1：val alpha by animateFloatAsState(if (alert) 1f else 0.15f, tween(600), label = "alert")
+        // TODO ①-1：val alpha by animateFloatAsState(if (alert) 1f else 0.15f,
+        // tween(600), label = "alert")
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             RecomposeCounter("TradeCard")
-            AlertBadge(alpha = 1f)                          // TODO ①-2：把 1f 換成上面的 alpha（Float：在這裡讀，Composition 階段）
+            // TODO ①-2：把 1f 換成上面的 alpha（Float：在這裡讀，Composition
+            // 階段）
+            AlertBadge(alpha = 1f)
         }
     }
 
@@ -57,10 +67,13 @@ private object L02Bug {
 private object L02Fixed {
     @Composable
     fun TradeCard(alert: Boolean) {
-        // TODO ②-1：val alpha = animateFloatAsState(if (alert) 1f else 0.15f, tween(600), label = "alert")（不要加 by，這裡不讀 value）
+        // TODO ②-1：val alpha = animateFloatAsState(if (alert) 1f else 0.15f,
+        // tween(600), label = "alert")（不要加 by，這裡不讀 value）
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             RecomposeCounter("TradeCard")
-            AlertBadge(alpha = { 1f })                      // TODO ②-2：把 { 1f } 換成 { alpha.value }（只傳函式，沒有讀 alpha.value）
+            // TODO ②-2：把 { 1f } 換成 { alpha.value }（只傳函式，沒有讀 alpha.
+            // value）
+            AlertBadge(alpha = { 1f })
         }
     }
 
@@ -70,7 +83,8 @@ private object L02Fixed {
         Text(
             "警示：價格偏離",
             Modifier
-                // TODO ②-3：加上 .graphicsLayer { this.alpha = alpha() }（大括號在 Drawing 階段才執行，這時才讀 alpha）
+                // TODO ②-3：加上 graphicsLayer { this.alpha = alpha()
+                // }（大括號在 Drawing 階段才執行，這時才讀 alpha）
                 .background(Color(0xFFFFCDD2))
                 .padding(8.dp),
         )

@@ -1,12 +1,17 @@
 // L05：本機的掛單簿和交易所對不上（order book 的增量更新不能 conflate）
-// 對應複習站：Kotlin05Flow 第 4 題「行情資料進 UI 時，conflate、sample、debounce 差在哪？」
+// 對應複習站：Kotlin05Flow 第 4 題「行情資料進 UI 時，conflate、sample、
+// debounce 差在哪？」
 //
-// 情境：交易所用 delta（增量更新）推送 order book（買賣掛單的完整清單）：每筆 delta 是「某個價位現在有多少數量」。
-//        共 60 筆，每筆更新不同的價位，每 1 ms 一筆。本機要靠依序套用每一筆 delta，維護出和交易所一樣的 order book。
+// 情境：交易所用 delta（增量更新）推送 order book（買賣掛單的完整清單）：每筆
+// delta 是「某個價位現在有多少數量」。
+//        共 60 筆，每筆更新不同的價位，每 1 ms 一筆。本機要靠依序套用每一筆
+// delta，維護出和交易所一樣的 order book。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug）：對 delta 串流加 conflate()。收集端套用一筆要 5 ms，比來得慢，中間的 delta 被丟掉，本機的 order book 少了價位。
-//   ② 修正版（L05Fixed）：一個 coroutine 依序套用每一筆 delta（一筆都不丟）維護 localBook，再把快照發佈成 StateFlow 給慢的 UI。
+//   ① Bug 版（L05Bug）：對 delta 串流加 conflate()。收集端套用一筆要 5 ms，
+// 比來得慢，中間的 delta 被丟掉，本機的 order book 少了價位。
+//   ② 修正版（L05Fixed）：一個 coroutine 依序套用每一筆 delta（一筆都不丟）
+// 維護 localBook，再把快照發佈成 StateFlow 給慢的 UI。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin05-flow/L05_OrderBookDelta.kt
 package tw.harry.labs.practice.kotlin05flow
@@ -34,7 +39,10 @@ private fun deltas(): Flow<Delta> = flow {
 }
 
 /** 交易所那邊真正的 order book：每個價位的數量 */
-private val serverBook: Map<Int, Int> = (0 until 60).associate { 100 + it to it + 1 }
+private val serverBook: Map<Int, Int> = (0 until 60).associate {
+    100 + it to
+        it + 1
+}
 
 private fun report(log: LabLog, localBook: Map<Int, Int>) {
     log("本機 order book ${localBook.size} 個價位，交易所 ${serverBook.size} 個價位")
@@ -45,9 +53,11 @@ private fun report(log: LabLog, localBook: Map<Int, Int>) {
 private object L05Bug {
     suspend fun run(log: LabLog) {
         val localBook = HashMap<Int, Int>()
-        // TODO ①：在 deltas() 後面加 .conflate()（收集端比較慢，conflate 會把中間的 delta 丟掉）
+        // TODO ①：在 deltas() 後面加 conflate()（收集端比較慢，conflate
+        // 會把中間的 delta 丟掉）
         deltas().collect { delta ->
-            delay(5)                                            // 套用一筆並更新畫面要 5 ms
+            // 套用一筆並更新畫面要 5 ms
+            delay(5)
             localBook[delta.price] = delta.qty
         }
         report(log, localBook)
@@ -57,21 +67,26 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     suspend fun run(log: LabLog) {
-        val localBook = HashMap<Int, Int>()                     // 只有下面這一個 coroutine 會動它
+        // 只有下面這一個 coroutine 會動它
+        val localBook = HashMap<Int, Int>()
         val snapshots = MutableStateFlow<Map<Int, Int>>(emptyMap())
         var shownByUi: Map<Int, Int> = emptyMap()
         coroutineScope {
             val ui = launch {
-                snapshots.collect { snapshot ->                 // UI 很慢，StateFlow 只保留最新的快照，剛好
+                // UI 很慢，StateFlow 只保留最新的快照，剛好
+                snapshots.collect { snapshot ->
                     delay(20)
                     shownByUi = snapshot
                 }
             }
-            deltas().collect { delta ->                         // 一筆都不丟：依序套用
-                // TODO ②-1：把 delta 套用到 localBook：localBook[delta.price] = delta.qty
+            // 一筆都不丟：依序套用
+            deltas().collect { delta ->
+                // TODO ②-1：把 delta 套用到 localBook：localBook[delta.price]
+                // = delta.qty
                 // TODO ②-2：對外發佈快照：snapshots.value = localBook.toMap()
             }
-            delay(100)                                          // 讓 UI 追上最新的快照
+            // 讓 UI 追上最新的快照
+            delay(100)
             ui.cancelAndJoin()
         }
         report(log, shownByUi)
@@ -101,15 +116,23 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("本機 order book ") } -> "演練沒有跑完：收集 deltas() 之後要呼叫 report(log, localBook)"
+            lines.none {
+                it.startsWith("本機 order book ")
+            } -> "演練沒有跑完：收集 deltas() 之後要呼叫 report(log, localBook)"
+
             "兩邊對不上" !in lines -> "Bug 版 order book 要對不上：收集端對 deltas() 加 conflate()，再用 delay(5) 慢慢套用"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("本機 order book ") } -> "演練沒有跑完：最後要呼叫 report(log, …)"
+            lines.none {
+                it.startsWith("本機 order book ")
+            } -> "演練沒有跑完：最後要呼叫 report(log, …)"
+
             "兩邊一致" !in lines -> "order book 對不上：delta 一筆都不能丟，要依序套用每一筆（不要 conflate），再發佈快照給 UI"
+
             else -> null
         }
     },

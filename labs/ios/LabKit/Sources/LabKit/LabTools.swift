@@ -60,7 +60,9 @@ public struct LiveObjectsView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        live.counts[name, default: 0] > 0 ? Color.orange.opacity(0.2) : Color.green.opacity(0.2),
+                        live.counts[name, default: 0] > 0
+                            ? Color.orange.opacity(0.2)
+                            : Color.green.opacity(0.2),
                         in: Capsule()
                     )
             }
@@ -141,7 +143,8 @@ public struct BodyCountView: View {
 
 // MARK: - 畫面流暢度
 
-/// 顯示目前每秒畫了幾格，以及累計「卡頓」次數（某一格花的時間超過預期的 1.5 倍）。
+/// 顯示目前每秒畫了幾格，以及累計「卡頓」次數（某一格花的時間超過預期的 1.5
+/// 倍）。
 /// 主執行緒被卡住時，這裡的數字會掉下來。
 public struct FrameMeter: View {
     @StateObject private var model = FrameMeterModel()
@@ -159,7 +162,10 @@ public struct FrameMeter: View {
         .font(.system(.caption, design: .monospaced))
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(model.fps < 50 ? Color.red.opacity(0.2) : Color.green.opacity(0.2), in: Capsule())
+        .background(
+            model.fps < 50 ? Color.red.opacity(0.2) : Color.green.opacity(0.2),
+            in: Capsule()
+        )
         .onAppear { model.start() }
         .onDisappear { model.stop() }
     }

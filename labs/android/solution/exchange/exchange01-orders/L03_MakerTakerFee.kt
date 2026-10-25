@@ -1,11 +1,16 @@
 // L03：指値買單的手續費算少了（一張單的成交可能同時有 taker 和 maker）
-// 對應複習站：Exchange01Orders 第 2 題「訂單簿是什麼？「約定」「部分約定」「maker／taker」是什麼意思？」
+// 對應複習站：Exchange01Orders 第 2 題「訂單簿是什麼？「約定」「部分約定」
+// 「maker／taker」是什麼意思？」
 //
 // 情境：和上一個演練同一張單：指値買單 0.5 BTC、委託價 10,005,000 円。
-//        先吃掉賣板上的 0.2 BTC（成交價 10,000,000 円，這一筆是 taker），剩下的 0.3 BTC 掛在買板上，之後有人賣給他（成交價 10,005,000 円，這一筆是 maker）。
+//        先吃掉賣板上的 0.2 BTC（成交價 10,000,000 円，這一筆是 taker），
+// 剩下的 0.3 BTC 掛在買板上，之後有人賣給他（成交價 10,005,000 円，這一筆是
+// maker）。
 //        手續費率是演練的假設，不是交易所的費率：maker 0.05%、taker 0.1%。
-// Bug 版：用「下單的種類」決定費率：指値單就全部當成 maker。但那 0.2 BTC 是吃板，實際上是 taker，手續費少收了。
-// 修正版：每一筆成交各自看它的角色（吃板是 taker、掛單等到的是 maker），分別套用費率再加總。
+// Bug 版：用「下單的種類」決定費率：指値單就全部當成 maker。但那 0.2 BTC
+// 是吃板，實際上是 taker，手續費少收了。
+// 修正版：每一筆成交各自看它的角色（吃板是 taker、掛單等到的是 maker），
+// 分別套用費率再加總。
 package tw.harry.labs.solution.exchange01orders
 
 import java.math.BigDecimal
@@ -15,20 +20,35 @@ import tw.harry.labs.kit.Variant
 
 private enum class OrderType { LIMIT, MARKET }
 
-private val makerRate = e01("0.0005")       // 演練假設：0.05%
-private val takerRate = e01("0.001")        // 演練假設：0.1%
+private val makerRate = e01("0.0005") // 演練假設：0.05%
+private val takerRate = e01("0.001") // 演練假設：0.1%
 
 /** 演練流程（兩個版本共用）：指値單先吃板、再等到對手，算每一筆成交的手續費 */
 private fun scenario(log: LabLog, rate: (E01Fill, OrderType) -> BigDecimal) {
-    val book = E01Book(listOf(E01Level(e01("10000000"), e01("0.2")), E01Level(e01("10010000"), e01("0.3"))))
-    val fills = book.takeAsks(e01("0.5"), limit = e01("10005000")).toMutableList()     // 立刻吃板：taker
-    fills += E01Fill(e01("0.3"), e01("10005000"), E01Role.MAKER)                       // 之後有人賣給掛單：maker
+    val book =
+        E01Book(
+            listOf(
+                E01Level(e01("10000000"), e01("0.2")),
+                E01Level(e01("10010000"), e01("0.3")),
+            ),
+        )
+    // 立刻吃板：taker
+    val fills = book.takeAsks(
+        e01("0.5"),
+        limit = e01("10005000"),
+    ).toMutableList()
+    // 之後有人賣給掛單：maker
+    fills += E01Fill(e01("0.3"), e01("10005000"), E01Role.MAKER)
     var total = BigDecimal.ZERO
     for (fill in fills) {
         val fee = fill.qty * fill.price * rate(fill, OrderType.LIMIT)
         total += fee
         val role = if (fill.role == E01Role.TAKER) "吃板 taker" else "掛單 maker"
-        log("成交 ${e01Text(fill.qty)} BTC @ ${e01Text(fill.price)}（$role），手續費 ${e01Text(fee)} 円")
+        log(
+            "成交 ${e01Text(
+                fill.qty,
+            )} BTC @ ${e01Text(fill.price)}（$role），手續費 ${e01Text(fee)} 円",
+        )
     }
     log("手續費合計 ${e01Text(total)} 円")
 }
@@ -36,15 +56,16 @@ private fun scenario(log: LabLog, rate: (E01Fill, OrderType) -> BigDecimal) {
 // MARK: - Bug 版
 private object L03Bug {
     fun rate(fill: E01Fill, orderType: OrderType): BigDecimal =
-        if (orderType == OrderType.LIMIT) makerRate else takerRate      // 指値單就當成 maker，成行單就當成 taker
+        // 指値單就當成 maker，成行單就當成 taker
+        if (orderType == OrderType.LIMIT) makerRate else takerRate
 
     suspend fun run(log: LabLog) = scenario(log, ::rate)
 }
 
 // MARK: - 修正版
 private object L03Fixed {
-    fun rate(fill: E01Fill, orderType: OrderType): BigDecimal =
-        if (fill.role == E01Role.MAKER) makerRate else takerRate        // 看這一筆成交實際的角色
+    fun rate(fill: E01Fill, orderType: OrderType): BigDecimal = // 看這一筆成交實際的角色
+        if (fill.role == E01Role.MAKER) makerRate else takerRate
 
     suspend fun run(log: LabLog) = scenario(log, ::rate)
 }
@@ -72,15 +93,23 @@ val l03 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("手續費合計") } -> "演練沒有跑完：要用 scenario(log, ::rate) 執行"
+            lines.none {
+                it.startsWith("手續費合計")
+            } -> "演練沒有跑完：要用 scenario(log, ::rate) 執行"
+
             "手續費合計 2500.75 円" !in lines -> "Bug 還沒重現：指値單（orderType == LIMIT）每一筆都用 makerRate，合計應該是 2500.75"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("手續費合計") } -> "演練沒有跑完：要用 scenario(log, ::rate) 執行"
+            lines.none {
+                it.startsWith("手續費合計")
+            } -> "演練沒有跑完：要用 scenario(log, ::rate) 執行"
+
             "手續費合計 3500.75 円" !in lines -> "要看每一筆成交的 fill.role：MAKER 用 makerRate，TAKER 用 takerRate，合計應該是 3500.75"
+
             else -> null
         }
     },

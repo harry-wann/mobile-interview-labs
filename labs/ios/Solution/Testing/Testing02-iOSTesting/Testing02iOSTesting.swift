@@ -6,6 +6,7 @@ enum Testing02iOSTesting {
         id: "testing-ios",
         code: "Testing02iOSTesting",
         title: "iOS 測試工具",
-        labs: [l01, l02, l03, l04]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04]
     )
 }

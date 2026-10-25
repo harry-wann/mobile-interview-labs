@@ -1,9 +1,11 @@
 // L07：1 satoshi 的價格顯示成 1E-8（BigDecimal.toString() 用科學記號）
 // 對應複習站：Exchange02Precision 第 5 題「數字要怎麼顯示？」
 //
-// 情境：行情畫面要顯示三個數字：0.00000001（1 satoshi，BTC 的最小單位）、0.00000015、100.00000000（尾端有多餘的 0，先 stripTrailingZeros 去掉）。
+// 情境：行情畫面要顯示三個數字：0.00000001（1 satoshi，BTC 的最小單位）、0.
+// 00000015、100.00000000（尾端有多餘的 0，先 stripTrailingZeros 去掉）。
 //        畫面上要看到一般的小數，不能出現科學記號。
-// Bug 版：BigDecimal 轉字串用 toString()。很小的數字會變成 1E-8、1.5E-7，stripTrailingZeros 之後的 100 也會變成 1E+2。
+// Bug 版：BigDecimal 轉字串用 toString()。很小的數字會變成 1E-8、1.5E-7，
+// stripTrailingZeros 之後的 100 也會變成 1E+2。
 // 修正版：顯示一律用 toPlainString()，永遠是一般的小數。
 package tw.harry.labs.solution.exchange02precision
 
@@ -28,23 +30,24 @@ private fun scenario(log: LabLog, display: (String) -> String) {
 
 // MARK: - Bug 版
 private object L07Bug {
-    fun display(text: String): String =
-        BigDecimal(text).stripTrailingZeros().toString()        // toString()：很小的數字會變成 1E-8
+    fun display(text: String): String = // toString()：很小的數字會變成 1E-8
+        BigDecimal(text).stripTrailingZeros().toString()
 
     suspend fun run(log: LabLog) = scenario(log, ::display)
 }
 
 // MARK: - 修正版
 private object L07Fixed {
-    fun display(text: String): String =
-        BigDecimal(text).stripTrailingZeros().toPlainString()   // toPlainString()：永遠是一般的小數
+    fun display(text: String): String = // toPlainString()：永遠是一般的小數
+        BigDecimal(text).stripTrailingZeros().toPlainString()
 
     suspend fun run(log: LabLog) = scenario(log, ::display)
 }
 
 // MARK: - 演練設定
-private fun scientificCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("3 個數字裡") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun scientificCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("3 個數字裡")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l07 = Lab(
     id = "L07",

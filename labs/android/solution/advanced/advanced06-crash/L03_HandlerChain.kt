@@ -1,11 +1,18 @@
-// L03：自己裝了一個 crash 處理，Crashlytics 就收不到 crash 了（uncaught exception handler 要串起來）
-// 對應複習站：Advanced06Crash 第 2 題「iOS 和 Android 常見的 crash 有哪幾種？」（沒被接住的例外要怎麼回報）
+// L03：自己裝了一個 crash 處理，Crashlytics 就收不到 crash 了（uncaught
+// exception handler 要串起來）
+// 對應複習站：Advanced06Crash 第 2 題「iOS 和 Android 常見的 crash 有哪幾種？」
+// （沒被接住的例外要怎麼回報）
 //
-// 情境：App 啟動時先初始化 Crashlytics，它用 Thread.setDefaultUncaughtExceptionHandler 登記自己。
-//       後來有人想「crash 前先補寫一筆本機紀錄」，在 Crashlytics 之後又呼叫了一次 setDefaultUncaughtExceptionHandler。
-//       演練用「假的 Crashlytics」，並直接呼叫目前登記的 handler 來模擬系統在例外沒被接住時做的事（不會真的當掉）。
-// Bug 版：新的 handler 直接取代舊的。例外沒被接住時，系統只會呼叫「最後登記的那一個」，Crashlytics 完全收不到這次 crash。
-// 修正版：登記前先用 getDefaultUncaughtExceptionHandler() 把前一個存起來，自己的紀錄寫完後，再呼叫前一個 handler。
+// 情境：App 啟動時先初始化 Crashlytics，它用 Thread.
+// setDefaultUncaughtExceptionHandler 登記自己。
+//       後來有人想「crash 前先補寫一筆本機紀錄」，在 Crashlytics
+// 之後又呼叫了一次 setDefaultUncaughtExceptionHandler。
+//       演練用「假的 Crashlytics」，並直接呼叫目前登記的 handler
+// 來模擬系統在例外沒被接住時做的事（不會真的當掉）。
+// Bug 版：新的 handler 直接取代舊的。例外沒被接住時，
+// 系統只會呼叫「最後登記的那一個」，Crashlytics 完全收不到這次 crash。
+// 修正版：登記前先用 getDefaultUncaughtExceptionHandler() 把前一個存起來，
+// 自己的紀錄寫完後，再呼叫前一個 handler。
 package tw.harry.labs.solution.advanced06crash
 
 import java.util.concurrent.CopyOnWriteArrayList
@@ -13,7 +20,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 假的 Crashlytics：App 啟動時登記自己的 handler，收到的 crash 記在 received（兩個版本共用） */
+/**
+ * 假的 Crashlytics：App 啟動時登記自己的 handler，收到的 crash 記在
+ * received（兩個版本共用）
+ */
 private class L03FakeCrashlytics : Thread.UncaughtExceptionHandler {
     val received = CopyOnWriteArrayList<String>()
 
@@ -25,22 +35,31 @@ private class L03FakeCrashlytics : Thread.UncaughtExceptionHandler {
 }
 
 /** 演練流程（兩個版本共用） */
-private fun scenario(log: LabLog, installOwnHandler: (own: MutableList<String>) -> Unit) {
+private fun scenario(
+    log: LabLog,
+    installOwnHandler: (own: MutableList<String>) -> Unit,
+) {
     val original = Thread.getDefaultUncaughtExceptionHandler()
     try {
         val crashlytics = L03FakeCrashlytics()
         val own = CopyOnWriteArrayList<String>()
-        crashlytics.install()                                   // App 啟動：Crashlytics 先登記
-        installOwnHandler(own)                                  // 後來有人又登記了一個
+        // App 啟動：Crashlytics 先登記
+        crashlytics.install()
+        // 後來有人又登記了一個
+        installOwnHandler(own)
 
         val exception = IllegalStateException("下單 API 回傳格式錯誤")
         log("沒被接住的例外：${exception.javaClass.simpleName}")
         // 例外沒被接住時，系統會呼叫「目前登記的」預設 handler
-        Thread.getDefaultUncaughtExceptionHandler()?.uncaughtException(Thread.currentThread(), exception)
+        Thread.getDefaultUncaughtExceptionHandler()?.uncaughtException(
+            Thread.currentThread(),
+            exception,
+        )
         log("自己的紀錄收到 ${own.size} 筆")
         log("Crashlytics 收到 ${crashlytics.received.size} 筆")
     } finally {
-        Thread.setDefaultUncaughtExceptionHandler(original)     // 演練結束還原，不影響 App 本身
+        // 演練結束還原，不影響 App 本身
+        Thread.setDefaultUncaughtExceptionHandler(original)
     }
 }
 
@@ -48,7 +67,8 @@ private fun scenario(log: LabLog, installOwnHandler: (own: MutableList<String>) 
 private object L03Bug {
     fun installOwnHandler(own: MutableList<String>) {
         Thread.setDefaultUncaughtExceptionHandler { _, e ->
-            own += e.javaClass.simpleName                       // 只寫自己的紀錄，前一個 handler 被蓋掉了
+            // 只寫自己的紀錄，前一個 handler 被蓋掉了
+            own += e.javaClass.simpleName
         }
     }
 
@@ -58,10 +78,12 @@ private object L03Bug {
 // MARK: - 修正版
 private object L03Fixed {
     fun installOwnHandler(own: MutableList<String>) {
-        val previous = Thread.getDefaultUncaughtExceptionHandler()   // 登記前先把前一個存起來
+        // 登記前先把前一個存起來
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             own += e.javaClass.simpleName
-            previous?.uncaughtException(t, e)                   // 自己的事做完，再交給前一個（Crashlytics）
+            // 自己的事做完，再交給前一個（Crashlytics）
+            previous?.uncaughtException(t, e)
         }
     }
 

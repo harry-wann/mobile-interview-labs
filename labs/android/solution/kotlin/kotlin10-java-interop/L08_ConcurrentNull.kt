@@ -1,10 +1,15 @@
 // L08：把查不到的結果放進 ConcurrentHashMap，直接 NullPointerException
-// 對應複習站：Kotlin10JavaInterop 第 6 題「HashMap 和 ConcurrentHashMap 差在哪？」
+// 對應複習站：Kotlin10JavaInterop 第 6 題「HashMap 和 ConcurrentHashMap
+// 差在哪？」
 //
-// 情境：QuoteCache 把查過的報價快取在 ConcurrentHashMap。已下市的幣種查不到報價（api 回傳 null）。
-// Bug 版：不管查到沒有，都 cache[symbol] = price。HashMap 允許 value 是 null，但 ConcurrentHashMap 的 key 和 value 都不能是 null，
-//        執行時丟 NullPointerException。Kotlin 的型別系統（ConcurrentHashMap<String, Int?>）不會在編譯時擋下這個問題。
-// 修正版：查不到就不放進快取（price?.let { cache[symbol] = it }）；map 的 value 型別寫成不可為 null 的 Int，讓編譯器幫忙檢查。
+// 情境：QuoteCache 把查過的報價快取在 ConcurrentHashMap。
+// 已下市的幣種查不到報價（api 回傳 null）。
+// Bug 版：不管查到沒有，都 cache[symbol] = price。HashMap 允許 value 是 null，
+// 但 ConcurrentHashMap 的 key 和 value 都不能是 null，
+//        執行時丟 NullPointerException。Kotlin
+// 的型別系統（ConcurrentHashMap<String, Int?>）不會在編譯時擋下這個問題。
+// 修正版：查不到就不放進快取（price?.let { cache[symbol] = it }）；map 的
+// value 型別寫成不可為 null 的 Int，讓編譯器幫忙檢查。
 package tw.harry.labs.solution.kotlin10javainterop
 
 import java.util.concurrent.ConcurrentHashMap
@@ -13,9 +18,18 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 假的報價 API：只有 BTC_JPY 查得到，其他（已下市）回傳 null */
-private fun fetchQuote(symbol: String): Int? = if (symbol == "BTC_JPY") 5_000_000 else null
+private fun fetchQuote(symbol: String): Int? = if (symbol ==
+    "BTC_JPY"
+) {
+    5_000_000
+} else {
+    null
+}
 
-/** 演練流程（兩個版本共用）：查 BTC_JPY 和已下市的 OLD_JPY，[load] 是「取得報價（有快取就用快取）」 */
+/**
+ * 演練流程（兩個版本共用）：查 BTC_JPY 和已下市的 OLD_JPY，[load]
+ * 是「取得報價（有快取就用快取）」
+ */
 private fun scenario(log: LabLog, load: (String) -> Int?) {
     for (symbol in listOf("BTC_JPY", "OLD_JPY")) {
         try {
@@ -29,33 +43,41 @@ private fun scenario(log: LabLog, load: (String) -> Int?) {
 // MARK: - Bug 版
 private object L08Bug {
     class QuoteCache {
-        private val cache = ConcurrentHashMap<String, Int?>()          // value 型別寫成 Int?：編譯器不會擋
+        // value 型別寫成 Int?：編譯器不會擋
+        private val cache = ConcurrentHashMap<String, Int?>()
 
         fun load(symbol: String): Int? {
             cache[symbol]?.let { return it }
             val price = fetchQuote(symbol)
-            cache[symbol] = price                           // price 是 null 時，ConcurrentHashMap 丟 NullPointerException
+            // price 是 null 時，ConcurrentHashMap 丟 NullPointerException
+            cache[symbol] = price
             return price
         }
     }
 
-    fun run(log: LabLog) = QuoteCache().let { cache -> scenario(log, cache::load) }
+    fun run(log: LabLog) = QuoteCache().let { cache ->
+        scenario(log, cache::load)
+    }
 }
 
 // MARK: - 修正版
 private object L08Fixed {
     class QuoteCache {
-        private val cache = ConcurrentHashMap<String, Int>()           // value 不可為 null
+        // value 不可為 null
+        private val cache = ConcurrentHashMap<String, Int>()
 
         fun load(symbol: String): Int? {
             cache[symbol]?.let { return it }
             val price = fetchQuote(symbol)
-            price?.let { cache[symbol] = it }               // 查不到就不放進快取
+            // 查不到就不放進快取
+            price?.let { cache[symbol] = it }
             return price
         }
     }
 
-    fun run(log: LabLog) = QuoteCache().let { cache -> scenario(log, cache::load) }
+    fun run(log: LabLog) = QuoteCache().let { cache ->
+        scenario(log, cache::load)
+    }
 }
 
 // MARK: - 演練設定

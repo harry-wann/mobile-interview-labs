@@ -2,13 +2,17 @@
 // 對應複習站：Exchange04Reconnect 第 3 題「什麼時候才可以把失敗次數歸零？」
 //
 // 情境：交易高峰期，伺服器限制新連線：App 連得上，但連上 0.3 秒就被踢掉。
-//       重連的等待時間用正確的指數退避（起始 500 毫秒、上限 8 秒，亂數固定 0.5，結果每次一樣）。
-//       演練用虛擬的時間跑 60 秒，看 App 這段時間連了幾次線（時間用毫秒數傳進來，不用真的等）。
-//       前 5 次連上，都在 0.3 秒後被踢；第 6 次連上後，伺服器恢復正常，連線穩定維持了 20 秒才斷；之後又開始每次連上 0.3 秒就被踢。
+//       重連的等待時間用正確的指數退避（起始 500 毫秒、上限 8 秒，亂數固定 0.
+// 5，結果每次一樣）。
+//       演練用虛擬的時間跑 60 秒，看 App
+// 這段時間連了幾次線（時間用毫秒數傳進來，不用真的等）。
+//       前 5 次連上，都在 0.3 秒後被踢；第 6 次連上後，伺服器恢復正常，
+// 連線穩定維持了 20 秒才斷；之後又開始每次連上 0.3 秒就被踢。
 //
 // 你要寫：
 //   ① Bug 版（L03Bug.Manager.opened）：一連上就把失敗次數 attempt 歸零。
-//   ② 修正版（L03Fixed.Manager）：opened 只記下連上的時間；closed 時，這條連線穩定超過 10 秒才歸零，然後 attempt 加 1。
+//   ② 修正版（L03Fixed.Manager）：opened 只記下連上的時間；closed 時，
+// 這條連線穩定超過 10 秒才歸零，然後 attempt 加 1。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange04-Reconnect/L03_Flapping.swift
 import Foundation
@@ -20,7 +24,8 @@ private protocol ReconnectManager {
     func closed(nowMs: Int64) -> Int64
 }
 
-/// 演練流程（兩個版本共用）：虛擬時間 60 秒；第 6 次連線穩定了 20 秒，其他每次連上 300 毫秒就被伺服器踢掉
+/// 演練流程（兩個版本共用）：虛擬時間 60 秒；第 6 次連線穩定了 20 秒，
+/// 其他每次連上 300 毫秒就被伺服器踢掉
 private func scenario(_ log: LabLog, manager: ReconnectManager) {
     var now: Int64 = 0
     var connects = 0
@@ -28,12 +33,19 @@ private func scenario(_ log: LabLog, manager: ReconnectManager) {
     while now < 60_000 {
         connects += 1
         manager.opened(nowMs: now)
-        now += connects == 6 ? 20_000 : 300                     // 第 6 次連線穩定 20 秒，其他的 300 毫秒後被踢掉
+        // 第 6 次連線穩定 20 秒，其他的 300 毫秒後被踢掉
+        now += connects == 6 ? 20_000 : 300
         let wait = manager.closed(nowMs: now)
-        if connects == 6 { log("第 6 次連線穩定了 20 秒才斷線，下一次等待 \(wait) ms") } else { waits.append(wait) }
+        if connects == 6 {
+            log("第 6 次連線穩定了 20 秒才斷線，下一次等待 \(wait) ms")
+        } else {
+            waits.append(wait)
+        }
         now += wait
     }
-    log("其他連線被踢之後，前 5 次的等待時間（毫秒）：\(waits.prefix(5).map { "\($0)" }.joined(separator: "、"))")
+    log(
+        "其他連線被踢之後，前 5 次的等待時間（毫秒）：\(waits.prefix(5).map { "\($0)" }.joined(separator: "、"))"
+    )
     log("60 秒內連線了 \(connects) 次")
 }
 
@@ -68,7 +80,8 @@ private enum L03Fixed {
         }
 
         func closed(nowMs: Int64) -> Int64 {
-            // TODO ②-2：這條連線從連上到現在已經穩定超過 10 秒（10_000 毫秒），才把 attempt 歸零
+            // TODO ②-2：這條連線從連上到現在已經穩定超過 10 秒（10_000 毫秒），
+            // 才把 attempt 歸零
             attempt += 1
             return E04Backoff.delayMs(attempt: attempt, random: 0.5)
         }
@@ -81,8 +94,11 @@ private enum L03Fixed {
 
 // MARK: - 演練設定
 private func connectCount(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasPrefix("60 秒內連線了") }) else { return nil }
-    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.last
+    guard let line = lines.first(where: { $0.hasPrefix("60 秒內連線了") }) else {
+        return nil
+    }
+    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        .last
 }
 
 extension Exchange04Reconnect {
@@ -90,7 +106,8 @@ extension Exchange04Reconnect {
         id: "L03",
         title: "伺服器連上就踢人，手機每秒重連一次",
         question: "第 3 題：什麼時候才可以把失敗次數歸零？",
-        goal: "連上之後立刻被踢，不能算成功。失敗次數要等連線穩定一段時間才歸零，不然會變成緊密的重連迴圈；連線真的穩定了，下一次就要從頭開始。先寫出一連上就歸零的 Bug 版，再寫修正版。",
+        goal:
+            "連上之後立刻被踢，不能算成功。失敗次數要等連線穩定一段時間才歸零，不然會變成緊密的重連迴圈；連線真的穩定了，下一次就要從頭開始。先寫出一連上就歸零的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Exchange/Exchange04-Reconnect/L03_Flapping.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，看每次斷線後等多久、60 秒內連了幾次。",
@@ -99,7 +116,8 @@ extension Exchange04Reconnect {
             "進階：網路恢復（從 offline 回來）和 App 回到前景是「現在可以試」的強烈訊號，這兩種情況才會立即重連並歸零。",
         ],
         expectBug: "等待時間一直是 500 毫秒，「60 秒內連線了 51 次」左右（次數以實測為準，一定超過 40 次）。",
-        expectFixed: "等待時間 500、1000、2000、4000、4000……，穩定 20 秒之後回到 500（「第 6 次連線穩定了 20 秒才斷線，下一次等待 500 ms」），「60 秒內連線了 14 次」。",
+        expectFixed:
+            "等待時間 500、1000、2000、4000、4000……，穩定 20 秒之後回到 500（「第 6 次連線穩定了 20 秒才斷線，下一次等待 500 ms」），「60 秒內連線了 14 次」。",
         run: { variant, log in
             switch variant {
             case .bug: await L03Bug.run(log)
@@ -107,14 +125,28 @@ extension Exchange04Reconnect {
             }
         },
         checkBug: { lines in
-            guard let n = connectCount(lines) else { return "演練沒有跑完：要用 scenario(log, manager:) 執行" }
-            return n >= 40 ? nil : "Bug 還沒重現：opened 一連上就把 attempt 歸零，等待時間永遠是 500 毫秒，60 秒內應該連 40 次以上（目前 \(n) 次）"
+            guard let n = connectCount(lines) else {
+                return "演練沒有跑完：要用 scenario(log, manager:) 執行"
+            }
+            return n >= 40
+                ? nil
+                : "Bug 還沒重現：opened 一連上就把 attempt 歸零，等待時間永遠是 500 毫秒，60 秒內應該連 40 次以上（目前 \(n) 次）"
         },
         checkFixed: { lines in
-            guard let n = connectCount(lines) else { return "演練沒有跑完：要用 scenario(log, manager:) 執行" }
-            if n > 20 { return "還是連太多次（\(n) 次）：opened 不要歸零，只記下連上的時間；closed 時，穩定超過 10 秒才歸零，否則 attempt 加 1" }
-            if !lines.contains("其他連線被踢之後，前 5 次的等待時間（毫秒）：500、1000、2000、4000、4000") { return "被踢之後的等待時間應該依序是 500、1000、2000、4000、4000（attempt 越來越大）" }
-            return lines.contains("第 6 次連線穩定了 20 秒才斷線，下一次等待 500 ms") ? nil : "連線穩定超過 10 秒之後斷線，attempt 要歸零，下一次只等 500 毫秒"
+            guard let n = connectCount(lines) else {
+                return "演練沒有跑完：要用 scenario(log, manager:) 執行"
+            }
+            if n > 20 {
+                return
+                    "還是連太多次（\(n) 次）：opened 不要歸零，只記下連上的時間；closed 時，穩定超過 10 秒才歸零，否則 attempt 加 1"
+            }
+            if !lines.contains(
+                "其他連線被踢之後，前 5 次的等待時間（毫秒）：500、1000、2000、4000、4000")
+            {
+                return "被踢之後的等待時間應該依序是 500、1000、2000、4000、4000（attempt 越來越大）"
+            }
+            return lines.contains("第 6 次連線穩定了 20 秒才斷線，下一次等待 500 ms")
+                ? nil : "連線穩定超過 10 秒之後斷線，attempt 要歸零，下一次只等 500 毫秒"
         }
     )
 }

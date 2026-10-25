@@ -1,11 +1,17 @@
-// L04：委託狀態從來沒有更新，因為前一段 collect 永遠不會結束（同一個 LaunchedEffect 裡有兩段 collect）
-// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key 是什麼意思？」
+// L04：委託狀態從來沒有更新，因為前一段 collect 永遠不會結束（同一個
+// LaunchedEffect 裡有兩段 collect）
+// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key
+// 是什麼意思？」
 //
-// 情境：交易畫面要同時收兩個不會結束的 Flow：行情（ticks）和委託狀態（orders），各自每 20 ms 送一筆。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
-// Bug 版：在同一個 LaunchedEffect 裡，先 collect 行情，再 collect 委託狀態。行情的 collect 永遠不會結束，
+// 情境：交易畫面要同時收兩個不會結束的 Flow：行情（ticks）
+// 和委託狀態（orders），各自每 20 ms 送一筆。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
+// Bug 版：在同一個 LaunchedEffect 裡，先 collect 行情，再 collect 委託狀態。
+// 行情的 collect 永遠不會結束，
 //        後面那一行永遠執行不到，委託狀態一筆都收不到。
-// 修正版：兩段各自用 launch { } 啟動，同時收集。LaunchedEffect 離開畫面時，兩個一起取消。
+// 修正版：兩段各自用 launch { } 啟動，同時收集。LaunchedEffect 離開畫面時，
+// 兩個一起取消。
 package tw.harry.labs.solution.kotlin07sideeffects
 
 import androidx.compose.runtime.Composable
@@ -35,12 +41,23 @@ private class L04Server {
 }
 
 /** 演練流程（兩個版本共用）：進入畫面 300 ms，看收到幾筆行情、幾筆委託狀態 */
-private suspend fun scenario(log: LabLog, screen: @Composable (server: L04Server, onTick: () -> Unit, onOrder: () -> Unit) -> Unit) {
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (
+        server: L04Server,
+        onTick: () -> Unit,
+        onOrder: () -> Unit,
+    ) -> Unit,
+) {
     val server = L04Server()
     val ticks = AtomicInteger()
     val orders = AtomicInteger()
     withHeadlessCompose {
-        setContent { screen(server, { ticks.incrementAndGet() }, { orders.incrementAndGet() }) }
+        setContent {
+            screen(server, {
+                ticks.incrementAndGet()
+            }, { orders.incrementAndGet() })
+        }
         delay(300)
         log("進入畫面 300 ms：收到行情 ${ticks.get()} 筆")
         log("進入畫面 300 ms：收到委託狀態 ${orders.get()} 筆")
@@ -50,32 +67,48 @@ private suspend fun scenario(log: LabLog, screen: @Composable (server: L04Server
 // MARK: - Bug 版
 private object L04Bug {
     @Composable
-    fun TradeScreen(server: L04Server, onTick: () -> Unit, onOrder: () -> Unit) {
+    fun TradeScreen(
+        server: L04Server,
+        onTick: () -> Unit,
+        onOrder: () -> Unit,
+    ) {
         LaunchedEffect(Unit) {
-            server.ticks.collect { onTick() }               // 這個 Flow 不會結束，collect 一直掛在這裡
-            server.orders.collect { onOrder() }             // 永遠執行不到
+            // 這個 Flow 不會結束，collect 一直掛在這裡
+            server.ticks.collect { onTick() }
+            server.orders.collect { onOrder() } // 永遠執行不到
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder -> TradeScreen(server, onTick, onOrder) }
+    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder ->
+        TradeScreen(server, onTick, onOrder)
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
     @Composable
-    fun TradeScreen(server: L04Server, onTick: () -> Unit, onOrder: () -> Unit) {
+    fun TradeScreen(
+        server: L04Server,
+        onTick: () -> Unit,
+        onOrder: () -> Unit,
+    ) {
         LaunchedEffect(Unit) {
-            launch { server.ticks.collect { onTick() } }    // 各自用 launch 啟動，同時收集
+            // 各自用 launch 啟動，同時收集
+            launch { server.ticks.collect { onTick() } }
             launch { server.orders.collect { onOrder() } }
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder -> TradeScreen(server, onTick, onOrder) }
+    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder ->
+        TradeScreen(server, onTick, onOrder)
+    }
 }
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 筆")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 筆")?.toIntOrNull()
 
 private const val TICKS = "進入畫面 300 ms：收到行情 "
 private const val ORDERS = "進入畫面 300 ms：收到委託狀態 "

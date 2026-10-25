@@ -39,8 +39,13 @@ object LiveObjects {
     private val _counts = MutableStateFlow<Map<String, Int>>(emptyMap())
     val counts = _counts.asStateFlow()
 
-    fun add(name: String) = _counts.update { it + (name to (it[name] ?: 0) + 1) }
-    fun remove(name: String) = _counts.update { it + (name to (it[name] ?: 0) - 1) }
+    fun add(name: String) = _counts.update {
+        it + (name to (it[name] ?: 0) + 1)
+    }
+    fun remove(name: String) = _counts.update {
+        it +
+            (name to (it[name] ?: 0) - 1)
+    }
     fun count(name: String): Int = _counts.value[name] ?: 0
     fun reset() {
         _counts.value = emptyMap()
@@ -58,7 +63,16 @@ fun LiveObjectsView(vararg names: String) {
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
                 modifier = Modifier
-                    .background(if (n > 0) Color(0x33FF9800) else Color(0x334CAF50), RoundedCornerShape(50))
+                    .background(
+                        if (n >
+                            0
+                        ) {
+                            Color(0x33FF9800)
+                        } else {
+                            Color(0x334CAF50)
+                        },
+                        RoundedCornerShape(50),
+                    )
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
@@ -128,7 +142,16 @@ fun FrameMeter() {
 
     Row(
         Modifier
-            .background(if (fps in 1..49) Color(0x33F44336) else Color(0x334CAF50), RoundedCornerShape(50))
+            .background(
+                if (fps in
+                    1..49
+                ) {
+                    Color(0x33F44336)
+                } else {
+                    Color(0x334CAF50)
+                },
+                RoundedCornerShape(50),
+            )
             .padding(horizontal = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -139,6 +162,8 @@ fun FrameMeter() {
                 fontSize = 12.sp,
             )
         }
-        TextButton(onClick = { hitches = 0; worstMs = 0 }) { Text("歸零", fontSize = 12.sp) }
+        TextButton(onClick = {
+            hitches = 0; worstMs = 0
+        }) { Text("歸零", fontSize = 12.sp) }
     }
 }

@@ -6,6 +6,7 @@ enum Coding04Async {
         id: "livecoding-async",
         code: "Coding04Async",
         title: "非同步題",
-        labs: [l01, l02, l03]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03]
     )
 }

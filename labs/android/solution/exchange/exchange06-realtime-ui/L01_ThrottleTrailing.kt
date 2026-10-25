@@ -1,11 +1,16 @@
-// L01：行情停了，畫面卻停在幾百毫秒前的價格（降低更新頻率時，最後一筆沒有送出去）
+// L01：行情停了，畫面卻停在幾百毫秒前的價格（降低更新頻率時，
+// 最後一筆沒有送出去）
 // 對應複習站：Exchange06RealtimeUI 第 3 題「畫面多久更新一次？用什麼來驅動？」
 //
-// 情境：行情每 30 毫秒來一筆價格（價格 = 100 + 第幾筆），從 0 毫秒到 330 毫秒共 12 筆，最新價是 111。畫面每 100 毫秒更新一次（降頻）。
-//        0、100、200、300 毫秒，畫面的計時器各響一次；330 毫秒是最後一筆，之後行情停了，計時器也跟著停。
-// Bug 版：「進來的價格，距離上次送給畫面超過 100 毫秒才送，不到 100 毫秒就直接丟掉」。中間的價格丟掉沒關係，但最後一筆剛好落在 100 毫秒之內，
+// 情境：行情每 30 毫秒來一筆價格（價格 = 100 + 第幾筆），從 0 毫秒到 330
+// 毫秒共 12 筆，最新價是 111。畫面每 100 毫秒更新一次（降頻）。
+//        0、100、200、300 毫秒，畫面的計時器各響一次；330 毫秒是最後一筆，
+// 之後行情停了，計時器也跟著停。
+// Bug 版：「進來的價格，距離上次送給畫面超過 100 毫秒才送，不到 100
+// 毫秒就直接丟掉」。中間的價格丟掉沒關係，但最後一筆剛好落在 100 毫秒之內，
 //        也被丟掉，行情停了之後沒有人再送：畫面停在 108，最新價是 111。
-// 修正版：ThrottleLatest：進來的價格只記下最新的（蓋掉還沒送的），由計時器響的時候才送，而且距離上次送出超過 100 毫秒才送；
+// 修正版：ThrottleLatest：進來的價格只記下最新的（蓋掉還沒送的），
+// 由計時器響的時候才送，而且距離上次送出超過 100 毫秒才送；
 //        串流結束時，把還沒送出的最新值取走（flush）。
 package tw.harry.labs.solution.exchange06realtimeui
 
@@ -26,7 +31,10 @@ private interface L01PriceThrottle {
 
 private const val INTERVAL_MS = 100L
 
-/** 演練流程（兩個版本共用）：價格每 30 毫秒一筆，計時器每 100 毫秒響一次（同一毫秒時，價格先到） */
+/**
+ * 演練流程（兩個版本共用）：價格每 30 毫秒一筆，計時器每 100
+ * 毫秒響一次（同一毫秒時，價格先到）
+ */
 private fun scenario(log: LabLog, throttle: L01PriceThrottle) {
     var shown: Int? = null
     fun show(value: Int?, ms: Long) {
@@ -34,9 +42,22 @@ private fun scenario(log: LabLog, throttle: L01PriceThrottle) {
         shown = value
         log("t=$ms：畫面顯示 $value")
     }
-    val events = (0..11).map { it * 30L to true } + listOf(0L, 100L, 200L, 300L).map { it to false }
-    for ((ms, isValue) in events.sortedWith(compareBy({ it.first }, { if (it.second) 0 else 1 }))) {
-        if (isValue) show(throttle.onValue(100 + (ms / 30).toInt(), ms), ms) else show(throttle.onTick(ms), ms)
+    val events =
+        (0..11).map { it * 30L to true } +
+            listOf(0L, 100L, 200L, 300L).map { it to false }
+    for ((ms, isValue) in events.sortedWith(
+        compareBy({
+            it.first
+        }, { if (it.second) 0 else 1 }),
+    )) {
+        if (isValue) {
+            show(
+                throttle.onValue(100 + (ms / 30).toInt(), ms),
+                ms,
+            )
+        } else {
+            show(throttle.onTick(ms), ms)
+        }
     }
     show(throttle.onEnd(), 330)
     log("最後：畫面顯示 ${shown ?: "-"}，最新價是 111")
@@ -49,7 +70,8 @@ private object L01Bug {
 
         override fun onValue(value: Int, nowMs: Long): Int? {
             val last = lastEmitMs
-            if (last != null && nowMs - last < INTERVAL_MS) return null     // 距離上次送出不到 100 毫秒：直接丟掉
+            // 距離上次送出不到 100 毫秒：直接丟掉
+            if (last != null && nowMs - last < INTERVAL_MS) return null
             lastEmitMs = nowMs
             return value
         }
@@ -68,20 +90,24 @@ private object L01Fixed {
         private var lastEmitMs: Long? = null
 
         override fun onValue(value: Int, nowMs: Long): Int? {
-            pending = value                                                 // 只記下最新的，蓋掉還沒送出的
+            // 只記下最新的，蓋掉還沒送出的
+            pending = value
             return null
         }
 
         override fun onTick(nowMs: Long): Int? {
-            val value = pending ?: return null                              // 沒有待送的值：不送
+            // 沒有待送的值：不送
+            val value = pending ?: return null
             val last = lastEmitMs
-            if (last != null && nowMs - last < INTERVAL_MS) return null     // 還不到 100 毫秒：待送的值留到下次
+            // 還不到 100 毫秒：待送的值留到下次
+            if (last != null && nowMs - last < INTERVAL_MS) return null
             pending = null
             lastEmitMs = nowMs
             return value
         }
 
-        override fun onEnd(): Int? {                                        // 串流結束：把尾端還沒送出的值取走
+        // 串流結束：把尾端還沒送出的值取走
+        override fun onEnd(): Int? {
             val value = pending
             pending = null
             return value
@@ -114,17 +140,27 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, throttle) 執行"
+            lines.none {
+                it.startsWith("最後")
+            } -> "演練沒有跑完：要用 scenario(log, throttle) 執行"
+
             "t=120：畫面顯示 104" !in lines -> "Bug 版的 onValue 要「距離上次送出超過 100 毫秒才送出」：沒有上次送出的紀錄，或已經過了 100 毫秒，就更新 lastEmitMs 並回傳這個價格"
+
             "最後：畫面顯示 108，最新價是 111" !in lines -> "Bug 還沒重現：不到 100 毫秒的價格直接丟掉（回傳 null），onTick、onEnd 都不送，最後一筆 111 就送不出去"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, throttle) 執行"
+            lines.none {
+                it.startsWith("最後")
+            } -> "演練沒有跑完：要用 scenario(log, throttle) 執行"
+
             "t=100：畫面顯示 103" !in lines -> "onValue 只記下最新的值（pending = value）；onTick 在計時器響的時候送出 pending，t=100 要顯示 103"
+
             "最後：畫面顯示 111，最新價是 111" !in lines -> "onEnd 要把還沒送出的 pending 取走（flush）並清掉，不然最後一筆 111 送不出去"
+
             else -> null
         }
     },

@@ -1,20 +1,29 @@
 // L03：覆蓋率 100%、測試全過，但程式被改壞測試還是過（沒有檢查邊界）
 // 對應複習站：Testing01Strategy 第 4 題「怎麼知道測試真的有用？」
 //
-// 情境：單筆出金達到 100 萬日圓，就要再做一次兩步驟驗證。T01Withdrawal.requiresTwoFactor 是被測的函式。
-//       mutation testing 的做法：故意把程式改壞（這裡手寫一個 requiresTwoFactorMutant：>= 變成 >），再跑一次測試。
+// 情境：單筆出金達到 100 萬日圓，就要再做一次兩步驟驗證。T01Withdrawal.
+// requiresTwoFactor 是被測的函式。
+//       mutation testing 的做法：故意把程式改壞（這裡手寫一個
+// requiresTwoFactorMutant：>= 變成 >），再跑一次測試。
 //       演練把同一個測試，分別對「正確的實作」和「被改壞的實作」各跑一次。
 //
 // 你要寫：
-//   ① Bug 版：寫兩個離邊界很遠的檢查：requires(5_000_000) 是 true、requires(100) 是 false（用 t.equal）。
+//   ① Bug 版：寫兩個離邊界很遠的檢查：requires(5_000_000) 是 true、
+// requires(100) 是 false（用 t.equal）。
 //      兩個分支都跑到了，覆蓋率 100%，但被改壞的實作測試也會通過。
-//   ② 修正版：再補上邊界的檢查：999_999 是 false、1_000_000 是 true、1_000_001 是 true。
-// 只改有 TODO 的地方。解答：Solution/Testing/Testing01-Strategy/L03_CoverageIsNotChecking.swift
+//   ② 修正版：再補上邊界的檢查：999_999 是 false、1_000_000 是 true、1_000_001
+// 是 true。
+// 只改有 TODO 的地方。解答：
+// Solution/Testing/Testing01-Strategy/L03_CoverageIsNotChecking.swift
 import Foundation
 import LabKit
 
-/// 把同一個測試分別對「正確的實作」和「被改壞的實作」各跑一次，並記下函式被呼叫了幾次、兩個分支有沒有跑到（已寫好）
-private func runMatrix(_ log: LabLog, test: (_ requires: @escaping (Int) -> Bool, _ t: T01Expect) -> Void) {
+/// 把同一個測試分別對「正確的實作」和「被改壞的實作」各跑一次，
+/// 並記下函式被呼叫了幾次、兩個分支有沒有跑到（已寫好）
+private func runMatrix(
+    _ log: LabLog,
+    test: (_ requires: @escaping (Int) -> Bool, _ t: T01Expect) -> Void
+) {
     let implementations: [(String, (Int) -> Bool)] = [
         ("正確的實作", T01Withdrawal.requiresTwoFactor),
         ("被改壞的實作（>= 改成 >）", T01Withdrawal.requiresTwoFactorMutant),
@@ -33,7 +42,9 @@ private func runMatrix(_ log: LabLog, test: (_ requires: @escaping (Int) -> Bool
         test(spy, t)
         log("\(name)：\(t.failures.isEmpty ? "測試通過" : "測試失敗（\(t.failures[0])）")")
         if name == "正確的實作" {
-            log("覆蓋：函式被呼叫 \(calls) 次，true 分支\(sawTrue ? "有" : "沒有")跑到，false 分支\(sawFalse ? "有" : "沒有")跑到")
+            log(
+                "覆蓋：函式被呼叫 \(calls) 次，true 分支\(sawTrue ? "有" : "沒有")跑到，false 分支\(sawFalse ? "有" : "沒有")跑到"
+            )
         }
     }
 }
@@ -41,7 +52,8 @@ private func runMatrix(_ log: LabLog, test: (_ requires: @escaping (Int) -> Bool
 // MARK: - Bug 版
 private enum L03Bug {
     static func test(_ requires: (Int) -> Bool, _ t: T01Expect) {
-        // TODO ①：用 t.equal(requires(5_000_000), true)、t.equal(requires(100), false) 寫兩個離邊界很遠的檢查
+        // TODO ①：用 t.equal(requires(5_000_000), true)、t.
+        // equal(requires(100), false) 寫兩個離邊界很遠的檢查
     }
 
     static func run(_ log: LabLog) async {
@@ -53,7 +65,8 @@ private enum L03Bug {
 private enum L03Fixed {
     static func test(_ requires: (Int) -> Bool, _ t: T01Expect) {
         // TODO ②-1：先寫和 Bug 版一樣的兩個檢查
-        // TODO ②-2：再補邊界：999_999 預期 false、1_000_000 預期 true、1_000_001 預期 true
+        // TODO ②-2：再補邊界：999_999 預期 false、1_000_000 預期 true、
+        // 1_000_001 預期 true
     }
 
     static func run(_ log: LabLog) async {
@@ -82,14 +95,26 @@ extension Testing01Strategy {
             }
         },
         checkBug: { lines in
-            guard lines.contains("正確的實作：測試通過") else { return "測試在正確的實作上要通過：requires(5_000_000) 是 true、requires(100) 是 false" }
-            guard lines.contains("覆蓋：函式被呼叫 2 次，true 分支有跑到，false 分支有跑到") else { return "測試要呼叫 requires 兩次，讓 true 與 false 兩個分支都跑到（覆蓋率 100%）" }
-            return lines.contains("被改壞的實作（>= 改成 >）：測試通過") ? nil : "Bug 還沒重現：被改壞的實作也要讓測試通過（不要驗剛好 1,000,000 的邊界）"
+            guard lines.contains("正確的實作：測試通過") else {
+                return
+                    "測試在正確的實作上要通過：requires(5_000_000) 是 true、requires(100) 是 false"
+            }
+            guard lines.contains("覆蓋：函式被呼叫 2 次，true 分支有跑到，false 分支有跑到") else {
+                return "測試要呼叫 requires 兩次，讓 true 與 false 兩個分支都跑到（覆蓋率 100%）"
+            }
+            return lines.contains("被改壞的實作（>= 改成 >）：測試通過")
+                ? nil : "Bug 還沒重現：被改壞的實作也要讓測試通過（不要驗剛好 1,000,000 的邊界）"
         },
         checkFixed: { lines in
             guard lines.contains("正確的實作：測試通過") else { return "測試在正確的實作上要通過" }
-            guard lines.contains(where: { $0.hasPrefix("覆蓋：函式被呼叫 ") && !$0.hasPrefix("覆蓋：函式被呼叫 0 次") }) else { return "測試沒有呼叫 requires：要驗邊界 999_999、1_000_000、1_000_001" }
-            return lines.contains(where: { $0.hasPrefix("被改壞的實作（>= 改成 >）：測試失敗") }) ? nil : "被改壞的實作也通過了：補上剛好 1_000_000 的例子，預期 true"
+            guard
+                lines.contains(where: {
+                    $0.hasPrefix("覆蓋：函式被呼叫 ") && !$0.hasPrefix("覆蓋：函式被呼叫 0 次")
+                })
+            else { return "測試沒有呼叫 requires：要驗邊界 999_999、1_000_000、1_000_001" }
+            return lines.contains(where: {
+                $0.hasPrefix("被改壞的實作（>= 改成 >）：測試失敗")
+            }) ? nil : "被改壞的實作也通過了：補上剛好 1_000_000 的例子，預期 true"
         }
     )
 }

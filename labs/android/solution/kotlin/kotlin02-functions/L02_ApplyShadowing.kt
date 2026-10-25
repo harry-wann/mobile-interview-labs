@@ -1,9 +1,13 @@
-// L02：apply 區塊裡設定了數量，送出的訂單數量卻是 0（scope function 與同名變數）
+// L02：apply 區塊裡設定了數量，送出的訂單數量卻是 0（scope function
+// 與同名變數）
 // 對應複習站：Kotlin02Functions 第 2 題「let、run、with、apply、also 怎麼選？」
 //
-// 情境：下單畫面把輸入框目前的文字存在區域變數 qty，建立 OrderRequest 時用 apply 設定它的欄位。
-// Bug 版：apply { } 裡寫 qty = "0.5"。外面剛好有同名的區域變數 qty，Kotlin 優先用區域變數，
-//        被改到的是外面的 qty，OrderRequest.qty 還是預設的 "0"。編譯器完全不會提醒。
+// 情境：下單畫面把輸入框目前的文字存在區域變數 qty，建立 OrderRequest 時用
+// apply 設定它的欄位。
+// Bug 版：apply { } 裡寫 qty = "0.5"。外面剛好有同名的區域變數 qty，Kotlin
+// 優先用區域變數，
+//        被改到的是外面的 qty，OrderRequest.qty 還是預設的 "0"。
+// 編譯器完全不會提醒。
 // 修正版：明確寫 this.qty = "0.5"，指定要設定的是 OrderRequest 的屬性。
 package tw.harry.labs.solution.kotlin02functions
 
@@ -20,10 +24,13 @@ private class OrderRequest {
 // MARK: - Bug 版
 private object L02Bug {
     fun run(log: LabLog) {
-        var qty = "0"                                      // 輸入框目前的文字（區域變數）
+        // 輸入框目前的文字（區域變數）
+        var qty = "0"
         val request = OrderRequest().apply {
-            symbol = "BTC_JPY"                             // 沒有同名的區域變數，這行改的是 OrderRequest.symbol
-            qty = "0.5"                                    // 有同名的區域變數：改到的是外面的 qty
+            // 沒有同名的區域變數，這行改的是 OrderRequest.symbol
+            symbol = "BTC_JPY"
+            // 有同名的區域變數：改到的是外面的 qty
+            qty = "0.5"
         }
         log("送出的 symbol = ${request.symbol}")
         log("送出的 qty = ${request.qty}")
@@ -37,7 +44,8 @@ private object L02Fixed {
         var qty = "0"
         val request = OrderRequest().apply {
             symbol = "BTC_JPY"
-            this.qty = "0.5"                               // 明確指定：設定 OrderRequest 的 qty
+            // 明確指定：設定 OrderRequest 的 qty
+            this.qty = "0.5"
         }
         log("送出的 symbol = ${request.symbol}")
         log("送出的 qty = ${request.qty}")

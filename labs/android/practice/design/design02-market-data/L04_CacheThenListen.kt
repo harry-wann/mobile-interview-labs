@@ -1,9 +1,14 @@
-// L04：切到詳細頁，畫面顯示的是舊價格，要等下一筆推送才更新（先給畫面快取，再登記監聽，中間的推送漏掉了）
-// 對應複習站：Design02MarketData 第 3 題「一條連線、好幾個畫面，要怎麼共用？」（Repository 的快取與推送要接得起來）
+// L04：切到詳細頁，畫面顯示的是舊價格，要等下一筆推送才更新（先給畫面快取，
+// 再登記監聽，中間的推送漏掉了）
+// 對應複習站：Design02MarketData 第 3 題「一條連線、好幾個畫面，要怎麼共用？」
+// （Repository 的快取與推送要接得起來）
 //
-// 情境：Repository 把最新的價格存在快取裡，WebSocket 每推來一筆就更新快取、並通知已登記的畫面。
-//       畫面打開詳細頁時呼叫 observe(symbol, onPrice)：要先拿到快取的價格（馬上有東西可以顯示），再收到之後的推送。
-//       快取裡是 10000000 円。訂閱 topic 要等伺服器回應（suspend），就在這段時間裡，伺服器剛好推出一筆新價格 10000500 円。
+// 情境：Repository 把最新的價格存在快取裡，WebSocket 每推來一筆就更新快取、
+// 並通知已登記的畫面。
+//       畫面打開詳細頁時呼叫 observe(symbol, onPrice)：
+// 要先拿到快取的價格（馬上有東西可以顯示），再收到之後的推送。
+//       快取裡是 10000000 円。訂閱 topic 要等伺服器回應（suspend），
+// 就在這段時間裡，伺服器剛好推出一筆新價格 10000500 円。
 //       這個交易對不常成交，下一筆推送要很久以後才會來。
 //
 // 你要寫（Repo.observe）：
@@ -25,14 +30,19 @@ private const val L04_NEW_PRICE = 10_000_500
 private class L04FakeSocket {
     var onMessage: ((String, Int) -> Unit)? = null
 
-    /** 向伺服器訂閱：要等伺服器回應。就在這段時間裡，伺服器剛好推出一筆新價格 */
+    /**
+     * 向伺服器訂閱：要等伺服器回應。就在這段時間裡，伺服器剛好推出一筆新價格
+     */
     suspend fun subscribe(topic: String) {
         yield()
         onMessage?.invoke(topic, L04_NEW_PRICE)
     }
 }
 
-/** Repository：快取＋監聽。收到推送的處理（receive）兩個版本一樣：先更新快取，再通知已登記的畫面 */
+/**
+ * Repository：快取＋監聽。收到推送的處理（receive）兩個版本一樣：先更新快取，
+ * 再通知已登記的畫面
+ */
 private open class L04Repository {
     val socket = L04FakeSocket()
     val cache = mutableMapOf("btcjpy" to L04_OLD_PRICE)
@@ -71,7 +81,8 @@ private object L04Bug {
             // TODO ①：依序做三件事：
             //   1. 如果 cache[symbol] 有值，先呼叫 onPrice 把快取交給畫面
             //   2. socket.subscribe("market.$symbol.bbo")
-            //   3. 最後才把 onPrice 加進 listeners[symbol]（listeners.getOrPut(symbol) { mutableListOf() }）
+            //   3. 最後才把 onPrice 加進 listeners[symbol]（listeners.
+            // getOrPut(symbol) { mutableListOf() }）
         }
     }
 
@@ -84,7 +95,8 @@ private object L04Fixed {
         override suspend fun observe(symbol: String, onPrice: (Int) -> Unit) {
             // TODO ②：改成這個順序：
             //   1. 先把 onPrice 加進 listeners[symbol]
-            //   2. 再把 cache[symbol]（有值的話）交給 onPrice，步驟 1 和 2 中間不能有 suspend
+            //   2. 再把 cache[symbol]（有值的話）交給 onPrice，步驟 1 和 2
+            // 中間不能有 suspend
             //   3. 最後才 socket.subscribe("market.$symbol.bbo")
         }
     }
@@ -116,20 +128,40 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, repository) 執行"
-            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> "observe 還沒寫：要先把快取交給畫面、呼叫 socket.subscribe，最後才登記監聽"
-            "最後：畫面顯示 10000000 円，快取裡是 10000500 円" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, repository) 執行"
+            }
+
+            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> {
+                "observe 還沒寫：要先把快取交給畫面、呼叫 socket.subscribe，最後才登記監聽"
+            }
+
+            "最後：畫面顯示 10000000 円，快取裡是 10000500 円" !in lines -> {
                 "Bug 還沒重現：先把快取交給畫面，接著 socket.subscribe，最後才把 onPrice 加進 listeners，訂閱期間的推送就沒人收"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, repository) 執行"
-            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> "observe 還沒寫：先登記監聽，再給畫面快取，最後 socket.subscribe"
-            "最後：畫面顯示 10000500 円，快取裡是 10000500 円" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, repository) 執行"
+            }
+
+            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> {
+                "observe 還沒寫：先登記監聽，再給畫面快取，最後 socket.subscribe"
+            }
+
+            "最後：畫面顯示 10000500 円，快取裡是 10000500 円" !in lines -> {
                 "先把 onPrice 加進 listeners[symbol]，再交出快取，最後才 socket.subscribe"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

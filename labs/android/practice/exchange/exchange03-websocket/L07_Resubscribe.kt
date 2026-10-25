@@ -1,13 +1,18 @@
 // L07：斷線重連之後，畫面停在最後一個價格不動了（重連後沒有重新訂閱）
-// 對應複習站：Exchange03WebSocket 第 6 題「收到訊息後怎麼分派？斷線重連後要做什麼？」
+// 對應複習站：Exchange03WebSocket 第 6
+// 題「收到訊息後怎麼分派？斷線重連後要做什麼？」
 //
-// 情境：畫面訂閱了兩個 topic：market.btcjpy.bbo 和 market.btcjpy.depth.step0。連線一斷，伺服器就不記得這條連線訂閱過什麼。
+// 情境：畫面訂閱了兩個 topic：market.btcjpy.bbo 和 market.btcjpy.depth.step0。
+// 連線一斷，伺服器就不記得這條連線訂閱過什麼。
 //        App 重新連上之後，伺服器只有在收到新的 sub 之後才會推送。
-//        （演練用假的連線與假伺服器：伺服器每次「推送一輪」，會對每個已訂閱的 topic 各推一則。）
+//        （演練用假的連線與假伺服器：伺服器每次「推送一輪」，會對每個已訂閱的
+// topic 各推一則。）
 //
 // 你要寫：
-//   ① Bug 版（L07Bug.makeClient 的 onReconnected）：重連時只呼叫 server.connect() 重新建立連線。
-//   ② 修正版（L07Fixed.makeClient 的 onReconnected）：server.connect() 之後，依 topics 清單把每一個 topic 重新 sub 一次。
+//   ① Bug 版（L07Bug.makeClient 的 onReconnected）：重連時只呼叫 server.
+// connect() 重新建立連線。
+//   ② 修正版（L07Fixed.makeClient 的 onReconnected）：server.connect() 之後，
+// 依 topics 清單把每一個 topic 重新 sub 一次。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange03-websocket/L07_Resubscribe.kt
 package tw.harry.labs.practice.exchange03websocket
@@ -22,7 +27,8 @@ private class FakeServer {
     var connections = 0
         private set
 
-    fun connect() { connections++; subscribed.clear() }         // 新的連線：伺服器不記得之前訂閱過什麼
+    // 新的連線：伺服器不記得之前訂閱過什麼
+    fun connect() { connections++; subscribed.clear() }
 
     fun receive(text: String) {
         val topic = e03Parse(text)?.e03String("sub") ?: return
@@ -33,9 +39,13 @@ private class FakeServer {
     fun pushRound(): Int = subscribed.size
 }
 
-private fun subMessage(topic: String, id: Int) = """{"sub":"$topic","id":"id$id"}"""
+private fun subMessage(topic: String, id: Int) =
+    """{"sub":"$topic","id":"id$id"}"""
 
-private class Client(val subscribe: (String) -> Unit, val onReconnected: () -> Unit)
+private class Client(
+    val subscribe: (String) -> Unit,
+    val onReconnected: () -> Unit,
+)
 
 /** 演練流程（兩個版本共用）：訂閱 → 推送 → 斷線 → 重連 → 再推送 */
 private fun scenario(log: LabLog, makeClient: (FakeServer) -> Client) {
@@ -49,13 +59,16 @@ private fun scenario(log: LabLog, makeClient: (FakeServer) -> Client) {
     client.onReconnected()
     log("重連後：目前連線數 ${server.connections}")
     val after = server.pushRound()
-    log("重連後：伺服器推送一輪，App 收到 $after 則${if (after == 0) "，畫面停在斷線前的最後一個價格" else ""}")
+    log(
+        "重連後：伺服器推送一輪，App 收到 $after 則${if (after == 0) "，畫面停在斷線前的最後一個價格" else ""}",
+    )
 }
 
 // MARK: - Bug 版
 private object L07Bug {
     fun makeClient(server: FakeServer): Client {
-        val topics = mutableListOf<String>()                    // 畫面需要的 topic 清單
+        // 畫面需要的 topic 清單
+        val topics = mutableListOf<String>()
         var nextId = 1
         return Client(
             subscribe = { topic ->
@@ -83,7 +96,8 @@ private object L07Fixed {
             },
             onReconnected = {
                 server.connect()
-                // TODO ②：依 topics 清單，把每一個 topic 都重新送一次 sub：server.receive(subMessage(topic, nextId++))
+                // TODO ②：依 topics 清單，把每一個 topic 都重新送一次 sub：
+                // server.receive(subMessage(topic, nextId++))
             },
         )
     }
@@ -115,17 +129,27 @@ val l07 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("重連後：伺服器推送一輪") } -> "演練沒有跑完：要用 scenario(log, ::makeClient) 執行"
+            lines.none {
+                it.startsWith("重連後：伺服器推送一輪")
+            } -> "演練沒有跑完：要用 scenario(log, ::makeClient) 執行"
+
             "重連後：目前連線數 2" !in lines -> "onReconnected 要呼叫 server.connect() 重新建立連線"
+
             "重連後：伺服器推送一輪，App 收到 0 則，畫面停在斷線前的最後一個價格" !in lines -> "Bug 還沒重現：重連時只呼叫 server.connect()，不要重新 sub"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("重連後：伺服器推送一輪") } -> "演練沒有跑完：要用 scenario(log, ::makeClient) 執行"
+            lines.none {
+                it.startsWith("重連後：伺服器推送一輪")
+            } -> "演練沒有跑完：要用 scenario(log, ::makeClient) 執行"
+
             "重連後：目前連線數 2" !in lines -> "onReconnected 要呼叫 server.connect() 重新建立連線"
+
             "重連後：伺服器推送一輪，App 收到 2 則" !in lines -> "重連之後，要把 topics 清單裡的每一個 topic 都用 subMessage(topic, id) 重新送一次"
+
             else -> null
         }
     },

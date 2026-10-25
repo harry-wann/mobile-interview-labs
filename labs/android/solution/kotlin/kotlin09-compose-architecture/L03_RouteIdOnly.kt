@@ -1,12 +1,17 @@
 // L03：從訂單列表點進詳情，看到的狀態是點擊當下的舊資料（路由只傳識別碼）
-// 對應複習站：Kotlin09ComposeArchitecture 第 3 題「Navigation Compose 的 type-safe 路由怎麼寫？」
+// 對應複習站：Kotlin09ComposeArchitecture 第 3 題「Navigation Compose 的
+// type-safe 路由怎麼寫？」
 //
-// 情境：訂單列表點進第 1 筆（A1001，狀態「待成交」）。點擊 100 ms 後，伺服器把這筆訂單更新成「已成交」，
+// 情境：訂單列表點進第 1 筆（A1001，狀態「待成交」）。點擊 100 ms 後，
+// 伺服器把這筆訂單更新成「已成交」，
 //        再過 100 ms 詳情畫面才完成載入。詳情畫面應該顯示最新的狀態。
-//        路由（route）用一個 data class 代表目的地，和 type-safe navigation 的寫法一樣；這個演練只看路由裡放什麼。
-// Bug 版：路由帶整個 Order 物件（OrderDetail(order)），詳情畫面直接顯示路由帶來的 order。它是點擊當下的快照，狀態已經過期。
+//        路由（route）用一個 data class 代表目的地，和 type-safe navigation
+// 的寫法一樣；這個演練只看路由裡放什麼。
+// Bug 版：路由帶整個 Order 物件（OrderDetail(order)），
+// 詳情畫面直接顯示路由帶來的 order。它是點擊當下的快照，狀態已經過期。
 //        （真的序列化進 Navigation 的參數時，還會有大小限制。）
-// 修正版：路由只帶識別碼（OrderDetail(orderId)），詳情畫面的 ViewModel 再向 repository 取最新的訂單。
+// 修正版：路由只帶識別碼（OrderDetail(orderId)），詳情畫面的 ViewModel 再向
+// repository 取最新的訂單。
 package tw.harry.labs.solution.kotlin09composearchitecture
 
 import kotlinx.coroutines.delay
@@ -38,9 +43,11 @@ private suspend fun <Route> scenario(
     val repo = L03OrderRepository()
     val tapped = repo.all().first()
     log("列表上的訂單 ${tapped.id}：${tapped.status}")
-    val route = navigate(tapped)                            // 點擊：導航，路由裡放什麼由版本決定
+    // 點擊：導航，路由裡放什麼由版本決定
+    val route = navigate(tapped)
     delay(100)
-    repo.update(tapped.id, "已成交")                         // 導航期間，伺服器更新了這筆訂單
+    // 導航期間，伺服器更新了這筆訂單
+    repo.update(tapped.id, "已成交")
     delay(100)
     log("詳情畫面顯示：訂單 ${tapped.id}：${showDetail(route, repo)}")
     log("伺服器上的最新狀態：${repo.find(tapped.id).status}")
@@ -51,11 +58,15 @@ private object L03Bug {
     /** 路由：帶整個 Order */
     data class OrderDetail(val order: L03Order)
 
-    fun navigate(order: L03Order) = OrderDetail(order)      // navigate(OrderDetail(order))
+    // navigate(OrderDetail(order))
+    fun navigate(order: L03Order) = OrderDetail(order)
 
-    fun showDetail(route: OrderDetail): String = route.order.status    // 直接用路由帶來的物件：點擊當下的快照
+    // 直接用路由帶來的物件：點擊當下的快照
+    fun showDetail(route: OrderDetail): String = route.order.status
 
-    suspend fun run(log: LabLog) = scenario(log, ::navigate) { route, _ -> showDetail(route) }
+    suspend fun run(log: LabLog) = scenario(log, ::navigate) { route, _ ->
+        showDetail(route)
+    }
 }
 
 // MARK: - 修正版
@@ -63,17 +74,20 @@ private object L03Fixed {
     /** 路由：只帶識別碼 */
     data class OrderDetail(val orderId: String)
 
-    fun navigate(order: L03Order) = OrderDetail(order.id)   // navigate(OrderDetail(order.id))
+    // navigate(OrderDetail(order.id))
+    fun navigate(order: L03Order) = OrderDetail(order.id)
 
     fun showDetail(route: OrderDetail, repo: L03OrderRepository): String =
-        repo.find(route.orderId).status                     // 詳情畫面向 repository 取最新的資料
+        // 詳情畫面向 repository 取最新的資料
+        repo.find(route.orderId).status
 
     suspend fun run(log: LabLog) = scenario(log, ::navigate, ::showDetail)
 }
 
 // MARK: - 演練設定
-private fun shown(lines: List<String>): String? =
-    lines.firstOrNull { it.startsWith("詳情畫面顯示：訂單 A1001：") }?.removePrefix("詳情畫面顯示：訂單 A1001：")
+private fun shown(lines: List<String>): String? = lines.firstOrNull {
+    it.startsWith("詳情畫面顯示：訂單 A1001：")
+}?.removePrefix("詳情畫面顯示：訂單 A1001：")
 
 val l03 = Lab(
     id = "L03",

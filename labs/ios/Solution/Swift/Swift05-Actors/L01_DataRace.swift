@@ -1,12 +1,19 @@
-// L01：10 個任務各數 10 萬次成交，總數卻對不起來（沒有保護的共享可變狀態，資料競爭）
+// L01：10 個任務各數 10 萬次成交，總數卻對不起來（沒有保護的共享可變狀態，
+// 資料競爭）
 // 對應複習站：Swift05Actors 第 1 題「actor 是什麼？它解決了什麼問題？」
 //
-// 情境：行情畫面統計成交筆數。10 個任務同時處理推播，每個任務處理 10 萬筆，每筆呼叫一次 increment()，總數應該是 100 萬。
-// Bug 版：計數器是一般的 class，為了讓編譯器不抱怨標了 @unchecked Sendable，但裡面沒有任何保護。
-//        （拿掉 @unchecked Sendable，Strict Concurrency Checking 設成 Complete 會出現警告，Swift 6 語言模式是編譯錯誤：
-//          passing closure as a 'sending' parameter risks causing data races。標上 @unchecked 只是讓它消失。）
-//        count += 1 其實是「讀、加一、寫回」三步，多個執行緒同時做，會有人把別人剛寫的值蓋掉，總數變少，而且每次不一樣。
-// 修正版：改成 actor。外部呼叫要 await 排隊，一次只有一個呼叫在裡面，不會有資料競爭。
+// 情境：行情畫面統計成交筆數。10 個任務同時處理推播，每個任務處理 10 萬筆，
+// 每筆呼叫一次 increment()，總數應該是 100 萬。
+// Bug 版：計數器是一般的 class，為了讓編譯器不抱怨標了 @unchecked Sendable，
+// 但裡面沒有任何保護。
+//        （拿掉 @unchecked Sendable，Strict Concurrency Checking 設成 Complete
+// 會出現警告，Swift 6 語言模式是編譯錯誤：
+//          passing closure as a 'sending' parameter risks causing data races。
+// 標上 @unchecked 只是讓它消失。）
+//        count += 1 其實是「讀、加一、寫回」三步，多個執行緒同時做，
+// 會有人把別人剛寫的值蓋掉，總數變少，而且每次不一樣。
+// 修正版：改成 actor。外部呼叫要 await 排隊，一次只有一個呼叫在裡面，
+// 不會有資料競爭。
 import Foundation
 import LabKit
 
@@ -18,7 +25,9 @@ private enum L01Bug {
     /// @unchecked Sendable：向編譯器保證「同步由我自己負責」，但其實什麼都沒做
     final class TradeCounter: @unchecked Sendable {
         private(set) var count = 0
-        @inline(never) func increment() { count += 1 }              // @inline(never)：Release 建置才不會把整個迴圈合併成一次加法，看得到真實的競爭
+        // @inline(never)：Release 建置才不會把整個迴圈合併成一次加法，
+        // 看得到真實的競爭
+        @inline(never) func increment() { count += 1 }
     }
 
     static func run(_ log: LabLog) async {
@@ -76,7 +85,8 @@ extension Swift05Actors {
             "想一想：count += 1 在機器看來是幾個步驟？@unchecked Sendable 保護了什麼？",
             "選「修正版」執行：總數剛好是 1000000。（每次呼叫要 await 排隊，會比 Bug 版慢很多，這是 actor 的成本。）",
         ],
-        expectBug: "實際數到的筆數少於 1000000，而且每次執行都不一樣；Thread Sanitizer 會回報 Data race detected。",
+        expectBug:
+            "實際數到的筆數少於 1000000，而且每次執行都不一樣；Thread Sanitizer 會回報 Data race detected。",
         expectFixed: "實際是 1000000，每次都一樣。",
         run: { variant, log in
             switch variant {
@@ -87,11 +97,13 @@ extension Swift05Actors {
         checkBug: { lines in
             guard let n = actualCount(lines) else { return "找不到實際筆數" }
             guard n > 0 else { return "increment() 要把 count 加一" }
-            return n < 1_000_000 ? nil : "Bug 還沒重現：總數剛好是 1000000，沒有少算（計數器要是沒有任何保護的一般 class）"
+            return n < 1_000_000
+                ? nil : "Bug 還沒重現：總數剛好是 1000000，沒有少算（計數器要是沒有任何保護的一般 class）"
         },
         checkFixed: { lines in
             guard let n = actualCount(lines) else { return "找不到實際筆數" }
-            return n == 1_000_000 ? nil : "總數應該剛好是 1000000，實際是 \(n)：計數器要改成 actor"
+            return n == 1_000_000
+                ? nil : "總數應該剛好是 1000000，實際是 \(n)：計數器要改成 actor"
         }
     )
 }

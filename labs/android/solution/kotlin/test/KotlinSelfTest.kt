@@ -9,6 +9,9 @@ import tw.harry.labs.kit.runLabSelfTest
 class KotlinSelfTest {
     @Test
     fun labs() = runBlocking {
-        assertEquals(emptyList<String>(), runLabSelfTest(kotlinSection, strict = true))
+        assertEquals(
+            emptyList<String>(),
+            runLabSelfTest(kotlinSection, strict = true),
+        )
     }
 }

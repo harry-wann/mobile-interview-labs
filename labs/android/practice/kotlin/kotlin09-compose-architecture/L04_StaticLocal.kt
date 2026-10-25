@@ -1,13 +1,19 @@
-// L04：價格每跳一次，連沒用到價格的表單也重組（staticCompositionLocalOf 放了會頻繁變動的值）
-// 對應複習站：Kotlin09ComposeArchitecture 第 4 題「CompositionLocal 是什麼？什麼時候不該用？」
+// L04：價格每跳一次，連沒用到價格的表單也重組（staticCompositionLocalOf
+// 放了會頻繁變動的值）
+// 對應複習站：Kotlin09ComposeArchitecture 第 4 題「CompositionLocal
+// 是什麼？什麼時候不該用？」
 //
-// 情境：畫面用 CompositionLocal 把「目前價格」提供給整棵樹。PriceBadge 會讀它，OrderForm 完全沒有讀。價格更新 10 次（每 30 ms 一次）。
+// 情境：畫面用 CompositionLocal 把「目前價格」提供給整棵樹。PriceBadge 會讀它，
+// OrderForm 完全沒有讀。價格更新 10 次（每 30 ms 一次）。
 //        演練計算 PriceBadge 與 OrderForm 各執行了幾次。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.LocalPrice）：staticCompositionLocalOf { 0L }。值一變，提供範圍裡面全部重組，包含沒讀它的 OrderForm。
-//   ② 修正版（L04Fixed.LocalPrice）：compositionLocalOf { 0L }。Compose 追蹤讀取，只有讀它的 PriceBadge 重組。
+//   ① Bug 版（L04Bug.LocalPrice）：staticCompositionLocalOf { 0L }。值一變，
+// 提供範圍裡面全部重組，包含沒讀它的 OrderForm。
+//   ② 修正版（L04Fixed.LocalPrice）：compositionLocalOf { 0L }。Compose
+// 追蹤讀取，只有讀它的 PriceBadge 重組。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin09-compose-architecture/L04_StaticLocal.kt
 package tw.harry.labs.practice.kotlin09composearchitecture
@@ -32,8 +38,15 @@ private class L04Counts {
     val form = AtomicInteger()
 }
 
-/** 演練流程（兩個版本共用）：組合畫面 → 價格每 30 ms 更新一次，共 10 次 → 看兩個 Composable 各執行了幾次 */
-private suspend fun scenario(log: LabLog, counts: L04Counts, screen: @Composable (price: Long) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：組合畫面 → 價格每 30 ms 更新一次，共 10 次 →
+ * 看兩個 Composable 各執行了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    counts: L04Counts,
+    screen: @Composable (price: Long) -> Unit,
+) {
     withHeadlessCompose {
         val price = mutableLongStateOf(100_000L)
         setContent { screen(price.longValue) }
@@ -50,7 +63,8 @@ private suspend fun scenario(log: LabLog, counts: L04Counts, screen: @Composable
 
 // MARK: - Bug 版
 private object L04Bug {
-    // TODO ①：改成 staticCompositionLocalOf { 0L }（static：不追蹤讀取，值一變，範圍內全部重組）。現在這行還不是 static
+    // TODO ①：改成 staticCompositionLocalOf { 0L }（static：不追蹤讀取，
+    // 值一變，範圍內全部重組）。現在這行還不是 static
     val LocalPrice = compositionLocalOf { 0L }
 
     @Composable
@@ -63,14 +77,14 @@ private object L04Bug {
 
     @Composable
     fun PriceBadge(counts: L04Counts) {
-        val price = LocalPrice.current                      // 只有它讀了價格
+        val price = LocalPrice.current // 只有它讀了價格
         SideEffect { counts.badge.incrementAndGet() }
         HeadlessText("價格 $price")
     }
 
     @Composable
     fun OrderForm(counts: L04Counts) {
-        SideEffect { counts.form.incrementAndGet() }        // 沒有讀價格
+        SideEffect { counts.form.incrementAndGet() } // 沒有讀價格
         HeadlessText("下單表單")
     }
 
@@ -82,7 +96,8 @@ private object L04Bug {
 
 // MARK: - 修正版
 private object L04Fixed {
-    // TODO ②：改成 compositionLocalOf { 0L }（追蹤讀取：值一變，只有讀它的地方重組）。現在這行還是 static
+    // TODO ②：改成 compositionLocalOf { 0L }（追蹤讀取：值一變，
+    // 只有讀它的地方重組）。現在這行還是 static
     val LocalPrice = staticCompositionLocalOf { 0L }
 
     @Composable
@@ -114,7 +129,9 @@ private object L04Fixed {
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
 
 private const val BADGE = "價格更新 10 次：PriceBadge 執行了 "
 private const val FORM = "價格更新 10 次：OrderForm 執行了 "

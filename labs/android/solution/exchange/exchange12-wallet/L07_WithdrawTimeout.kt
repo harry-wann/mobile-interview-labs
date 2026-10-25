@@ -1,32 +1,54 @@
-// L07：出金送出後逾時，App 自動重送，帳戶被扣了兩筆（出金申請沒有冪等鍵，逾時要先對帳）
-// 對應複習站：Exchange12Wallet 第 5 題「出金申請的 API 長什麼樣子？送出逾時時為什麼不能直接重送？」
+// L07：出金送出後逾時，App 自動重送，帳戶被扣了兩筆（出金申請沒有冪等鍵，
+// 逾時要先對帳）
+// 對應複習站：Exchange12Wallet 第 5 題「出金申請的 API
+// 長什麼樣子？送出逾時時為什麼不能直接重送？」
 //
-// 情境：這套交易所 API 的出金申請沒有冪等鍵（idempotency key：讓同一個請求送多次，結果和送一次一樣的識別碼）。
-//        送出後逾時（OkHttp 的 SocketTimeoutException），只代表「沒收到回應」，伺服器可能已經建立了出金。正確的做法是不重送，先用出入金記錄（type=withdraw）查詢，
-//        比對地址、數量、tag 是否已經有這一筆：有，就追蹤那一筆；找不到，也不代表一定沒成功（記錄可能有延遲），要明確告訴使用者「結果不明」，由使用者決定。
+// 情境：這套交易所 API 的出金申請沒有冪等鍵（idempotency key：
+// 讓同一個請求送多次，結果和送一次一樣的識別碼）。
+//        送出後逾時（OkHttp 的 SocketTimeoutException），只代表「沒收到回應」，
+// 伺服器可能已經建立了出金。正確的做法是不重送，先用出入金記錄（type=withdraw）
+// 查詢，
+//        比對地址、數量、tag 是否已經有這一筆：有，就追蹤那一筆；找不到，
+// 也不代表一定沒成功（記錄可能有延遲），要明確告訴使用者「結果不明」，
+// 由使用者決定。
 //        演練用一台假伺服器（記憶體裡的出金記錄），兩個情境：
-//        ①請求送到了，伺服器已經建立出金，但回應遺失（App 看到逾時）②請求沒有送到伺服器（App 同樣看到逾時）。
-//        App 送出時逾時，交給 handleTimeout 決定怎麼辦。（地址、數量是演練用的假資料。）
-// Bug 版：逾時就自動重送一次（「失敗了就再試」）。情境 ①：伺服器上變成兩筆一模一樣的出金，帳戶被扣了兩次；
+//        ①請求送到了，伺服器已經建立出金，但回應遺失（App 看到逾時）
+// ②請求沒有送到伺服器（App 同樣看到逾時）。
+//        App 送出時逾時，交給 handleTimeout 決定怎麼辦。（地址、
+// 數量是演練用的假資料。）
+// Bug 版：逾時就自動重送一次（「失敗了就再試」）。情境 ①：
+// 伺服器上變成兩筆一模一樣的出金，帳戶被扣了兩次；
 //        情境 ②：使用者還沒確認，App 就自己送出了出金。
-// 修正版：逾時不重送。先查出入金記錄：找到相同地址、數量、tag 的一筆，就追蹤那一筆；找不到，顯示「結果不明」，讓使用者決定要不要重送。
+// 修正版：逾時不重送。先查出入金記錄：找到相同地址、數量、tag 的一筆，
+// 就追蹤那一筆；找不到，顯示「結果不明」，讓使用者決定要不要重送。
 package tw.harry.labs.solution.exchange12wallet
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private data class L07Request(val address: String, val amount: String, val tag: String?)
+private data class L07Request(
+    val address: String,
+    val amount: String,
+    val tag: String?,
+)
 
 private class L07Record(val id: Int, val request: L07Request)
 
 private class L07TimeoutException : Exception("timeout")
 
-/** 假伺服器：沒有冪等鍵，送一次就建立一筆。可以設定「下一次的回應遺失」或「下一次的請求遺失」 */
+/**
+ * 假伺服器：沒有冪等鍵，送一次就建立一筆。可以設定「下一次的回應遺失」
+ * 或「下一次的請求遺失」
+ */
 private class L07Server {
     private val all = mutableListOf<L07Record>()
-    var loseNextResponse = false        // 伺服器收到並建立了，但回應沒回到 App
-    var loseNextRequest = false         // 請求沒有送到伺服器
+
+    // 伺服器收到並建立了，但回應沒回到 App
+    var loseNextResponse = false
+
+    // 請求沒有送到伺服器
+    var loseNextRequest = false
 
     val count get() = all.size
 
@@ -49,9 +71,13 @@ private class L07Server {
 }
 
 private sealed interface L07Outcome {
-    data class Sent(val id: Int) : L07Outcome        // 送出成功，出金 id
-    data class Found(val id: Int) : L07Outcome       // 逾時，但在記錄裡找到了這一筆
-    data object Unknown : L07Outcome                 // 逾時，找不到：結果不明
+    data class Sent(val id: Int) : L07Outcome // 送出成功，出金 id
+
+    // 逾時，但在記錄裡找到了這一筆
+    data class Found(val id: Int) : L07Outcome
+
+    // 逾時，找不到：結果不明
+    data object Unknown : L07Outcome
 }
 
 private fun text(o: L07Outcome): String = when (o) {
@@ -60,18 +86,28 @@ private fun text(o: L07Outcome): String = when (o) {
     L07Outcome.Unknown -> "結果不明，請到出入金記錄確認後再決定要不要重送"
 }
 
-private val request = L07Request(address = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", amount = "0.5", tag = null)
+private val request =
+    L07Request(
+        address = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2",
+        amount = "0.5",
+        tag = null,
+    )
 
 /** 送出：成功回傳 Sent；逾時交給 handleTimeout */
-private fun send(server: L07Server, handleTimeout: (L07Server, L07Request) -> L07Outcome): L07Outcome =
-    try {
-        L07Outcome.Sent(server.create(request))
-    } catch (e: L07TimeoutException) {
-        handleTimeout(server, request)
-    }
+private fun send(
+    server: L07Server,
+    handleTimeout: (L07Server, L07Request) -> L07Outcome,
+): L07Outcome = try {
+    L07Outcome.Sent(server.create(request))
+} catch (e: L07TimeoutException) {
+    handleTimeout(server, request)
+}
 
 /** 演練流程（兩個版本共用）：兩個情境，每個情境各自一台全新的伺服器 */
-private fun scenario(log: LabLog, handleTimeout: (L07Server, L07Request) -> L07Outcome) {
+private fun scenario(
+    log: LabLog,
+    handleTimeout: (L07Server, L07Request) -> L07Outcome,
+) {
     var wrong = 0
 
     val a = L07Server()
@@ -79,25 +115,36 @@ private fun scenario(log: LabLog, handleTimeout: (L07Server, L07Request) -> L07O
     val outcomeA = send(a, handleTimeout)
     val okA = a.count == 1 && outcomeA == L07Outcome.Found(1)
     if (!okA) wrong++
-    log("情境 1（伺服器已建立，回應遺失）：伺服器上有 ${a.count} 筆出金；App：${text(outcomeA)} ${if (okA) "✓" else "✗（應該只有 1 筆，並追蹤那一筆）"}")
+    log(
+        "情境 1（伺服器已建立，回應遺失）：伺服器上有 ${a.count} 筆出金；App：${text(
+            outcomeA,
+        )} ${if (okA) "✓" else "✗（應該只有 1 筆，並追蹤那一筆）"}",
+    )
 
     val b = L07Server()
     b.loseNextRequest = true
     val outcomeB = send(b, handleTimeout)
     val okB = b.count == 0 && outcomeB == L07Outcome.Unknown
     if (!okB) wrong++
-    log("情境 2（請求沒有送到）：伺服器上有 ${b.count} 筆出金；App：${text(outcomeB)} ${if (okB) "✓" else "✗（使用者還沒確認，不應該自動送出）"}")
+    log(
+        "情境 2（請求沒有送到）：伺服器上有 ${b.count} 筆出金；App：${text(
+            outcomeB,
+        )} ${if (okB) "✓" else "✗（使用者還沒確認，不應該自動送出）"}",
+    )
     log("2 個情境，處理錯的有 $wrong 個")
 }
 
 // MARK: - Bug 版
 private object L07Bug {
     fun handleTimeout(server: L07Server, request: L07Request): L07Outcome {
-        val id = runCatching { server.create(request) }.getOrNull()               // 逾時就重送一次
+        // 逾時就重送一次
+        val id = runCatching { server.create(request) }.getOrNull()
         return if (id != null) L07Outcome.Sent(id) else L07Outcome.Unknown
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { server, request -> handleTimeout(server, request) }
+    suspend fun run(log: LabLog) = scenario(log) { server, request ->
+        handleTimeout(server, request)
+    }
 }
 
 // MARK: - 修正版
@@ -105,15 +152,25 @@ private object L07Fixed {
     fun handleTimeout(server: L07Server, request: L07Request): L07Outcome {
         // 不重送：先對帳。用地址、數量、tag 比對出入金記錄
         val match = server.records().lastOrNull { it.request == request }
-        return if (match != null) L07Outcome.Found(match.id) else L07Outcome.Unknown   // 找不到不代表沒成功：告訴使用者結果不明
+        // 找不到不代表沒成功：告訴使用者結果不明
+        return if (match !=
+            null
+        ) {
+            L07Outcome.Found(match.id)
+        } else {
+            L07Outcome.Unknown
+        }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { server, request -> handleTimeout(server, request) }
+    suspend fun run(log: LabLog) = scenario(log) { server, request ->
+        handleTimeout(server, request)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("2 個情境") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("2 個情境")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l07 = Lab(
     id = "L07",
@@ -139,8 +196,13 @@ val l07 = Lab(
         val n = wrongCount(lines)
         when {
             n == null -> "演練沒有跑完：要用 scenario(log) { server, request -> … } 執行"
-            lines.none { it.startsWith("情境 1") && it.contains("伺服器上有 2 筆出金") } -> "Bug 還沒重現：逾時就重送，情境 1 的伺服器上會有 2 筆一模一樣的出金"
+
+            lines.none {
+                it.startsWith("情境 1") && it.contains("伺服器上有 2 筆出金")
+            } -> "Bug 還沒重現：逾時就重送，情境 1 的伺服器上會有 2 筆一模一樣的出金"
+
             n != 2 -> "Bug 版兩個情境都應該處理錯（目前錯 $n 個）"
+
             else -> null
         }
     },

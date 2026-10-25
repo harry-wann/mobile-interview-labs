@@ -1,16 +1,25 @@
-// L06：規約更新到 1.10 版，同意過 1.9 版的使用者卻沒有被要求重新同意（版本號用字串比較）
-// 對應複習站：Exchange11eKYC 第 6 題「旅行規則、同意書、風險揭露，對 App 有什麼影響？」
+// L06：規約更新到 1.10 版，同意過 1.9
+// 版的使用者卻沒有被要求重新同意（版本號用字串比較）
+// 對應複習站：Exchange11eKYC 第 6 題「旅行規則、同意書、風險揭露，對 App
+// 有什麼影響？」
 //
-// 情境：同意書要記錄「版本、時間、語系」。App 啟動時，拿「使用者上次同意的版本」和「伺服器要求的版本」比較，
-//        伺服器的版本比較新，就要擋住相關功能、要求重新同意。複習站範例用日期當版本號；演練改用「主版本.次版本」（1.9、1.10、2.0），
-//        因為這種格式最容易讓人直接拿字串比較。（版本格式是演練的自訂，實際格式依產品與法務的規約。）
+// 情境：同意書要記錄「版本、時間、語系」。App 啟動時，
+// 拿「使用者上次同意的版本」和「伺服器要求的版本」比較，
+//        伺服器的版本比較新，就要擋住相關功能、要求重新同意。
+// 複習站範例用日期當版本號；演練改用「主版本.次版本」（1.9、1.10、2.0），
+//        因為這種格式最容易讓人直接拿字串比較。（版本格式是演練的自訂，
+// 實際格式依產品與法務的規約。）
 //        needsReconsent(accepted, required) 回傳要不要重新同意。六種情況：
-//        沒同意過／1.9 → 1.10／1.10 → 1.10（一樣）／2.0 → 10.0／1.10 → 1.9（伺服器退回舊版）／1.2 → 1.3。
+//        沒同意過／1.9 → 1.10／1.10 → 1.10（一樣）／2.0 → 10.0／1.10 → 1.
+// 9（伺服器退回舊版）／1.2 → 1.3。
 //
 // 你要寫：
-//   ① Bug 版（L06Bug.needsReconsent）：沒同意過（accepted 是 null）回傳 true；否則回傳 required > accepted（直接用字串比較大小）。
-//   ② 修正版（L06Fixed.needsReconsent）：沒同意過回傳 true；否則用 split(".") 把兩個版本拆成整數 list，逐段比較，
-//      required 比 accepted 新（第一個不同的段，required 的數字比較大）才回傳 true；全部相同回傳 false。
+//   ① Bug 版（L06Bug.needsReconsent）：沒同意過（accepted 是 null）回傳 true；
+// 否則回傳 required > accepted（直接用字串比較大小）。
+//   ② 修正版（L06Fixed.needsReconsent）：沒同意過回傳 true；否則用 split(".")
+// 把兩個版本拆成整數 list，逐段比較，
+//      required 比 accepted 新（第一個不同的段，required 的數字比較大）才回傳
+// true；全部相同回傳 false。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange11-ekyc/L06_ConsentVersion.kt
 package tw.harry.labs.practice.exchange11ekyc
@@ -19,7 +28,12 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private class L06Case(val name: String, val accepted: String?, val required: String, val expected: Boolean)
+private class L06Case(
+    val name: String,
+    val accepted: String?,
+    val required: String,
+    val expected: Boolean,
+)
 
 private val cases = listOf(
     L06Case("沒同意過", null, "1.0", true),
@@ -31,7 +45,10 @@ private val cases = listOf(
 )
 
 /** 演練流程（兩個版本共用）：六種情況逐一判斷，和正確答案比對 */
-private fun scenario(log: LabLog, needsReconsent: (accepted: String?, required: String) -> Boolean) {
+private fun scenario(
+    log: LabLog,
+    needsReconsent: (accepted: String?, required: String) -> Boolean,
+) {
     var wrong = 0
     for (c in cases) {
         val result = needsReconsent(c.accepted, c.required)
@@ -40,7 +57,9 @@ private fun scenario(log: LabLog, needsReconsent: (accepted: String?, required: 
             log("${c.name} → $text ✓")
         } else {
             wrong++
-            log("${c.name} → $text ✗（應該${if (c.expected) "要重新同意" else "不用重新同意"}）")
+            log(
+                "${c.name} → $text ✗（應該${if (c.expected) "要重新同意" else "不用重新同意"}）",
+            )
         }
     }
     log("6 種情況，判斷錯的有 $wrong 種")
@@ -49,27 +68,35 @@ private fun scenario(log: LabLog, needsReconsent: (accepted: String?, required: 
 // MARK: - Bug 版
 private object L06Bug {
     fun needsReconsent(accepted: String?, required: String): Boolean {
-        // TODO ①：accepted 是 null 回傳 true；否則回傳 required > accepted（直接比較兩個字串）
+        // TODO ①：accepted 是 null 回傳 true；否則回傳 required >
+        // accepted（直接比較兩個字串）
         return false
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { accepted, required -> needsReconsent(accepted, required) }
+    suspend fun run(log: LabLog) = scenario(log) { accepted, required ->
+        needsReconsent(accepted, required)
+    }
 }
 
 // MARK: - 修正版
 private object L06Fixed {
     fun needsReconsent(accepted: String?, required: String): Boolean {
-        // TODO ②：accepted 是 null 回傳 true；否則把 accepted、required 各自 split(".") 並轉成 Int 的 list，
-        //        逐段比較（段數不同時，缺的段當 0）：第一個不同的段，required 的數字比較大就回傳 true、比較小回傳 false；全部相同回傳 false
+        // TODO ②：accepted 是 null 回傳 true；否則把 accepted、required 各自
+        // split(".") 並轉成 Int 的 list，
+        //        逐段比較（段數不同時，缺的段當 0）：第一個不同的段，required
+        // 的數字比較大就回傳 true、比較小回傳 false；全部相同回傳 false
         return false
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { accepted, required -> needsReconsent(accepted, required) }
+    suspend fun run(log: LabLog) = scenario(log) { accepted, required ->
+        needsReconsent(accepted, required)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("6 種情況") }?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("6 種情況")
+}?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l06 = Lab(
     id = "L06",

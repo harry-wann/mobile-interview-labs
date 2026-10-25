@@ -1,13 +1,18 @@
-// L02：按了「收到新報價」，清單明明變長了，畫面卻沒更新（原地修改 State 裡的物件）
-// 對應複習站：Kotlin06Recomposition 第 2 題「Compose 怎麼知道哪個 State 被誰讀過？」
+// L02：按了「收到新報價」，清單明明變長了，畫面卻沒更新（原地修改 State
+// 裡的物件）
+// 對應複習站：Kotlin06Recomposition 第 2 題「Compose 怎麼知道哪個 State
+// 被誰讀過？」
 //
-// 情境：行情畫面把收到的報價放進清單，並顯示「畫面顯示 N 筆」。按下「收到一筆新報價」模擬 WebSocket 推來一筆。
+// 情境：行情畫面把收到的報價放進清單，並顯示「畫面顯示 N 筆」。
+// 按下「收到一筆新報價」模擬 WebSocket 推來一筆。
 //        log 會印出清單裡真正有幾筆。
 //
 // 你要寫：
-//   ① Bug 版：用 remember { mutableStateOf(mutableListOf()) }，按鈕裡 ticks.value.add(…)。原地修改 list，Compose 不知道，畫面不更新。
+//   ① Bug 版：用 remember { mutableStateOf(mutableListOf()) }，按鈕裡 ticks.
+// value.add(…)。原地修改 list，Compose 不知道，畫面不更新。
 //   ② 修正版：改用 mutableStateListOf()，內容改變時會通知 Compose。
-// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，看橘色的重組次數（或畫面）是不是照預期。
+// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，
+// 看橘色的重組次數（或畫面）是不是照預期。
 // 解答：solution/kotlin/kotlin06-recomposition/L02_MutateInPlace.kt
 package tw.harry.labs.practice.kotlin06recomposition
 
@@ -29,11 +34,15 @@ private class FeedTick(val symbol: String, val price: Long)
 // MARK: - Bug 版
 @Composable
 private fun L02BugScreen(log: LabLog) {
-    // TODO ①-1：宣告 val ticks = remember { mutableStateOf(mutableListOf<FeedTick>()) }（State 裡存一個會被原地修改的 list）
+    // TODO ①-1：宣告 val ticks = remember {
+    // mutableStateOf(mutableListOf<FeedTick>()) }（State
+    // 裡存一個會被原地修改的 list）
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
-            // TODO ①-2：原地加入一筆：ticks.value.add(FeedTick("BTC_JPY", 10_000_000L + ticks.value.size))
-            //          再 log("收到一筆報價，list 裡現在有 ${ticks.value.size} 筆")
+            // TODO ①-2：原地加入一筆：ticks.value.add(FeedTick("BTC_JPY",
+            // 10_000_000L + ticks.value.size))
+            //          再 log("收到一筆報價，list 裡現在有 ${ticks.value.size}
+            // 筆")
         }) { Text("收到一筆新報價") }
         // TODO ①-3：顯示 Text("畫面顯示 ${ticks.value.size} 筆")
     }
@@ -42,10 +51,12 @@ private fun L02BugScreen(log: LabLog) {
 // MARK: - 修正版
 @Composable
 private fun L02FixedScreen(log: LabLog) {
-    // TODO ②-1：宣告 val ticks = remember { mutableStateListOf<FeedTick>() }（內容改變時會通知 Compose 的 list）
+    // TODO ②-1：宣告 val ticks = remember { mutableStateListOf<FeedTick>()
+    // }（內容改變時會通知 Compose 的 list）
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
-            // TODO ②-2：ticks.add(FeedTick("BTC_JPY", 10_000_000L + ticks.size))，再 log("收到一筆報價，list 裡現在有 ${ticks.size} 筆")
+            // TODO ②-2：ticks.add(FeedTick("BTC_JPY", 10_000_000L + ticks.
+            // size))，再 log("收到一筆報價，list 裡現在有 ${ticks.size} 筆")
         }) { Text("收到一筆新報價") }
         // TODO ②-3：顯示 Text("畫面顯示 ${ticks.size} 筆")
     }

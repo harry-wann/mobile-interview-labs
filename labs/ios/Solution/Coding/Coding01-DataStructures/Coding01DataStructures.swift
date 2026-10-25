@@ -6,6 +6,7 @@ enum Coding01DataStructures {
         id: "livecoding-ds",
         code: "Coding01DataStructures",
         title: "資料結構題",
-        labs: [l01, l02, l03, l04, l05, l06]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05, l06]
     )
 }

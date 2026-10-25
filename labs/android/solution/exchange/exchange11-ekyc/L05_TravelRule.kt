@@ -1,16 +1,24 @@
-// L05：登記出金地址時，該填的資料沒填也能過（旅行規則的必填欄位依收款對象不同，空白不算有填）
-// 對應複習站：Exchange11eKYC 第 6 題「旅行規則、同意書、風險揭露，對 App 有什麼影響？」
+// L05：登記出金地址時，該填的資料沒填也能過（旅行規則的必填欄位依收款對象不同，
+// 空白不算有填）
+// 對應複習站：Exchange11eKYC 第 6 題「旅行規則、同意書、風險揭露，對 App
+// 有什麼影響？」
 //
-// 情境：旅行規則（travel rule）要求出金到外部地址時，要收集收款方的資訊。所以登記出金地址的表單，要依「這個地址屬於誰」要求不同的欄位。
-//        演練用的是自訂的示範規則（不是實際法規；實際要收集什麼，以法務確認為準）：
+// 情境：旅行規則（travel rule）要求出金到外部地址時，要收集收款方的資訊。
+// 所以登記出金地址的表單，要依「這個地址屬於誰」要求不同的欄位。
+//        演練用的是自訂的示範規則（不是實際法規；實際要收集什麼，
+// 以法務確認為準）：
 //        ・屬於其他交易所：交易所名稱、收款人姓名 都要填
 //        ・使用者自己的錢包：要勾選「這是我本人持有的錢包」的所有權聲明
 //        ・其他人的錢包：收款人姓名、與收款人的關係 都要填
-//        欄位只有空白（空格、換行）也算沒填。validate 回傳「缺少的欄位名稱」，空 list 代表可以送出。
-//        六種表單：交易所（完整／缺收款人姓名／交易所名稱只有空白）、自己的錢包（沒勾聲明／有勾）、其他人的錢包（什麼都沒填）。
-// Bug 版：只檢查「屬於其他交易所」這一種，而且用 isEmpty 判斷（只有空白的字串不是空字串，會通過）；
+//        欄位只有空白（空格、換行）也算沒填。validate 回傳「缺少的欄位名稱」，
+// 空 list 代表可以送出。
+//        六種表單：交易所（完整／缺收款人姓名／交易所名稱只有空白）、
+// 自己的錢包（沒勾聲明／有勾）、其他人的錢包（什麼都沒填）。
+// Bug 版：只檢查「屬於其他交易所」這一種，而且用 isEmpty
+// 判斷（只有空白的字串不是空字串，會通過）；
 //        自己的錢包沒勾聲明、其他人的錢包什麼都沒填，都能直接送出。
-// 修正版：依收款對象分別檢查，欄位先 trim 掉前後空白再判斷是不是空的（isBlank）。
+// 修正版：依收款對象分別檢查，欄位先 trim
+// 掉前後空白再判斷是不是空的（isBlank）。
 package tw.harry.labs.solution.exchange11ekyc
 
 import tw.harry.labs.kit.Lab
@@ -18,9 +26,9 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 private enum class L05Destination {
-    Exchange,       // 屬於其他交易所
-    OwnWallet,      // 使用者自己的錢包
-    OtherPerson,    // 其他人的錢包
+    Exchange, // 屬於其他交易所
+    OwnWallet, // 使用者自己的錢包
+    OtherPerson, // 其他人的錢包
 }
 
 private class L05Form(
@@ -31,15 +39,51 @@ private class L05Form(
     val ownershipConfirmed: Boolean = false,
 )
 
-private class L05Case(val name: String, val form: L05Form, val expected: List<String>)
+private class L05Case(
+    val name: String,
+    val form: L05Form,
+    val expected: List<String>,
+)
 
 private val cases = listOf(
-    L05Case("交易所，資料完整", L05Form(L05Destination.Exchange, exchangeName = "Example Exchange", beneficiaryName = "山田 太郎"), emptyList()),
-    L05Case("交易所，缺收款人姓名", L05Form(L05Destination.Exchange, exchangeName = "Example Exchange"), listOf("收款人姓名")),
-    L05Case("交易所，交易所名稱只有空白", L05Form(L05Destination.Exchange, exchangeName = "   ", beneficiaryName = "山田 太郎"), listOf("交易所名稱")),
-    L05Case("自己的錢包，沒勾所有權聲明", L05Form(L05Destination.OwnWallet), listOf("所有權聲明")),
-    L05Case("自己的錢包，有勾所有權聲明", L05Form(L05Destination.OwnWallet, ownershipConfirmed = true), emptyList()),
-    L05Case("其他人的錢包，什麼都沒填", L05Form(L05Destination.OtherPerson), listOf("收款人姓名", "與收款人的關係")),
+    L05Case(
+        "交易所，資料完整",
+        L05Form(
+            L05Destination.Exchange,
+            exchangeName = "Example Exchange",
+            beneficiaryName = "山田 太郎",
+        ),
+        emptyList(),
+    ),
+    L05Case(
+        "交易所，缺收款人姓名",
+        L05Form(L05Destination.Exchange, exchangeName = "Example Exchange"),
+        listOf("收款人姓名"),
+    ),
+    L05Case(
+        "交易所，交易所名稱只有空白",
+        L05Form(
+            L05Destination.Exchange,
+            exchangeName = "   ",
+            beneficiaryName = "山田 太郎",
+        ),
+        listOf("交易所名稱"),
+    ),
+    L05Case(
+        "自己的錢包，沒勾所有權聲明",
+        L05Form(L05Destination.OwnWallet),
+        listOf("所有權聲明"),
+    ),
+    L05Case(
+        "自己的錢包，有勾所有權聲明",
+        L05Form(L05Destination.OwnWallet, ownershipConfirmed = true),
+        emptyList(),
+    ),
+    L05Case(
+        "其他人的錢包，什麼都沒填",
+        L05Form(L05Destination.OtherPerson),
+        listOf("收款人姓名", "與收款人的關係"),
+    ),
 )
 
 /** 演練流程（兩個版本共用）：六種表單逐一驗證，和正確答案比對 */
@@ -47,12 +91,22 @@ private fun scenario(log: LabLog, validate: (L05Form) -> List<String>) {
     var wrong = 0
     for (c in cases) {
         val missing = validate(c.form)
-        val text = if (missing.isEmpty()) "可以送出" else "缺 " + missing.joinToString("、")
+        val text = if (missing.isEmpty()) {
+            "可以送出"
+        } else {
+            "缺 " +
+                missing.joinToString("、")
+        }
         if (missing == c.expected) {
             log("${c.name} → $text ✓")
         } else {
             wrong++
-            val expectedText = if (c.expected.isEmpty()) "可以送出" else "缺 " + c.expected.joinToString("、")
+            val expectedText = if (c.expected.isEmpty()) {
+                "可以送出"
+            } else {
+                "缺 " +
+                    c.expected.joinToString("、")
+            }
             log("${c.name} → $text ✗（應該是：$expectedText）")
         }
     }
@@ -63,7 +117,8 @@ private fun scenario(log: LabLog, validate: (L05Form) -> List<String>) {
 private object L05Bug {
     fun validate(form: L05Form): List<String> {
         val missing = mutableListOf<String>()
-        if (form.type == L05Destination.Exchange) {              // 只管交易所；而且 isEmpty 擋不住只有空白的字串
+        // 只管交易所；而且 isEmpty 擋不住只有空白的字串
+        if (form.type == L05Destination.Exchange) {
             if (form.exchangeName.isEmpty()) missing += "交易所名稱"
             if (form.beneficiaryName.isEmpty()) missing += "收款人姓名"
         }
@@ -79,12 +134,15 @@ private object L05Fixed {
         val missing = mutableListOf<String>()
         when (form.type) {
             L05Destination.Exchange -> {
-                if (form.exchangeName.isBlank()) missing += "交易所名稱"           // isBlank：只有空白也算沒填
+                // isBlank：只有空白也算沒填
+                if (form.exchangeName.isBlank()) missing += "交易所名稱"
                 if (form.beneficiaryName.isBlank()) missing += "收款人姓名"
             }
+
             L05Destination.OwnWallet -> {
                 if (!form.ownershipConfirmed) missing += "所有權聲明"
             }
+
             L05Destination.OtherPerson -> {
                 if (form.beneficiaryName.isBlank()) missing += "收款人姓名"
                 if (form.relationship.isBlank()) missing += "與收款人的關係"
@@ -97,8 +155,9 @@ private object L05Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("6 種表單") }?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("6 種表單")
+}?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l05 = Lab(
     id = "L05",

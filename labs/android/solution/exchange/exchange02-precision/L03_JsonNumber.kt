@@ -1,11 +1,17 @@
-// L03：伺服器回 1.234567890123456789 ETH，App 讀進來卻是 1.2345678901234567（JSON 的數字被當成 Double）
-// 對應複習站：Exchange02Precision 第 3 題「API 回來的數字要怎麼讀，才不會一開始就不準？」
+// L03：伺服器回 1.234567890123456789 ETH，App 讀進來卻是 1.
+// 2345678901234567（JSON 的數字被當成 Double）
+// 對應複習站：Exchange02Precision 第 3 題「API 回來的數字要怎麼讀，
+// 才不會一開始就不準？」
 //
-// 情境：資產 API 回傳 JSON，balance 是一個有 18 位小數的數字（ETH 最小單位 wei 是小數第 18 位）：
+// 情境：資產 API 回傳 JSON，balance 是一個有 18 位小數的數字（ETH 最小單位 wei
+// 是小數第 18 位）：
 //        {"symbol":"ethjpy","balance":1.234567890123456789}
-//        App 用 Gson 解析成資料類別。Double 只有 15 到 17 位有效數字，超過的位數在讀進來的那一刻就丟了。
-// Bug 版：資料類別的 balance 宣告成 Double。解析後變成 1.2345678901234567，和伺服器的原文對不起來。
-// 修正版：balance 宣告成 BigDecimal。Gson 會直接把數字的文字轉成 BigDecimal，不經過 Double，位數完整保留。
+//        App 用 Gson 解析成資料類別。Double 只有 15 到 17 位有效數字，
+// 超過的位數在讀進來的那一刻就丟了。
+// Bug 版：資料類別的 balance 宣告成 Double。解析後變成 1.2345678901234567，
+// 和伺服器的原文對不起來。
+// 修正版：balance 宣告成 BigDecimal。Gson 會直接把數字的文字轉成 BigDecimal，
+// 不經過 Double，位數完整保留。
 package tw.harry.labs.solution.exchange02precision
 
 import com.google.gson.Gson
@@ -27,10 +33,14 @@ private fun scenario(log: LabLog, parse: (String) -> String) {
 
 // MARK: - Bug 版
 private object L03Bug {
-    class Account(val symbol: String, val balance: Double)      // 用 Double 接
+    class Account(val symbol: String, val balance: Double) // 用 Double 接
 
     fun parse(json: String): String {
-        val account = runCatching { Gson().fromJson(json, Account::class.java) }.getOrNull() ?: return "解析失敗"
+        val account =
+            runCatching {
+                Gson().fromJson(json, Account::class.java)
+            }.getOrNull()
+                ?: return "解析失敗"
         return "${account.balance}"
     }
 
@@ -39,10 +49,15 @@ private object L03Bug {
 
 // MARK: - 修正版
 private object L03Fixed {
-    class Account(val symbol: String, val balance: BigDecimal)  // 用 BigDecimal 接
+    // 用 BigDecimal 接
+    class Account(val symbol: String, val balance: BigDecimal)
 
     fun parse(json: String): String {
-        val account = runCatching { Gson().fromJson(json, Account::class.java) }.getOrNull() ?: return "解析失敗"
+        val account =
+            runCatching {
+                Gson().fromJson(json, Account::class.java)
+            }.getOrNull()
+                ?: return "解析失敗"
         return account.balance.toPlainString()
     }
 
@@ -72,16 +87,25 @@ val l03 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("App 讀到") } -> "演練沒有跑完：要用 scenario(log, ::parse) 執行"
+            lines.none {
+                it.startsWith("App 讀到")
+            } -> "演練沒有跑完：要用 scenario(log, ::parse) 執行"
+
             "App 讀到 balance = 解析失敗" in lines -> "還沒讀到 balance：Account 要宣告 balance 欄位（Double），再用 Gson().fromJson 解析"
+
             "App 讀到 balance = 1.2345678901234567" !in lines -> "Bug 還沒重現：balance 宣告成 Double，讀進來會變成 1.2345678901234567"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("App 讀到") } -> "演練沒有跑完：要用 scenario(log, ::parse) 執行"
+            lines.none {
+                it.startsWith("App 讀到")
+            } -> "演練沒有跑完：要用 scenario(log, ::parse) 執行"
+
             "和伺服器的原文一致" !in lines -> "位數還是被吃掉了：Account.balance 要宣告成 BigDecimal，不要經過 Double"
+
             else -> null
         }
     },

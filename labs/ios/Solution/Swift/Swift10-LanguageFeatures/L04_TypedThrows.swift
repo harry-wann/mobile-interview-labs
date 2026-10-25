@@ -1,11 +1,14 @@
 // L04：被限流時，使用者看到「發生未知錯誤」（typed throws 與窮舉的 switch）
 // 對應複習站：Swift10LanguageFeatures 第 5 題「typed throws 解決什麼問題？」
 //
-// 情境：網路層的錯誤 NetworkError 一開始只有 offline、badStatus。後來伺服器開始限流，有人新增了 rateLimited(retryAfter:)，
+// 情境：網路層的錯誤 NetworkError 一開始只有 offline、badStatus。
+// 後來伺服器開始限流，有人新增了 rateLimited(retryAfter:)，
 //      但顯示錯誤訊息的地方沒有人記得改。
-// Bug 版：fetch 只寫 throws，丟出來的是 any Error，錯誤訊息那邊要自己轉型，最後用 default 兜底。新增的 case 沒有人處理，掉進 default，
+// Bug 版：fetch 只寫 throws，丟出來的是 any Error，錯誤訊息那邊要自己轉型，
+// 最後用 default 兜底。新增的 case 沒有人處理，掉進 default，
 //        使用者看到「發生未知錯誤」，而不是「請 30 秒後再試」。
-// 修正版：fetch 寫 throws(NetworkError)。catch 拿到的 error 就是 NetworkError，switch 要窮舉、不用寫 default。
+// 修正版：fetch 寫 throws(NetworkError)。catch 拿到的 error 就是 NetworkError，
+// switch 要窮舉、不用寫 default。
 //        新增 case 又沒處理的話，編譯器會直接報錯：switch must be exhaustive。
 import Foundation
 import LabKit
@@ -19,15 +22,17 @@ private enum NetworkError: Error {
 
 // MARK: - Bug 版
 private enum L04Bug {
-    static func fetch() throws -> Int {                     // 只知道「會丟錯誤」，不知道是哪一種
+    // 只知道「會丟錯誤」，不知道是哪一種
+    static func fetch() throws -> Int {
         throw NetworkError.rateLimited(retryAfter: 30)
     }
 
     static func message(for error: Error) -> String {
-        switch error as? NetworkError {                     // 要自己轉型
+        switch error as? NetworkError {  // 要自己轉型
         case .offline?: return "沒有網路"
         case .badStatus(let code)?: return "伺服器錯誤 \(code)"
-        default: return "發生未知錯誤"                         // 新增的 rateLimited 掉進這裡
+        // 新增的 rateLimited 掉進這裡
+        default: return "發生未知錯誤"
         }
     }
 
@@ -42,20 +47,24 @@ private enum L04Bug {
 
 // MARK: - 修正版
 private enum L04Fixed {
-    static func fetch() throws(NetworkError) -> Int {       // 簽名寫明：只會丟 NetworkError
+    // 簽名寫明：只會丟 NetworkError
+    static func fetch() throws(NetworkError) -> Int {
         throw .rateLimited(retryAfter: 30)
     }
 
     static func run(_ log: LabLog) async {
         do {
             _ = try fetch()
-        } catch {                                           // error 的型別是 NetworkError，不用轉型
+            // error 的型別是 NetworkError，不用轉型
+        } catch {
             let text: String
-            switch error {                                  // 沒有 default：要窮舉每一個 case
+            // 沒有 default：要窮舉每一個 case
+            switch error {
             case .offline: text = "沒有網路"
             case .badStatus(let code): text = "伺服器錯誤 \(code)"
             case .rateLimited(let seconds): text = "請 \(seconds) 秒後再試"
-            // 如果 NetworkError 又新增一個 case（例如 maintenance），這裡沒處理的話，編譯器會報錯：
+            // 如果 NetworkError 又新增一個 case（例如 maintenance），
+            // 這裡沒處理的話，編譯器會報錯：
             //   error: switch must be exhaustive
             }
             log("使用者看到：\(text)")
@@ -69,7 +78,8 @@ extension Swift10LanguageFeatures {
         id: "L04",
         title: "被限流時，使用者看到「未知錯誤」",
         question: "第 5 題：typed throws 解決什麼問題？",
-        goal: "NetworkError 新增了 rateLimited，但錯誤訊息沒有跟著處理。先寫出掉進 default 的 Bug 版，再用 typed throws 讓編譯器幫你檢查有沒有處理完。",
+        goal:
+            "NetworkError 新增了 rateLimited，但錯誤訊息沒有跟著處理。先寫出掉進 default 的 Bug 版，再用 typed throws 讓編譯器幫你檢查有沒有處理完。",
         steps: [
             "選「Bug 版」執行，看 log：使用者看到什麼？",
             "選「修正版」執行：使用者看到「請 30 秒後再試」。",
@@ -77,7 +87,8 @@ extension Swift10LanguageFeatures {
             "想想取捨：公開的 API 簽名寫死錯誤型別，之後新增 case 會有什麼影響？",
         ],
         expectBug: "使用者看到「發生未知錯誤」：rateLimited 掉進 default，沒有人處理。",
-        expectFixed: "使用者看到「請 30 秒後再試」。新增 case 沒處理時，編譯器會報 switch must be exhaustive。",
+        expectFixed:
+            "使用者看到「請 30 秒後再試」。新增 case 沒處理時，編譯器會報 switch must be exhaustive。",
         run: { variant, log in
             switch variant {
             case .bug: await L04Bug.run(log)
@@ -85,10 +96,14 @@ extension Swift10LanguageFeatures {
             }
         },
         checkBug: { lines in
-            lines.contains("使用者看到：發生未知錯誤") ? nil : "Bug 還沒重現：message(for:) 要用 error as? NetworkError 轉型，沒有處理 rateLimited，用 default 兜底"
+            lines.contains("使用者看到：發生未知錯誤")
+                ? nil
+                : "Bug 還沒重現：message(for:) 要用 error as? NetworkError 轉型，沒有處理 rateLimited，用 default 兜底"
         },
         checkFixed: { lines in
-            lines.contains("使用者看到：請 30 秒後再試") ? nil : "使用者應該看到「請 30 秒後再試」：fetch 要寫 throws(NetworkError)，catch 裡的 switch 要處理 rateLimited（不用 default）"
+            lines.contains("使用者看到：請 30 秒後再試")
+                ? nil
+                : "使用者應該看到「請 30 秒後再試」：fetch 要寫 throws(NetworkError)，catch 裡的 switch 要處理 rateLimited（不用 default）"
         }
     )
 }

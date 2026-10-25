@@ -1,9 +1,12 @@
 // L03：「漲幅榜」第一名顯示成成交量最大的（複製貼上漏改欄位，改用 KeyPath）
 // 對應複習站：Swift10LanguageFeatures 第 4 題「KeyPath 是什麼？什麼時候用？」
 //
-// 情境：行情頁有「成交量榜」「漲幅榜」「價格榜」三個榜單，每個榜單都是「找出某個欄位最大的那一檔」。
-// Bug 版：三個榜單各寫一個函式，內容幾乎一樣。複製貼上時，「漲幅榜」忘了把欄位從 volume 改成 changePercent，榜首永遠是成交量最大的那一檔。
-// 修正版：寫一個通用的 top(by: KeyPath)，把「哪個欄位」當參數傳進去，三個榜單共用同一份邏輯，不會再複製貼上出錯。
+// 情境：行情頁有「成交量榜」「漲幅榜」「價格榜」三個榜單，
+// 每個榜單都是「找出某個欄位最大的那一檔」。
+// Bug 版：三個榜單各寫一個函式，內容幾乎一樣。複製貼上時，「漲幅榜」
+// 忘了把欄位從 volume 改成 changePercent，榜首永遠是成交量最大的那一檔。
+// 修正版：寫一個通用的 top(by: KeyPath)，把「哪個欄位」當參數傳進去，
+// 三個榜單共用同一份邏輯，不會再複製貼上出錯。
 import Foundation
 import LabKit
 
@@ -23,9 +26,16 @@ private let tickers = [
 
 // MARK: - Bug 版
 private enum L03Bug {
-    static func topByVolume(_ list: [Ticker]) -> Ticker? { list.max { $0.volume < $1.volume } }
-    static func topByChange(_ list: [Ticker]) -> Ticker? { list.max { $0.volume < $1.volume } }          // 複製貼上：忘了改成 changePercent
-    static func topByPrice(_ list: [Ticker]) -> Ticker? { list.max { $0.price < $1.price } }
+    static func topByVolume(_ list: [Ticker]) -> Ticker? {
+        list.max { $0.volume < $1.volume }
+    }
+    // 複製貼上：忘了改成 changePercent
+    static func topByChange(_ list: [Ticker]) -> Ticker? {
+        list.max { $0.volume < $1.volume }
+    }
+    static func topByPrice(_ list: [Ticker]) -> Ticker? {
+        list.max { $0.price < $1.price }
+    }
 
     static func run(_ log: LabLog) async {
         log("成交量榜第一名：\(topByVolume(tickers)?.symbol ?? "（沒有）")")
@@ -37,7 +47,9 @@ private enum L03Bug {
 // MARK: - 修正版
 private enum L03Fixed {
     /// 通用：不管哪個欄位，只要可以比較，就找出最大的那一檔
-    static func top<V: Comparable>(_ list: [Ticker], by key: KeyPath<Ticker, V>) -> Ticker? {
+    static func top<V: Comparable>(
+        _ list: [Ticker], by key: KeyPath<Ticker, V>
+    ) -> Ticker? {
         list.max { $0[keyPath: key] < $1[keyPath: key] }
     }
 
@@ -54,7 +66,8 @@ extension Swift10LanguageFeatures {
         id: "L03",
         title: "漲幅榜第一名，顯示成成交量最大的",
         question: "第 4 題：KeyPath 是什麼？什麼時候用？",
-        goal: "三個榜單都是「找出某個欄位最大的那一檔」。先寫出複製貼上漏改欄位的 Bug 版，再用 KeyPath 把「哪個欄位」當參數傳進去。",
+        goal:
+            "三個榜單都是「找出某個欄位最大的那一檔」。先寫出複製貼上漏改欄位的 Bug 版，再用 KeyPath 把「哪個欄位」當參數傳進去。",
         steps: [
             "選「Bug 版」執行，看 log：漲幅榜第一名是誰？（XRP 漲了 8.9%，應該是它。）",
             "選「修正版」執行：三個榜單各自對了。",
@@ -71,13 +84,21 @@ extension Swift10LanguageFeatures {
         },
         checkBug: { lines in
             if !lines.contains("成交量榜第一名：BTC") { return "成交量榜第一名應該是 BTC" }
-            if !lines.contains("漲幅榜第一名：BTC") { return "Bug 還沒重現：漲幅榜的比較要用到 volume（複製貼上沒改欄位），榜首變成 BTC" }
+            if !lines.contains("漲幅榜第一名：BTC") {
+                return "Bug 還沒重現：漲幅榜的比較要用到 volume（複製貼上沒改欄位），榜首變成 BTC"
+            }
             return nil
         },
         checkFixed: { lines in
-            if !lines.contains("成交量榜第一名：BTC") { return "成交量榜第一名應該是 BTC：top(_:by:) 用 \\.volume" }
-            if !lines.contains("漲幅榜第一名：XRP") { return "漲幅榜第一名應該是 XRP：top(_:by:) 用 \\.changePercent" }
-            if !lines.contains("價格榜第一名：BTC") { return "價格榜第一名應該是 BTC：top(_:by:) 用 \\.price" }
+            if !lines.contains("成交量榜第一名：BTC") {
+                return "成交量榜第一名應該是 BTC：top(_:by:) 用 \\.volume"
+            }
+            if !lines.contains("漲幅榜第一名：XRP") {
+                return "漲幅榜第一名應該是 XRP：top(_:by:) 用 \\.changePercent"
+            }
+            if !lines.contains("價格榜第一名：BTC") {
+                return "價格榜第一名應該是 BTC：top(_:by:) 用 \\.price"
+            }
             return nil
         }
     )

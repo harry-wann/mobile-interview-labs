@@ -1,14 +1,22 @@
-// L04：兩個地方同時格式化價格，有些數字的小數位數不對（共用一個 DecimalFormat，邊用邊改設定）
-// 對應複習站：Exchange06RealtimeUI 第 6 題「數字怎麼顯示，才不會抖動、也不會拖慢畫面？」
+// L04：兩個地方同時格式化價格，有些數字的小數位數不對（共用一個 DecimalFormat，
+// 邊用邊改設定）
+// 對應複習站：Exchange06RealtimeUI 第 6 題「數字怎麼顯示，才不會抖動、
+// 也不會拖慢畫面？」
 //
-// 情境：行情列表的價格要依交易對的精度顯示：BTC_JPY 0 位小數（10,234,568）、XRP_JPY 4 位小數（0.1235）。
-//        背景有兩個工作同時在格式化價格：一個格式化 BTC 的價格、一個格式化 XRP 的價格，各 10 萬次，
+// 情境：行情列表的價格要依交易對的精度顯示：BTC_JPY 0 位小數（10,234,568）、
+// XRP_JPY 4 位小數（0.1235）。
+//        背景有兩個工作同時在格式化價格：一個格式化 BTC 的價格、一個格式化 XRP
+// 的價格，各 10 萬次，
 //        每次都和「單獨格式化的正確答案」比對。
-//        筆記的規則：DecimalFormat 本身不是 thread-safe（多個執行緒同時使用會出錯），要每個執行緒各一個，或集中在同一個執行緒使用。
+//        筆記的規則：DecimalFormat 本身不是
+// thread-safe（多個執行緒同時使用會出錯），要每個執行緒各一個，
+// 或集中在同一個執行緒使用。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.Shared.text）：共用同一個 formatter：每次先把 minimumFractionDigits、maximumFractionDigits 設成 digits，再 format。
-//   ② 修正版（L04Fixed.PerThread.text）：依 digits 從 formatters.get()（這個執行緒自己的一組）取出對應的 formatter，再 format，不修改它。
+//   ① Bug 版（L04Bug.Shared.text）：共用同一個 formatter：每次先把
+// minimumFractionDigits、maximumFractionDigits 設成 digits，再 format。
+//   ② 修正版（L04Fixed.PerThread.text）：依 digits 從 formatters.get()
+// （這個執行緒自己的一組）取出對應的 formatter，再 format，不修改它。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange06-realtime-ui/L04_SharedFormatter.kt
 package tw.harry.labs.practice.exchange06realtimeui
@@ -38,11 +46,22 @@ private fun makeFormatter(digits: Int): DecimalFormat {
 
 private const val ROUNDS = 100_000
 
-private class L04Job(val value: BigDecimal, val digits: Int, val expected: String)
+private class L04Job(
+    val value: BigDecimal,
+    val digits: Int,
+    val expected: String,
+)
 
-/** 演練流程（兩個版本共用）：兩個工作同時格式化，和正確答案比對（丟出例外也算一次不對） */
+/**
+ * 演練流程（兩個版本共用）：兩個工作同時格式化，
+ * 和正確答案比對（丟出例外也算一次不對）
+ */
 private suspend fun scenario(log: LabLog, formatter: L04PriceFormatter) {
-    val jobs = listOf(L04Job(e06("10234567.891"), 0, "10,234,568"), L04Job(e06("0.123456"), 4, "0.1235"))
+    val jobs =
+        listOf(
+            L04Job(e06("10234567.891"), 0, "10,234,568"),
+            L04Job(e06("0.123456"), 4, "0.1235"),
+        )
     val wrong = coroutineScope {
         jobs.map { job ->
             async(Dispatchers.Default) {
@@ -69,7 +88,9 @@ private object L04Bug {
         private val formatter = makeFormatter(0)
 
         override fun text(value: BigDecimal, digits: Int): String {
-            // TODO ①：先把 formatter 的 minimumFractionDigits、maximumFractionDigits 設成 digits，再回傳 formatter.format(value)。
+            // TODO ①：先把 formatter 的 minimumFractionDigits、
+            // maximumFractionDigits 設成 digits，再回傳 formatter.
+            // format(value)。
             //        目前回傳空字串只是佔位，要改掉
             return ""
         }
@@ -81,12 +102,17 @@ private object L04Bug {
 // MARK: - 修正版
 private object L04Fixed {
     class PerThread : L04PriceFormatter {
-        private val formatters = object : ThreadLocal<Map<Int, DecimalFormat>>() {         // 每個執行緒各一組，建好就不再修改
-            override fun initialValue(): Map<Int, DecimalFormat> = (0..4).associateWith { makeFormatter(it) }
+        // 每個執行緒各一組，建好就不再修改
+        private val formatters = object : ThreadLocal<Map<Int, DecimalFormat>>() {
+            override fun initialValue(): Map<Int, DecimalFormat> =
+                (0..4).associateWith {
+                    makeFormatter(it)
+                }
         }
 
         override fun text(value: BigDecimal, digits: Int): String {
-            // TODO ②：從 formatters.get()!!.getValue(digits) 取出這個執行緒、這個精度的 formatter（不要修改它），回傳 format(value)。
+            // TODO ②：從 formatters.get()!!.getValue(digits) 取出這個執行緒、
+            // 這個精度的 formatter（不要修改它），回傳 format(value)。
             //        目前回傳空字串只是佔位，要改掉
             return ""
         }
@@ -98,7 +124,9 @@ private object L04Fixed {
 // MARK: - 演練設定
 private fun wrongCount(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("最後：字串不對的有") }
-        ?.split(Regex("[^0-9]+"))?.firstOrNull { it.isNotEmpty() }?.toIntOrNull()
+        ?.split(Regex("[^0-9]+"))?.firstOrNull {
+            it.isNotEmpty()
+        }?.toIntOrNull()
 
 val l04 = Lab(
     id = "L04",

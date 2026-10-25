@@ -1,13 +1,19 @@
-// L02：維護中的價格顯示成 -1，還觸發了誤報的跌破提醒（舊 SDK 的怪習慣要擋在邊界，不要滲進新程式）
-// 對應複習站：Advanced09Architecture 第 1 題「面對已經上線的舊專案，怎麼逐步演進，而不是整個重寫？」（anti-corruption layer）
+// L02：維護中的價格顯示成 -1，還觸發了誤報的跌破提醒（舊 SDK
+// 的怪習慣要擋在邊界，不要滲進新程式）
+// 對應複習站：Advanced09Architecture 第 1 題「面對已經上線的舊專案，
+// 怎麼逐步演進，而不是整個重寫？」（anti-corruption layer）
 //
-// 情境：新的畫面要從舊的行情 SDK 取價格。舊 SDK 的習慣是：沒有價格（維護中）時，last 傳 -1。
-//       新程式裡有三個地方會用到價格：價格標籤、下單表單的預設價格、「跌破 14000000 時通知我」的價格提醒。
+// 情境：新的畫面要從舊的行情 SDK 取價格。舊 SDK 的習慣是：沒有價格（維護中）
+// 時，last 傳 -1。
+//       新程式裡有三個地方會用到價格：價格標籤、下單表單的預設價格、「跌破
+// 14000000 時通知我」的價格提醒。
 //       演練各用一個正常的報價與一個維護中的報價（last 是 -1）測試。
 //
 // 你要寫：
-//   ① Bug 版：新程式直接用舊 SDK 的型別，三個地方各自假設 last 是真的價格。維護中（-1）時顯示 -1、預設價格 -1、誤報跌破提醒。
-//   ② 修正版：邊界放一層 adapt，把舊 SDK 的型別轉成自己的 Ticker（沒有價格就是 null）；三個地方都明確處理 null。
+//   ① Bug 版：新程式直接用舊 SDK 的型別，三個地方各自假設 last 是真的價格。
+// 維護中（-1）時顯示 -1、預設價格 -1、誤報跌破提醒。
+//   ② 修正版：邊界放一層 adapt，把舊 SDK 的型別轉成自己的 Ticker（沒有價格就是
+// null）；三個地方都明確處理 null。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced09-architecture/L02_AntiCorruption.kt
 package tw.harry.labs.practice.advanced09architecture
@@ -22,7 +28,13 @@ private class L02LegacyTicker(val symbol: String, val last: Double)
 
 private object L02LegacySdk {
     /** 0 是正常的報價，1 是維護中 */
-    fun fetch(index: Int) = if (index == 0) L02LegacyTicker("BTC_JPY", 15_000_000.0) else L02LegacyTicker("BTC_JPY", -1.0)
+    fun fetch(index: Int) = if (index ==
+        0
+    ) {
+        L02LegacyTicker("BTC_JPY", 15_000_000.0)
+    } else {
+        L02LegacyTicker("BTC_JPY", -1.0)
+    }
 }
 
 private const val ALERT_THRESHOLD = 14_000_000.0
@@ -40,7 +52,16 @@ private fun <T> scenario(
         val price = defaultPrice(ticker)
         log("[$name] 價格標籤：${label(ticker)}")
         log("[$name] 下單表單的預設價格：${price.ifEmpty { "（空白，請使用者輸入）" }}")
-        log("[$name] 跌破 14000000 的提醒：${if (belowAlert(ticker)) "觸發" else "不觸發"}")
+        log(
+            "[$name] 跌破 14000000 的提醒：${if (belowAlert(
+                    ticker,
+                )
+            ) {
+                "觸發"
+            } else {
+                "不觸發"
+            }}",
+        )
     }
 }
 
@@ -48,21 +69,30 @@ private fun <T> scenario(
 private object L02Bug {
     // 新程式直接使用舊 SDK 的型別
     fun label(ticker: L02LegacyTicker): String {
-        // TODO ①-1：直接用舊 SDK 的 ticker.last：回傳「<價格取整數> JPY」，例如 "15000000 JPY"
+        // TODO ①-1：直接用舊 SDK 的 ticker.last：回傳「<價格取整數> JPY」，
+        // 例如 "15000000 JPY"
         return ""
     }
 
     fun defaultPrice(ticker: L02LegacyTicker): String {
-        // TODO ①-2：直接用舊 SDK 的 ticker.last：回傳取整數之後的字串，例如 "15000000"
+        // TODO ①-2：直接用舊 SDK 的 ticker.last：回傳取整數之後的字串，例如
+        // "15000000"
         return ""
     }
 
     fun belowAlert(ticker: L02LegacyTicker): Boolean {
-        // TODO ①-3：直接用舊 SDK 的 ticker.last：小於等於 ALERT_THRESHOLD 就回傳 true
+        // TODO ①-3：直接用舊 SDK 的 ticker.last：小於等於 ALERT_THRESHOLD
+        // 就回傳 true
         return false
     }
 
-    suspend fun run(log: LabLog) = scenario(log, L02LegacySdk::fetch, ::label, ::defaultPrice, ::belowAlert)
+    suspend fun run(log: LabLog) = scenario(
+        log,
+        L02LegacySdk::fetch,
+        ::label,
+        ::defaultPrice,
+        ::belowAlert,
+    )
 }
 
 // MARK: - 修正版
@@ -72,7 +102,8 @@ private object L02Fixed {
 
     /** anti-corruption layer：舊 SDK 的型別只出現在這裡 */
     fun adapt(legacy: L02LegacyTicker): Ticker {
-        // TODO ②-1：把舊 SDK 的型別轉成 Ticker：pair 把符號裡的 "_" 換成 "/"；last 小於 0（-1 代表沒有價格）就是 null，否則轉成 BigDecimal
+        // TODO ②-1：把舊 SDK 的型別轉成 Ticker：pair 把符號裡的 "_" 換成 "/"；
+        // last 小於 0（-1 代表沒有價格）就是 null，否則轉成 BigDecimal
         return Ticker(legacy.symbol, null)
     }
 
@@ -87,11 +118,14 @@ private object L02Fixed {
     }
 
     fun belowAlert(ticker: Ticker): Boolean {
-        // TODO ②-4：沒有價格（null）回傳 false；有價格就比較：小於等於 ALERT_THRESHOLD 才觸發
+        // TODO ②-4：沒有價格（null）回傳 false；有價格就比較：小於等於
+        // ALERT_THRESHOLD 才觸發
         return false
     }
 
-    suspend fun run(log: LabLog) = scenario(log, { adapt(L02LegacySdk.fetch(it)) }, ::label, ::defaultPrice, ::belowAlert)
+    suspend fun run(log: LabLog) = scenario(log, {
+        adapt(L02LegacySdk.fetch(it))
+    }, ::label, ::defaultPrice, ::belowAlert)
 }
 
 // MARK: - 演練設定

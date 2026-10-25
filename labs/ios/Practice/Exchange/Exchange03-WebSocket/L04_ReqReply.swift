@@ -1,13 +1,18 @@
 // L04：K 線頁一直轉圈（req 的回覆和錯誤訊息都被丟掉了）
-// 對應複習站：Exchange03WebSocket 第 4 題「sub、unsub、req 差在哪？訊息和錯誤長什麼樣子？」
+// 對應複習站：Exchange03WebSocket 第 4 題「sub、unsub、req
+// 差在哪？訊息和錯誤長什麼樣子？」
 //
-// 情境：打開 BTC/JPY 的 K 線頁，App 送出三個請求：req 歷史 K 線（id r1）、sub 即時 K 線（id s1）、sub 一個文件裡沒有的 market.btcjpy.kline.3min（id s2）。
+// 情境：打開 BTC/JPY 的 K 線頁，App 送出三個請求：req 歷史 K 線（id r1）、sub
+// 即時 K 線（id s1）、sub 一個文件裡沒有的 market.btcjpy.kline.3min（id s2）。
 //       畫面上每個「還沒收到結果的請求」都會轉圈。伺服器依序回來：
-//       s1 的確認（subbed）、r1 的回覆（rep，不是 ch）、s2 的錯誤（status 是 error）、一則即時 K 線的推送（ch）、一則 ping。
+//       s1 的確認（subbed）、r1 的回覆（rep，不是 ch）、s2 的錯誤（status 是
+// error）、一則即時 K 線的推送（ch）、一則 ping。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.classify）：除了心跳，只認得有 ch 欄位的推送，其他一律 .ignored。
-//   ② 修正版（L04Fixed.classify）：心跳 → 錯誤 → 確認／req 的回覆 → 推送 → 忽略，用 id 對回請求。
+//   ① Bug 版（L04Bug.classify）：除了心跳，只認得有 ch 欄位的推送，其他一律
+// ignored。
+//   ② 修正版（L04Fixed.classify）：心跳 → 錯誤 → 確認／req 的回覆 → 推送 →
+// 忽略，用 id 對回請求。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange03-WebSocket/L04_ReqReply.swift
 import Foundation
@@ -15,10 +20,10 @@ import LabKit
 
 private enum Incoming: Equatable {
     case heartbeat(Int64)
-    case failure(id: String, message: String)       // status 是 error
-    case ack(id: String)                            // subbed／unsubbed
-    case reply(id: String, topic: String)           // req 的回覆
-    case push(topic: String)                        // 持續推送
+    case failure(id: String, message: String)  // status 是 error
+    case ack(id: String)  // subbed／unsubbed
+    case reply(id: String, topic: String)  // req 的回覆
+    case push(topic: String)  // 持續推送
     case ignored
 }
 
@@ -30,7 +35,8 @@ private let serverMessages = [
     #"{"ping":18212558000}"#,
 ]
 
-/// 演練流程（兩個版本共用）：送出三個請求，依序處理伺服器的回覆，看有哪些請求一直沒有結果
+/// 演練流程（兩個版本共用）：送出三個請求，依序處理伺服器的回覆，
+/// 看有哪些請求一直沒有結果
 private func scenario(_ log: LabLog, classify: ([String: Any]) -> Incoming) {
     var pending: Set<String> = ["r1", "s1", "s2"]
     var candles = 0
@@ -53,14 +59,19 @@ private func scenario(_ log: LabLog, classify: ([String: Any]) -> Incoming) {
         case .ignored: log("忽略一則訊息")
         }
     }
-    log("還在轉圈、沒有收到結果的請求有 \(pending.count) 個\(pending.isEmpty ? "" : "（\(pending.sorted().joined(separator: "、"))）")")
+    log(
+        "還在轉圈、沒有收到結果的請求有 \(pending.count) 個\(pending.isEmpty ? "" : "（\(pending.sorted().joined(separator: "、"))）")"
+    )
 }
 
 // MARK: - Bug 版
 private enum L04Bug {
     static func classify(_ json: [String: Any]) -> Incoming {
-        if let ping = (json["ping"] as? NSNumber)?.int64Value { return .heartbeat(ping) }
-        // TODO ①：有 "ch" 欄位的就是推送，回傳 .push(topic: ch)（其他的回覆、確認、錯誤都不處理，維持下面的 .ignored）
+        if let ping = (json["ping"] as? NSNumber)?.int64Value {
+            return .heartbeat(ping)
+        }
+        // TODO ①：有 "ch" 欄位的就是推送，回傳 push(topic: ch)（其他的回覆、
+        // 確認、錯誤都不處理，維持下面的 ignored）
         return .ignored
     }
 
@@ -72,12 +83,18 @@ private enum L04Bug {
 // MARK: - 修正版
 private enum L04Fixed {
     static func classify(_ json: [String: Any]) -> Incoming {
-        if let ping = (json["ping"] as? NSNumber)?.int64Value { return .heartbeat(ping) }              // 1. 心跳
+        // 1. 心跳
+        if let ping = (json["ping"] as? NSNumber)?.int64Value {
+            return .heartbeat(ping)
+        }
         // TODO ②：照順序判斷（上面的心跳已經寫好）：
-        //   2. status 是 "error" 而且有 id → .failure(id: id, message: err-msg 欄位的文字)
-        //   3. 有 "subbed" 或 "unsubbed" 欄位而且有 id → .ack(id: id)；有 "rep" 欄位（req 的回覆）而且有 id → .reply(id: id, topic: rep 的文字)
+        //   2. status 是 "error" 而且有 id → failure(id: id, message: err-msg
+        // 欄位的文字)
+        //   3. 有 "subbed" 或 "unsubbed" 欄位而且有 id → ack(id: id)；有 "rep"
+        // 欄位（req 的回覆）而且有 id → reply(id: id, topic: rep 的文字)
         //   4. 有 "ch"，而且有 "tick" 或 "data" → .push(topic: ch)
-        return .ignored                                                                                // 5. 其他一律忽略
+        // 5. 其他一律忽略
+        return .ignored
     }
 
     static func run(_ log: LabLog) async {
@@ -91,7 +108,8 @@ extension Exchange03WebSocket {
         id: "L04",
         title: "K 線頁一直轉圈，回覆被丟掉了",
         question: "第 4 題：sub、unsub、req 差在哪？訊息和錯誤長什麼樣子？",
-        goal: "每個請求都帶一個 id，回覆（確認、req 的 rep、錯誤）要用 id 對回請求。分派的順序是：心跳、錯誤、確認、推送、忽略。先寫出只認得推送的 Bug 版，再寫修正版。",
+        goal:
+            "每個請求都帶一個 id，回覆（確認、req 的 rep、錯誤）要用 id 對回請求。分派的順序是：心跳、錯誤、確認、推送、忽略。先寫出只認得推送的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Exchange/Exchange03-WebSocket/L04_ReqReply.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，看哪些請求一直沒有收到結果、哪些訊息被「忽略」。",
@@ -108,17 +126,34 @@ extension Exchange03WebSocket {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("還在轉圈") }) { return "演練沒有跑完：要用 scenario(log, classify:) 執行" }
-            if !lines.contains("推送：market.btcjpy.kline.1min") { return "Bug 版也要認得推送：有 ch 欄位就是推送" }
+            if !lines.contains(where: { $0.hasPrefix("還在轉圈") }) {
+                return "演練沒有跑完：要用 scenario(log, classify:) 執行"
+            }
+            if !lines.contains("推送：market.btcjpy.kline.1min") {
+                return "Bug 版也要認得推送：有 ch 欄位就是推送"
+            }
             return lines.contains("還在轉圈、沒有收到結果的請求有 3 個（r1、s1、s2）")
                 ? nil : "Bug 還沒重現：只認得有 ch 欄位的推送和 ping，req 的回覆、確認、錯誤都要被忽略"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("還在轉圈") }) { return "演練沒有跑完：要用 scenario(log, classify:) 執行" }
-            if !lines.contains("請求 s2 失敗：invalid topic market.btcjpy.kline.3min，畫面顯示錯誤") { return "status 是 error 要回傳 .failure(id:message:)，message 取 err-msg" }
-            if !lines.contains("請求 r1 的回覆：market.btcjpy.kline.1min 的歷史 K 線") { return "req 的回覆用 rep 欄位（不是 ch），要回傳 .reply(id:topic:)" }
-            if !lines.contains("請求 s1 訂閱成功") { return "有 subbed 或 unsubbed 欄位的是確認，要回傳 .ack(id:)" }
-            if !lines.contains("推送：market.btcjpy.kline.1min") { return "有 ch 而且有 tick 或 data 的是推送" }
+            if !lines.contains(where: { $0.hasPrefix("還在轉圈") }) {
+                return "演練沒有跑完：要用 scenario(log, classify:) 執行"
+            }
+            if !lines.contains(
+                "請求 s2 失敗：invalid topic market.btcjpy.kline.3min，畫面顯示錯誤")
+            {
+                return
+                    "status 是 error 要回傳 .failure(id:message:)，message 取 err-msg"
+            }
+            if !lines.contains("請求 r1 的回覆：market.btcjpy.kline.1min 的歷史 K 線") {
+                return "req 的回覆用 rep 欄位（不是 ch），要回傳 .reply(id:topic:)"
+            }
+            if !lines.contains("請求 s1 訂閱成功") {
+                return "有 subbed 或 unsubbed 欄位的是確認，要回傳 .ack(id:)"
+            }
+            if !lines.contains("推送：market.btcjpy.kline.1min") {
+                return "有 ch 而且有 tick 或 data 的是推送"
+            }
             return lines.contains("還在轉圈、沒有收到結果的請求有 0 個") ? nil : "還有請求沒有收到結果"
         }
     )

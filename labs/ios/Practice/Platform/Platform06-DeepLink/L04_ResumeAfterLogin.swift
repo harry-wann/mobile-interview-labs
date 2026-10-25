@@ -1,17 +1,24 @@
 // L04：點推播登入後卻停在首頁（未登入時要先記下目標，登入後再繼續）
-// 對應複習站：Platform06DeepLink 第 5 題「怎麼避免外部連結觸發下單這類敏感操作？」（登入與權限）
+// 對應複習站：Platform06DeepLink 第 5
+// 題「怎麼避免外部連結觸發下單這類敏感操作？」（登入與權限）
 //
-// 情境：價格提醒的連結 /alert/{編號} 要登入才能看。未登入的使用者點了推播，Router 要求先登入。
-//       演練的劇本：使用者點推播 → 看到登入畫面 → 登入成功。接著他登出，過幾天再正常登入一次（沒有連結）。
+// 情境：價格提醒的連結 /alert/{編號} 要登入才能看。未登入的使用者點了推播，
+// Router 要求先登入。
+//       演練的劇本：使用者點推播 → 看到登入畫面 → 登入成功。接著他登出，
+// 過幾天再正常登入一次（沒有連結）。
 //
 // 你要寫：
-//   ① Bug 版：handle 對未登入的 /alert/ 連結只顯示登入畫面（不記下連結）；onLoginSuccess 回到首頁。
-//   ② 修正版：handle 把未登入的 /alert/ 連結存進 pendingLink；onLoginSuccess 先回首頁，有 pendingLink 就清成 nil 並用 handle 處理它。
-// 只改有 TODO 的地方。解答：Solution/Platform/Platform06-DeepLink/L04_ResumeAfterLogin.swift
+//   ① Bug 版：handle 對未登入的 /alert/ 連結只顯示登入畫面（不記下連結）；
+// onLoginSuccess 回到首頁。
+//   ② 修正版：handle 把未登入的 /alert/ 連結存進 pendingLink；onLoginSuccess
+// 先回首頁，有 pendingLink 就清成 nil 並用 handle 處理它。
+// 只改有 TODO 的地方。解答：
+// Solution/Platform/Platform06-DeepLink/L04_ResumeAfterLogin.swift
 import Foundation
 import LabKit
 
-/// 簡化的導覽（兩個版本共用的部分是 screen、log；差別在 handle 與 onLoginSuccess）
+/// 簡化的導覽（兩個版本共用的部分是 screen、log；差別在 handle 與
+/// onLoginSuccess）
 private let alertLink = "https://www.example.com/alert/ab12cd34"
 
 // MARK: - Bug 版
@@ -21,7 +28,8 @@ private enum L04Bug {
 
         func handle(_ url: String, isLoggedIn: Bool) {
             if url.contains("/alert/") && !isLoggedIn {
-                // TODO ①-1：只要求登入：screen = "登入畫面"（不要記下原本的連結）
+                // TODO ①-1：只要求登入：screen =
+                // "登入畫面"（不要記下原本的連結）
             } else if url.contains("/alert/") {
                 screen = "提醒 ab12cd34"
             }
@@ -47,7 +55,8 @@ private enum L04Bug {
 private enum L04Fixed {
     final class Navigator {
         private(set) var screen = "首頁"
-        private var pendingLink: String?                        // 登入前先記下的目標
+        // 登入前先記下的目標
+        private var pendingLink: String?
 
         func handle(_ url: String, isLoggedIn: Bool) {
             if url.contains("/alert/") && !isLoggedIn {
@@ -59,7 +68,8 @@ private enum L04Fixed {
 
         func onLoginSuccess() {
             screen = "首頁"
-            // TODO ②-2：有 pendingLink 的話：先把 pendingLink 清成 nil（只用一次），再用 handle(link, isLoggedIn: true) 前往
+            // TODO ②-2：有 pendingLink 的話：先把 pendingLink 清成
+            // nil（只用一次），再用 handle(link, isLoggedIn: true) 前往
         }
     }
 
@@ -96,13 +106,22 @@ extension Platform06DeepLink {
             }
         },
         checkBug: { lines in
-            if !lines.contains("未登入點到推播：畫面是 登入畫面") { return "未登入點到提醒連結，Router 要顯示登入畫面" }
-            return lines.contains("登入成功後，畫面停在：首頁") ? nil : "Bug 還沒重現：Router 沒有記下原本的連結，登入成功後只能停在首頁"
+            if !lines.contains("未登入點到推播：畫面是 登入畫面") {
+                return "未登入點到提醒連結，Router 要顯示登入畫面"
+            }
+            return lines.contains("登入成功後，畫面停在：首頁")
+                ? nil : "Bug 還沒重現：Router 沒有記下原本的連結，登入成功後只能停在首頁"
         },
         checkFixed: { lines in
-            if !lines.contains("未登入點到推播：畫面是 登入畫面") { return "未登入點到提醒連結，Router 要顯示登入畫面" }
-            if !lines.contains("登入成功後，畫面停在：提醒 ab12cd34") { return "登入成功後要前往原本的連結：未登入時存進 pendingLink，onLoginSuccess 取出來 handle" }
-            return lines.contains("之後單純登入一次，畫面停在：首頁") ? nil : "pendingLink 取出來之後要清成 nil，否則下一次登入又被帶去提醒頁"
+            if !lines.contains("未登入點到推播：畫面是 登入畫面") {
+                return "未登入點到提醒連結，Router 要顯示登入畫面"
+            }
+            if !lines.contains("登入成功後，畫面停在：提醒 ab12cd34") {
+                return
+                    "登入成功後要前往原本的連結：未登入時存進 pendingLink，onLoginSuccess 取出來 handle"
+            }
+            return lines.contains("之後單純登入一次，畫面停在：首頁")
+                ? nil : "pendingLink 取出來之後要清成 nil，否則下一次登入又被帶去提醒頁"
         }
     )
 }

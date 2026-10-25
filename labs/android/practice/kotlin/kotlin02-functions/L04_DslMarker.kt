@@ -1,11 +1,15 @@
 // L04：在 leg { } 裡寫錯，改到的卻是整張訂單的 symbol（@DslMarker）
-// 對應複習站：Kotlin02Functions 第 3 題「什麼是 lambda with receiver？DSL 怎麼做，@DslMarker 是做什麼的？」
+// 對應複習站：Kotlin02Functions 第 3 題「什麼是 lambda with receiver？DSL
+// 怎麼做，@DslMarker 是做什麼的？」
 //
-// 情境：用 DSL 組訂單：order { symbol = …; leg { price = …; qty = … } }。每個 leg（一筆分批委託）只有 price 和 qty，沒有 symbol。
+// 情境：用 DSL 組訂單：order { symbol = …; leg { price = …; qty = … } }。每個
+// leg（一筆分批委託）只有 price 和 qty，沒有 symbol。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug）：在 leg { } 裡寫 symbol = "ETH_JPY"。LegBuilder 沒有 symbol，Kotlin 往外層找，默默改掉整張訂單的 symbol。
-//   ② 修正版（L04Fixed）：在 OrderBuilder 和 LegBuilder 上標 @OrderDsl（@DslMarker 的標註已經寫好）。
+//   ① Bug 版（L04Bug）：在 leg { } 裡寫 symbol = "ETH_JPY"。LegBuilder 沒有
+// symbol，Kotlin 往外層找，默默改掉整張訂單的 symbol。
+//   ② 修正版（L04Fixed）：在 OrderBuilder 和 LegBuilder 上標
+// @OrderDsl（@DslMarker 的標註已經寫好）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin02-functions/L04_DslMarker.kt
 package tw.harry.labs.practice.kotlin02functions
@@ -35,13 +39,15 @@ private object L04Bug {
         fun build() = DslOrder(symbol, legs.toList())
     }
 
-    fun order(block: OrderBuilder.() -> Unit): DslOrder = OrderBuilder().apply(block).build()
+    fun order(block: OrderBuilder.() -> Unit): DslOrder =
+        OrderBuilder().apply(block).build()
 
     fun run(log: LabLog) {
         val o = order {
             symbol = "BTC_JPY"
             leg {
-                // TODO ①：在這裡寫 symbol = "ETH_JPY"（手滑）。LegBuilder 沒有 symbol，Kotlin 會往外層找到 OrderBuilder.symbol，默默改掉
+                // TODO ①：在這裡寫 symbol = "ETH_JPY"（手滑）。LegBuilder 沒有
+                // symbol，Kotlin 會往外層找到 OrderBuilder.symbol，默默改掉
                 price = BigDecimal("100")
                 qty = BigDecimal("0.5")
             }
@@ -54,7 +60,9 @@ private object L04Bug {
 private object L04Fixed {
     @DslMarker
     @Retention(AnnotationRetention.RUNTIME)
-    annotation class OrderDsl                              // 已經寫好的 DSL 標註（Retention 設成 RUNTIME，是為了讓自動檢查能用反射確認）
+    // 已經寫好的 DSL 標註（Retention 設成 RUNTIME，
+    // 是為了讓自動檢查能用反射確認）
+    annotation class OrderDsl
 
     // TODO ②-1：在 LegBuilder 前面標上 @OrderDsl
     class LegBuilder {
@@ -73,21 +81,31 @@ private object L04Fixed {
         fun build() = DslOrder(symbol, legs.toList())
     }
 
-    fun order(block: OrderBuilder.() -> Unit): DslOrder = OrderBuilder().apply(block).build()
+    fun order(block: OrderBuilder.() -> Unit): DslOrder =
+        OrderBuilder().apply(block).build()
 
     fun run(log: LabLog) {
         val o = order {
             symbol = "BTC_JPY"
             leg {
-                // symbol = "ETH_JPY"                      // 取消註解看看：有 @DslMarker 之後，這一行會編譯錯誤
+                // symbol = "ETH_JPY"                      // 取消註解看看：有
+                // @DslMarker 之後，這一行會編譯錯誤
                 price = BigDecimal("100")
                 qty = BigDecimal("0.5")
             }
         }
         log("訂單 symbol = ${o.symbol}，${o.legs.size} 筆 leg")
         // @DslMarker 要標在每一層 builder 上才有效（用反射確認）
-        log("OrderBuilder 標了 @OrderDsl：${OrderBuilder::class.java.isAnnotationPresent(OrderDsl::class.java)}")
-        log("LegBuilder 標了 @OrderDsl：${LegBuilder::class.java.isAnnotationPresent(OrderDsl::class.java)}")
+        log(
+            "OrderBuilder 標了 @OrderDsl：${OrderBuilder::class.java.isAnnotationPresent(
+                OrderDsl::class.java,
+            )}",
+        )
+        log(
+            "LegBuilder 標了 @OrderDsl：${LegBuilder::class.java.isAnnotationPresent(
+                OrderDsl::class.java,
+            )}",
+        )
     }
 }
 
@@ -114,8 +132,12 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("訂單 symbol = ") } -> "沒有組出訂單：order { } 要回傳 DslOrder"
+            lines.none {
+                it.startsWith("訂單 symbol = ")
+            } -> "沒有組出訂單：order { } 要回傳 DslOrder"
+
             "訂單 symbol = ETH_JPY，1 筆 leg" !in lines -> "Bug 版 symbol 要被 leg 區塊裡的 symbol = \"ETH_JPY\" 默默改掉：builder 先不要加 @DslMarker"
+
             else -> null
         }
     },

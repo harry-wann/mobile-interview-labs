@@ -1,14 +1,21 @@
-// L04：換新手機、還原備份之後，App 一打開就當掉（Auto Backup 還原了密文，Keystore 的金鑰卻不在）
-// 對應複習站：Platform04SecureStorage 第 3 題「Android 的 Keystore 和 Tink 是什麼？Auto Backup 會造成什麼問題？」
+// L04：換新手機、還原備份之後，App 一打開就當掉（Auto Backup 還原了密文，
+// Keystore 的金鑰卻不在）
+// 對應複習站：Platform04SecureStorage 第 3 題「Android 的 Keystore 和 Tink
+// 是什麼？Auto Backup 會造成什麼問題？」
 //
-// 情境：使用者在舊手機登入過，token 用 Tink 的 AEAD 加密後存成檔案。換新手機時，Android 的 Auto Backup 把 App 的檔案（密文）還原到新手機，
-//        但 Keystore 裡的金鑰不會跟著備份。新手機上的 App 啟動時，要用「新的、不同的金鑰」解開舊手機的密文。
-//        演練用兩把不同的 keyset 模擬舊手機與新手機（正式的 App 是 Keystore 裡的 master key 不同），用 startApp 代表「App 啟動時的第一步」。
-//        （防止還原的設定寫在 AndroidManifest 的 android:dataExtractionRules，見複習站；這個演練練的是「還原了也不能當掉」。）
+// 情境：使用者在舊手機登入過，token 用 Tink 的 AEAD 加密後存成檔案。
+// 換新手機時，Android 的 Auto Backup 把 App 的檔案（密文）還原到新手機，
+//        但 Keystore 裡的金鑰不會跟著備份。新手機上的 App 啟動時，要用「新的、
+// 不同的金鑰」解開舊手機的密文。
+//        演練用兩把不同的 keyset 模擬舊手機與新手機（正式的 App 是 Keystore
+// 裡的 master key 不同），用 startApp 代表「App 啟動時的第一步」。
+//        （防止還原的設定寫在 AndroidManifest 的 android:dataExtractionRules，
+// 見複習站；這個演練練的是「還原了也不能當掉」。）
 //
 // 你要寫：
 //   ① Bug 版（L04Bug）：啟動時直接 aead.decrypt，金鑰不對時丟出例外，沒有人接。
-//   ② 修正版（L04Fixed）：接住 GeneralSecurityException，清除本機資料，回到登入畫面。
+//   ② 修正版（L04Fixed）：接住 GeneralSecurityException，清除本機資料，
+// 回到登入畫面。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform04-secure-storage/L04_BackupRestore.kt
 package tw.harry.labs.practice.platform04securestorage
@@ -33,15 +40,25 @@ private class L04LocalFile {
 
 private fun newAead(): Aead {
     AeadConfig.register()
-    return KeysetHandle.generateNew(KeyTemplates.get("AES256_GCM")).getPrimitive(RegistryConfiguration.get(), Aead::class.java)
+    return KeysetHandle.generateNew(
+        KeyTemplates.get("AES256_GCM"),
+    ).getPrimitive(RegistryConfiguration.get(), Aead::class.java)
 }
 
-/** 演練流程（兩個版本共用）：舊手機存密文 → 還原到新手機（金鑰不同）→ 啟動 App */
-private fun scenario(log: LabLog, startApp: (file: L04LocalFile, aead: Aead) -> String) {
+/**
+ * 演練流程（兩個版本共用）：舊手機存密文 → 還原到新手機（金鑰不同）→ 啟動 App
+ */
+private fun scenario(
+    log: LabLog,
+    startApp: (file: L04LocalFile, aead: Aead) -> String,
+) {
     val oldPhoneAead = newAead()
     val file = L04LocalFile()
-    file.cipherText = oldPhoneAead.encrypt("access-token".toByteArray(), associatedData)      // 舊手機：登入後存的密文
-    val newPhoneAead = newAead()                                                              // 新手機：Auto Backup 還原了檔案，但金鑰是新的
+    // 舊手機：登入後存的密文
+    file.cipherText =
+        oldPhoneAead.encrypt("access-token".toByteArray(), associatedData)
+    // 新手機：Auto Backup 還原了檔案，但金鑰是新的
+    val newPhoneAead = newAead()
     try {
         val screen = startApp(file, newPhoneAead)
         log("新手機啟動 App：顯示「$screen」")
@@ -56,7 +73,9 @@ private object L04Bug {
     /** App 啟動的第一步：取出 token，有的話進首頁 */
     fun startApp(file: L04LocalFile, aead: Aead): String {
         val cipherText = file.cipherText ?: return "登入畫面"
-        // TODO ①：直接呼叫 aead.decrypt(cipherText, associatedData)（金鑰不對會丟出 GeneralSecurityException，這裡不接），解開之後回傳 "首頁"
+        // TODO ①：直接呼叫 aead.decrypt(cipherText, associatedData)
+        // （金鑰不對會丟出 GeneralSecurityException，這裡不接），解開之後回傳
+        // "首頁"
         return "首頁"
     }
 
@@ -67,8 +86,10 @@ private object L04Bug {
 private object L04Fixed {
     fun startApp(file: L04LocalFile, aead: Aead): String {
         val cipherText = file.cipherText ?: return "登入畫面"
-        // TODO ②：用 try 呼叫 aead.decrypt(cipherText, associatedData)，成功回傳 "首頁"；
-        //        接住 GeneralSecurityException：file.clear() 清除本機資料，回傳 "登入畫面"
+        // TODO ②：用 try 呼叫 aead.decrypt(cipherText, associatedData)，
+        // 成功回傳 "首頁"；
+        //        接住 GeneralSecurityException：file.clear() 清除本機資料，
+        // 回傳 "登入畫面"
         return "首頁"
     }
 
@@ -99,16 +120,28 @@ val l04 = Lab(
     checkBug = { lines ->
         when {
             lines.none { it.startsWith("新手機啟動 App：") } -> "演練沒有跑完"
+
             lines.any { it.startsWith("新手機啟動 App：當掉了") } -> null
-            lines.contains("新手機啟動 App：顯示「首頁」") -> "金鑰換了卻解密成功？startApp 要用傳進來的 aead 解 file 的密文"
+
+            lines.contains(
+                "新手機啟動 App：顯示「首頁」",
+            ) -> "金鑰換了卻解密成功？startApp 要用傳進來的 aead 解 file 的密文"
+
             else -> "Bug 還沒重現：Bug 版要直接 aead.decrypt，不要接例外"
         }
     },
     checkFixed = { lines ->
         when {
-            lines.any { it.startsWith("新手機啟動 App：當掉了") } -> "App 當掉了：用 try／catch 接住 GeneralSecurityException"
+            lines.any {
+                it.startsWith("新手機啟動 App：當掉了")
+            } -> "App 當掉了：用 try／catch 接住 GeneralSecurityException"
+
             !lines.contains("新手機啟動 App：顯示「登入畫面」") -> "解密失敗之後要回到登入畫面"
-            !lines.contains("本機的密文檔案：已清除") -> "解密失敗之後要清除本機的密文（file.clear()），不然每次啟動都會失敗"
+
+            !lines.contains(
+                "本機的密文檔案：已清除",
+            ) -> "解密失敗之後要清除本機的密文（file.clear()），不然每次啟動都會失敗"
+
             else -> null
         }
     },

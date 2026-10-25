@@ -1,12 +1,20 @@
-// L01：防連點的測試要真的等 300 毫秒才跑得完（函式裡直接讀 System.currentTimeMillis()）
-// 對應複習站：Coding02TimeStreams 第 1 題「和時間有關的題目，為什麼要把時間當成參數傳進去？」
+// L01：防連點的測試要真的等 300 毫秒才跑得完（函式裡直接讀 System.
+// currentTimeMillis()）
+// 對應複習站：Coding02TimeStreams 第 1 題「和時間有關的題目，
+// 為什麼要把時間當成參數傳進去？」
 //
-// 情境：「買入」按鈕防連點：第一次點擊立刻送出，之後 100 毫秒內的點擊都忽略（throttle，送第一個）。
-//       測試要驗證這組點擊：第 0、30、150、300 毫秒各點一次，預期結果是 [送出, 忽略, 送出, 送出]。
-// Bug 版：Throttle 在函式裡自己呼叫 System.currentTimeMillis() 讀現在時間。測試只能真的 delay 到 30、150、300 毫秒再點，
-//        一個測試要等 300 毫秒；機器忙的時候 delay 會多等一點，剛好卡在邊界的點擊結果就會時對時錯（flaky test）。
-// 修正版：Throttle 不讀現在時間，由外面傳入「取得現在時間」的函式 now。測試傳入假時鐘，直接把時間撥到 30、150、300，
-//        幾乎 0 毫秒跑完，同樣的輸入永遠得到同樣的結果。（Kotlin 的 runTest 也有虛擬時間，delay 不會真的等。）
+// 情境：「買入」按鈕防連點：第一次點擊立刻送出，之後 100
+// 毫秒內的點擊都忽略（throttle，送第一個）。
+//       測試要驗證這組點擊：第 0、30、150、300 毫秒各點一次，預期結果是 [送出,
+// 忽略, 送出, 送出]。
+// Bug 版：Throttle 在函式裡自己呼叫 System.currentTimeMillis() 讀現在時間。
+// 測試只能真的 delay 到 30、150、300 毫秒再點，
+//        一個測試要等 300 毫秒；機器忙的時候 delay 會多等一點，
+// 剛好卡在邊界的點擊結果就會時對時錯（flaky test）。
+// 修正版：Throttle 不讀現在時間，由外面傳入「取得現在時間」的函式 now。
+// 測試傳入假時鐘，直接把時間撥到 30、150、300，
+//        幾乎 0 毫秒跑完，同樣的輸入永遠得到同樣的結果。（Kotlin 的 runTest
+// 也有虛擬時間，delay 不會真的等。）
 package tw.harry.labs.solution.coding02timestreams
 
 import kotlinx.coroutines.delay
@@ -17,13 +25,20 @@ import tw.harry.labs.kit.Variant
 private val taps = listOf(0, 30, 150, 300)
 private const val INTERVAL_MS = 100
 
-private fun text(results: List<Boolean>): String = results.joinToString(", ", "[", "]") { if (it) "送出" else "忽略" }
+private fun text(results: List<Boolean>): String =
+    results.joinToString(", ", "[", "]") {
+        if (it) "送出" else "忽略"
+    }
 
 /**
  * 演練流程（兩個版本共用）：到了每個點擊的時間就點一下，記錄結果與測試花了多久
  * advanceTo：把時間走到某個毫秒（Bug 版真的等，修正版撥假時鐘）
  */
-private suspend fun scenario(log: LabLog, advanceTo: suspend (Int) -> Unit, tap: () -> Boolean) {
+private suspend fun scenario(
+    log: LabLog,
+    advanceTo: suspend (Int) -> Unit,
+    tap: () -> Boolean,
+) {
     val start = System.nanoTime()
     val results = ArrayList<Boolean>()
     for (time in taps) {
@@ -36,8 +51,9 @@ private suspend fun scenario(log: LabLog, advanceTo: suspend (Int) -> Unit, tap:
 }
 
 /** 從「這個測試花了 N 毫秒」取出 N（自動檢查用） */
-private fun elapsedMs(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("這個測試花了 ") }?.removePrefix("這個測試花了 ")?.removeSuffix(" 毫秒")?.toIntOrNull()
+private fun elapsedMs(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("這個測試花了 ")
+}?.removePrefix("這個測試花了 ")?.removeSuffix(" 毫秒")?.toIntOrNull()
 
 // MARK: - Bug 版
 private object L01Bug {
@@ -45,7 +61,8 @@ private object L01Bug {
         private var lastFire: Long? = null
 
         fun shouldFire(): Boolean {
-            val now = System.currentTimeMillis()                    // 現在時間寫死在函式裡
+            // 現在時間寫死在函式裡
+            val now = System.currentTimeMillis()
             val last = lastFire
             if (last != null && now - last < intervalMs) return false
             lastFire = now
@@ -58,14 +75,16 @@ private object L01Bug {
         val start = System.nanoTime()
         scenario(log, advanceTo = { time ->
             val elapsed = ((System.nanoTime() - start) / 1_000_000).toInt()
-            delay(maxOf(0, time - elapsed).toLong())                // 測試只能真的等
+            // 測試只能真的等
+            delay(maxOf(0, time - elapsed).toLong())
         }, tap = { throttle.shouldFire() })
     }
 }
 
 // MARK: - 修正版
 private object L01Fixed {
-    class Throttle(private val intervalMs: Int, private val now: () -> Int) {   // 「現在幾毫秒」由外面傳進來
+    // 「現在幾毫秒」由外面傳進來
+    class Throttle(private val intervalMs: Int, private val now: () -> Int) {
         private var lastFire: Int? = null
 
         fun shouldFire(): Boolean {
@@ -80,7 +99,10 @@ private object L01Fixed {
     suspend fun run(log: LabLog) {
         val clock = C02FakeClock()
         val throttle = Throttle(INTERVAL_MS) { clock.now }
-        scenario(log, advanceTo = { clock.advanceTo(it) }, tap = { throttle.shouldFire() })   // 假時鐘：直接撥時間
+        // 假時鐘：直接撥時間
+        scenario(log, advanceTo = {
+            clock.advanceTo(it)
+        }, tap = { throttle.shouldFire() })
     }
 }
 
@@ -107,21 +129,41 @@ val l01 = Lab(
     checkBug = { lines ->
         val ms = elapsedMs(lines)
         when {
-            ms == null -> "演練沒有跑完：要用 scenario(log, advanceTo, tap) 執行"
-            "點擊時間 [0, 30, 150, 300] 毫秒 → [送出, 忽略, 送出, 送出]" !in lines ->
+            ms == null -> {
+                "演練沒有跑完：要用 scenario(log, advanceTo, tap) 執行"
+            }
+
+            "點擊時間 [0, 30, 150, 300] 毫秒 → [送出, 忽略, 送出, 送出]" !in lines -> {
                 "shouldFire 還沒寫對：用 System.currentTimeMillis() 記下上一次送出的時間，距離不到 100 毫秒就回傳 false"
-            ms < 250 -> "Bug 還沒重現：Throttle 要在函式裡自己讀 System.currentTimeMillis()，測試才需要真的等"
-            else -> null
+            }
+
+            ms < 250 -> {
+                "Bug 還沒重現：Throttle 要在函式裡自己讀 System.currentTimeMillis()，測試才需要真的等"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         val ms = elapsedMs(lines)
         when {
-            ms == null -> "演練沒有跑完：要用 scenario(log, advanceTo, tap) 執行"
-            "點擊時間 [0, 30, 150, 300] 毫秒 → [送出, 忽略, 送出, 送出]" !in lines ->
+            ms == null -> {
+                "演練沒有跑完：要用 scenario(log, advanceTo, tap) 執行"
+            }
+
+            "點擊時間 [0, 30, 150, 300] 毫秒 → [送出, 忽略, 送出, 送出]" !in lines -> {
                 "shouldFire 還沒寫對：用 now() 取得現在時間，距離上一次送出不到 100 毫秒就回傳 false"
-            ms >= 100 -> "測試花了 $ms 毫秒：Throttle 不能自己讀系統時間，要用傳進來的 now()，測試用假時鐘撥時間"
-            else -> null
+            }
+
+            ms >= 100 -> {
+                "測試花了 $ms 毫秒：Throttle 不能自己讀系統時間，要用傳進來的 now()，測試用假時鐘撥時間"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

@@ -1,12 +1,16 @@
-// L01：兩個畫面元件各收一次行情，開了兩條 WebSocket（cold flow 與 shareIn／stateIn）
+// L01：兩個畫面元件各收一次行情，開了兩條 WebSocket（cold flow 與
+// shareIn／stateIn）
 // 對應複習站：Kotlin05Flow 第 1 題「Flow 是什麼？cold 和 hot 差在哪？」
 //
-// 情境：行情的上游是「開一條 WebSocket 訂閱價格」（用 flow { } 寫的 cold flow，已經寫好）。
+// 情境：行情的上游是「開一條 WebSocket 訂閱價格」（用 flow { } 寫的 cold flow，
+// 已經寫好）。
 //        行情頁上有兩個元件（價格看板、迷你走勢圖）同時收集同一份價格。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug）：ViewModel 的 prices 直接回傳 cold flow（repo.tickers()）。兩個元件各開一條 WebSocket。
-//   ② 修正版（L01Fixed）：用 stateIn(scope, WhileSubscribed(5000), 初始值) 轉成 hot flow，兩個元件共用同一條上游。
+//   ① Bug 版（L01Bug）：ViewModel 的 prices 直接回傳 cold flow（repo.
+// tickers()）。兩個元件各開一條 WebSocket。
+//   ② 修正版（L01Fixed）：用 stateIn(scope, WhileSubscribed(5000), 初始值)
+// 轉成 hot flow，兩個元件共用同一條上游。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin05-flow/L01_ColdFlow.kt
 package tw.harry.labs.practice.kotlin05flow
@@ -30,7 +34,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 行情來源：每次有人開始收集，就「開一條 WebSocket」，每 50 ms 送出一個價格（1 到 5） */
+/**
+ * 行情來源：每次有人開始收集，就「開一條 WebSocket」，每 50 ms 送出一個價格（1
+ * 到 5）
+ */
 private class TickerRepo(private val log: LabLog) {
     val opened = AtomicInteger(0)
 
@@ -59,7 +66,8 @@ private suspend fun scenario(log: LabLog, repo: TickerRepo, prices: Flow<Int>) {
 // MARK: - Bug 版
 private object L01Bug {
     class TickerViewModel(repo: TickerRepo) {
-        // TODO ①：prices 直接回傳 repo.tickers()（cold flow：每個 collector 都重新開一條）
+        // TODO ①：prices 直接回傳 repo.tickers()（cold flow：每個 collector
+        // 都重新開一條）
         val prices: Flow<Int> = flowOf(5)
     }
 
@@ -72,13 +80,15 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     class TickerViewModel(repo: TickerRepo, scope: CoroutineScope) {
-        // TODO ②：repo.tickers() 後面接 .stateIn(scope, SharingStarted.WhileSubscribed(5_000), 0)，轉成 hot flow 共用上游
+        // TODO ②：repo.tickers() 後面接 stateIn(scope, SharingStarted.
+        // WhileSubscribed(5_000), 0)，轉成 hot flow 共用上游
         val prices: Flow<Int> = flowOf(5)
     }
 
     suspend fun run(log: LabLog) {
         val repo = TickerRepo(log)
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)   // 代表 viewModelScope
+        // 代表 viewModelScope
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             scenario(log, repo, TickerViewModel(repo, scope).prices)
         } finally {

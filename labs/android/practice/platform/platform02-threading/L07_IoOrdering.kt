@@ -1,12 +1,18 @@
-// L07：訂單狀態更新亂了順序，資料庫最後留下「New」（用 limitedParallelism(1) 讓寫入排隊）
-// 對應複習站：Platform02Threading 第 5 題「Android 的 Dispatchers 怎麼選？為什麼不能在主執行緒 runBlocking？」
+// L07：訂單狀態更新亂了順序，資料庫最後留下「New」（用 limitedParallelism(1)
+// 讓寫入排隊）
+// 對應複習站：Platform02Threading 第 5 題「Android 的 Dispatchers
+// 怎麼選？為什麼不能在主執行緒 runBlocking？」
 //
-// 情境：同一張訂單的狀態依序更新三次：New → PartiallyFilled → Filled。三次寫入都交給資料庫，但每次寫入花的時間不一樣
-//        （演練用 Thread.sleep 代替：第一次 60 ms、第二次 30 ms、第三次 5 ms）。看資料庫最後留下哪個狀態。
+// 情境：同一張訂單的狀態依序更新三次：New → PartiallyFilled → Filled。
+// 三次寫入都交給資料庫，但每次寫入花的時間不一樣
+//        （演練用 Thread.sleep 代替：第一次 60 ms、第二次 30 ms、第三次 5
+// ms）。看資料庫最後留下哪個狀態。
 //
 // 你要寫：
-//   ① Bug 版（L07Bug）：三次寫入都 launch 在 Dispatchers.IO，同時進行，最慢的第一次最後才寫完。
-//   ② 修正版（L07Fixed）：寫入用 Dispatchers.IO.limitedParallelism(1)，一個一個照順序做。
+//   ① Bug 版（L07Bug）：三次寫入都 launch 在 Dispatchers.IO，同時進行，
+// 最慢的第一次最後才寫完。
+//   ② 修正版（L07Fixed）：寫入用 Dispatchers.IO.limitedParallelism(1)，
+// 一個一個照順序做。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform02-threading/L07_IoOrdering.kt
 package tw.harry.labs.practice.platform02threading
@@ -30,7 +36,10 @@ private class L07OrderDb {
 }
 
 /** 演練流程（兩個版本共用）：[writeAll] 決定三次寫入怎麼交給資料庫 */
-private suspend fun scenario(log: LabLog, writeAll: suspend (L07OrderDb) -> Unit) {
+private suspend fun scenario(
+    log: LabLog,
+    writeAll: suspend (L07OrderDb) -> Unit,
+) {
     val db = L07OrderDb()
     writeAll(db)
     log("依序更新 New → PartiallyFilled → Filled，資料庫最後的狀態是 ${db.status}")
@@ -40,7 +49,9 @@ private suspend fun scenario(log: LabLog, writeAll: suspend (L07OrderDb) -> Unit
 private object L07Bug {
     suspend fun run(log: LabLog) = scenario(log) { db ->
         coroutineScope {
-            // TODO ①：用 launch(Dispatchers.IO) 開三個協程，依序呼叫 db.write("New", 60)、db.write("PartiallyFilled", 30)、db.write("Filled", 5)
+            // TODO ①：用 launch(Dispatchers.IO) 開三個協程，依序呼叫 db.
+            // write("New", 60)、db.write("PartiallyFilled", 30)、db.
+            // write("Filled", 5)
         }
     }
 }
@@ -49,18 +60,22 @@ private object L07Bug {
 @OptIn(ExperimentalCoroutinesApi::class)
 private object L07Fixed {
     suspend fun run(log: LabLog) = scenario(log) { db ->
-        // TODO ②-1：用 Dispatchers.IO.limitedParallelism(1) 做出「最多同時 1 條執行緒」的 dbDispatcher
+        // TODO ②-1：用 Dispatchers.IO.limitedParallelism(1) 做出「最多同時 1
+        // 條執行緒」的 dbDispatcher
         val dbDispatcher = Dispatchers.IO
         coroutineScope {
-            // TODO ②-2：用 launch(dbDispatcher) 開三個協程，依序呼叫 db.write("New", 60)、db.write("PartiallyFilled", 30)、db.write("Filled", 5)
+            // TODO ②-2：用 launch(dbDispatcher) 開三個協程，依序呼叫 db.
+            // write("New", 60)、db.write("PartiallyFilled", 30)、db.
+            // write("Filled", 5)
         }
     }
 }
 
 // MARK: - 演練設定
-private fun finalStatus(lines: List<String>): String? =
-    lines.firstOrNull { it.startsWith("依序更新 New → PartiallyFilled → Filled，資料庫最後的狀態是 ") }
-        ?.substringAfter("資料庫最後的狀態是 ")
+private fun finalStatus(lines: List<String>): String? = lines.firstOrNull {
+    it.startsWith("依序更新 New → PartiallyFilled → Filled，資料庫最後的狀態是 ")
+}
+    ?.substringAfter("資料庫最後的狀態是 ")
 
 val l07 = Lab(
     id = "L07",

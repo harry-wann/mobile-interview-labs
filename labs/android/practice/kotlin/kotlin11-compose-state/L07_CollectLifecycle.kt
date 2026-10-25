@@ -1,15 +1,23 @@
-// L07：App 退到背景，畫面還一直在更新（collectAsState 與 collectAsStateWithLifecycle）
-// 對應複習站：Kotlin11ComposeState 第 7 題「外部資料怎麼變成 State？collectAsState 還是 collectAsStateWithLifecycle？」
+// L07：App 退到背景，畫面還一直在更新（collectAsState 與
+// collectAsStateWithLifecycle）
+// 對應複習站：Kotlin11ComposeState 第 7 題「外部資料怎麼變成
+// State？collectAsState 還是 collectAsStateWithLifecycle？」
 //
-// 情境：行情畫面用 StateFlow 收價格（伺服器每 50 ms 推一筆，不管畫面在不在前景）。
-//        演練用自己的 lifecycle 模擬畫面：前景（STARTED）0.3 秒 → 退到背景（STOPPED）0.5 秒 → 回到前景 0.2 秒。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose，
+// 情境：行情畫面用 StateFlow 收價格（伺服器每 50 ms 推一筆，
+// 不管畫面在不在前景）。
+//        演練用自己的 lifecycle 模擬畫面：前景（STARTED）0.3 秒 →
+// 退到背景（STOPPED）0.5 秒 → 回到前景 0.2 秒。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose，
 //        lifecycle 用 LifecycleRegistry 自己控制（寫法同 Kotlin05 演練 9）。
-//        要在手機上執行（collectAsStateWithLifecycle 內部用 repeatOnLifecycle，需要 Android 的主執行緒）；電腦上的單元測試會替換主執行緒後執行。
+//        要在手機上執行（collectAsStateWithLifecycle 內部用 repeatOnLifecycle，
+// 需要 Android 的主執行緒）；電腦上的單元測試會替換主執行緒後執行。
 //
 // 你要寫：
-//   ① Bug 版（L07Bug）：val price by prices.collectAsState()。不管 lifecycle，退到背景之後 collector 還在，每一筆價格都讓畫面重組。
-//   ② 修正版（L07Fixed）：val price by prices.collectAsStateWithLifecycle()。預設只在 STARTED 以上才收，退到背景就取消，回到前景再重新收。
+//   ① Bug 版（L07Bug）：val price by prices.collectAsState()。不管 lifecycle，
+// 退到背景之後 collector 還在，每一筆價格都讓畫面重組。
+//   ② 修正版（L07Fixed）：val price by prices.collectAsStateWithLifecycle()。
+// 預設只在 STARTED 以上才收，退到背景就取消，回到前景再重新收。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin11-compose-state/L07_CollectLifecycle.kt
 package tw.harry.labs.practice.kotlin11composestate
@@ -42,13 +50,24 @@ private class L07Screen : LifecycleOwner {
     fun move(event: Lifecycle.Event) = registry.handleLifecycleEvent(event)
 }
 
-/** 演練流程（兩個版本共用）：[screen] 是行情畫面；前景 0.3 秒 → 背景 0.5 秒 → 回前景 0.2 秒，記下各階段畫面更新了幾次 */
-private suspend fun scenario(log: LabLog, screen: @Composable (prices: StateFlow<Long>, onShow: (String) -> Unit) -> Unit) = coroutineScope {
+/**
+ * 演練流程（兩個版本共用）：[screen] 是行情畫面；前景 0.3 秒 → 背景 0.5 秒 →
+ * 回前景 0.2 秒，記下各階段畫面更新了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (
+        prices: StateFlow<Long>,
+        onShow: (String) -> Unit,
+    ) -> Unit,
+) = coroutineScope {
     val owner = L07Screen()
     owner.move(Lifecycle.Event.ON_CREATE)
-    owner.move(Lifecycle.Event.ON_START)                            // 畫面在前景
+    // 畫面在前景
+    owner.move(Lifecycle.Event.ON_START)
     val prices = MutableStateFlow(0L)
-    val feed = launch {                                             // 伺服器推行情：每 50 ms 一筆
+    // 伺服器推行情：每 50 ms 一筆
+    val feed = launch {
         var price = 0L
         while (true) {
             delay(50)
@@ -68,7 +87,7 @@ private suspend fun scenario(log: LabLog, screen: @Composable (prices: StateFlow
         log("前景 0.3 秒，畫面更新了 $shows 次")
         log("前景結束時，畫面顯示：$shown")
 
-        owner.move(Lifecycle.Event.ON_STOP)                         // 退到背景
+        owner.move(Lifecycle.Event.ON_STOP) // 退到背景
         settle()
         val atStop = shows
         delay(500)
@@ -76,7 +95,7 @@ private suspend fun scenario(log: LabLog, screen: @Composable (prices: StateFlow
         log("退到背景 0.5 秒，畫面又更新了 ${shows - atStop} 次")
         log("退到背景 0.5 秒後，還有 ${prices.subscriptionCount.value} 個畫面在收行情")
 
-        owner.move(Lifecycle.Event.ON_START)                        // 回到前景
+        owner.move(Lifecycle.Event.ON_START) // 回到前景
         delay(200)
         settle()
         log("回到前景 0.2 秒後，畫面顯示：$shown")
@@ -90,32 +109,42 @@ private suspend fun scenario(log: LabLog, screen: @Composable (prices: StateFlow
 private object L07Bug {
     @Composable
     fun PriceText(prices: StateFlow<Long>, onShow: (String) -> Unit) {
-        // TODO ①：val price by prices.collectAsState()（不管 lifecycle，在背景也一直收）
+        // TODO ①：val price by prices.collectAsState()（不管 lifecycle，
+        // 在背景也一直收）
         val price = 0L
         HeadlessText("價格 $price", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { prices, onShow -> PriceText(prices, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { prices, onShow ->
+        PriceText(prices, onShow)
+    }
 }
 
 // MARK: - 修正版
 private object L07Fixed {
     @Composable
     fun PriceText(prices: StateFlow<Long>, onShow: (String) -> Unit) {
-        // TODO ②：val price by prices.collectAsStateWithLifecycle()（預設 STARTED 才收）
+        // TODO ②：val price by prices.collectAsStateWithLifecycle()（預設
+        // STARTED 才收）
         val price = 0L
         HeadlessText("價格 $price", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { prices, onShow -> PriceText(prices, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { prices, onShow ->
+        PriceText(prices, onShow)
+    }
 }
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String, suffix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(suffix)?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(suffix)?.toIntOrNull()
 
 private fun price(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removePrefix("價格 ")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removePrefix("價格 ")?.toIntOrNull()
 
 val l07 = Lab(
     id = "L07",

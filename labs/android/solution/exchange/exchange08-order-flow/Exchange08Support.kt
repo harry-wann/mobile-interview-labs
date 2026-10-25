@@ -8,4 +8,5 @@ import java.math.BigDecimal
 fun e08(text: String) = BigDecimal(text)
 
 /** 去掉尾端的 0，轉成不含科學記號的文字：BigDecimal("2.0") → "2" */
-fun e08Text(value: BigDecimal): String = value.stripTrailingZeros().toPlainString()
+fun e08Text(value: BigDecimal): String =
+    value.stripTrailingZeros().toPlainString()

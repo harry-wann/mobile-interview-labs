@@ -9,6 +9,9 @@ import tw.harry.labs.kit.runLabSelfTest
 class ExchangeSelfTest {
     @Test
     fun labs() = runBlocking {
-        assertEquals(emptyList<String>(), runLabSelfTest(exchangeSection, strict = true))
+        assertEquals(
+            emptyList<String>(),
+            runLabSelfTest(exchangeSection, strict = true),
+        )
     }
 }

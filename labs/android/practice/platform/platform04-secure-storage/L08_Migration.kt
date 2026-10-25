@@ -1,15 +1,23 @@
-// L08：App 更新之後，使用者本機的訂單全部消失了（fallbackToDestructiveMigration）
-// 對應複習站：Platform04SecureStorage 第 7 題「資料庫結構改版時，migration 要怎麼做？」
+// L08：App 更新之後，
+// 使用者本機的訂單全部消失了（fallbackToDestructiveMigration）
+// 對應複習站：Platform04SecureStorage 第 7 題「資料庫結構改版時，migration
+// 要怎麼做？」
 //
-// 情境：1.0 版（資料庫 version 1）的 orders 資料表沒有 memo 欄位，使用者手機裡已經存了 2 張訂單。1.1 版（version 2）新增了 memo 欄位。
+// 情境：1.0 版（資料庫 version 1）的 orders 資料表沒有 memo 欄位，
+// 使用者手機裡已經存了 2 張訂單。1.1 版（version 2）新增了 memo 欄位。
 //        使用者更新 App 之後，手機裡還是 version 1 的資料庫檔案。
-//        這一區的 JVM 單元測試沒有 Android 的 SQLite，也沒有 Room 編譯器，所以演練用一個幾十行的「迷你資料庫」代替 Room：
-//        MiniDbBuilder 的 addMigrations、fallbackToDestructiveMigration、build 和 Room 的 RoomDatabase.Builder 同名、規則一樣：
-//        找不到 migration 又沒有開 fallback 時，build() 會丟出和 Room 一樣的錯誤；開了 fallback 就清空整個資料庫。
+//        這一區的 JVM 單元測試沒有 Android 的 SQLite，也沒有 Room 編譯器，
+// 所以演練用一個幾十行的「迷你資料庫」代替 Room：
+//        MiniDbBuilder 的 addMigrations、fallbackToDestructiveMigration、build
+// 和 Room 的 RoomDatabase.Builder 同名、規則一樣：
+//        找不到 migration 又沒有開 fallback 時，build() 會丟出和 Room
+// 一樣的錯誤；開了 fallback 就清空整個資料庫。
 //
 // 你要寫：
-//   ① Bug 版（L08Bug）：用 fallbackToDestructiveMigration() 開啟，舊資料全部清空。
-//   ② 修正版（L08Fixed）：寫 MIGRATION_1_2（舊資料補上 memo 預設值 ''），用 addMigrations 加進去。
+//   ① Bug 版（L08Bug）：用 fallbackToDestructiveMigration() 開啟，
+// 舊資料全部清空。
+//   ② 修正版（L08Fixed）：寫 MIGRATION_1_2（舊資料補上 memo 預設值 ''），用
+// addMigrations 加進去。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform04-secure-storage/L08_Migration.kt
 package tw.harry.labs.practice.platform04securestorage
@@ -18,18 +26,33 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 迷你資料庫的「檔案」（兩個版本共用）：記著版本號與資料列，關掉 App 之後還在 */
-private class L08DbFile(var version: Int, val rows: MutableList<MutableMap<String, String>> = mutableListOf())
+/**
+ * 迷你資料庫的「檔案」（兩個版本共用）：記著版本號與資料列，關掉 App 之後還在
+ */
+private class L08DbFile(
+    var version: Int,
+    val rows: MutableList<MutableMap<String, String>> = mutableListOf(),
+)
 
 /** 一個 migration：從 from 版升到 to 版要做的事（對應 Room 的 Migration） */
-private class L08Migration(val from: Int, val to: Int, val migrate: (L08DbFile) -> Unit)
+private class L08Migration(
+    val from: Int,
+    val to: Int,
+    val migrate: (L08DbFile) -> Unit,
+)
 
 /** 迷你資料庫（對應 Room 的 RoomDatabase.Builder，規則和 Room 一樣） */
-private class L08MiniDbBuilder(private val file: L08DbFile, private val version: Int) {
+private class L08MiniDbBuilder(
+    private val file: L08DbFile,
+    private val version: Int,
+) {
     private val migrations = mutableListOf<L08Migration>()
     private var destructive = false
 
-    fun addMigrations(vararg migration: L08Migration) = apply { migrations += migration }
+    fun addMigrations(vararg migration: L08Migration) = apply {
+        migrations +=
+            migration
+    }
     fun fallbackToDestructiveMigration() = apply { destructive = true }
 
     /** 開啟資料庫：版本相同直接用；不同就找 migration 一步一步升上去 */
@@ -46,7 +69,8 @@ private class L08MiniDbBuilder(private val file: L08DbFile, private val version:
             path.forEach { it.migrate(file) }
             file.version = version
         } else if (destructive) {
-            file.rows.clear()                                   // 清空整個資料庫再重建
+            // 清空整個資料庫再重建
+            file.rows.clear()
             file.version = version
         } else {
             throw IllegalStateException(
@@ -59,7 +83,10 @@ private class L08MiniDbBuilder(private val file: L08DbFile, private val version:
     }
 }
 
-/** 演練流程（兩個版本共用）：version 1 的資料庫裡有 2 張訂單，App 更新後用 version 2 開啟 */
+/**
+ * 演練流程（兩個版本共用）：version 1 的資料庫裡有 2 張訂單，App 更新後用
+ * version 2 開啟
+ */
 private fun scenario(log: LabLog, open: (L08DbFile) -> L08DbFile) {
     val file = L08DbFile(version = 1)
     file.rows += mutableMapOf("id" to "1", "symbol" to "btcjpy")
@@ -82,27 +109,37 @@ private fun scenario(log: LabLog, open: (L08DbFile) -> L08DbFile) {
 // MARK: - Bug 版
 private object L08Bug {
     fun open(file: L08DbFile): L08DbFile =
-        file                                                    // TODO ①：改用 L08MiniDbBuilder（version 2）開啟，加上 fallbackToDestructiveMigration()，再 build()
+        // TODO ①：改用 L08MiniDbBuilder（version 2）開啟，加上
+        // fallbackToDestructiveMigration()，再 build()
+        file
 
     fun run(log: LabLog) = scenario(log, ::open)
 }
 
 // MARK: - 修正版
 private object L08Fixed {
-    /** 1 → 2：orders 新增 memo 欄位，舊資料補上預設值 ''（Room：ALTER TABLE orders ADD COLUMN memo TEXT NOT NULL DEFAULT ''） */
+    /**
+     * 1 → 2：orders 新增 memo 欄位，舊資料補上預設值 ''（Room：ALTER TABLE
+     * orders ADD COLUMN memo TEXT NOT NULL DEFAULT ''）
+     */
     val MIGRATION_1_2 = L08Migration(1, 2) { db ->
-        // TODO ②-1：對 db.rows 的每一列，加上 memo 欄位，預設值是空字串（it["memo"] = ""）
+        // TODO ②-1：對 db.rows 的每一列，加上 memo 欄位，
+        // 預設值是空字串（it["memo"] = ""）
     }
 
     fun open(file: L08DbFile): L08DbFile =
-        file                                                    // TODO ②-2：改用 L08MiniDbBuilder（version 2）開啟，用 addMigrations 加上 MIGRATION_1_2，再 build()（不要加 fallbackToDestructiveMigration()）
+        // TODO ②-2：改用 L08MiniDbBuilder（version 2）開啟，用 addMigrations
+        // 加上 MIGRATION_1_2，再 build()（不要加
+        // fallbackToDestructiveMigration()）
+        file
 
     fun run(log: LabLog) = scenario(log, ::open)
 }
 
 // MARK: - 演練設定
-private fun remaining(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("更新後（version ") && it.contains("本機剩 ") }?.substringAfter("本機剩 ")?.removeSuffix(" 張訂單")?.toIntOrNull()
+private fun remaining(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("更新後（version ") && it.contains("本機剩 ")
+}?.substringAfter("本機剩 ")?.removeSuffix(" 張訂單")?.toIntOrNull()
 
 val l08 = Lab(
     id = "L08",
@@ -127,21 +164,40 @@ val l08 = Lab(
     checkBug = { lines ->
         val n = remaining(lines)
         when {
-            lines.any { it.startsWith("更新後打不開資料庫") } -> "資料庫打不開：加上 .fallbackToDestructiveMigration()（Bug 版就是用它讓 App 不要當掉）"
+            lines.any {
+                it.startsWith("更新後打不開資料庫")
+            } -> "資料庫打不開：加上 .fallbackToDestructiveMigration()（Bug 版就是用它讓 App 不要當掉）"
+
             n == null -> "演練沒有跑完"
-            !lines.contains("更新後（version 2）：本機剩 $n 張訂單") -> "資料庫要升到 version 2：用 L08MiniDbBuilder(file, version = 2) 開啟，再 build()"
+
+            !lines.contains(
+                "更新後（version 2）：本機剩 $n 張訂單",
+            ) -> "資料庫要升到 version 2：用 L08MiniDbBuilder(file, version = 2) 開啟，再 build()"
+
             n != 0 -> "Bug 還沒重現（剩 $n 張）：Bug 版要用 fallbackToDestructiveMigration() 開啟，舊資料會被清空"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         val n = remaining(lines)
         when {
-            lines.any { it.startsWith("更新後打不開資料庫") } -> "資料庫打不開：要用 addMigrations(MIGRATION_1_2) 加上 1 到 2 的 migration"
+            lines.any {
+                it.startsWith("更新後打不開資料庫")
+            } -> "資料庫打不開：要用 addMigrations(MIGRATION_1_2) 加上 1 到 2 的 migration"
+
             n == null -> "演練沒有跑完"
-            !lines.contains("更新後（version 2）：本機剩 $n 張訂單") -> "資料庫要升到 version 2：用 L08MiniDbBuilder(file, version = 2) 開啟，再 build()"
+
+            !lines.contains(
+                "更新後（version 2）：本機剩 $n 張訂單",
+            ) -> "資料庫要升到 version 2：用 L08MiniDbBuilder(file, version = 2) 開啟，再 build()"
+
             n != 2 -> "更新後只剩 $n 張訂單：不要用 fallbackToDestructiveMigration()，改用 addMigrations(MIGRATION_1_2)"
-            !lines.contains("訂單有 memo 欄位：是") -> "舊的訂單要補上 memo 欄位：MIGRATION_1_2 要對每一列加上 it[\"memo\"] = \"\""
+
+            !lines.contains(
+                "訂單有 memo 欄位：是",
+            ) -> "舊的訂單要補上 memo 欄位：MIGRATION_1_2 要對每一列加上 it[\"memo\"] = \"\""
+
             else -> null
         }
     },

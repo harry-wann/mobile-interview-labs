@@ -1,13 +1,20 @@
-// L02：價格一跳，被選取的那一列就取消選取了（列表用「包含價格的整個 struct」當識別）
+// L02：價格一跳，被選取的那一列就取消選取了（列表用「包含價格的整個 struct」
+// 當識別）
 // 對應複習站：Exchange06RealtimeUI 第 4 題「列表怎麼只更新有變動的列？」
 //
-// 情境：行情列表有三列（BTC_JPY、ETH_JPY、XRP_JPY）。使用者點了 ETH_JPY，那一列變成選取狀態（狀態存在「列」這個物件上）。
-//       接著價格更新三次：第 1 次 BTC 和 ETH 變、第 2 次三檔都變、第 3 次只有 ETH 變。
-//       列表用「識別」（identity）決定新的一份資料對應到哪一個既有的列：對得上就沿用那一列（只換內容），對不上就新建一列。
-//       （diffable data source 的 Hashable 項目、SwiftUI 的 ForEach id、Compose 的 key，都是這個意思；列表用 index 當識別的問題，Swift08 L02、Kotlin06 L07 練過。）
+// 情境：行情列表有三列（BTC_JPY、ETH_JPY、XRP_JPY）。使用者點了 ETH_JPY，
+// 那一列變成選取狀態（狀態存在「列」這個物件上）。
+//       接著價格更新三次：第 1 次 BTC 和 ETH 變、第 2 次三檔都變、第 3 次只有
+// ETH 變。
+//       列表用「識別」（identity）決定新的一份資料對應到哪一個既有的列：
+// 對得上就沿用那一列（只換內容），對不上就新建一列。
+//       （diffable data source 的 Hashable 項目、SwiftUI 的 ForEach id、
+// Compose 的 key，都是這個意思；列表用 index 當識別的問題，Swift08 L02、
+// Kotlin06 L07 練過。）
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.run）：識別 = 整個 Row（交易對代號加價格），例如 "\(row)"。
+//   ① Bug 版（L02Bug.run）：識別 = 整個 Row（交易對代號加價格），例如 "\(row)
+// "。
 //   ② 修正版（L02Fixed.run）：識別 = row.symbol（交易對代號）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange06-RealtimeUI/L02_RowIdentity.swift
@@ -41,15 +48,18 @@ private final class ListView {
         for row in rows {
             let id = identity(row)
             if next[id] != nil {
-                duplicates += 1                         // 兩列的識別一樣：這不是正常的寫法
+                // 兩列的識別一樣：這不是正常的寫法
+                duplicates += 1
                 continue
             }
             if let cell = cells[id] {
-                cell.row = row                          // 識別對得上：沿用既有的列，只換內容
+                // 識別對得上：沿用既有的列，只換內容
+                cell.row = row
                 reused += 1
                 next[id] = cell
             } else {
-                next[id] = Cell(row: row)               // 對不上：新建一列（沒有選取狀態）
+                // 對不上：新建一列（沒有選取狀態）
+                next[id] = Cell(row: row)
                 created += 1
             }
         }
@@ -66,7 +76,11 @@ private final class ListView {
 }
 
 private func rows(_ btc: String, _ eth: String, _ xrp: String) -> [Row] {
-    [Row(symbol: "BTC_JPY", price: e06(btc)), Row(symbol: "ETH_JPY", price: e06(eth)), Row(symbol: "XRP_JPY", price: e06(xrp))]
+    [
+        Row(symbol: "BTC_JPY", price: e06(btc)),
+        Row(symbol: "ETH_JPY", price: e06(eth)),
+        Row(symbol: "XRP_JPY", price: e06(xrp)),
+    ]
 }
 
 /// 演練流程（兩個版本共用）：`identity` 決定新的一份資料對應到哪一個既有的列
@@ -75,21 +89,29 @@ private func scenario(_ log: LabLog, identity: (Row) -> String) {
     list.apply(rows("10000000", "400000", "80"), identity: identity)
     list.select("ETH_JPY")
     log("開始：選取 \(list.selectedSymbol ?? "沒有")")
-    let updates = [rows("10000100", "400100", "80"), rows("10000200", "400200", "80.3"), rows("10000200", "400300", "80.3")]
+    let updates = [
+        rows("10000100", "400100", "80"), rows("10000200", "400200", "80.3"),
+        rows("10000200", "400300", "80.3"),
+    ]
     let before = list.created
     for (index, update) in updates.enumerated() {
         let createdBefore = list.created, reusedBefore = list.reused
         list.apply(update, identity: identity)
-        log("第 \(index + 1) 次更新：新建 \(list.created - createdBefore) 列，沿用 \(list.reused - reusedBefore) 列，選取 \(list.selectedSymbol ?? "沒有")")
+        log(
+            "第 \(index + 1) 次更新：新建 \(list.created - createdBefore) 列，沿用 \(list.reused - reusedBefore) 列，選取 \(list.selectedSymbol ?? "沒有")"
+        )
     }
-    log("最後：選取 \(list.selectedSymbol ?? "沒有")，更新期間共新建 \(list.created - before) 列，沿用 \(list.reused) 列，識別重複 \(list.duplicates) 次")
+    log(
+        "最後：選取 \(list.selectedSymbol ?? "沒有")，更新期間共新建 \(list.created - before) 列，沿用 \(list.reused) 列，識別重複 \(list.duplicates) 次"
+    )
 }
 
 // MARK: - Bug 版
 private enum L02Bug {
     static func run(_ log: LabLog) async {
         scenario(log) { row in
-            // TODO ①：回傳整個 row（交易對代號加價格）轉成的字串當識別，例如 "\(row)"。目前回傳空字串只是佔位，要改掉
+            // TODO ①：回傳整個 row（交易對代號加價格）轉成的字串當識別，例如
+            // "\(row)"。目前回傳空字串只是佔位，要改掉
             ""
         }
     }
@@ -99,7 +121,8 @@ private enum L02Bug {
 private enum L02Fixed {
     static func run(_ log: LabLog) async {
         scenario(log) { row in
-            // TODO ②：回傳 row.symbol（交易對代號）當識別。目前回傳空字串只是佔位，要改掉
+            // TODO ②：回傳 row.symbol（交易對代號）當識別。
+            // 目前回傳空字串只是佔位，要改掉
             ""
         }
     }
@@ -111,7 +134,8 @@ extension Exchange06RealtimeUI {
         id: "L02",
         title: "價格一跳，選取的那一列就取消選取了",
         question: "第 4 題：列表怎麼只更新有變動的列？",
-        goal: "列表的識別要用穩定的交易對代號，不能把價格放進識別：價格一變就變成「刪一列、新建一列」，列上的選取、展開狀態都會消失。先寫出把價格放進識別的 Bug 版，再寫修正版。",
+        goal:
+            "列表的識別要用穩定的交易對代號，不能把價格放進識別：價格一變就變成「刪一列、新建一列」，列上的選取、展開狀態都會消失。先寫出把價格放進識別的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Exchange/Exchange06-RealtimeUI/L02_RowIdentity.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，看每次更新「新建幾列、沿用幾列」，以及選取的那一列還在不在。",
@@ -119,8 +143,10 @@ extension Exchange06RealtimeUI {
             "寫 TODO ②（修正版），選「修正版」執行，三次更新都要沿用三列、不新建，選取一直是 ETH_JPY。",
             "進階：iOS 的 diffable data source 搭配 `reconfigureItems`（只更新內容、沿用 cell），和 Android 的 DiffUtil 的 `areItemsTheSame`，各自對應這裡的哪一個步驟？",
         ],
-        expectBug: "每次更新價格有變的列都被新建：第 1 次新建 2 列，選取變成「沒有」，「最後：選取 沒有，更新期間共新建 6 列，沿用 3 列」。",
-        expectFixed: "三次更新都沿用 3 列、不新建，選取一直是 ETH_JPY，「最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列」。",
+        expectBug:
+            "每次更新價格有變的列都被新建：第 1 次新建 2 列，選取變成「沒有」，「最後：選取 沒有，更新期間共新建 6 列，沿用 3 列」。",
+        expectFixed:
+            "三次更新都沿用 3 列、不新建，選取一直是 ETH_JPY，「最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列」。",
         run: { variant, log in
             switch variant {
             case .bug: await L02Bug.run(log)
@@ -128,12 +154,17 @@ extension Exchange06RealtimeUI {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("最後") }) { return "演練沒有跑完：要用 scenario(log, identity:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("最後") }) {
+                return "演練沒有跑完：要用 scenario(log, identity:) 執行"
+            }
             return lines.contains("最後：選取 沒有，更新期間共新建 6 列，沿用 3 列，識別重複 0 次")
-                ? nil : "Bug 還沒重現：識別要把整個 Row 都放進去（例如 \"\\(row)\"，包含交易對代號和價格），價格有變的列才會被新建"
+                ? nil
+                : "Bug 還沒重現：識別要把整個 Row 都放進去（例如 \"\\(row)\"，包含交易對代號和價格），價格有變的列才會被新建"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("最後") }) { return "演練沒有跑完：要用 scenario(log, identity:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("最後") }) {
+                return "演練沒有跑完：要用 scenario(log, identity:) 執行"
+            }
             return lines.contains("最後：選取 ETH_JPY，更新期間共新建 0 列，沿用 9 列，識別重複 0 次")
                 ? nil : "識別要用 row.symbol（交易對代號）：每一列的識別不同，價格變了還是對得上既有的列"
         }

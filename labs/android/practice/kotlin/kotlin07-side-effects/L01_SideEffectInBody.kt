@@ -1,12 +1,17 @@
 // L01：價格每跳一次，就再向伺服器訂閱一次（副作用不能直接寫在 Composable 裡）
-// 對應複習站：Kotlin07SideEffects 第 1 題「什麼是副作用？為什麼不能直接寫在 Composable 裡？」
+// 對應複習站：Kotlin07SideEffects 第 1 題「什麼是副作用？為什麼不能直接寫在
+// Composable 裡？」
 //
-// 情境：行情畫面進來時要向伺服器訂閱這個交易對的行情，畫面同時顯示價格。價格共更新 10 次（每 30 ms 一次）。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
+// 情境：行情畫面進來時要向伺服器訂閱這個交易對的行情，畫面同時顯示價格。
+// 價格共更新 10 次（每 30 ms 一次）。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug）：在 TickerScreen 的函式裡直接呼叫 socket.subscribe(symbol)。價格每變一次就重組，伺服器收到一堆重複的訂閱。
-//   ② 修正版（L01Fixed）：把訂閱放進 LaunchedEffect(symbol)，只在進入畫面時執行一次。
+//   ① Bug 版（L01Bug）：在 TickerScreen 的函式裡直接呼叫 socket.
+// subscribe(symbol)。價格每變一次就重組，伺服器收到一堆重複的訂閱。
+//   ② 修正版（L01Fixed）：把訂閱放進 LaunchedEffect(symbol)，
+// 只在進入畫面時執行一次。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin07-side-effects/L01_SideEffectInBody.kt
 package tw.harry.labs.practice.kotlin07sideeffects
@@ -32,8 +37,18 @@ private class L01Socket(private val log: LabLog) {
     }
 }
 
-/** 演練流程（兩個版本共用）：進入畫面 → 價格每 30 ms 更新一次，共 10 次 → 看總共訂閱了幾次 */
-private suspend fun scenario(log: LabLog, screen: @Composable (symbol: String, price: Long, socket: L01Socket) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：進入畫面 → 價格每 30 ms 更新一次，共 10 次 →
+ * 看總共訂閱了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (
+        symbol: String,
+        price: Long,
+        socket: L01Socket,
+    ) -> Unit,
+) {
     val socket = L01Socket(log)
     withHeadlessCompose {
         val price = mutableLongStateOf(100_000L)
@@ -53,27 +68,36 @@ private suspend fun scenario(log: LabLog, screen: @Composable (symbol: String, p
 private object L01Bug {
     @Composable
     fun TickerScreen(symbol: String, price: Long, socket: L01Socket) {
-        // TODO ①：在這裡直接呼叫 socket.subscribe(symbol)（不要放進任何 effect）
-        HeadlessText("$symbol $price")                      // 畫面上的價格（Text 的替身）
+        // TODO ①：在這裡直接呼叫 socket.subscribe(symbol)（不要放進任何
+        // effect）
+        // 畫面上的價格（Text 的替身）
+        HeadlessText("$symbol $price")
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { symbol, price, socket -> TickerScreen(symbol, price, socket) }
+    suspend fun run(log: LabLog) = scenario(log) { symbol, price, socket ->
+        TickerScreen(symbol, price, socket)
+    }
 }
 
 // MARK: - 修正版
 private object L01Fixed {
     @Composable
     fun TickerScreen(symbol: String, price: Long, socket: L01Socket) {
-        // TODO ②：用 LaunchedEffect(symbol) { … } 包住 socket.subscribe(symbol)（symbol 就是 key）
+        // TODO ②：用 LaunchedEffect(symbol) { … } 包住 socket.subscribe(symbol)
+        // （symbol 就是 key）
         HeadlessText("$symbol $price")
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { symbol, price, socket -> TickerScreen(symbol, price, socket) }
+    suspend fun run(log: LabLog) = scenario(log) { symbol, price, socket ->
+        TickerScreen(symbol, price, socket)
+    }
 }
 
 // MARK: - 演練設定
 private fun total(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
 
 val l01 = Lab(
     id = "L01",
@@ -97,15 +121,39 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            (total(lines, "進入畫面時，共訂閱 ") ?: 0) == 0 -> "進入畫面時沒有訂閱：TickerScreen 要呼叫 socket.subscribe(symbol)"
-            (total(lines, "價格更新 10 次之後，共訂閱 ") ?: 0) <= 1 -> "價格更新後沒有重複訂閱：Bug 版要把 socket.subscribe(symbol) 直接寫在 TickerScreen 的函式裡，不要放進 effect"
+            (
+                total(
+                    lines,
+                    "進入畫面時，共訂閱 ",
+                ) ?: 0
+            ) == 0 -> "進入畫面時沒有訂閱：TickerScreen 要呼叫 socket.subscribe(symbol)"
+
+            (
+                total(
+                    lines,
+                    "價格更新 10 次之後，共訂閱 ",
+                ) ?: 0
+            ) <= 1 -> "價格更新後沒有重複訂閱：Bug 版要把 socket.subscribe(symbol) 直接寫在 TickerScreen 的函式裡，不要放進 effect"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            (total(lines, "進入畫面時，共訂閱 ") ?: 0) == 0 -> "進入畫面時沒有訂閱：TickerScreen 要在 LaunchedEffect 裡呼叫 socket.subscribe(symbol)"
-            (total(lines, "價格更新 10 次之後，共訂閱 ") ?: 0) != 1 -> "價格更新後又訂閱了：把 socket.subscribe(symbol) 放進 LaunchedEffect(symbol) { }"
+            (
+                total(
+                    lines,
+                    "進入畫面時，共訂閱 ",
+                ) ?: 0
+            ) == 0 -> "進入畫面時沒有訂閱：TickerScreen 要在 LaunchedEffect 裡呼叫 socket.subscribe(symbol)"
+
+            (
+                total(
+                    lines,
+                    "價格更新 10 次之後，共訂閱 ",
+                ) ?: 0
+            ) != 1 -> "價格更新後又訂閱了：把 socket.subscribe(symbol) 放進 LaunchedEffect(symbol) { }"
+
             else -> null
         }
     },

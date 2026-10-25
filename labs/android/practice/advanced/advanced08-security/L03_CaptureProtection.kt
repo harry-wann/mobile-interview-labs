@@ -1,14 +1,21 @@
-// L03：Activity 設了 FLAG_SECURE，彈出來的 Dialog 還是截得到（Dialog 是另一個視窗）
-// 對應複習站：Advanced08Security 第 6 題「怎麼防截圖、錄影、剪貼簿和背景快照洩漏資料？」（Android：FLAG_SECURE）
+// L03：Activity 設了 FLAG_SECURE，彈出來的 Dialog 還是截得到（Dialog
+// 是另一個視窗）
+// 對應複習站：Advanced08Security 第 6 題「怎麼防截圖、錄影、
+// 剪貼簿和背景快照洩漏資料？」（Android：FLAG_SECURE）
 //
-// 情境：出金確認畫面顯示地址與金額。Android 可以用 FLAG_SECURE 讓整個視窗無法截圖、無法錄影，最近使用的 App 列表（Recents）的縮圖也會變黑。
-//       工程師在 Activity 的視窗設了 FLAG_SECURE，但「確認出金」是用 AlertDialog 彈出來的。
+// 情境：出金確認畫面顯示地址與金額。Android 可以用 FLAG_SECURE
+// 讓整個視窗無法截圖、無法錄影，最近使用的 App 列表（Recents）的縮圖也會變黑。
+//       工程師在 Activity 的視窗設了 FLAG_SECURE，但「確認出金」是用
+// AlertDialog 彈出來的。
 //       這個演練需要在模擬器或手機上操作，沒有自動檢查。
 //
 // 你要寫：
-//   ① Bug 版：只有 Activity 的視窗有 FLAG_SECURE（已經加好）。Dialog 是另一個視窗，不會繼承，彈出的對話框內容仍然截得到。
-//   ② 修正版：Dialog 顯示之前，也替它自己的視窗（dialog.window）加 FLAG_SECURE。
-// 只改有 TODO 的地方。寫完在 App 選「練習」執行，這個演練沒有自動檢查，要按步驟自己截圖確認。
+//   ① Bug 版：只有 Activity 的視窗有 FLAG_SECURE（已經加好）。Dialog
+// 是另一個視窗，不會繼承，彈出的對話框內容仍然截得到。
+//   ② 修正版：Dialog 顯示之前，也替它自己的視窗（dialog.window）加
+// FLAG_SECURE。
+// 只改有 TODO 的地方。寫完在 App 選「練習」執行，這個演練沒有自動檢查，
+// 要按步驟自己截圖確認。
 // 解答：solution/advanced/advanced08-security/L03_CaptureProtection.kt
 package tw.harry.labs.practice.advanced08security
 
@@ -40,8 +47,13 @@ private fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private fun Window?.secureText(): String =
-    if (this != null && (attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) != 0) "有 FLAG_SECURE" else "沒有 FLAG_SECURE"
+private fun Window?.secureText(): String = if (this != null &&
+    (attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) != 0
+) {
+    "有 FLAG_SECURE"
+} else {
+    "沒有 FLAG_SECURE"
+}
 
 /** 出金確認的 Dialog（兩個版本共用）：AlertDialog 有自己獨立的視窗 */
 private fun buildConfirmDialog(activity: Activity): AlertDialog =
@@ -56,8 +68,10 @@ private object L03Bug {
     /** 只有 Activity 的視窗有 FLAG_SECURE */
     fun showConfirmDialog(activity: Activity, log: LabLog) {
         val dialog = buildConfirmDialog(activity)
-        // TODO ①：呼叫 dialog.show() 彈出 Dialog（不要替 dialog.window 加 FLAG_SECURE），
-        //         再用 log(…) 印出「Activity 視窗：…；Dialog 視窗：…」（用 activity.window.secureText() 與 dialog.window.secureText()）
+        // TODO ①：呼叫 dialog.show() 彈出 Dialog（不要替 dialog.window 加
+        // FLAG_SECURE），
+        //         再用 log(…) 印出「Activity 視窗：…；Dialog 視窗：…」（用
+        // activity.window.secureText() 與 dialog.window.secureText()）
     }
 }
 
@@ -65,9 +79,12 @@ private object L03Bug {
 private object L03Fixed {
     fun showConfirmDialog(activity: Activity, log: LabLog) {
         val dialog = buildConfirmDialog(activity)
-        // TODO ②：Dialog 顯示之前，替 dialog.window 加上 FLAG_SECURE：dialog.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // TODO ②：Dialog 顯示之前，替 dialog.window 加上 FLAG_SECURE：dialog.
+        // window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         dialog.show()
-        log("Activity 視窗：${activity.window.secureText()}；Dialog 視窗：${dialog.window.secureText()}")
+        log(
+            "Activity 視窗：${activity.window.secureText()}；Dialog 視窗：${dialog.window.secureText()}",
+        )
     }
 }
 
@@ -75,12 +92,16 @@ private object L03Fixed {
 @Composable
 private fun L03Demo(variant: Variant, log: LabLog) {
     val activity = LocalContext.current.findActivity()
-    // 進入這個演練時，替 Activity 的視窗加 FLAG_SECURE；離開時還原，不影響其他演練
+    // 進入這個演練時，替 Activity 的視窗加 FLAG_SECURE；離開時還原，
+    // 不影響其他演練
     var activityFlag by remember { mutableStateOf("…") }
     DisposableEffect(activity) {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        activityFlag = activity?.window.secureText()        // 加完旗標再讀，畫面上的文字才正確
-        onDispose { activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+        // 加完旗標再讀，畫面上的文字才正確
+        activityFlag = activity?.window.secureText()
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Activity 視窗：$activityFlag")

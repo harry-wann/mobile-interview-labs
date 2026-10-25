@@ -1,11 +1,18 @@
-// L02：120 Hz 的 iPhone 上，掉了一格卻沒被偵測到（每一格的時間預算 = 1000 ÷ 刷新率）
-// 對應複習站：Platform02Threading 第 2 題「每一格畫面有多少時間？60 Hz 和 120 Hz 差在哪？」
+// L02：120 Hz 的 iPhone 上，掉了一格卻沒被偵測到（每一格的時間預算 = 1000 ÷
+// 刷新率）
+// 對應複習站：Platform02Threading 第 2 題「每一格畫面有多少時間？60 Hz 和 120
+// Hz 差在哪？」
 //
-// 情境：App 裡有一個卡頓偵測，量每一格花了多少 ms，超過「時間預算」的 1.5 倍就算掉格（hitch）。
-//        演練用兩份錄下來的資料：60 Hz 與 120 Hz 的手機各量了一段，每一格花的毫秒數已經寫好。
-// Bug 版：時間預算寫死 16.7 ms（只想到 60 Hz）。120 Hz 的手機一格只有 8.3 ms，掉一格就是 16.7 ms，卻低於 25 ms 的門檻，沒被偵測到。
-// 修正版：時間預算 = 1000 ÷ 這支手機的刷新率。60 Hz 約 16.7 ms，120 Hz 約 8.3 ms。
-//        （正式的 App：UIScreen 的 maximumFramesPerSecond，或 CADisplayLink 的 targetTimestamp 減 timestamp。）
+// 情境：App 裡有一個卡頓偵測，量每一格花了多少 ms，超過「時間預算」的 1.5
+// 倍就算掉格（hitch）。
+//        演練用兩份錄下來的資料：60 Hz 與 120 Hz 的手機各量了一段，
+// 每一格花的毫秒數已經寫好。
+// Bug 版：時間預算寫死 16.7 ms（只想到 60 Hz）。120 Hz 的手機一格只有 8.3 ms，
+// 掉一格就是 16.7 ms，卻低於 25 ms 的門檻，沒被偵測到。
+// 修正版：時間預算 = 1000 ÷ 這支手機的刷新率。60 Hz 約 16.7 ms，120 Hz 約 8.3
+// ms。
+//        （正式的 App：UIScreen 的 maximumFramesPerSecond，或 CADisplayLink 的
+// targetTimestamp 減 timestamp。）
 import Foundation
 import LabKit
 
@@ -15,11 +22,17 @@ private func hitchCount(_ frameMs: [Double], budgetMs: Double) -> Int {
 }
 
 /// 錄下來的資料（兩個版本共用）：每一格花的毫秒數
-private let frames60: [Double] = [16.67, 16.67, 33.33, 16.67, 50.0, 16.67]                        // 實際掉了 2 次
-private let frames120: [Double] = [8.33, 8.33, 16.67, 8.33, 16.67, 8.33, 33.33, 8.33]            // 實際掉了 3 次
+// 實際掉了 2 次
+private let frames60: [Double] = [16.67, 16.67, 33.33, 16.67, 50.0, 16.67]
+// 實際掉了 3 次
+private let frames120: [Double] = [
+    8.33, 8.33, 16.67, 8.33, 16.67, 8.33, 33.33, 8.33,
+]
 
 /// 演練流程（兩個版本共用）
-private func scenario(_ log: LabLog, budgetMs: (_ refreshRate: Double) -> Double) {
+private func scenario(
+    _ log: LabLog, budgetMs: (_ refreshRate: Double) -> Double
+) {
     let on60 = hitchCount(frames60, budgetMs: budgetMs(60))
     let on120 = hitchCount(frames120, budgetMs: budgetMs(120))
     log("60 Hz 的手機：偵測到 \(on60) 次掉格（實際 2 次）")
@@ -30,7 +43,7 @@ private func scenario(_ log: LabLog, budgetMs: (_ refreshRate: Double) -> Double
 private enum L02Bug {
     /// 這一格的時間預算
     static func budgetMs(refreshRate: Double) -> Double {
-        16.7                                            // 寫死 60 Hz 的預算
+        16.7  // 寫死 60 Hz 的預算
     }
 
     static func run(_ log: LabLog) async {
@@ -41,7 +54,7 @@ private enum L02Bug {
 // MARK: - 修正版
 private enum L02Fixed {
     static func budgetMs(refreshRate: Double) -> Double {
-        1000 / refreshRate                              // 一秒 ÷ 每秒幾格
+        1000 / refreshRate  // 一秒 ÷ 每秒幾格
     }
 
     static func run(_ log: LabLog) async {
@@ -52,7 +65,12 @@ private enum L02Fixed {
 // MARK: - 演練設定
 private func detected(_ lines: [String], prefix: String) -> Int? {
     lines.first { $0.hasPrefix(prefix) }
-        .flatMap { Int($0.replacingOccurrences(of: prefix, with: "").components(separatedBy: " ").first ?? "") }
+        .flatMap {
+            Int(
+                $0.replacingOccurrences(of: prefix, with: "").components(
+                    separatedBy: " "
+                ).first ?? "")
+        }
 }
 
 extension Platform02Threading {
@@ -66,7 +84,8 @@ extension Platform02Threading {
             "算一算：120 Hz 的預算是幾 ms？掉一格（16.67 ms）要超過預算的 1.5 倍才算掉格，門檻是多少？",
             "選「修正版」執行：兩種手機都抓到實際的次數。",
         ],
-        expectBug: "60 Hz 的手機偵測到 2 次（正確）；120 Hz 的手機只偵測到 1 次，漏了 2 次（16.67 ms 的掉格都被當成正常）。",
+        expectBug:
+            "60 Hz 的手機偵測到 2 次（正確）；120 Hz 的手機只偵測到 1 次，漏了 2 次（16.67 ms 的掉格都被當成正常）。",
         expectFixed: "60 Hz 偵測到 2 次、120 Hz 偵測到 3 次，都和實際相同。",
         run: { variant, log in
             switch variant {
@@ -75,15 +94,24 @@ extension Platform02Threading {
             }
         },
         checkBug: { lines in
-            guard let a = detected(lines, prefix: "60 Hz 的手機：偵測到 "), let b = detected(lines, prefix: "120 Hz 的手機：偵測到 ") else { return "演練沒有跑完" }
-            if a != 2 { return "Bug 版的預算寫死 16.7 ms，60 Hz 的手機應該剛好偵測到 2 次（現在 \(a) 次）" }
+            guard let a = detected(lines, prefix: "60 Hz 的手機：偵測到 "),
+                let b = detected(lines, prefix: "120 Hz 的手機：偵測到 ")
+            else { return "演練沒有跑完" }
+            if a != 2 {
+                return "Bug 版的預算寫死 16.7 ms，60 Hz 的手機應該剛好偵測到 2 次（現在 \(a) 次）"
+            }
             if b >= 3 { return "Bug 還沒重現：Bug 版的預算要寫死 16.7，120 Hz 的手機就會漏掉掉格" }
             return nil
         },
         checkFixed: { lines in
-            guard let a = detected(lines, prefix: "60 Hz 的手機：偵測到 "), let b = detected(lines, prefix: "120 Hz 的手機：偵測到 ") else { return "演練沒有跑完" }
+            guard let a = detected(lines, prefix: "60 Hz 的手機：偵測到 "),
+                let b = detected(lines, prefix: "120 Hz 的手機：偵測到 ")
+            else { return "演練沒有跑完" }
             if a != 2 { return "60 Hz 的手機應該偵測到 2 次（現在 \(a) 次）" }
-            if b != 3 { return "120 Hz 的手機應該偵測到 3 次（現在 \(b) 次）：預算要依刷新率算，1000 ÷ refreshRate" }
+            if b != 3 {
+                return
+                    "120 Hz 的手機應該偵測到 3 次（現在 \(b) 次）：預算要依刷新率算，1000 ÷ refreshRate"
+            }
             return nil
         }
     )

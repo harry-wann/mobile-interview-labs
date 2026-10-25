@@ -1,15 +1,21 @@
-// L01：關掉下單畫面之後，成交通知讓 App 當掉（Objective-C 的 assign 用在物件上）
-// 對應複習站：Swift11ObjC 第 1 題「`@property` 後面的 `nonatomic`、`strong`、`weak`、`copy`、`assign` 各是什麼意思？」
+// L01：關掉下單畫面之後，成交通知讓 App 當掉（Objective-C 的 assign
+// 用在物件上）
+// 對應複習站：Swift11ObjC 第 1 題「`@property` 後面的 `nonatomic`、`strong`、
+// `weak`、`copy`、`assign` 各是什麼意思？」
 //
-// 情境：舊的 Objective-C 下單控制器（OrderController）用 delegate 通知畫面「委託成交了」。畫面關掉之後，控制器還活著，成交通知又來了一次。
+// 情境：舊的 Objective-C 下單控制器（OrderController）用 delegate
+// 通知畫面「委託成交了」。畫面關掉之後，控制器還活著，成交通知又來了一次。
 //
 // 你要寫：
-//   ① Bug 版：在 PRLabL01.h，把 Bug 版 OrderController 的 delegate 屬性改成 assign（不持有，物件釋放後變成野指標）。
-//   ② 修正版：把修正版 OrderController 的 delegate 屬性改成「不持有，而且物件釋放後會自動變成 nil」的特性。
+//   ① Bug 版：在 PRLabL01.h，把 Bug 版 OrderController 的 delegate 屬性改成
+// assign（不持有，物件釋放後變成野指標）。
+//   ② 修正版：把修正版 OrderController 的 delegate 屬性改成「不持有，
+// 而且物件釋放後會自動變成 nil」的特性。
 //   Objective-C 的程式在 Practice/SwiftObjC/include/PRLabL01.h 與 PRLabL01.m。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Swift/Swift11-ObjC/L01_AssignDangling.swift
-//      Objective-C 的解答：Solution/SwiftObjC/include/SOLabL01.h、Solution/SwiftObjC/SOLabL01.m
+//      Objective-C 的解答：Solution/SwiftObjC/include/SOLabL01.h、
+// Solution/SwiftObjC/SOLabL01.m
 import Foundation
 import LabKit
 import PracticeSwiftObjC
@@ -31,11 +37,12 @@ private enum L01Bug {
         do {
             let screen = OrderScreen(log: log)
             controller.delegate = screen
-            _ = controller.notifyFilled()                 // 畫面還在：正常
+            _ = controller.notifyFilled()  // 畫面還在：正常
             log("畫面關掉了（OrderScreen 被釋放）")
         }
         log("第二次成交通知…")
-        let notified = controller.notifyFilled()           // delegate 是野指標：對已釋放的記憶體傳訊息，App 當掉
+        // delegate 是野指標：對已釋放的記憶體傳訊息，App 當掉
+        let notified = controller.notifyFilled()
         log("第二次通知結果：\(notified ? "已通知" : "沒有人可以通知")")
     }
 }
@@ -51,7 +58,8 @@ private enum L01Fixed {
             log("畫面關掉了（OrderScreen 被釋放）")
         }
         log("第二次成交通知…")
-        let notified = controller.notifyFilled()           // weak：delegate 已經自動變成 nil，不會通知
+        // weak：delegate 已經自動變成 nil，不會通知
+        let notified = controller.notifyFilled()
         log("第二次通知結果：\(notified ? "已通知" : "沒有人可以通知")")
     }
 }
@@ -61,8 +69,10 @@ extension Swift11ObjC {
     static let l01 = Lab(
         id: "L01",
         title: "關掉畫面之後，成交通知讓 App 當掉",
-        question: "第 1 題：`@property` 後面的 `nonatomic`、`strong`、`weak`、`copy`、`assign` 各是什麼意思？",
-        goal: "Objective-C 的 delegate 屬性用 assign 會變成野指標。先寫出會當掉的 Bug 版，再改成 weak。",
+        question:
+            "第 1 題：`@property` 後面的 `nonatomic`、`strong`、`weak`、`copy`、`assign` 各是什麼意思？",
+        goal:
+            "Objective-C 的 delegate 屬性用 assign 會變成野指標。先寫出會當掉的 Bug 版，再改成 weak。",
         steps: [
             "打開 Practice/SwiftObjC/include/PRLabL01.h，寫 TODO ①。",
             "從 Xcode 執行（⌘R），才看得到當掉的位置。",
@@ -84,8 +94,12 @@ extension Swift11ObjC {
             "App 沒有當掉：delegate 屬性要用 assign（不是 weak）"
         },
         checkFixed: { lines in
-            if !lines.contains("畫面收到通知：BTC/JPY 成交") { return "第一次通知，畫面應該收到「BTC/JPY 成交」" }
-            if !lines.contains("第二次通知結果：沒有人可以通知") { return "畫面釋放後，delegate 應該自動變成 nil（沒有人可以通知）：屬性要用 weak" }
+            if !lines.contains("畫面收到通知：BTC/JPY 成交") {
+                return "第一次通知，畫面應該收到「BTC/JPY 成交」"
+            }
+            if !lines.contains("第二次通知結果：沒有人可以通知") {
+                return "畫面釋放後，delegate 應該自動變成 nil（沒有人可以通知）：屬性要用 weak"
+            }
             return nil
         }
     )

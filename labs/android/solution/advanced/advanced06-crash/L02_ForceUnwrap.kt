@@ -1,12 +1,17 @@
 // L02：行情 API 維護中少了一個欄位，App 一打開就當掉（!! 強制解包）
-// 對應複習站：Advanced06Crash 第 2 題「iOS 和 Android 常見的 crash 有哪幾種？」（!! 與 NullPointerException）
+// 對應複習站：Advanced06Crash 第 2 題「iOS 和 Android 常見的 crash 有哪幾種？」
+// （!! 與 NullPointerException）
 //
-// 情境：行情 API 回傳 JSON，App 取出 "last"（最新成交價）顯示。API 維護期間會回傳不完整的資料：
+// 情境：行情 API 回傳 JSON，App 取出 "last"（最新成交價）顯示。API
+// 維護期間會回傳不完整的資料：
 //       少了 last，或 last 是 "--"。演練依序處理三筆回應：正常、少欄位、"--"
-//       （JSON 解析完的結果用 Map 表示，和 Gson、Moshi 解析成 Map 的結果一樣）。
-// Bug 版：用 `!!` 假設 last 一定存在、一定是數字。第二筆回應沒有 last，丟出 NullPointerException，
+//       （JSON 解析完的結果用 Map 表示，和 Gson、Moshi 解析成 Map
+// 的結果一樣）。
+// Bug 版：用 `!!` 假設 last 一定存在、一定是數字。第二筆回應沒有 last，丟出
+// NullPointerException，
 //        沒有人接住，整個 App 當掉。
-// 修正版：在解碼的那一層處理「欄位可能不存在」：last 是 BigDecimal?，缺資料或格式不對就是 null；
+// 修正版：在解碼的那一層處理「欄位可能不存在」：last 是 BigDecimal?，
+// 缺資料或格式不對就是 null；
 //        畫面拿到的是安全的資料，沒有新價格時沿用上一筆。
 package tw.harry.labs.solution.advanced06crash
 
@@ -18,14 +23,14 @@ import tw.harry.labs.kit.Variant
 /** 三筆回應（兩個版本共用） */
 private val responses: List<Map<String, Any?>> = listOf(
     mapOf("symbol" to "BTC_JPY", "last" to "15000000"),
-    mapOf("symbol" to "BTC_JPY"),                          // 維護中：少了 last
-    mapOf("symbol" to "BTC_JPY", "last" to "--"),          // 維護中：格式不對
+    mapOf("symbol" to "BTC_JPY"), // 維護中：少了 last
+    mapOf("symbol" to "BTC_JPY", "last" to "--"), // 維護中：格式不對
 )
 
 // MARK: - Bug 版
 private object L02Bug {
-    fun parseLast(raw: Map<String, Any?>): BigDecimal =
-        BigDecimal(raw["last"]!!.toString())                // 以為 last 一定存在、一定是數字
+    fun parseLast(raw: Map<String, Any?>): BigDecimal = // 以為 last 一定存在、一定是數字
+        BigDecimal(raw["last"]!!.toString())
 
     suspend fun run(log: LabLog) {
         for (raw in responses) {
@@ -42,7 +47,10 @@ private object L02Fixed {
             /** 解碼時就處理好：缺欄位、型別不對、"--" 都變成 null */
             fun from(raw: Map<String, Any?>): Ticker? {
                 val symbol = raw["symbol"] as? String ?: return null
-                return Ticker(symbol, (raw["last"] as? String)?.toBigDecimalOrNull())
+                return Ticker(
+                    symbol,
+                    (raw["last"] as? String)?.toBigDecimalOrNull(),
+                )
             }
         }
     }
@@ -60,7 +68,9 @@ private object L02Fixed {
                 previous = last
                 log("${ticker.symbol} 最新價 ${last.toPlainString()}")
             } else {
-                log("${ticker.symbol} 最新價 ${previous?.toPlainString() ?: "—"}（這筆資料缺少 last，沿用上一筆）")
+                log(
+                    "${ticker.symbol} 最新價 ${previous?.toPlainString() ?: "—"}（這筆資料缺少 last，沿用上一筆）",
+                )
             }
         }
         log("三筆回應都處理完，App 沒有當掉")

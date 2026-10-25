@@ -8,8 +8,11 @@ import java.math.RoundingMode
 /** 從字串建立 BigDecimal（金額與數量不經過 Double） */
 fun e01(text: String): BigDecimal = BigDecimal(text)
 
-/** 把 BigDecimal 轉成不帶科學記號、沒有多餘 0 的文字（"2000000.0" → "2000000"） */
-fun e01Text(value: BigDecimal): String = value.stripTrailingZeros().toPlainString()
+/**
+ * 把 BigDecimal 轉成不帶科學記號、沒有多餘 0 的文字（"2000000.0" → "2000000"）
+ */
+fun e01Text(value: BigDecimal): String =
+    value.stripTrailingZeros().toPlainString()
 
 /** 成交的角色：TAKER 是吃掉板上既有的單，MAKER 是掛在板上等人來吃 */
 enum class E01Role { TAKER, MAKER }

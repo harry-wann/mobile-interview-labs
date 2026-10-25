@@ -1,8 +1,11 @@
 // L01：按了「取消」，價格卻還是被改掉（struct 和 class 的差別）
-// 對應複習站：Swift01ValueSemantics 第 1 題「struct 和 class 差在哪？什麼時候用哪個？」
+// 對應複習站：Swift01ValueSemantics 第 1 題「struct 和 class
+// 差在哪？什麼時候用哪個？」
 //
-// 情境：價格提醒清單，點一筆打開編輯畫面，改了價格之後可以按「取消」或「儲存」。
-// Bug 版：提醒用 class 寫。編輯畫面拿到的是「同一個物件」，還沒儲存，清單上的價格就已經變了，按取消也改不回來。
+// 情境：價格提醒清單，點一筆打開編輯畫面，改了價格之後可以按「取消」
+// 或「儲存」。
+// Bug 版：提醒用 class 寫。編輯畫面拿到的是「同一個物件」，還沒儲存，
+// 清單上的價格就已經變了，按取消也改不回來。
 // 修正版：提醒改用 struct。編輯畫面拿到的是自己的一份，按儲存時才寫回清單。
 import LabKit
 
@@ -24,7 +27,8 @@ private enum L01Bug {
         log("清單：\(alerts[0].symbol) 提醒價 \(alerts[0].price)")
 
         // 打開編輯畫面：把清單上的這一筆交給編輯畫面當草稿
-        let draft = alerts[0]          // class：只複製了參考，draft 和 alerts[0] 是同一個物件
+        // class：只複製了參考，draft 和 alerts[0] 是同一個物件
+        let draft = alerts[0]
         draft.price = 16_000_000
         log("編輯畫面把價格改成 \(draft.price)，還沒按儲存")
         log("這時清單上的價格：\(alerts[0].price)")
@@ -46,7 +50,8 @@ private enum L01Fixed {
         var alerts = [PriceAlert(symbol: "BTC/JPY", price: 15_000_000)]
         log("清單：\(alerts[0].symbol) 提醒價 \(alerts[0].price)")
 
-        var draft = alerts[0]          // struct：複製出一份新的資料，改 draft 不會影響清單
+        // struct：複製出一份新的資料，改 draft 不會影響清單
+        var draft = alerts[0]
         draft.price = 16_000_000
         log("編輯畫面把價格改成 \(draft.price)，還沒按儲存")
         log("這時清單上的價格：\(alerts[0].price)")
@@ -83,8 +88,12 @@ extension Swift01ValueSemantics {
                 ? nil : "取消後清單的價格沒有被改掉：Bug 還沒重現（draft 要和清單是同一個物件）"
         },
         checkFixed: { lines in
-            if !lines.contains("按下取消後，清單上的價格：15000000") { return "取消後清單的價格被改掉了：draft 要是自己的一份" }
-            if !lines.contains("（如果按儲存）清單上的價格：16000000") { return "按儲存後清單應該變成 16000000：要把 draft 寫回 alerts[0]" }
+            if !lines.contains("按下取消後，清單上的價格：15000000") {
+                return "取消後清單的價格被改掉了：draft 要是自己的一份"
+            }
+            if !lines.contains("（如果按儲存）清單上的價格：16000000") {
+                return "按儲存後清單應該變成 16000000：要把 draft 寫回 alerts[0]"
+            }
             return nil
         }
     )

@@ -1,15 +1,23 @@
 // L02：「撤單」測試單獨跑就失敗，換個順序也失敗（測試依賴別的測試留下的資料）
-// 對應複習站：Testing04E2E 第 2 題「交易所 App 的測試環境要注意什麼？」（每次測試前重設資料）
+// 對應複習站：Testing04E2E 第 2 題「交易所 App 的測試環境要注意什麼？」
+// （每次測試前重設資料）
 //
-// 情境：兩個 E2E 測試：A「限價買單後，未成交列表有這筆訂單」、B「撤單後，未成交列表是空的」。
-//       後端是 T04FakeExchange（每個帳號有自己的未成交訂單；createAccount() 建立全新的帳號）。
-//       演練用三種方式跑：依序 A→B、順序換成 B→A、只跑 B（例如只重跑失敗的測試）。每一輪開始前，後端都是乾淨的。
+// 情境：兩個 E2E 測試：A「限價買單後，未成交列表有這筆訂單」、B「撤單後，
+// 未成交列表是空的」。
+//       後端是 T04FakeExchange（每個帳號有自己的未成交訂單；createAccount()
+// 建立全新的帳號）。
+//       演練用三種方式跑：依序 A→B、順序換成 B→A、只跑
+// B（例如只重跑失敗的測試）。每一輪開始前，後端都是乾淨的。
 //
 // 你要寫：
-//   ① Bug 版：A、B 兩個測試都用共用帳號 "e2e-user"。A：placeLimitBuy 15_000_000，檢查 openOrders 筆數是 1。
-//      B：不自己下單，直接 cancelFirst，用 isTrue 檢查「撤得掉」，再檢查 openOrders 筆數是 0。
-//   ② 修正版：每個測試用 exchange.createAccount() 建立自己的帳號。A 同上。B 先自己 placeLimitBuy 當作前置條件，再撤單並檢查。
-// 只改有 TODO 的地方。解答：solution/testing/testing04-e2e/L02_OrderDependency.kt
+//   ① Bug 版：A、B 兩個測試都用共用帳號 "e2e-user"。A：placeLimitBuy
+// 15_000_000，檢查 openOrders 筆數是 1。
+//      B：不自己下單，直接 cancelFirst，用 isTrue 檢查「撤得掉」，再檢查
+// openOrders 筆數是 0。
+//   ② 修正版：每個測試用 exchange.createAccount() 建立自己的帳號。A 同上。B
+// 先自己 placeLimitBuy 當作前置條件，再撤單並檢查。
+// 只改有 TODO 的地方。解答：solution/testing/testing04-e2e/L02_OrderDependency.
+// kt
 package tw.harry.labs.practice.testing04e2e
 
 import tw.harry.labs.kit.Lab
@@ -19,9 +27,17 @@ import tw.harry.labs.kit.Variant
 private typealias L02Test = Pair<String, suspend (T04Expect) -> Unit>
 
 /** 演練流程（兩個版本共用）：同樣兩個測試，用三種順序各跑一輪 */
-private suspend fun scenario(log: LabLog, makeTests: (T04FakeExchange) -> List<L02Test>) {
-    for ((label, order) in listOf("順序 A→B" to listOf(0, 1), "順序 B→A" to listOf(1, 0), "只跑 B" to listOf(1))) {
-        val exchange = T04FakeExchange()                           // 每一輪開始前，後端都是乾淨的
+private suspend fun scenario(
+    log: LabLog,
+    makeTests: (T04FakeExchange) -> List<L02Test>,
+) {
+    for ((label, order) in listOf(
+        "順序 A→B" to listOf(0, 1),
+        "順序 B→A" to listOf(1, 0),
+        "只跑 B" to listOf(1),
+    )) {
+        // 每一輪開始前，後端都是乾淨的
+        val exchange = T04FakeExchange()
         val all = makeTests(exchange)
         val suite = T04Suite()
         for (i in order) suite.test(all[i].first, all[i].second)
@@ -33,10 +49,12 @@ private suspend fun scenario(log: LabLog, makeTests: (T04FakeExchange) -> List<L
 private object L02Bug {
     fun tests(exchange: T04FakeExchange): List<L02Test> = listOf(
         "A 限價買單後，未成交列表有這筆訂單" to { t ->
-            // TODO ①-1：用共用帳號 "e2e-user" placeLimitBuy(15_000_000)，t.equal 檢查 openOrders 的筆數是 1
+            // TODO ①-1：用共用帳號 "e2e-user" placeLimitBuy(15_000_000)，t.
+            // equal 檢查 openOrders 的筆數是 1
         },
         "B 撤單後，未成交列表是空的" to { t ->
-            // TODO ①-2：同一個帳號，不自己下單，直接 cancelFirst；t.isTrue 檢查撤得掉，t.equal 檢查 openOrders 的筆數是 0
+            // TODO ①-2：同一個帳號，不自己下單，直接 cancelFirst；t.isTrue
+            // 檢查撤得掉，t.equal 檢查 openOrders 的筆數是 0
         },
     )
 
@@ -47,11 +65,14 @@ private object L02Bug {
 private object L02Fixed {
     fun tests(exchange: T04FakeExchange): List<L02Test> = listOf(
         "A 限價買單後，未成交列表有這筆訂單" to { t ->
-            // TODO ②-1：val account = exchange.createAccount()；placeLimitBuy 15_000_000；t.equal 檢查 openOrders 的筆數是 1
+            // TODO ②-1：val account = exchange.createAccount()；placeLimitBuy
+            // 15_000_000；t.equal 檢查 openOrders 的筆數是 1
         },
         "B 撤單後，未成交列表是空的" to { t ->
-            // TODO ②-2：自己 createAccount()，先自己 placeLimitBuy 當作前置條件；
-            //          再 cancelFirst（t.isTrue 檢查撤得掉），t.equal 檢查 openOrders 的筆數是 0
+            // TODO ②-2：自己 createAccount()，先自己 placeLimitBuy
+            // 當作前置條件；
+            //          再 cancelFirst（t.isTrue 檢查撤得掉），t.equal 檢查
+            // openOrders 的筆數是 0
         },
     )
 

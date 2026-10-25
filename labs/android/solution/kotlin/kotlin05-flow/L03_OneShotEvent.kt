@@ -1,10 +1,15 @@
 // L03：旋轉螢幕後，又導航了一次（一次性事件不要用 StateFlow 的目前值）
-// 對應複習站：Kotlin05Flow 第 3 題「導航、Toast 這種一次性事件怎麼傳才不會掉？」
+// 對應複習站：Kotlin05Flow 第 3 題「導航、Toast
+// 這種一次性事件怎麼傳才不會掉？」
 //
-// 情境：下單成功後要導航到訂單詳情，這個事件只能處理一次。使用者下單後馬上旋轉螢幕，畫面被銷毀重建，新的畫面再開始收集。
-// Bug 版：ViewModel 用 StateFlow<String?> 傳「要導航到哪張訂單」，收集端導航後沒有清掉。
-//        StateFlow 永遠有「目前值」，新的 collector 一進來就先收到它，旋轉後又導航了一次。
-// 修正版：把事件放進 state（pendingNavigation），UI 導航完呼叫 onNavigated() 讓 ViewModel 清成 null。
+// 情境：下單成功後要導航到訂單詳情，這個事件只能處理一次。
+// 使用者下單後馬上旋轉螢幕，畫面被銷毀重建，新的畫面再開始收集。
+// Bug 版：ViewModel 用 StateFlow<String?> 傳「要導航到哪張訂單」，
+// 收集端導航後沒有清掉。
+//        StateFlow 永遠有「目前值」，新的 collector 一進來就先收到它，
+// 旋轉後又導航了一次。
+// 修正版：把事件放進 state（pendingNavigation），UI 導航完呼叫 onNavigated()
+// 讓 ViewModel 清成 null。
 //        新的 collector 進來看到的是 null，不會重複導航。
 package tw.harry.labs.solution.kotlin05flow
 
@@ -29,7 +34,8 @@ private object L03Bug {
         val navigateTo: StateFlow<String?> = _navigateTo.asStateFlow()
 
         fun onOrderPlaced(id: String) {
-            _navigateTo.value = id                           // 事件當成 StateFlow 的目前值
+            // 事件當成 StateFlow 的目前值
+            _navigateTo.value = id
         }
     }
 
@@ -37,25 +43,29 @@ private object L03Bug {
         val navigations = AtomicInteger(0)
         val vm = OrderViewModel()
         coroutineScope {
-            val screenBeforeRotate = launch(start = CoroutineStart.UNDISPATCHED) {
-                vm.navigateTo.collect { id ->
-                    if (id != null) {
-                        navigations.incrementAndGet()
-                        log("旋轉前的畫面：導航到訂單 $id")
+            val screenBeforeRotate =
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    vm.navigateTo.collect { id ->
+                        if (id != null) {
+                            navigations.incrementAndGet()
+                            log("旋轉前的畫面：導航到訂單 $id")
+                        }
                     }
                 }
-            }
             vm.onOrderPlaced("o-1")
             delay(50)
-            screenBeforeRotate.cancelAndJoin()               // 旋轉螢幕：畫面被銷毀
-            val screenAfterRotate = launch(start = CoroutineStart.UNDISPATCHED) {
-                vm.navigateTo.collect { id ->                // 新的畫面一開始收集，先收到目前值 o-1
-                    if (id != null) {
-                        navigations.incrementAndGet()
-                        log("旋轉後的畫面：導航到訂單 $id")
+            // 旋轉螢幕：畫面被銷毀
+            screenBeforeRotate.cancelAndJoin()
+            val screenAfterRotate =
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    // 新的畫面一開始收集，先收到目前值 o-1
+                    vm.navigateTo.collect { id ->
+                        if (id != null) {
+                            navigations.incrementAndGet()
+                            log("旋轉後的畫面：導航到訂單 $id")
+                        }
                     }
                 }
-            }
             delay(50)
             screenAfterRotate.cancelAndJoin()
         }
@@ -72,11 +82,13 @@ private object L03Fixed {
         val state: StateFlow<OrderUiState> = _state.asStateFlow()
 
         fun onOrderPlaced(id: String) {
-            _state.update { it.copy(pendingNavigation = id) }   // 把「要導航」存進 state
+            // 把「要導航」存進 state
+            _state.update { it.copy(pendingNavigation = id) }
         }
 
         fun onNavigated() {
-            _state.update { it.copy(pendingNavigation = null) } // UI 導航完，通知 ViewModel 清掉
+            // UI 導航完，通知 ViewModel 清掉
+            _state.update { it.copy(pendingNavigation = null) }
         }
     }
 
@@ -84,27 +96,30 @@ private object L03Fixed {
         val navigations = AtomicInteger(0)
         val vm = OrderViewModel()
         coroutineScope {
-            val screenBeforeRotate = launch(start = CoroutineStart.UNDISPATCHED) {
-                vm.state.collect { state ->
-                    state.pendingNavigation?.let { id ->
-                        navigations.incrementAndGet()
-                        log("旋轉前的畫面：導航到訂單 $id")
-                        vm.onNavigated()                     // 處理完就清掉
+            val screenBeforeRotate =
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    vm.state.collect { state ->
+                        state.pendingNavigation?.let { id ->
+                            navigations.incrementAndGet()
+                            log("旋轉前的畫面：導航到訂單 $id")
+                            vm.onNavigated() // 處理完就清掉
+                        }
                     }
                 }
-            }
             vm.onOrderPlaced("o-1")
             delay(50)
-            screenBeforeRotate.cancelAndJoin()               // 旋轉螢幕：畫面被銷毀
-            val screenAfterRotate = launch(start = CoroutineStart.UNDISPATCHED) {
-                vm.state.collect { state ->
-                    state.pendingNavigation?.let { id ->
-                        navigations.incrementAndGet()
-                        log("旋轉後的畫面：導航到訂單 $id")
-                        vm.onNavigated()
+            // 旋轉螢幕：畫面被銷毀
+            screenBeforeRotate.cancelAndJoin()
+            val screenAfterRotate =
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    vm.state.collect { state ->
+                        state.pendingNavigation?.let { id ->
+                            navigations.incrementAndGet()
+                            log("旋轉後的畫面：導航到訂單 $id")
+                            vm.onNavigated()
+                        }
                     }
                 }
-            }
             delay(50)
             screenAfterRotate.cancelAndJoin()
         }

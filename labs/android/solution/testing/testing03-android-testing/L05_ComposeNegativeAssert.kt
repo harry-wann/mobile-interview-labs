@@ -1,18 +1,28 @@
-// L05：下單表單一直顯示錯誤訊息，Compose UI 測試卻顯示通過（assertDoesNotExist 找錯名字）
+// L05：下單表單一直顯示錯誤訊息，Compose UI 測試卻顯示通過（assertDoesNotExist
+// 找錯名字）
 // 對應複習站：Testing03AndroidTesting 第 5 題「畫面要怎麼測？」
 //
-// 這題在電腦上跑單元測試（JVM，用 Robolectric 模擬 Android，不用模擬器），沒有「執行」按鈕。
-// 測試在 solution/testing/test/Testing03L05Test.kt。第一次執行 Robolectric 會下載 Android 的模擬環境，要等一下。
+// 這題在電腦上跑單元測試（JVM，用 Robolectric 模擬 Android，不用模擬器），
+// 沒有「執行」按鈕。
+// 測試在 solution/testing/test/Testing03L05Test.kt。第一次執行 Robolectric
+// 會下載 Android 的模擬環境，要等一下。
 //
-// 情境：下單表單在「數量低於 10,000 satoshi」時，要用 testTag 是 "order.error" 的文字顯示「數量低於最小下單量」。
-//       測試要驗證「數量足夠時，不會顯示錯誤訊息」。演練把同一個測試，分別對三個實作各跑一次：
+// 情境：下單表單在「數量低於 10,000 satoshi」時，要用 testTag 是 "order.error"
+// 的文字顯示「數量低於最小下單量」。
+//       測試要驗證「數量足夠時，不會顯示錯誤訊息」。演練把同一個測試，
+// 分別對三個實作各跑一次：
 //       正確的、一直顯示錯誤訊息的、從來不顯示錯誤訊息的。
-// Bug 版：數量足夠時，用 onNodeWithTag("order.errorLabel").assertDoesNotExist() 檢查。
-//        標籤名字寫錯了（實際是 "order.error"）：找不到這個元件，所以 assertDoesNotExist() 永遠通過。
+// Bug 版：數量足夠時，用 onNodeWithTag("order.errorLabel").
+// assertDoesNotExist() 檢查。
+//        標籤名字寫錯了（實際是 "order.error"）：找不到這個元件，所以
+// assertDoesNotExist() 永遠通過。
 //        一直顯示錯誤訊息的實作也通過（假的綠燈）。
-// 修正版：加上「有錯誤時，同一個標籤真的找得到、而且文字正確」的檢查（positive control）：
-//        數量足夠時 order.error 不存在；數量不足時 order.error 存在、文字是「數量低於最小下單量」。
-//        標籤寫錯就會在第二個檢查失敗；一直顯示或從來不顯示錯誤訊息的實作，也各有一個檢查失敗。
+// 修正版：加上「有錯誤時，同一個標籤真的找得到、而且文字正確」的檢查（positive
+// control）：
+//        數量足夠時 order.error 不存在；數量不足時 order.error 存在、
+// 文字是「數量低於最小下單量」。
+//        標籤寫錯就會在第二個檢查失敗；一直顯示或從來不顯示錯誤訊息的實作，
+// 也各有一個檢查失敗。
 package tw.harry.labs.solution.testing03androidtesting
 
 import androidx.compose.foundation.layout.Column
@@ -40,15 +50,21 @@ private fun T03OrderFormBody(amountSatoshi: Int, showError: Boolean) {
 
 /** 正確的實作：數量低於 10,000 satoshi 才顯示錯誤訊息 */
 @Composable
-fun T03OrderFormCorrect(amountSatoshi: Int) = T03OrderFormBody(amountSatoshi, showError = amountSatoshi < 10_000)
+fun T03OrderFormCorrect(amountSatoshi: Int) = T03OrderFormBody(
+    amountSatoshi,
+    showError =
+        amountSatoshi < 10_000,
+)
 
 /** 被改壞：一直顯示錯誤訊息 */
 @Composable
-fun T03OrderFormAlwaysError(amountSatoshi: Int) = T03OrderFormBody(amountSatoshi, showError = true)
+fun T03OrderFormAlwaysError(amountSatoshi: Int) =
+    T03OrderFormBody(amountSatoshi, showError = true)
 
 /** 被改壞：從來不顯示錯誤訊息 */
 @Composable
-fun T03OrderFormNeverError(amountSatoshi: Int) = T03OrderFormBody(amountSatoshi, showError = false)
+fun T03OrderFormNeverError(amountSatoshi: Int) =
+    T03OrderFormBody(amountSatoshi, showError = false)
 
 // MARK: - 演練設定
 val l05 = Lab(

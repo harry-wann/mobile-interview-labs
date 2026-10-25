@@ -1,13 +1,18 @@
 // L04：把停止旗標設成 false 了，背景迴圈卻停不下來（可見性：@Volatile）
-// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）在規範什麼？什麼是可見性？」
+// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）
+// 在規範什麼？什麼是可見性？」
 //
-// 情境：Poller 在背景執行緒用 while (running) 持續輪詢行情，另一條執行緒呼叫 stop() 把 running 設成 false 要它停下來。
+// 情境：Poller 在背景執行緒用 while (running) 持續輪詢行情，另一條執行緒呼叫
+// stop() 把 running 設成 false 要它停下來。
 //        演練先讓迴圈跑 100 ms，呼叫 stop()，再等 300 ms，看迴圈結束了沒有。
-//        為了不讓 Bug 版一直空轉，迴圈最多跑 10 億圈（約 1 到 3 秒）就自己結束。
+//        為了不讓 Bug 版一直空轉，迴圈最多跑 10 億圈（約 1 到 3 秒）
+// 就自己結束。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.Poller）：var running = true，不加 @Volatile。stop() 設成 false 之後，迴圈可能停不下來。
-//   ② 修正版（L04Fixed.Poller）：@Volatile var running = true，stop() 之後迴圈很快結束。
+//   ① Bug 版（L04Bug.Poller）：var running = true，不加 @Volatile。stop() 設成
+// false 之後，迴圈可能停不下來。
+//   ② 修正版（L04Fixed.Poller）：@Volatile var running = true，stop()
+// 之後迴圈很快結束。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin10-java-interop/L04_StopFlag.kt
 package tw.harry.labs.practice.kotlin10javainterop
@@ -42,15 +47,17 @@ private suspend fun scenario(log: LabLog, loop: () -> Unit, stop: () -> Unit) {
 // MARK: - Bug 版
 private object L04Bug {
     class Poller {
-        // TODO ①：var running = true（沒有 @Volatile）。現在的初始值是 false，迴圈一開始就結束了
+        // TODO ①：var running = true（沒有 @Volatile）。現在的初始值是 false，
+        // 迴圈一開始就結束了
         var running = false
         var spins = 0L
 
         fun loop() {
             var hash = 1L
             var i = 0L
-            while (running && i < MAX_SPINS) {              // JIT 可能把 running 的讀取移到迴圈外
-                hash = hash * 31 + i                        // 模擬輪詢的工作
+            // JIT 可能把 running 的讀取移到迴圈外
+            while (running && i < MAX_SPINS) {
+                hash = hash * 31 + i // 模擬輪詢的工作
                 i++
             }
             spins = i + hash
@@ -70,7 +77,8 @@ private object L04Bug {
 // MARK: - 修正版
 private object L04Fixed {
     class Poller {
-        // TODO ②：@Volatile var running = true（每次讀都讀最新的值）。現在的初始值是 false，迴圈一開始就結束了
+        // TODO ②：@Volatile var running = true（每次讀都讀最新的值）。
+        // 現在的初始值是 false，迴圈一開始就結束了
         var running = false
         var spins = 0L
 

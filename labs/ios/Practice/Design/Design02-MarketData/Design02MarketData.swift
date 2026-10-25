@@ -6,6 +6,7 @@ enum Design02MarketData {
         id: "sysdesign-market",
         code: "Design02MarketData",
         title: "即時行情模組",
-        labs: [l01, l02, l03, l04]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04]
     )
 }

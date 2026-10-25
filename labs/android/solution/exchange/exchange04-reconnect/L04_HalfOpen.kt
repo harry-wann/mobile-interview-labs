@@ -1,12 +1,19 @@
-// L04：走出電梯，行情停在 9 秒前的價格，卻沒有重連（半開連線，App 自己送出的 ping 騙了監看）
-// 對應複習站：Exchange04Reconnect 第 4 題「系統說「有網路」就真的連得上嗎？什麼是半開連線？」
+// L04：走出電梯，行情停在 9 秒前的價格，卻沒有重連（半開連線，App 自己送出的
+// ping 騙了監看）
+// 對應複習站：Exchange04Reconnect 第 4 題「系統說「有網路」
+// 就真的連得上嗎？什麼是半開連線？」
 //
-// 情境：半開連線：連線在 App 這端看起來還開著，但對方其實已經收不到你、你也收不到資料；系統不會通知，也不會觸發 onClosed 的回呼。
-//        App 每 5 秒主動送一次 ping（寫進本機的傳送緩衝就算「送出成功」，半開的連線也一樣）。
-//        演練用虛擬的時間，一秒一秒跑 60 秒：前 10 秒（第 0 到 9 秒）每秒收到一則行情，之後什麼都收不到。
+// 情境：半開連線：連線在 App 這端看起來還開著，但對方其實已經收不到你、
+// 你也收不到資料；系統不會通知，也不會觸發 onClosed 的回呼。
+//        App 每 5 秒主動送一次 ping（寫進本機的傳送緩衝就算「送出成功」，
+// 半開的連線也一樣）。
+//        演練用虛擬的時間，一秒一秒跑 60 秒：前 10 秒（第 0 到 9 秒）
+// 每秒收到一則行情，之後什麼都收不到。
 //        應用層的監看：超過 15 秒沒有「活動」，就主動關閉連線並重連。
-// Bug 版：監看把「送出」也算成活動：每次送 ping，最後活動時間就更新。半開連線送得出去、什麼都收不到，最後活動時間永遠是剛剛，監看永遠不會觸發。
-// 修正版：只有「收到」伺服器的訊息才更新最後活動時間；超過 15 秒沒有收到任何訊息，就判定連線已死。
+// Bug 版：監看把「送出」也算成活動：每次送 ping，最後活動時間就更新。
+// 半開連線送得出去、什麼都收不到，最後活動時間永遠是剛剛，監看永遠不會觸發。
+// 修正版：只有「收到」伺服器的訊息才更新最後活動時間；超過 15
+// 秒沒有收到任何訊息，就判定連線已死。
 package tw.harry.labs.solution.exchange04reconnect
 
 import tw.harry.labs.kit.Lab
@@ -25,8 +32,10 @@ private fun scenario(log: LabLog, watchdog: Watchdog) {
     var detectedAt: Int? = null
     for (second in 0..60) {
         val now = second * 1000L
-        if (second <= 9) watchdog.didReceive(now)               // 前 10 秒每秒收到一則行情
-        if (second % 5 == 0) watchdog.didSend(now)              // App 每 5 秒送一次 ping（半開連線也寫得進本機緩衝）
+        // 前 10 秒每秒收到一則行情
+        if (second <= 9) watchdog.didReceive(now)
+        // App 每 5 秒送一次 ping（半開連線也寫得進本機緩衝）
+        if (second % 5 == 0) watchdog.didSend(now)
         if (watchdog.isDead(now)) {
             detectedAt = second
             log("第 $second 秒：超過 15 秒沒有收到任何訊息，判定連線已死，主動關閉並重連")
@@ -47,7 +56,8 @@ private object L04Bug {
         override var lastActivityMs = 0L
             private set
 
-        override fun didSend(nowMs: Long) { lastActivityMs = nowMs }        // 送出也算活動
+        // 送出也算活動
+        override fun didSend(nowMs: Long) { lastActivityMs = nowMs }
         override fun didReceive(nowMs: Long) { lastActivityMs = nowMs }
         override fun isDead(nowMs: Long) = nowMs - lastActivityMs > 15_000
     }
@@ -61,8 +71,11 @@ private object L04Fixed {
         override var lastActivityMs = 0L
             private set
 
-        override fun didSend(nowMs: Long) {}                                // 送出成功不代表對方收到，不算活動
-        override fun didReceive(nowMs: Long) { lastActivityMs = nowMs }     // 只有收到伺服器的訊息才更新
+        // 送出成功不代表對方收到，不算活動
+        override fun didSend(nowMs: Long) {}
+
+        // 只有收到伺服器的訊息才更新
+        override fun didReceive(nowMs: Long) { lastActivityMs = nowMs }
         override fun isDead(nowMs: Long) = nowMs - lastActivityMs > 15_000
     }
 
@@ -92,17 +105,29 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後一次活動是第") } -> "演練沒有跑完：要用 scenario(log, watchdog) 執行"
+            lines.none {
+                it.startsWith("最後一次活動是第")
+            } -> "演練沒有跑完：要用 scenario(log, watchdog) 執行"
+
             "最後一次活動是第 60 秒" !in lines -> "Bug 還沒重現：didSend 也要更新 lastActivityMs（把送出也算活動），最後一次活動才會是第 60 秒"
-            lines.none { it.startsWith("60 秒內都沒有偵測到") } -> "Bug 版的監看永遠不會觸發：isDead 是「現在 − 最後活動時間 > 15000」"
+
+            lines.none {
+                it.startsWith("60 秒內都沒有偵測到")
+            } -> "Bug 版的監看永遠不會觸發：isDead 是「現在 − 最後活動時間 > 15000」"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後一次活動是第") } -> "演練沒有跑完：要用 scenario(log, watchdog) 執行"
+            lines.none {
+                it.startsWith("最後一次活動是第")
+            } -> "演練沒有跑完：要用 scenario(log, watchdog) 執行"
+
             "最後一次活動是第 9 秒" !in lines -> "只有 didReceive 更新 lastActivityMs，didSend 什麼都不做"
+
             "第 25 秒：超過 15 秒沒有收到任何訊息，判定連線已死，主動關閉並重連" !in lines -> "isDead 應該是「現在 − 最後活動時間 > 15000」：第 9 秒之後過了 15 秒，第 25 秒才超過"
+
             else -> null
         }
     },

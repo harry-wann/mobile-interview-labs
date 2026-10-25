@@ -6,6 +6,7 @@ enum Coding03ExchangeAlgorithms {
         id: "livecoding-exchange",
         code: "Coding03ExchangeAlgorithms",
         title: "交易所情境題",
-        labs: [l01, l02, l03, l04, l05]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05]
     )
 }

@@ -1,9 +1,14 @@
-// L09：查詢價格的錯誤分支忘了 resume，呼叫端永遠等不到結果（continuation 從不 resume）
-// 對應複習站：Swift04StructuredConcurrency 第 5 題「continuation 是什麼？把舊的 callback 接成 async 時有哪三種常見誤用？」
+// L09：查詢價格的錯誤分支忘了 resume，呼叫端永遠等不到結果（continuation 從不
+// resume）
+// 對應複習站：Swift04StructuredConcurrency 第 5 題「continuation
+// 是什麼？把舊的 callback 接成 async 時有哪三種常見誤用？」
 //
-// 情境：舊的價格查詢 API 用 completion handler 回傳：成功給價格，失敗（例如交易對不存在）給錯誤。
-// Bug 版：包成 async 函式時，只在成功的分支 resume。查一個不存在的交易對，錯誤分支沒有 resume，呼叫端永遠卡在 await。
-// 修正版：callback 的每一個分支都 resume 一次：成功回傳價格，失敗丟出錯誤（先轉成 Result，只在最後 resume 一次）。
+// 情境：舊的價格查詢 API 用 completion handler 回傳：成功給價格，
+// 失敗（例如交易對不存在）給錯誤。
+// Bug 版：包成 async 函式時，只在成功的分支 resume。查一個不存在的交易對，
+// 錯誤分支沒有 resume，呼叫端永遠卡在 await。
+// 修正版：callback 的每一個分支都 resume 一次：成功回傳價格，
+// 失敗丟出錯誤（先轉成 Result，只在最後 resume 一次）。
 import Foundation
 import LabKit
 
@@ -21,16 +26,23 @@ private final class Outcome: @unchecked Sendable {
 
 /// 舊的價格查詢 API（兩個版本共用）：0.1 秒後呼叫 completion
 private final class LegacyPriceAPI: @unchecked Sendable {
-    func fetch(_ symbol: String, completion: @escaping @Sendable (Result<Int, Error>) -> Void) {
+    func fetch(
+        _ symbol: String,
+        completion: @escaping @Sendable (Result<Int, Error>) -> Void
+    ) {
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
-            completion(symbol == "BTC/JPY" ? .success(15_000_000) : .failure(PriceError()))
+            completion(
+                symbol == "BTC/JPY"
+                    ? .success(15_000_000) : .failure(PriceError()))
         }
     }
 }
 
 // MARK: - Bug 版
 private enum L09Bug {
-    static func fetchPrice(_ symbol: String, api: LegacyPriceAPI) async throws -> Int {
+    static func fetchPrice(
+        _ symbol: String, api: LegacyPriceAPI
+    ) async throws -> Int {
         try await withCheckedThrowingContinuation { continuation in
             api.fetch(symbol) { result in
                 if case .success(let price) = result {
@@ -45,8 +57,10 @@ private enum L09Bug {
         let api = LegacyPriceAPI()
         let outcome = Outcome()
         Task {
-            do { outcome.set("價格 \(try await fetchPrice("DOGE/JPY", api: api))") }
-            catch { outcome.set("錯誤（\(error)）") }              // 有結果（成功或失敗）才會執行到這裡
+            do {
+                outcome.set("價格 \(try await fetchPrice("DOGE/JPY", api: api))")
+            }// 有結果（成功或失敗）才會執行到這裡
+            catch { outcome.set("錯誤（\(error)）") }
         }
         try? await Task.sleep(for: .seconds(1))
         log("查詢不存在的交易對，等了 1 秒：\(outcome.value ?? "呼叫端還在等")")
@@ -55,10 +69,13 @@ private enum L09Bug {
 
 // MARK: - 修正版
 private enum L09Fixed {
-    static func fetchPrice(_ symbol: String, api: LegacyPriceAPI) async throws -> Int {
+    static func fetchPrice(
+        _ symbol: String, api: LegacyPriceAPI
+    ) async throws -> Int {
         try await withCheckedThrowingContinuation { continuation in
             api.fetch(symbol) { result in
-                continuation.resume(with: result)               // 成功、失敗都 resume，而且只 resume 一次
+                // 成功、失敗都 resume，而且只 resume 一次
+                continuation.resume(with: result)
             }
         }
     }
@@ -67,8 +84,9 @@ private enum L09Fixed {
         let api = LegacyPriceAPI()
         let outcome = Outcome()
         Task {
-            do { outcome.set("價格 \(try await fetchPrice("DOGE/JPY", api: api))") }
-            catch { outcome.set("錯誤（\(error)）") }
+            do {
+                outcome.set("價格 \(try await fetchPrice("DOGE/JPY", api: api))")
+            } catch { outcome.set("錯誤（\(error)）") }
         }
         try? await Task.sleep(for: .seconds(1))
         log("查詢不存在的交易對，等了 1 秒：\(outcome.value ?? "呼叫端還在等")")
@@ -102,7 +120,8 @@ extension Swift04StructuredConcurrency {
         },
         checkFixed: { lines in
             lines.last == "查詢不存在的交易對，等了 1 秒：錯誤（交易對不存在）"
-                ? nil : "呼叫端應該收到「交易對不存在」的錯誤：fetchPrice 要把 result 的成功與失敗都 resume 出去"
+                ? nil
+                : "呼叫端應該收到「交易對不存在」的錯誤：fetchPrice 要把 result 的成功與失敗都 resume 出去"
         }
     )
 }

@@ -1,23 +1,30 @@
 // L02：struct 不一定比較快（複製 struct 時，裡面的 class 欄位都要 retain）
 // 對應複習站：Swift01ValueSemantics 第 2 題「struct 一定比 class 快嗎？」
 //
-// 情境：行情推播每一筆報價都要經過「解析 → 過濾 → 換算」三個函式，每經過一個函式就複製一次。
-// Bug 版：報價 struct 裡放了 4 個 class 欄位。每複製一次，4 個物件的引用計數都要 +1、用完再 −1。
-// 修正版：報價只放數字（幣種用編號表示），複製就是單純的記憶體複製，沒有 retain／release。
+// 情境：行情推播每一筆報價都要經過「解析 → 過濾 → 換算」三個函式，
+// 每經過一個函式就複製一次。
+// Bug 版：報價 struct 裡放了 4 個 class 欄位。每複製一次，4
+// 個物件的引用計數都要 +1、用完再 −1。
+// 修正版：報價只放數字（幣種用編號表示），複製就是單純的記憶體複製，沒有
+// retain／release。
 //
 // 注意：Debug 下編譯器沒有最佳化，兩個版本都慢，差距只有約 1.5 倍。
-// 想看真實的差距：Product › Scheme › Edit Scheme › Run › Build Configuration 改成 Release（本機實測約 51 ms 對 2 ms）。
+// 想看真實的差距：Product › Scheme › Edit Scheme › Run › Build Configuration
+// 改成 Release（本機實測約 51 ms 對 2 ms）。
 import Foundation
 import LabKit
 
 /// 數一個值裡有幾個 class 型別的欄位（兩個版本共用）
 private func classFieldCount(_ value: Any) -> Int {
-    Mirror(reflecting: value).children.filter { Swift.type(of: $0.value) is AnyClass }.count
+    Mirror(reflecting: value).children.filter {
+        Swift.type(of: $0.value) is AnyClass
+    }.count
 }
 
 /// 列出一個值的欄位名稱
 private func fieldNames(_ value: Any) -> String {
-    Mirror(reflecting: value).children.compactMap(\.label).joined(separator: ", ")
+    Mirror(reflecting: value).children.compactMap(\.label).joined(
+        separator: ", ")
 }
 
 // MARK: - Bug 版
@@ -46,7 +53,9 @@ private enum L02Bug {
     }
 
     static func run(_ log: LabLog) async {
-        let base = Quote(symbol: SymbolInfo(), exchange: ExchangeInfo(), tags: Tags(), meta: Meta(), price: 0, qty: 1)
+        let base = Quote(
+            symbol: SymbolInfo(), exchange: ExchangeInfo(), tags: Tags(),
+            meta: Meta(), price: 0, qty: 1)
         log("Quote 的欄位：\(fieldNames(base))；class 欄位 \(classFieldCount(base)) 個")
         let ms = await Task.detached { () -> Int in
             let start = DispatchTime.now()
@@ -54,11 +63,14 @@ private enum L02Bug {
             for i in 0..<1_000_000 {
                 var q = base
                 q.price = Int64(i)
-                q = convert(filter(parse(q)))     // 每經過一個函式就複製一次
+                // 每經過一個函式就複製一次
+                q = convert(filter(parse(q)))
                 total &+= q.price
             }
             _ = total
-            return Int((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+            return Int(
+                (DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+                    / 1_000_000)
         }.value
         log("處理 100 萬筆報價：\(ms) ms")
     }
@@ -91,11 +103,14 @@ private enum L02Fixed {
             for i in 0..<1_000_000 {
                 var q = base
                 q.price = Int64(i)
-                q = convert(filter(parse(q)))     // 複製的只是 24 bytes 的數字
+                // 複製的只是 24 bytes 的數字
+                q = convert(filter(parse(q)))
                 total &+= q.price
             }
             _ = total
-            return Int((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+            return Int(
+                (DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+                    / 1_000_000)
         }.value
         log("處理 100 萬筆報價：\(ms) ms")
     }
@@ -114,7 +129,8 @@ extension Swift01ValueSemantics {
             "把 Scheme 的 Build Configuration 改成 Release，兩個版本再各量一次。",
             "進階：用 Instruments 的 Time Profiler 錄 Bug 版，找 swift_retain／swift_release 占了多少時間。",
         ],
-        expectBug: "比修正版慢。Debug 下大約慢 1.5 倍；Release 下差到 20 倍以上（本機實測約 51 ms 對 2 ms）。多出來的時間花在 retain／release。",
+        expectBug:
+            "比修正版慢。Debug 下大約慢 1.5 倍；Release 下差到 20 倍以上（本機實測約 51 ms 對 2 ms）。多出來的時間花在 retain／release。",
         expectFixed: "Quote 裡沒有 class 欄位，複製只是搬數字，幾乎不花時間。",
         run: { variant, log in
             switch variant {
@@ -123,11 +139,17 @@ extension Swift01ValueSemantics {
             }
         },
         checkBug: { lines in
-            lines.contains { $0.hasSuffix("class 欄位 4 個") } ? nil : "Bug 版的 Quote 要有 4 個 class 欄位（symbol、exchange、tags、meta）"
+            lines.contains { $0.hasSuffix("class 欄位 4 個") }
+                ? nil
+                : "Bug 版的 Quote 要有 4 個 class 欄位（symbol、exchange、tags、meta）"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasSuffix("class 欄位 0 個") }) { return "修正版的 Quote 不要有 class 欄位，只放數字" }
-            if !lines.contains(where: { $0.contains("symbolID") }) { return "修正版的 Quote 要用 symbolID、exchangeID 這種編號代替 class 欄位" }
+            if !lines.contains(where: { $0.hasSuffix("class 欄位 0 個") }) {
+                return "修正版的 Quote 不要有 class 欄位，只放數字"
+            }
+            if !lines.contains(where: { $0.contains("symbolID") }) {
+                return "修正版的 Quote 要用 symbolID、exchangeID 這種編號代替 class 欄位"
+            }
             return nil
         }
     )

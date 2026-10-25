@@ -1,10 +1,15 @@
 // L01：價格每秒跳好幾次，整個畫面都跟著重組（State 在哪裡讀，哪裡就重組）
-// 對應複習站：Kotlin06Recomposition 第 1 題「什麼是重組？State 變了，畫面上哪一塊會重畫？」
+// 對應複習站：Kotlin06Recomposition 第 1 題「什麼是重組？State 變了，
+// 畫面上哪一塊會重畫？」
 //
-// 情境：行情畫面有標題區（ChartHeader）和價格文字。價格每 250 ms 更新一次，共 20 次。畫面上的橘色數字顯示「重組幾次」。
-// Bug 版：在 PriceScreen 的最上層讀 price，並把 Text 寫在 Column { } 裡。Column 是 inline 函式，
-//        大括號裡的內容等於直接寫在 PriceScreen 裡，所以每次 price 變，整個 PriceScreen 都重新執行。
-// 修正版：把「讀 price」的地方往下推到小的 PriceText。price 變了，只有 PriceText 重組，PriceScreen 完全不動。
+// 情境：行情畫面有標題區（ChartHeader）和價格文字。價格每 250 ms 更新一次，共
+// 20 次。畫面上的橘色數字顯示「重組幾次」。
+// Bug 版：在 PriceScreen 的最上層讀 price，並把 Text 寫在 Column { } 裡。
+// Column 是 inline 函式，
+//        大括號裡的內容等於直接寫在 PriceScreen 裡，所以每次 price 變，整個
+// PriceScreen 都重新執行。
+// 修正版：把「讀 price」的地方往下推到小的 PriceText。price 變了，只有
+// PriceText 重組，PriceScreen 完全不動。
 package tw.harry.labs.solution.kotlin06recomposition
 
 import androidx.compose.foundation.layout.Arrangement
@@ -39,11 +44,13 @@ private fun ChartHeader(title: String) {
 private object L01Bug {
     @Composable
     fun PriceScreen(prices: StateFlow<Long>) {
-        val price by prices.collectAsState()                // 在最上層讀取 price
+        // 在最上層讀取 price
+        val price by prices.collectAsState()
         Column {
             RecomposeCounter("PriceScreen")
             ChartHeader("BTC/JPY")
-            Text("價格：$price")                              // Column 是 inline：這一行算在 PriceScreen 身上
+            // Column 是 inline：這一行算在 PriceScreen 身上
+            Text("價格：$price")
         }
     }
 }
@@ -55,13 +62,15 @@ private object L01Fixed {
         Column {
             RecomposeCounter("PriceScreen")
             ChartHeader("BTC/JPY")
-            PriceText(prices)                               // 這裡只傳 Flow，沒有讀 price
+            // 這裡只傳 Flow，沒有讀 price
+            PriceText(prices)
         }
     }
 
     @Composable
     fun PriceText(prices: StateFlow<Long>) {
-        val price by prices.collectAsState()                // 讀取只發生在這個小函式裡
+        // 讀取只發生在這個小函式裡
+        val price by prices.collectAsState()
         RecomposeCounter("PriceText")
         Text("價格：$price")
     }

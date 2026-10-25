@@ -16,7 +16,11 @@ extension Swift06AsyncStream {
         private let lock = NSLock()
         private var now = 0
         private var maximum = 0
-        func set(_ value: Int) { lock.withLock { now = value; maximum = max(maximum, value) } }
+        func set(_ value: Int) {
+            lock.withLock {
+                now = value; maximum = max(maximum, value)
+            }
+        }
         var current: Int { lock.withLock { now } }
         var peak: Int { lock.withLock { maximum } }
     }

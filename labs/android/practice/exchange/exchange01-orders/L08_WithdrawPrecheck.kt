@@ -1,15 +1,21 @@
 // L08：出庫送出去才被伺服器退回（地址還在審核中，餘額也不夠付手續費）
-// 對應複習站：Exchange01Orders 第 6 題「積立、貸暗号資産、入出金和入出庫（含トラベルルール）是什麼？」
+// 對應複習站：Exchange01Orders 第 6 題「積立、貸暗号資産、
+// 入出金和入出庫（含トラベルルール）是什麼？」
 //
-// 情境：出庫（把幣轉到外部地址）要先登錄地址並通過審核（承認）才能用；轉帳還要付網路手續費。
+// 情境：出庫（把幣轉到外部地址）要先登錄地址並通過審核（承認）才能用；
+// 轉帳還要付網路手續費。
 //        使用者有 0.1 BTC 可用，網路手續費 0.0005 BTC。演練依序試六筆出庫：
-//        ① 已承認的地址、0.05 BTC（可以）② 已承認的地址、0.1 BTC（餘額不夠付手續費）③ 審査中的地址 ④ 否認的地址
+//        ① 已承認的地址、0.05 BTC（可以）② 已承認的地址、0.1
+// BTC（餘額不夠付手續費）③ 審査中的地址 ④ 否認的地址
 //        ⑤ 沒有登錄過的地址 ⑥ 已承認的地址、0.5 BTC（超過餘額）。
-//        App 要在送出前先預檢，擋得住的就不要送到伺服器，並說明原因。（地址的審核與手續費是演練的假設；實際規則以交易所為準。）
+//        App 要在送出前先預檢，擋得住的就不要送到伺服器，並說明原因。
+// （地址的審核與手續費是演練的假設；實際規則以交易所為準。）
 //
 // 你要寫：
-//   ① Bug 版（L08Bug.precheck）：只檢查地址有沒有登錄過（address 在 addresses 裡），以及 amount 不超過 available。
-//   ② 修正版（L08Fixed.precheck）：地址的狀態必須是 APPROVED，而且 amount + networkFee 不能超過 available。
+//   ① Bug 版（L08Bug.precheck）：只檢查地址有沒有登錄過（address 在 addresses
+// 裡），以及 amount 不超過 available。
+//   ② 修正版（L08Fixed.precheck）：地址的狀態必須是 APPROVED，而且 amount +
+// networkFee 不能超過 available。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange01-orders/L08_WithdrawPrecheck.kt
 package tw.harry.labs.practice.exchange01orders
@@ -25,7 +31,11 @@ private enum class Review(val text: String) {
     REJECTED("否認"),
 }
 
-private val addresses = mapOf("bc1q-approved" to Review.APPROVED, "bc1q-reviewing" to Review.REVIEWING, "bc1q-rejected" to Review.REJECTED)
+private val addresses = mapOf(
+    "bc1q-approved" to Review.APPROVED,
+    "bc1q-reviewing" to Review.REVIEWING,
+    "bc1q-rejected" to Review.REJECTED,
+)
 private val available = e01("0.1")
 private val networkFee = e01("0.0005")
 
@@ -38,8 +48,14 @@ private fun serverCheck(address: String, amount: BigDecimal): String? = when {
 
 /** 演練流程（兩個版本共用）：六筆出庫依序預檢、送出 */
 private fun scenario(log: LabLog, precheck: (String, BigDecimal) -> String?) {
-    val requests = listOf("bc1q-approved" to "0.05", "bc1q-approved" to "0.1", "bc1q-reviewing" to "0.01", "bc1q-rejected" to "0.01",
-        "bc1q-unknown" to "0.01", "bc1q-approved" to "0.5")
+    val requests = listOf(
+        "bc1q-approved" to "0.05",
+        "bc1q-approved" to "0.1",
+        "bc1q-reviewing" to "0.01",
+        "bc1q-rejected" to "0.01",
+        "bc1q-unknown" to "0.01",
+        "bc1q-approved" to "0.5",
+    )
     var sent = 0
     var refused = 0
     for ((address, text) in requests) {
@@ -65,7 +81,8 @@ private fun scenario(log: LabLog, precheck: (String, BigDecimal) -> String?) {
 private object L08Bug {
     fun precheck(address: String, amount: BigDecimal): String? {
         // TODO ①：檢查 1) address 在 addresses 裡，否則回傳 "地址沒有登錄過"；
-        //        2) amount <= available，否則回傳 "餘額不足"（不要算手續費）。都通過回傳 null
+        //        2) amount <= available，否則回傳 "餘額不足"（不要算手續費）。
+        // 都通過回傳 null
         return null
     }
 
@@ -75,8 +92,10 @@ private object L08Bug {
 // MARK: - 修正版
 private object L08Fixed {
     fun precheck(address: String, amount: BigDecimal): String? {
-        // TODO ②：檢查 1) 地址有登錄過；2) 地址的狀態是 APPROVED，否則回傳原因（可以用 review.text 說明現在的狀態）；
-        //        3) amount + networkFee <= available，否則回傳原因。都通過回傳 null
+        // TODO ②：檢查 1) 地址有登錄過；2) 地址的狀態是 APPROVED，
+        // 否則回傳原因（可以用 review.text 說明現在的狀態）；
+        //        3) amount + networkFee <= available，否則回傳原因。都通過回傳
+        // null
         return null
     }
 
@@ -107,15 +126,23 @@ val l08 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("送到伺服器的出庫") } -> "演練沒有跑完：要用 scenario(log, ::precheck) 執行"
+            lines.none {
+                it.startsWith("送到伺服器的出庫")
+            } -> "演練沒有跑完：要用 scenario(log, ::precheck) 執行"
+
             "送到伺服器的出庫 4 筆，被伺服器退回 3 筆" !in lines -> "Bug 還沒重現：預檢只檢查地址有登錄過、數量不超過 available，審査中、否認的地址和 0.1 BTC 會放行，四筆送到伺服器、三筆被退回"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("送到伺服器的出庫") } -> "演練沒有跑完：要用 scenario(log, ::precheck) 執行"
+            lines.none {
+                it.startsWith("送到伺服器的出庫")
+            } -> "演練沒有跑完：要用 scenario(log, ::precheck) 執行"
+
             "送到伺服器的出庫 1 筆，被伺服器退回 0 筆" !in lines -> "預檢要擋下：地址不是承認（APPROVED），以及數量加手續費超過 available"
+
             else -> null
         }
     },

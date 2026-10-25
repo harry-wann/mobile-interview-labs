@@ -1,13 +1,20 @@
-// L03：快取容量變 10 倍，每次 get 的成本也變 10 倍（用 List 記使用順序，不是 O(1)）
-// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put 都很快？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
+// L03：快取容量變 10 倍，每次 get 的成本也變 10 倍（用 List 記使用順序，不是
+// O(1)）
+// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put
+// 都很快？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
 //
-// 情境：圖示快取。容量 100 與容量 1000 各做 1000 次 get（每次都讀得到），數「每次 get 平均碰了幾個元素」，看容量變大時成本怎麼變。
+// 情境：圖示快取。容量 100 與容量 1000 各做 1000 次 get（每次都讀得到），
+// 數「每次 get 平均碰了幾個元素」，看容量變大時成本怎麼變。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.ListCache.touch）：用 List order 把 key 移到最前面：從頭找 key、removeAt、add(0, key)，
-//      每一步依註解把碰到的元素數加進 cost。跑起來會看到容量變 10 倍，成本也變 10 倍。
-//   ② 修正版（L03Fixed.LinkedCache.get）：用 Map 找到節點，list.unlink 再 list.insertAfterHead。成本（改指標的次數）不隨容量變大。
-// 只改有 TODO 的地方（put、命中計數、成本統計已經寫好）。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
+//   ① Bug 版（L03Bug.ListCache.touch）：用 List order 把 key 移到最前面：
+// 從頭找 key、removeAt、add(0, key)，
+//      每一步依註解把碰到的元素數加進 cost。跑起來會看到容量變 10 倍，成本也變
+// 10 倍。
+//   ② 修正版（L03Fixed.LinkedCache.get）：用 Map 找到節點，list.unlink 再 list.
+// insertAfterHead。成本（改指標的次數）不隨容量變大。
+// 只改有 TODO 的地方（put、命中計數、成本統計已經寫好）。寫完在 App 選「練習」
+// 執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/coding/coding01-data-structures/L03_LRUCost.kt
 package tw.harry.labs.practice.coding01datastructures
 
@@ -25,7 +32,11 @@ private interface L03Cache {
 }
 
 /** 演練流程（兩個版本共用）：把快取放滿，再做 1000 次 get，數平均成本 */
-private fun averageCost(log: LabLog, capacity: Int, make: (Int) -> L03Cache): Double {
+private fun averageCost(
+    log: LabLog,
+    capacity: Int,
+    make: (Int) -> L03Cache,
+): Double {
     val cache = make(capacity)
     for (i in 0 until capacity) cache.put("K$i", i)
     val before = cache.cost
@@ -49,15 +60,20 @@ private fun scenario(log: LabLog, make: (Int) -> L03Cache) {
 private object L03Bug {
     class ListCache(private val capacity: Int) : L03Cache {
         private val values = HashMap<String, Int>()
-        private val order = ArrayList<String>()           // 由「最近」到「最久」
+
+        // 由「最近」到「最久」
+        private val order = ArrayList<String>()
         override var cost = 0
             private set
 
         /** 把 key 移到最前面 */
         private fun touch(key: String) {
-            // TODO ①-1：用 order.indexOf(key) 找到 key 的位置 index（找不到當 0）。一個一個找，碰了 index + 1 個元素：cost += index + 1
-            // TODO ①-2：order.removeAt(index)。後面的元素往前搬：cost += order.size - index（移除之後的 order.size）
-            // TODO ①-3：order.add(0, key)。全部元素往後搬：cost += order.size（插入之後的 order.size）
+            // TODO ①-1：用 order.indexOf(key) 找到 key 的位置 index（找不到當
+            // 0）。一個一個找，碰了 index + 1 個元素：cost += index + 1
+            // TODO ①-2：order.removeAt(index)。後面的元素往前搬：cost += order.
+            // size - index（移除之後的 order.size）
+            // TODO ①-3：order.add(0, key)。全部元素往後搬：cost += order.
+            // size（插入之後的 order.size）
         }
 
         override fun get(key: String): Int? {
@@ -74,7 +90,11 @@ private object L03Bug {
             }
             values[key] = value
             order.add(0, key)
-            if (order.size > capacity) values.remove(order.removeAt(order.size - 1))
+            if (order.size >
+                capacity
+            ) {
+                values.remove(order.removeAt(order.size - 1))
+            }
         }
     }
 
@@ -91,7 +111,8 @@ private object L03Fixed {
 
         override fun get(key: String): Int? {
             val node = map[key] ?: return null
-            // TODO ②：讀取也算「最近使用」：list.unlink(node) 拿出來，再 list.insertAfterHead(node) 放到最前面（共改 6 個指標，不隨容量變大）
+            // TODO ②：讀取也算「最近使用」：list.unlink(node) 拿出來，再 list.
+            // insertAfterHead(node) 放到最前面（共改 6 個指標，不隨容量變大）
             return node.value
         }
 
@@ -106,7 +127,11 @@ private object L03Fixed {
             val node = C01Node(key, value)
             map[key] = node
             list.insertAfterHead(node)
-            if (map.size > capacity) list.removeLast()?.let { map.remove(it.key) }
+            if (map.size >
+                capacity
+            ) {
+                list.removeLast()?.let { map.remove(it.key) }
+            }
         }
     }
 
@@ -136,18 +161,32 @@ val l03 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("容量 1000：1000 次 get 命中 1000 次") } -> "get 還沒寫好：1000 次 get 應該全部命中"
-            "容量變 10 倍，每次 get 的成本變成 10.0 倍" !in lines ->
+            lines.none { it.startsWith("容量 1000：1000 次 get 命中 1000 次") } -> {
+                "get 還沒寫好：1000 次 get 應該全部命中"
+            }
+
+            "容量變 10 倍，每次 get 的成本變成 10.0 倍" !in lines -> {
                 "Bug 還沒重現：要用 List 記順序，get 時從頭找 key、removeAt、add(0, key)，成本才會跟著容量成長"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("容量 1000：1000 次 get 命中 1000 次") } -> "get 還沒寫好：1000 次 get 應該全部命中"
-            "容量變 10 倍，每次 get 的成本變成 1.0 倍" !in lines ->
+            lines.none { it.startsWith("容量 1000：1000 次 get 命中 1000 次") } -> {
+                "get 還沒寫好：1000 次 get 應該全部命中"
+            }
+
+            "容量變 10 倍，每次 get 的成本變成 1.0 倍" !in lines -> {
                 "get 要用 Map 找到節點，再 list.unlink、list.insertAfterHead：成本不能跟著容量成長"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

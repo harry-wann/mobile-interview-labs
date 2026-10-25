@@ -1,12 +1,20 @@
-// L03：開始螢幕錄影之後，餘額還是明明白白錄進去了（錄影狀態要監聽變化，進背景要遮住）
-// 對應複習站：Advanced08Security 第 6 題「怎麼防截圖、錄影、剪貼簿和背景快照洩漏資料？」（iOS：isCaptured 與背景快照）
+// L03：開始螢幕錄影之後，餘額還是明明白白錄進去了（錄影狀態要監聽變化，
+// 進背景要遮住）
+// 對應複習站：Advanced08Security 第 6 題「怎麼防截圖、錄影、
+// 剪貼簿和背景快照洩漏資料？」（iOS：isCaptured 與背景快照）
 //
-// 情境：資產畫面顯示餘額。iOS 沒有禁止截圖的 API，能做的是：偵測螢幕正在被錄影（或鏡像到外部螢幕）就遮住餘額；
-//       App 切到背景時也遮住，因為系統會在這時對畫面截一張快照，顯示在多工切換畫面。
-//       演練用假的螢幕狀態（真正的 App 讀 UIScreen 的 isCaptured；iOS 17 起可以讀 trait 的 sceneCaptureState），
-//       並直接送出系統會送的通知（UIScreen.capturedDidChangeNotification、UIApplication.didEnterBackgroundNotification…）。
-// Bug 版：只在「打開畫面」的當下讀一次 isCaptured。使用者打開畫面之後才開始錄影，餘額照錄；切到背景也沒有遮。
-// 修正版：監聽 capturedDidChangeNotification，每次變化都重新讀 isCaptured；進入背景時遮住，回到前景再依錄影狀態決定。
+// 情境：資產畫面顯示餘額。iOS 沒有禁止截圖的 API，能做的是：
+// 偵測螢幕正在被錄影（或鏡像到外部螢幕）就遮住餘額；
+//       App 切到背景時也遮住，因為系統會在這時對畫面截一張快照，
+// 顯示在多工切換畫面。
+//       演練用假的螢幕狀態（真正的 App 讀 UIScreen 的 isCaptured；iOS 17
+// 起可以讀 trait 的 sceneCaptureState），
+//       並直接送出系統會送的通知（UIScreen.capturedDidChangeNotification、
+// UIApplication.didEnterBackgroundNotification…）。
+// Bug 版：只在「打開畫面」的當下讀一次 isCaptured。
+// 使用者打開畫面之後才開始錄影，餘額照錄；切到背景也沒有遮。
+// 修正版：監聽 capturedDidChangeNotification，每次變化都重新讀 isCaptured；
+// 進入背景時遮住，回到前景再依錄影狀態決定。
 import LabKit
 import UIKit
 
@@ -41,7 +49,8 @@ private func scenario(_ log: LabLog, makeCover: (FakeScreen) -> BalanceCover) {
     center.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
     log("切到背景（系統即將截多工畫面的快照）：\(state())")
 
-    center.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+    center.post(
+        name: UIApplication.willEnterForegroundNotification, object: nil)
     log("回到前景：\(state())")
 }
 
@@ -51,7 +60,8 @@ private enum L03Bug {
         private(set) var isCovered: Bool
 
         init(screen: FakeScreen) {
-            isCovered = screen.isCaptured                       // 只在打開畫面的當下看一次
+            // 只在打開畫面的當下看一次
+            isCovered = screen.isCaptured
         }
     }
 
@@ -71,17 +81,29 @@ private enum L03Fixed {
             isCovered = screen.isCaptured
             let center = NotificationCenter.default
             // 錄影狀態改變：重新讀一次
-            observers.append(center.addObserver(forName: UIScreen.capturedDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
-                self?.isCovered = screen.isCaptured
-            })
+            observers.append(
+                center.addObserver(
+                    forName: UIScreen.capturedDidChangeNotification,
+                    object: nil, queue: nil
+                ) { [weak self] _ in
+                    self?.isCovered = screen.isCaptured
+                })
             // 進入背景：系統馬上要截快照，先遮住
-            observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil) { [weak self] _ in
-                self?.isCovered = true
-            })
+            observers.append(
+                center.addObserver(
+                    forName: UIApplication.didEnterBackgroundNotification,
+                    object: nil, queue: nil
+                ) { [weak self] _ in
+                    self?.isCovered = true
+                })
             // 回到前景：依目前的錄影狀態決定
-            observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: nil) { [weak self] _ in
-                self?.isCovered = screen.isCaptured
-            })
+            observers.append(
+                center.addObserver(
+                    forName: UIApplication.willEnterForegroundNotification,
+                    object: nil, queue: nil
+                ) { [weak self] _ in
+                    self?.isCovered = screen.isCaptured
+                })
         }
 
         deinit {
@@ -117,17 +139,36 @@ extension Advanced08Security {
             }
         },
         checkBug: { lines in
-            guard lines.contains("打開餘額畫面（沒有錄影）：顯示中") else { return "餘額畫面一打開（沒有錄影）要顯示：isCovered 要設成 screen.isCaptured" }
-            if !lines.contains("使用者開始螢幕錄影：顯示中") { return "Bug 還沒重現：只在 init 讀一次 isCaptured，開始錄影之後餘額不該被遮住" }
-            if !lines.contains("切到背景（系統即將截多工畫面的快照）：顯示中") { return "Bug 還沒重現：Bug 版沒有處理進入背景，切到背景時餘額不該被遮住" }
+            guard lines.contains("打開餘額畫面（沒有錄影）：顯示中") else {
+                return "餘額畫面一打開（沒有錄影）要顯示：isCovered 要設成 screen.isCaptured"
+            }
+            if !lines.contains("使用者開始螢幕錄影：顯示中") {
+                return "Bug 還沒重現：只在 init 讀一次 isCaptured，開始錄影之後餘額不該被遮住"
+            }
+            if !lines.contains("切到背景（系統即將截多工畫面的快照）：顯示中") {
+                return "Bug 還沒重現：Bug 版沒有處理進入背景，切到背景時餘額不該被遮住"
+            }
             return nil
         },
         checkFixed: { lines in
-            guard lines.contains("打開餘額畫面（沒有錄影）：顯示中") else { return "餘額畫面一打開（沒有錄影）要顯示：isCovered 要設成 screen.isCaptured" }
-            if !lines.contains("使用者開始螢幕錄影：已遮住") { return "開始錄影後應該遮住：監聽 UIScreen.capturedDidChangeNotification，收到就重新讀 isCaptured" }
-            if !lines.contains("使用者停止錄影：顯示中") { return "停止錄影後應該恢復顯示：通知收到時要重新讀 isCaptured，不是永遠遮住" }
-            if !lines.contains("切到背景（系統即將截多工畫面的快照）：已遮住") { return "切到背景時應該遮住：監聽 UIApplication.didEnterBackgroundNotification" }
-            if !lines.contains("回到前景：顯示中") { return "回到前景（沒有在錄影）應該恢復顯示：監聽 willEnterForegroundNotification，依 isCaptured 決定" }
+            guard lines.contains("打開餘額畫面（沒有錄影）：顯示中") else {
+                return "餘額畫面一打開（沒有錄影）要顯示：isCovered 要設成 screen.isCaptured"
+            }
+            if !lines.contains("使用者開始螢幕錄影：已遮住") {
+                return
+                    "開始錄影後應該遮住：監聽 UIScreen.capturedDidChangeNotification，收到就重新讀 isCaptured"
+            }
+            if !lines.contains("使用者停止錄影：顯示中") {
+                return "停止錄影後應該恢復顯示：通知收到時要重新讀 isCaptured，不是永遠遮住"
+            }
+            if !lines.contains("切到背景（系統即將截多工畫面的快照）：已遮住") {
+                return
+                    "切到背景時應該遮住：監聽 UIApplication.didEnterBackgroundNotification"
+            }
+            if !lines.contains("回到前景：顯示中") {
+                return
+                    "回到前景（沒有在錄影）應該恢復顯示：監聽 willEnterForegroundNotification，依 isCaptured 決定"
+            }
             return nil
         }
     )

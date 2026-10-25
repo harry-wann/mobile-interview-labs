@@ -1,11 +1,15 @@
-// L02：餘額只有 100，連點兩次提領 80，兩筆都成功，餘額變成 -60（actor 的 reentrancy）
+// L02：餘額只有 100，連點兩次提領 80，兩筆都成功，餘額變成 -60（actor 的
+// reentrancy）
 // 對應複習站：Swift05Actors 第 2 題「actor 的 reentrancy 是什麼？怎麼修？」
 //
-// 情境：提領 80 円的流程是「檢查可用餘額 → 向伺服器確認（await）→ 扣款」。使用者連點兩次，兩個提領幾乎同時進來，餘額 100。
+// 情境：提領 80 円的流程是「檢查可用餘額 → 向伺服器確認（await）→ 扣款」。
+// 使用者連點兩次，兩個提領幾乎同時進來，餘額 100。
 //
 // 你要寫：
-//   ① Bug 版：actor Account 的 withdraw：先檢查餘額夠不夠，再 await 一個 Task.sleep（模擬向伺服器確認），然後才扣款。
-//   ② 修正版：withdraw 檢查餘額後，在 await 之前就先扣款（保留額度），再 await Task.sleep。
+//   ① Bug 版：actor Account 的 withdraw：先檢查餘額夠不夠，再 await 一個 Task.
+// sleep（模擬向伺服器確認），然後才扣款。
+//   ② 修正版：withdraw 檢查餘額後，在 await 之前就先扣款（保留額度），再 await
+// Task.sleep。
 // 只改有 TODO 的地方。解答：Solution/Swift/Swift05-Actors/L02_Reentrancy.swift
 import Foundation
 import LabKit
@@ -16,8 +20,10 @@ private enum L02Bug {
         private(set) var balance = 100
 
         func withdraw(_ amount: Int) async -> Bool {
-            // TODO ①：1. guard balance >= amount else { return false }（檢查餘額）
-            //        2. try? await Task.sleep(for: .milliseconds(10))（向伺服器確認，會暫停）
+            // TODO ①：1. guard balance >= amount else { return false
+            // }（檢查餘額）
+            //        2. try? await Task.sleep(for: milliseconds(10))
+            // （向伺服器確認，會暫停）
             //        3. balance -= amount（扣款），回傳 true
             return false
         }
@@ -39,8 +45,10 @@ private enum L02Fixed {
         private(set) var balance = 100
 
         func withdraw(_ amount: Int) async -> Bool {
-            // TODO ②：1. 檢查餘額，不夠回傳 false  2. 先 balance -= amount（保留額度）
-            //        3. 再 try? await Task.sleep(for: .milliseconds(10))（向伺服器確認），回傳 true
+            // TODO ②：1. 檢查餘額，不夠回傳 false  2. 先 balance -=
+            // amount（保留額度）
+            //        3. 再 try? await Task.sleep(for: milliseconds(10))
+            // （向伺服器確認），回傳 true
             return false
         }
     }
@@ -77,11 +85,15 @@ extension Swift05Actors {
             }
         },
         checkBug: { lines in
-            guard lines.contains("兩次提領 80，成功 2 筆") else { return "Bug 還沒重現：兩筆提領都應該成功（檢查、await、扣款，檢查和扣款之間隔著 await）" }
+            guard lines.contains("兩次提領 80，成功 2 筆") else {
+                return "Bug 還沒重現：兩筆提領都應該成功（檢查、await、扣款，檢查和扣款之間隔著 await）"
+            }
             return lines.last == "最後餘額：-60" ? nil : "最後餘額應該是 -60（兩筆都扣款）"
         },
         checkFixed: { lines in
-            guard lines.contains("兩次提領 80，成功 1 筆") else { return "只應該成功 1 筆：在 await 之前就先扣掉額度，第二筆的檢查才會失敗" }
+            guard lines.contains("兩次提領 80，成功 1 筆") else {
+                return "只應該成功 1 筆：在 await 之前就先扣掉額度，第二筆的檢查才會失敗"
+            }
             return lines.last == "最後餘額：20" ? nil : "最後餘額應該是 20"
         }
     )

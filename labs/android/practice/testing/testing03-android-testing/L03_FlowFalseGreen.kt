@@ -1,15 +1,23 @@
 // L03：行情資料流少發了一筆資料，測試卻顯示通過（斷言寫在 collect 裡）
-// 對應複習站：Testing03AndroidTesting 第 3 題「Flow 發出的一連串值，要怎麼檢查？」
+// 對應複習站：Testing03AndroidTesting 第 3 題「Flow 發出的一連串值，
+// 要怎麼檢查？」
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 practice/testing/test/Testing03L03Test.kt。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// practice/testing/test/Testing03L03Test.kt。
 //
-// 情境：T03PriceStream 的行情資料流應該「先發 Loading，再發 Data(15_000_000)」。
-//       演練把同一個測試，分別對三個實作各跑一次：正確的、漏發 Data 的、價格算錯（Data(0)）的。
+// 情境：T03PriceStream 的行情資料流應該「先發 Loading，再發
+// Data(15_000_000)」。
+//       演練把同一個測試，分別對三個實作各跑一次：正確的、漏發 Data 的、
+// 價格算錯（Data(0)）的。
 //
 // 你要寫（在 test/Testing03L03Test.kt）：
-//   ① Bug 版：L03Bug.test(stream) 用 runTest：launch { stream.collect { 遇到 T03UiState.Data 才 assertEquals(15_000_000, state.price) } }，最後 job.join()。
-//   ② 修正版：L03Fixed.test(stream) 用 Turbine：stream.test { awaitItem() 是 Loading、awaitItem() 是 Data(15_000_000)、awaitComplete() }。
-// 只改有 TODO 的地方。解答：solution/testing/testing03-android-testing/L03_FlowFalseGreen.kt
+//   ① Bug 版：L03Bug.test(stream) 用 runTest：launch { stream.collect { 遇到
+// T03UiState.Data 才 assertEquals(15_000_000, state.price) } }，最後 job.
+// join()。
+//   ② 修正版：L03Fixed.test(stream) 用 Turbine：stream.test { awaitItem() 是
+// Loading、awaitItem() 是 Data(15_000_000)、awaitComplete() }。
+// 只改有 TODO 的地方。解答：
+// solution/testing/testing03-android-testing/L03_FlowFalseGreen.kt
 package tw.harry.labs.practice.testing03androidtesting
 
 import kotlinx.coroutines.flow.Flow

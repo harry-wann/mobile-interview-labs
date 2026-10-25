@@ -1,13 +1,22 @@
-// L05：舊的 View 暫時被拆下再裝回，ComposeView 裡的狀態歸零了（ViewCompositionStrategy）
-// 對應複習站：Kotlin09ComposeArchitecture 第 5 題「既有的 XML／Fragment 專案，怎麼嵌入 Compose？反過來呢？」
+// L05：舊的 View 暫時被拆下再裝回，ComposeView
+// 裡的狀態歸零了（ViewCompositionStrategy）
+// 對應複習站：Kotlin09ComposeArchitecture 第 5 題「既有的 XML／Fragment 專案，
+// 怎麼嵌入 Compose？反過來呢？」
 //
-// 情境：舊的 View 系統裡嵌了一個 ComposeView，裡面有一個「點了 N 次」的按鈕（用 remember 保存次數）。
-//        按「移出畫面」「放回畫面」模擬 View 被暫時拆下再裝回（轉場動畫、重新排列版面時都可能發生）。
-//        ComposeView 是用程式建立的，寫法和 Fragment 的 onCreateView 裡建立 ComposeView 一樣。
-// Bug 版：沿用預設的 ViewCompositionStrategy。預設是「view 從 window 拆下，就釋放 composition」，
-//        移出畫面的瞬間 composition 就被釋放，放回來是全新的 composition，remember 的次數歸零。
-// 修正版：setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)。
-//        綁定 view tree 的 lifecycle owner（在 Fragment 裡就是 Fragment 的 view lifecycle）：
+// 情境：舊的 View 系統裡嵌了一個 ComposeView，裡面有一個「點了 N 次」
+// 的按鈕（用 remember 保存次數）。
+//        按「移出畫面」「放回畫面」模擬 View 被暫時拆下再裝回（轉場動畫、
+// 重新排列版面時都可能發生）。
+//        ComposeView 是用程式建立的，寫法和 Fragment 的 onCreateView 裡建立
+// ComposeView 一樣。
+// Bug 版：沿用預設的 ViewCompositionStrategy。預設是「view 從 window 拆下，
+// 就釋放 composition」，
+//        移出畫面的瞬間 composition 就被釋放，放回來是全新的 composition，
+// remember 的次數歸零。
+// 修正版：setViewCompositionStrategy(ViewCompositionStrategy.
+// DisposeOnViewTreeLifecycleDestroyed)。
+//        綁定 view tree 的 lifecycle owner（在 Fragment 裡就是 Fragment 的
+// view lifecycle）：
 //        暫時被拆下不會釋放，要等 lifecycle 結束（DESTROYED）才釋放。
 package tw.harry.labs.solution.kotlin09composearchitecture
 
@@ -37,7 +46,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** ComposeView 裡的內容（兩個版本共用）：remember 保存的點擊次數，加上 composition 建立與釋放的 log */
+/**
+ * ComposeView 裡的內容（兩個版本共用）：remember 保存的點擊次數，加上
+ * composition 建立與釋放的 log
+ */
 @Composable
 private fun L05Counter(log: LabLog) {
     var taps by remember { mutableIntStateOf(0) }
@@ -50,25 +62,31 @@ private fun L05Counter(log: LabLog) {
 
 // MARK: - Bug 版
 private object L05Bug {
-    fun createComposeView(context: Context, log: LabLog) = ComposeView(context).apply {
-        // 沒有設定 strategy：預設是 view 從 window 拆下就釋放 composition
-        setContent { L05Counter(log) }
-    }
+    fun createComposeView(context: Context, log: LabLog) =
+        ComposeView(context).apply {
+            // 沒有設定 strategy：預設是 view 從 window 拆下就釋放 composition
+            setContent { L05Counter(log) }
+        }
 }
 
 // MARK: - 修正版
 private object L05Fixed {
-    fun createComposeView(context: Context, log: LabLog) = ComposeView(context).apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)   // 跟著 view tree 的 lifecycle 釋放
-        setContent { L05Counter(log) }
-    }
+    fun createComposeView(context: Context, log: LabLog) =
+        ComposeView(context).apply {
+            // 跟著 view tree 的 lifecycle 釋放
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+            )
+            setContent { L05Counter(log) }
+        }
 }
 
 // MARK: - 演練設定
 @Composable
 private fun L05Demo(variant: Variant, log: LabLog) {
     val context = LocalContext.current
-    val host = remember { FrameLayout(context) }                        // 代表舊的 View 系統的容器
+    // 代表舊的 View 系統的容器
+    val host = remember { FrameLayout(context) }
     val composeView = remember(variant) {
         when (variant) {
             Variant.BUG -> L05Bug.createComposeView(context, log)
@@ -79,7 +97,8 @@ private fun L05Demo(variant: Variant, log: LabLog) {
         host.addView(composeView)
         onDispose {
             host.removeView(composeView)
-            composeView.disposeComposition()                            // 離開演練時一定要釋放
+            // 離開演練時一定要釋放
+            composeView.disposeComposition()
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -93,7 +112,9 @@ private fun L05Demo(variant: Variant, log: LabLog) {
                 log("把 ComposeView 放回容器（addView）")
             }) { Text("放回畫面") }
         }
-        AndroidView(factory = { host }, modifier = Modifier.fillMaxWidth().height(64.dp))
+        AndroidView(factory = {
+            host
+        }, modifier = Modifier.fillMaxWidth().height(64.dp))
     }
 }
 

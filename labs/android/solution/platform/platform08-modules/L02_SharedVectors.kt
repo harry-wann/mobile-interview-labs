@@ -1,13 +1,20 @@
 // L02：同一個價格，iOS 和 Android 對齊的結果不一樣（共用測試資料與 BigDecimal）
-// 對應複習站：Platform08Modules 第 5 題「Kotlin Multiplatform（KMP）是什麼？該共用什麼？有什麼代價？」（價格精度的規則要一致）
+// 對應複習站：Platform08Modules 第 5 題「Kotlin Multiplatform（KMP）
+// 是什麼？該共用什麼？有什麼代價？」（價格精度的規則要一致）
 //
-// 情境：限價單的價格必須是 tick size（最小跳動單位）的整數倍。App 要把使用者輸入的價格「往下對齊」到 tick size 的倍數，
-//        例如價格 0.57、tick size 0.01，結果還是 0.57。這個規則 iOS、Android、伺服器都要一模一樣。
-//        就算不導入 KMP，至少兩個平台、伺服器共用同一份測試資料（下面的 VECTORS：價格、tick size、標準答案），各自跑一次，不一致就是 bug。
-//        （演練把測試資料直接寫在檔案裡，iOS 與 Android 的文字一模一樣；真的專案會放成一份 JSON 檔，兩邊都讀。）
-// Bug 版：用 Double 計算：floor(價格 ÷ tick size) × tick size。0.57 ÷ 0.01 在 Double 裡是 56.99999999999999，往下取整變成 56，
+// 情境：限價單的價格必須是 tick size（最小跳動單位）的整數倍。App
+// 要把使用者輸入的價格「往下對齊」到 tick size 的倍數，
+//        例如價格 0.57、tick size 0.01，結果還是 0.57。這個規則 iOS、Android、
+// 伺服器都要一模一樣。
+//        就算不導入 KMP，至少兩個平台、伺服器共用同一份測試資料（下面的
+// VECTORS：價格、tick size、標準答案），各自跑一次，不一致就是 bug。
+//        （演練把測試資料直接寫在檔案裡，iOS 與 Android 的文字一模一樣；
+// 真的專案會放成一份 JSON 檔，兩邊都讀。）
+// Bug 版：用 Double 計算：floor(價格 ÷ tick size) × tick size。0.57 ÷ 0.01 在
+// Double 裡是 56.99999999999999，往下取整變成 56，
 //        結果 0.56，使用者明明輸入了正確的價格，卻被悄悄改小一格。
-// 修正版：用 BigDecimal 計算（十進位的精確運算）：價格 ÷ tick size 往下取整，再乘回 tick size。
+// 修正版：用 BigDecimal 計算（十進位的精確運算）：價格 ÷ tick size 往下取整，
+// 再乘回 tick size。
 package tw.harry.labs.solution.platform08modules
 
 import java.math.BigDecimal
@@ -29,7 +36,10 @@ private const val VECTORS = """
 1.1,0.1,1.1
 """
 
-/** 去掉小數尾端多餘的 0（兩個版本共用）："0.30000000" → "0.3"、"15000120.0" → "15000120" */
+/**
+ * 去掉小數尾端多餘的 0（兩個版本共用）："0.30000000" → "0.3"、"15000120.0" →
+ * "15000120"
+ */
 private fun trimmed(text: String): String =
     if ('.' in text) text.trimEnd('0').trimEnd('.') else text
 
@@ -54,7 +64,8 @@ private object L02Bug {
     fun alignToTick(price: String, tick: String): String {
         val p = price.toDoubleOrNull() ?: return ""
         val t = tick.toDoubleOrNull()?.takeIf { it > 0 } ?: return ""
-        val aligned = floor(p / t) * t                          // Double：0.57 / 0.01 = 56.99999999999999
+        // Double：0.57 / 0.01 = 56.99999999999999
+        val aligned = floor(p / t) * t
         return String.format(java.util.Locale.US, "%.8f", aligned)
     }
 
@@ -65,8 +76,11 @@ private object L02Bug {
 private object L02Fixed {
     fun alignToTick(price: String, tick: String): String {
         val p = price.toBigDecimalOrNull() ?: return ""
-        val t = tick.toBigDecimalOrNull()?.takeIf { it > BigDecimal.ZERO } ?: return ""
-        val quotient = p.divide(t, 0, RoundingMode.DOWN)        // BigDecimal：十進位運算，0.57 / 0.01 剛好是 57，往下取整到個位數
+        val t =
+            tick.toBigDecimalOrNull()?.takeIf { it > BigDecimal.ZERO }
+                ?: return ""
+        // BigDecimal：十進位運算，0.57 / 0.01 剛好是 57，往下取整到個位數
+        val quotient = p.divide(t, 0, RoundingMode.DOWN)
         return quotient.multiply(t).stripTrailingZeros().toPlainString()
     }
 
@@ -74,8 +88,9 @@ private object L02Fixed {
 }
 
 // MARK: - 演練設定
-private fun mismatchCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 ") && "不一致" in it }?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun mismatchCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 ") && "不一致" in it
+}?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l02 = Lab(
     id = "L02",
@@ -110,8 +125,12 @@ val l02 = Lab(
         val n = mismatchCount(lines)
         when {
             n == null -> "演練沒有跑完：要用 scenario(log, ::alignToTick) 執行"
+
             n == 0 -> null
-            else -> "還有 $n 筆和標準答案不一致，例如：${lines.firstOrNull { it.startsWith("✗") }}。用 toBigDecimalOrNull() 計算，divide(t, 0, RoundingMode.DOWN) 往下取整"
+
+            else -> "還有 $n 筆和標準答案不一致，例如：${lines.firstOrNull {
+                it.startsWith("✗")
+            }}。用 toBigDecimalOrNull() 計算，divide(t, 0, RoundingMode.DOWN) 往下取整"
         }
     },
 )

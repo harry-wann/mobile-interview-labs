@@ -10,7 +10,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * 回傳失敗清單；空的代表全部通過。用 runBlocking（真實時間）呼叫，有些演練就是要量真實的時間。
  */
-suspend fun runLabSelfTest(section: LabSection, strict: Boolean, timeoutMs: Long = 30_000): List<String> {
+suspend fun runLabSelfTest(
+    section: LabSection,
+    strict: Boolean,
+    timeoutMs: Long = 30_000,
+): List<String> {
     val failures = mutableListOf<String>()
     for (unit in section.units) {
         for (lab in unit.labs) {
@@ -31,12 +35,15 @@ suspend fun runLabSelfTest(section: LabSection, strict: Boolean, timeoutMs: Long
                     continue
                 }
                 if (variant == Variant.BUG && lab.bugCrashes) {
-                    println("[SELFTEST] $name ${variant.title} SKIP（會當掉，要在手機上確認）")
+                    println(
+                        "[SELFTEST] $name ${variant.title} SKIP（會當掉，要在手機上確認）",
+                    )
                     continue
                 }
                 val log = LabLog(echo = false)
                 val error = try {
-                    withTimeoutOrNull(timeoutMs) { run(variant, log) } ?: log("[SELFTEST] 逾時")
+                    withTimeoutOrNull(timeoutMs) { run(variant, log) }
+                        ?: log("[SELFTEST] 逾時")
                     null
                 } catch (e: Throwable) {
                     e
@@ -49,7 +56,9 @@ suspend fun runLabSelfTest(section: LabSection, strict: Boolean, timeoutMs: Long
                 }
                 val reason = check(lines)
                 if (reason == null) {
-                    println("[SELFTEST] $name ${variant.title} PASS　${lines.lastOrNull() ?: ""}")
+                    println(
+                        "[SELFTEST] $name ${variant.title} PASS　${lines.lastOrNull() ?: ""}",
+                    )
                 } else {
                     println("[SELFTEST] $name ${variant.title} FAIL：$reason")
                     if (strict) {

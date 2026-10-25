@@ -9,6 +9,9 @@ import tw.harry.labs.kit.runLabSelfTest
 class PlatformSelfTest {
     @Test
     fun labs() = runBlocking {
-        assertEquals(emptyList<String>(), runLabSelfTest(platformSection, strict = true))
+        assertEquals(
+            emptyList<String>(),
+            runLabSelfTest(platformSection, strict = true),
+        )
     }
 }

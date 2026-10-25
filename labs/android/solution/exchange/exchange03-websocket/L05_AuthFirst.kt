@@ -1,11 +1,16 @@
 // L05：私有頻道連上了，卻一直收不到自己的訂單（還沒認證成功就送 sub）
-// 對應複習站：Exchange03WebSocket 第 5 題「私有頻道怎麼用？認證、限流、順序不保證是什麼意思？」
+// 對應複習站：Exchange03WebSocket 第 5 題「私有頻道怎麼用？認證、限流、
+// 順序不保證是什麼意思？」
 //
-// 情境：連上私有頻道 /ws/v2 之後，要先送簽名過的 auth（認證），收到 {"action":"req","code":200,"ch":"auth",...} 才能訂閱。
-//        假伺服器：auth 的結果要過一小段時間才會回來；認證成功之前收到的 sub 一律拒絕，
-//        回 {"action":"sub","code":2002,...}（錯誤碼與文字是演練的假設，不是交易所的規格）。
+// 情境：連上私有頻道 /ws/v2 之後，要先送簽名過的 auth（認證），收到 {"action":
+// "req","code":200,"ch":"auth",...} 才能訂閱。
+//        假伺服器：auth 的結果要過一小段時間才會回來；認證成功之前收到的 sub
+// 一律拒絕，
+//        回 {"action":"sub","code":2002,...}（錯誤碼與文字是演練的假設，
+// 不是交易所的規格）。
 //        App 想訂閱 orders#btcjpy（自己的訂單）。
-// Bug 版：連上之後把 auth 和 sub 連續送出。sub 比認證結果先到伺服器，被拒絕；之後認證成功了，App 卻不會再訂閱一次，畫面永遠收不到訂單。
+// Bug 版：連上之後把 auth 和 sub 連續送出。sub 比認證結果先到伺服器，被拒絕；
+// 之後認證成功了，App 卻不會再訂閱一次，畫面永遠收不到訂單。
 // 修正版：連上之後只送 auth；收到認證成功（code 200）的回覆，才送 sub。
 package tw.harry.labs.solution.exchange03websocket
 
@@ -29,13 +34,15 @@ private class PrivateServer {
         val action = json.e03String("action") ?: return
         val ch = json.e03String("ch") ?: return
         if (action == "req" && ch == "auth") {
-            authPending = true                                  // 認證要過一小段時間才有結果
+            // 認證要過一小段時間才有結果
+            authPending = true
         } else if (action == "sub") {
             if (authenticated) {
                 outbox += """{"action":"sub","code":200,"ch":"$ch","data":{}}"""
             } else {
                 rejectedSubs++
-                outbox += """{"action":"sub","code":2002,"ch":"$ch","message":"invalid.auth.state"}"""
+                outbox +=
+                    """{"action":"sub","code":2002,"ch":"$ch","message":"invalid.auth.state"}"""
             }
         }
     }
@@ -45,7 +52,10 @@ private class PrivateServer {
         if (authPending) {
             authPending = false
             authenticated = true
-            outbox.add(0, """{"action":"req","code":200,"ch":"auth","data":{}}""")
+            outbox.add(
+                0,
+                """{"action":"req","code":200,"ch":"auth","data":{}}""",
+            )
         }
         val result = outbox.toList()
         outbox.clear()
@@ -53,7 +63,10 @@ private class PrivateServer {
     }
 }
 
-/** 演練流程（兩個版本共用）：連上 → 伺服器每過一小段時間把結果送回來，App 逐一處理 */
+/**
+ * 演練流程（兩個版本共用）：連上 → 伺服器每過一小段時間把結果送回來，App
+ * 逐一處理
+ */
 private fun scenario(
     log: LabLog,
     onOpen: (PrivateServer) -> Unit,
@@ -69,7 +82,9 @@ private fun scenario(
         }
     }
     log("伺服器拒絕了 ${server.rejectedSubs} 次 sub")
-    log("訂閱 orders#btcjpy：${if (subscribed()) "成功，會收到自己的訂單" else "沒有成功，畫面永遠收不到訂單"}")
+    log(
+        "訂閱 orders#btcjpy：${if (subscribed()) "成功，會收到自己的訂單" else "沒有成功，畫面永遠收不到訂單"}",
+    )
 }
 
 // MARK: - Bug 版
@@ -79,12 +94,17 @@ private object L05Bug {
 
         fun onOpen(server: PrivateServer) {
             server.receive(AUTH_REQUEST)
-            server.receive(SUB_REQUEST)                         // 不等認證結果，馬上訂閱
+            // 不等認證結果，馬上訂閱
+            server.receive(SUB_REQUEST)
         }
 
         fun onMessage(text: String, server: PrivateServer) {
             val json = e03Parse(text) ?: return
-            if (json.e03String("action") == "sub" && json.e03Long("code") == 200L) subscribed = true
+            if (json.e03String("action") == "sub" &&
+                json.e03Long("code") == 200L
+            ) {
+                subscribed = true
+            }
         }
     }
 
@@ -100,16 +120,22 @@ private object L05Fixed {
         var subscribed = false
 
         fun onOpen(server: PrivateServer) {
-            server.receive(AUTH_REQUEST)                        // 連上之後只送 auth
+            // 連上之後只送 auth
+            server.receive(AUTH_REQUEST)
         }
 
         fun onMessage(text: String, server: PrivateServer) {
             val json = e03Parse(text) ?: return
             val code = json.e03Long("code")
-            if (json.e03String("ch") == "auth" && code == 200L) {   // 認證成功了，才訂閱
+            // 認證成功了，才訂閱
+            if (json.e03String("ch") == "auth" && code == 200L) {
                 server.receive(SUB_REQUEST)
             }
-            if (json.e03String("action") == "sub" && code == 200L) subscribed = true
+            if (json.e03String("action") == "sub" &&
+                code == 200L
+            ) {
+                subscribed = true
+            }
         }
     }
 
@@ -142,17 +168,30 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("伺服器拒絕了") } -> "演練沒有跑完：要用 scenario(log, onOpen, onMessage, subscribed) 執行"
-            "伺服器拒絕了 1 次 sub" !in lines || "訂閱 orders#btcjpy：沒有成功，畫面永遠收不到訂單" !in lines ->
+            lines.none { it.startsWith("伺服器拒絕了") } -> {
+                "演練沒有跑完：要用 scenario(log, onOpen, onMessage, subscribed) 執行"
+            }
+
+            "伺服器拒絕了 1 次 sub" !in lines ||
+                "訂閱 orders#btcjpy：沒有成功，畫面永遠收不到訂單" !in lines -> {
                 "Bug 還沒重現：onOpen 要把 auth 和 sub 連續送出（不等認證結果），sub 會被拒絕一次"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("伺服器拒絕了") } -> "演練沒有跑完：要用 scenario(log, onOpen, onMessage, subscribed) 執行"
+            lines.none {
+                it.startsWith("伺服器拒絕了")
+            } -> "演練沒有跑完：要用 scenario(log, onOpen, onMessage, subscribed) 執行"
+
             "伺服器拒絕了 0 次 sub" !in lines -> "sub 不能比認證結果先送出：onOpen 只送 auth"
+
             "訂閱 orders#btcjpy：成功，會收到自己的訂單" !in lines -> "收到認證成功（ch 是 auth、code 是 200）之後，要送 sub；收到 sub 的成功回覆才算訂閱成功"
+
             else -> null
         }
     },

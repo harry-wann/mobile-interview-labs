@@ -1,13 +1,16 @@
 // L02：買方限價 102，成交價卻全部變成 102（成交價用了 taker 的限價）
-// 對應複習站：Coding03ExchangeAlgorithms 第 1 題「撮合引擎怎麼決定誰和誰成交、用什麼價格？」
+// 對應複習站：Coding03ExchangeAlgorithms 第 1 題「撮合引擎怎麼決定誰和誰成交、
+// 用什麼價格？」
 //
-// 情境：賣單簿有 A（100 円 × 1）、B（101 円 × 1）、C（103 円 × 5）。使用者下限價買單：102 円 × 3。
+// 情境：賣單簿有 A（100 円 × 1）、B（101 円 × 1）、C（103 円 × 5）。
+// 使用者下限價買單：102 円 × 3。
 //       C 的 103 比限價貴，不成交；A、B 各成交 1 個，剩下 1 個沒吃到。
 //
 // 你要寫：
 //   ① Bug 版（L02Bug.buy）：成交價用買方自己的限價 price。
 //   ② 修正版（L02Fixed.buy）：成交價用簿上掛單 best（maker）的價格 best.price。
-// 只改有 TODO 的地方（撮合的迴圈已經寫好）。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
+// 只改有 TODO 的地方（撮合的迴圈已經寫好）。寫完在 App 選「練習」執行，
+// 自動檢查會告訴你寫對了沒有。
 // 解答：solution/coding/coding03-exchange-algorithms/L02_TradePrice.kt
 package tw.harry.labs.practice.coding03exchangealgorithms
 
@@ -16,8 +19,16 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 演練流程（兩個版本共用）：用限價 102 買 3 個，看成交價與總共付出多少 */
-private fun scenario(log: LabLog, buy: (price: Int, qty: Int, asks: MutableList<C03Order>) -> List<C03Trade>) {
-    val asks = mutableListOf(C03Order("A", 100, 1), C03Order("B", 101, 1), C03Order("C", 103, 5))
+private fun scenario(
+    log: LabLog,
+    buy: (price: Int, qty: Int, asks: MutableList<C03Order>) -> List<C03Trade>,
+) {
+    val asks =
+        mutableListOf(
+            C03Order("A", 100, 1),
+            C03Order("B", 101, 1),
+            C03Order("C", 103, 5),
+        )
     log("賣單簿：${c03OrdersText(asks)}")
     val trades = buy(102, 3, asks)
     log("買進限價 102 × 3 → 成交 ${c03TradesText(trades)}")
@@ -89,15 +100,23 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("買進限價 102") } -> "演練沒有跑完：要用 scenario(log, buy) 執行"
+            lines.none {
+                it.startsWith("買進限價 102")
+            } -> "演練沒有跑完：要用 scenario(log, buy) 執行"
+
             "買進限價 102 × 3 → 成交 [A:1@102, B:1@102]" !in lines -> "Bug 還沒重現：成交價要寫成買方自己的限價 price，A、B 才會都變成 102"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("買進限價 102") } -> "演練沒有跑完：要用 scenario(log, buy) 執行"
+            lines.none {
+                it.startsWith("買進限價 102")
+            } -> "演練沒有跑完：要用 scenario(log, buy) 執行"
+
             "買進限價 102 × 3 → 成交 [A:1@100, B:1@101]" !in lines -> "成交價要用簿上掛單（best）自己的價格 best.price，A 是 100、B 是 101"
+
             else -> null
         }
     },

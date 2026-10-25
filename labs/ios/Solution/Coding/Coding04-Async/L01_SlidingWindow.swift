@@ -1,15 +1,21 @@
 // L01：限制同時 3 個，總共卻花了 600 毫秒（分批執行，沒有在完成後補位）
 // 對應複習站：Coding04Async 第 1 題「怎麼限制最多只有 N 個同時進行？」
 //
-// 情境：行情頁要載入 9 個交易對的 K 線，最多同時 3 個。每個請求花的時間不一樣：第 1、4、7 個慢（200 毫秒），其他快（20 毫秒）。
-//       回傳的結果要和輸入的順序一樣。（所有請求一口氣全部送出的寫法，見 Swift04 L02。）
-// Bug 版：把 9 個切成 3 批，一批 3 個、一批做完才開始下一批。同時確實不超過 3 個，但每一批都要等最慢的那個，
+// 情境：行情頁要載入 9 個交易對的 K 線，最多同時 3 個。每個請求花的時間不一樣：
+// 第 1、4、7 個慢（200 毫秒），其他快（20 毫秒）。
+//       回傳的結果要和輸入的順序一樣。（所有請求一口氣全部送出的寫法，見
+// Swift04 L02。）
+// Bug 版：把 9 個切成 3 批，一批 3 個、一批做完才開始下一批。同時確實不超過 3
+// 個，但每一批都要等最慢的那個，
 //        快的請求做完之後空出來的位子沒有人補，3 批各等 200 毫秒，共 600 毫秒。
-// 修正版：滑動視窗：先放 3 個，每完成一個就補下一個進去。快的做完立刻有下一個接手，慢的請求不會拖住別人，約 260 毫秒做完。
+// 修正版：滑動視窗：先放 3 個，每完成一個就補下一個進去。
+// 快的做完立刻有下一個接手，慢的請求不會拖住別人，約 260 毫秒做完。
 import Foundation
 import LabKit
 
-private let jobs = [200, 20, 20, 200, 20, 20, 200, 20, 20].enumerated().map { C04Job(name: "COIN\($0.offset + 1)", ms: $0.element) }
+private let jobs = [200, 20, 20, 200, 20, 20, 200, 20, 20].enumerated().map {
+    C04Job(name: "COIN\($0.offset + 1)", ms: $0.element)
+}
 private let limit = 3
 
 /// 假的 K 線 API：花 job.ms 毫秒，並讓 meter 記下同時有幾個在進行
@@ -22,17 +28,26 @@ private func fetch(_ job: C04Job, meter: C04Meter) async -> String {
 
 /// 從「…總共花了 N 毫秒」取出 N（自動檢查用）
 private func elapsedMs(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.contains("總共花了 ") && $0.hasSuffix(" 毫秒") }),
-          let range = line.range(of: "總共花了 ") else { return nil }
+    guard
+        let line = lines.first(where: {
+            $0.contains("總共花了 ") && $0.hasSuffix(" 毫秒")
+        }),
+        let range = line.range(of: "總共花了 ")
+    else { return nil }
     return Int(line[range.upperBound...].dropLast(" 毫秒".count))
 }
 
-/// 演練流程（兩個版本共用）：9 個請求、同時最多 3 個，量時間、同時進行的最高紀錄與結果順序
-private func scenario(_ log: LabLog, mapConcurrently: ([C04Job], Int, C04Meter) async -> [String]) async {
+/// 演練流程（兩個版本共用）：9 個請求、同時最多 3 個，量時間、
+/// 同時進行的最高紀錄與結果順序
+private func scenario(
+    _ log: LabLog, mapConcurrently: ([C04Job], Int, C04Meter) async -> [String]
+) async {
     let meter = C04Meter()
     let start = DispatchTime.now()
     let results = await mapConcurrently(jobs, limit, meter)
-    let ms = Int((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+    let ms = Int(
+        (DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+            / 1_000_000)
     log("\(jobs.count) 個請求、同時最多 \(limit) 個：總共花了 \(ms) 毫秒")
     log("同時進行的請求最多 \(meter.peak) 個")
     log("結果和輸入的順序相同：\(results == jobs.map(\.name) ? "是" : "否")")
@@ -40,11 +55,14 @@ private func scenario(_ log: LabLog, mapConcurrently: ([C04Job], Int, C04Meter) 
 
 // MARK: - Bug 版
 private enum L01Bug {
-    static func mapConcurrently(_ jobs: [C04Job], limit: Int, meter: C04Meter) async -> [String] {
+    static func mapConcurrently(
+        _ jobs: [C04Job], limit: Int, meter: C04Meter
+    ) async -> [String] {
         var results: [String] = []
         var start = 0
         while start < jobs.count {
-            let batch = Array(jobs[start..<min(start + limit, jobs.count)])     // 切成一批一批
+            // 切成一批一批
+            let batch = Array(jobs[start..<min(start + limit, jobs.count)])
             let part = await withTaskGroup(of: (Int, String).self) { group in
                 for (offset, job) in batch.enumerated() {
                     group.addTask { (offset, await fetch(job, meter: meter)) }
@@ -53,29 +71,40 @@ private enum L01Bug {
                 for await (offset, value) in group { out[offset] = value }
                 return out
             }
-            results += part                                                      // 這一批全部做完，才開始下一批
+            // 這一批全部做完，才開始下一批
+            results += part
             start += limit
         }
         return results
     }
 
     static func run(_ log: LabLog) async {
-        await scenario(log, mapConcurrently: { await mapConcurrently($0, limit: $1, meter: $2) })
+        await scenario(
+            log,
+            mapConcurrently: { await mapConcurrently($0, limit: $1, meter: $2) }
+        )
     }
 }
 
 // MARK: - 修正版
 private enum L01Fixed {
-    static func mapConcurrently(_ jobs: [C04Job], limit: Int, meter: C04Meter) async -> [String] {
+    static func mapConcurrently(
+        _ jobs: [C04Job], limit: Int, meter: C04Meter
+    ) async -> [String] {
         await withTaskGroup(of: (Int, String).self) { group in
             var results = [String](repeating: "", count: jobs.count)
             var next = 0
-            while next < min(limit, jobs.count) {                                // 1. 先放 limit 個
+            // 1. 先放 limit 個
+            while next < min(limit, jobs.count) {
                 let index = next
-                group.addTask { (index, await fetch(jobs[index], meter: meter)) }   // 帶著索引，之後才能放回原本的位置
+                // 帶著索引，之後才能放回原本的位置
+                group.addTask {
+                    (index, await fetch(jobs[index], meter: meter))
+                }
                 next += 1
             }
-            while let (index, value) = await group.next() {                      // 2. 每完成一個，就補下一個進去
+            // 2. 每完成一個，就補下一個進去
+            while let (index, value) = await group.next() {
                 results[index] = value
                 if next < jobs.count {
                     let i = next
@@ -88,7 +117,10 @@ private enum L01Fixed {
     }
 
     static func run(_ log: LabLog) async {
-        await scenario(log, mapConcurrently: { await mapConcurrently($0, limit: $1, meter: $2) })
+        await scenario(
+            log,
+            mapConcurrently: { await mapConcurrently($0, limit: $1, meter: $2) }
+        )
     }
 }
 
@@ -113,16 +145,29 @@ extension Coding04Async {
             }
         },
         checkBug: { lines in
-            guard let ms = elapsedMs(lines) else { return "演練沒有跑完：要用 scenario(log, mapConcurrently:) 執行" }
-            if !lines.contains("結果和輸入的順序相同：是") { return "mapConcurrently 還沒寫對：9 個結果要照輸入的順序回傳" }
-            if !lines.contains("同時進行的請求最多 3 個") { return "同時進行的請求應該剛好最多 3 個：一批 3 個" }
+            guard let ms = elapsedMs(lines) else {
+                return "演練沒有跑完：要用 scenario(log, mapConcurrently:) 執行"
+            }
+            if !lines.contains("結果和輸入的順序相同：是") {
+                return "mapConcurrently 還沒寫對：9 個結果要照輸入的順序回傳"
+            }
+            if !lines.contains("同時進行的請求最多 3 個") {
+                return "同時進行的請求應該剛好最多 3 個：一批 3 個"
+            }
             return ms >= 500 ? nil : "Bug 還沒重現：要切成一批一批（每批 limit 個），一批全部做完才開始下一批"
         },
         checkFixed: { lines in
-            guard let ms = elapsedMs(lines) else { return "演練沒有跑完：要用 scenario(log, mapConcurrently:) 執行" }
-            if !lines.contains("結果和輸入的順序相同：是") { return "mapConcurrently 還沒寫對：每個 task 帶著索引回傳，最後依索引放回原本的位置" }
-            if !lines.contains("同時進行的請求最多 3 個") { return "同時進行的請求應該剛好最多 3 個：先放 limit 個，每完成一個補一個" }
-            return ms < 450 ? nil : "花了 \(ms) 毫秒：每完成一個 task（group.next()），就要立刻補下一個，不要等一批做完"
+            guard let ms = elapsedMs(lines) else {
+                return "演練沒有跑完：要用 scenario(log, mapConcurrently:) 執行"
+            }
+            if !lines.contains("結果和輸入的順序相同：是") {
+                return "mapConcurrently 還沒寫對：每個 task 帶著索引回傳，最後依索引放回原本的位置"
+            }
+            if !lines.contains("同時進行的請求最多 3 個") {
+                return "同時進行的請求應該剛好最多 3 個：先放 limit 個，每完成一個補一個"
+            }
+            return ms < 450
+                ? nil : "花了 \(ms) 毫秒：每完成一個 task（group.next()），就要立刻補下一個，不要等一批做完"
         }
     )
 }

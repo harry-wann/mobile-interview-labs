@@ -1,9 +1,14 @@
-// L04：離開行情畫面後，WebSocket 的 topic 還在訂閱（AsyncStream 沒有設 onTermination 退訂）
-// 對應複習站：Swift06AsyncStream 第 3 題「怎麼把 callback 風格的 WebSocket 包成 AsyncStream，並且確實退訂？」
+// L04：離開行情畫面後，WebSocket 的 topic 還在訂閱（AsyncStream 沒有設
+// onTermination 退訂）
+// 對應複習站：Swift06AsyncStream 第 3 題「怎麼把 callback 風格的 WebSocket
+// 包成 AsyncStream，並且確實退訂？」
 //
-// 情境：行情畫面用 AsyncStream 包住 WebSocket 的 btcjpy topic，每收到價格就 yield。使用者離開畫面，畫面的 Task 被取消。
-// Bug 版：訂閱時把 handler 交給 WebSocket，但沒有設 onTermination。Task 取消、stream 結束了，WebSocket 上的訂閱與 handler 還在，價格繼續送進來。
-// 修正版：continuation.onTermination 裡呼叫 unsubscribe(token)，stream 一結束（finish、Task 被取消、不再被持有）就退訂。
+// 情境：行情畫面用 AsyncStream 包住 WebSocket 的 btcjpy topic，每收到價格就
+// yield。使用者離開畫面，畫面的 Task 被取消。
+// Bug 版：訂閱時把 handler 交給 WebSocket，但沒有設 onTermination。Task 取消、
+// stream 結束了，WebSocket 上的訂閱與 handler 還在，價格繼續送進來。
+// 修正版：continuation.onTermination 裡呼叫 unsubscribe(token)，stream
+// 一結束（finish、Task 被取消、不再被持有）就退訂。
 import Foundation
 import LabKit
 
@@ -16,7 +21,9 @@ private final class FakeSocket: @unchecked Sendable {
     var activeSubscriptions: Int { lock.withLock { handlers.count } }
     var deliveredCount: Int { lock.withLock { delivered } }
 
-    func subscribe(_ topic: String, handler: @escaping @Sendable (Int) -> Void) -> UUID {
+    func subscribe(
+        _ topic: String, handler: @escaping @Sendable (Int) -> Void
+    ) -> UUID {
         let token = UUID()
         lock.withLock { handlers[token] = handler }
         return token
@@ -36,8 +43,11 @@ private final class FakeSocket: @unchecked Sendable {
 
 // MARK: - Bug 版
 private enum L04Bug {
-    static func tickStream(topic: String, socket: FakeSocket) -> AsyncStream<Int> {
-        AsyncStream(Int.self, bufferingPolicy: .bufferingNewest(1)) { continuation in
+    static func tickStream(
+        topic: String, socket: FakeSocket
+    ) -> AsyncStream<Int> {
+        AsyncStream(Int.self, bufferingPolicy: .bufferingNewest(1)) {
+            continuation in
             _ = socket.subscribe(topic) { price in
                 continuation.yield(price)
             }
@@ -52,7 +62,8 @@ private enum L04Bug {
         }
         try? await Task.sleep(for: .milliseconds(50))
         log("畫面開著時，WebSocket 上的訂閱數：\(socket.activeSubscriptions)")
-        screen.cancel()                                              // 使用者離開畫面
+        // 使用者離開畫面
+        screen.cancel()
         await screen.value
         try? await Task.sleep(for: .milliseconds(50))
         log("離開畫面後，WebSocket 上的訂閱數：\(socket.activeSubscriptions)")
@@ -63,13 +74,17 @@ private enum L04Bug {
 
 // MARK: - 修正版
 private enum L04Fixed {
-    static func tickStream(topic: String, socket: FakeSocket) -> AsyncStream<Int> {
-        AsyncStream(Int.self, bufferingPolicy: .bufferingNewest(1)) { continuation in
+    static func tickStream(
+        topic: String, socket: FakeSocket
+    ) -> AsyncStream<Int> {
+        AsyncStream(Int.self, bufferingPolicy: .bufferingNewest(1)) {
+            continuation in
             let token = socket.subscribe(topic) { price in
                 continuation.yield(price)
             }
             continuation.onTermination = { _ in
-                socket.unsubscribe(token)                            // stream 結束時一定要退訂
+                // stream 結束時一定要退訂
+                socket.unsubscribe(token)
             }
         }
     }
@@ -111,14 +126,24 @@ extension Swift06AsyncStream {
             }
         },
         checkBug: { lines in
-            guard lines.contains("畫面開著時，WebSocket 上的訂閱數：1") else { return "畫面開著時應該有 1 個訂閱：tickStream 要在 AsyncStream 的 closure 裡呼叫 socket.subscribe" }
+            guard lines.contains("畫面開著時，WebSocket 上的訂閱數：1") else {
+                return
+                    "畫面開著時應該有 1 個訂閱：tickStream 要在 AsyncStream 的 closure 裡呼叫 socket.subscribe"
+            }
             return lines.contains("離開畫面後，WebSocket 上的訂閱數：1")
                 ? nil : "Bug 還沒重現：離開畫面後訂閱數應該還是 1（不要設 onTermination）"
         },
         checkFixed: { lines in
-            guard lines.contains("畫面開著時，WebSocket 上的訂閱數：1") else { return "畫面開著時應該有 1 個訂閱：tickStream 要在 AsyncStream 的 closure 裡呼叫 socket.subscribe" }
-            guard lines.contains("離開畫面後，WebSocket 上的訂閱數：0") else { return "離開畫面後應該退訂：在 continuation.onTermination 裡呼叫 socket.unsubscribe(token)" }
-            return lines.last == "離開畫面後又推一筆價格，被送進 handler 的次數：0" ? nil : "退訂後不應該再有價格被送進 handler"
+            guard lines.contains("畫面開著時，WebSocket 上的訂閱數：1") else {
+                return
+                    "畫面開著時應該有 1 個訂閱：tickStream 要在 AsyncStream 的 closure 裡呼叫 socket.subscribe"
+            }
+            guard lines.contains("離開畫面後，WebSocket 上的訂閱數：0") else {
+                return
+                    "離開畫面後應該退訂：在 continuation.onTermination 裡呼叫 socket.unsubscribe(token)"
+            }
+            return lines.last == "離開畫面後又推一筆價格，被送進 handler 的次數：0"
+                ? nil : "退訂後不應該再有價格被送進 handler"
         }
     )
 }

@@ -8,6 +8,13 @@ val unit = LabUnit(
     code = "Advanced06Crash",
     title = "穩定性與 crash",
     labs = listOf(
-        l01, l02, l03, l04, l05, l06, l07,   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        l01,
+        l02,
+        l03,
+        l04,
+        l05,
+        l06,
+        l07,
     ),
 )

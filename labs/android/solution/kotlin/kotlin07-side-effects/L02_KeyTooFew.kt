@@ -1,11 +1,17 @@
-// L02：切換成 ETH_JPY，畫面卻還在收 BTC_JPY 的行情（LaunchedEffect 的 key 寫太少）
-// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key 是什麼意思？」
+// L02：切換成 ETH_JPY，畫面卻還在收 BTC_JPY 的行情（LaunchedEffect 的 key
+// 寫太少）
+// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key
+// 是什麼意思？」
 //
-// 情境：行情畫面依 symbol（交易對）訂閱價格並顯示。使用者先看 BTC_JPY，0.1 秒後切換成 ETH_JPY，再等 0.15 秒。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
-// Bug 版：LaunchedEffect(Unit)。key 永遠不變，effect 只在進入畫面時執行一次，裡面抓到的 symbol 一直是 BTC_JPY。
+// 情境：行情畫面依 symbol（交易對）訂閱價格並顯示。使用者先看 BTC_JPY，0.1
+// 秒後切換成 ETH_JPY，再等 0.15 秒。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
+// Bug 版：LaunchedEffect(Unit)。key 永遠不變，effect 只在進入畫面時執行一次，
+// 裡面抓到的 symbol 一直是 BTC_JPY。
 //        切換之後，畫面停在「--」，舊的 BTC_JPY 訂閱也沒有被取消。
-// 修正版：LaunchedEffect(symbol)。effect 裡用到、而且變了就該重做的值，都要當成 key：
+// 修正版：LaunchedEffect(symbol)。effect 裡用到、而且變了就該重做的值，
+// 都要當成 key：
 //        symbol 一變，舊的 coroutine 被取消，用新的 symbol 重新收集。
 package tw.harry.labs.solution.kotlin07sideeffects
 
@@ -38,13 +44,24 @@ private class L02Feed {
                 delay(15)
             }
         } finally {
-            active -= symbol                                // 被取消時才會走到這裡
+            // 被取消時才會走到這裡
+            active -= symbol
         }
     }
 }
 
-/** 演練流程（兩個版本共用）：看 BTC_JPY 100 ms → 切換成 ETH_JPY → 再等 150 ms，看畫面上顯示什麼、還有誰在收行情 */
-private suspend fun scenario(log: LabLog, screen: @Composable (symbol: String, feed: L02Feed, onShow: (String) -> Unit) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：看 BTC_JPY 100 ms → 切換成 ETH_JPY → 再等 150 ms，
+ * 看畫面上顯示什麼、還有誰在收行情
+ */
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (
+        symbol: String,
+        feed: L02Feed,
+        onShow: (String) -> Unit,
+    ) -> Unit,
+) {
     val feed = L02Feed()
     var shown = ""
     withHeadlessCompose {
@@ -63,14 +80,19 @@ private suspend fun scenario(log: LabLog, screen: @Composable (symbol: String, f
 private object L02Bug {
     @Composable
     fun PriceHeader(symbol: String, feed: L02Feed, onShow: (String) -> Unit) {
-        var price by remember(symbol) { mutableStateOf("--") }      // symbol 變了，price 重設為 "--"
-        LaunchedEffect(Unit) {                                      // key 永遠不變：effect 只會跑一次
-            feed.prices(symbol).collect { price = it }              // symbol 永遠是第一次進來的 BTC_JPY
+        // symbol 變了，price 重設為 "--"
+        var price by remember(symbol) { mutableStateOf("--") }
+        // key 永遠不變：effect 只會跑一次
+        LaunchedEffect(Unit) {
+            // symbol 永遠是第一次進來的 BTC_JPY
+            feed.prices(symbol).collect { price = it }
         }
         HeadlessText("$symbol：$price", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { symbol, feed, onShow -> PriceHeader(symbol, feed, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { symbol, feed, onShow ->
+        PriceHeader(symbol, feed, onShow)
+    }
 }
 
 // MARK: - 修正版
@@ -78,13 +100,16 @@ private object L02Fixed {
     @Composable
     fun PriceHeader(symbol: String, feed: L02Feed, onShow: (String) -> Unit) {
         var price by remember(symbol) { mutableStateOf("--") }
-        LaunchedEffect(symbol) {                                    // symbol 變了：取消舊的，用新的 symbol 重新收集
+        // symbol 變了：取消舊的，用新的 symbol 重新收集
+        LaunchedEffect(symbol) {
             feed.prices(symbol).collect { price = it }
         }
         HeadlessText("$symbol：$price", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { symbol, feed, onShow -> PriceHeader(symbol, feed, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { symbol, feed, onShow ->
+        PriceHeader(symbol, feed, onShow)
+    }
 }
 
 // MARK: - 演練設定
@@ -115,9 +140,16 @@ val l02 = Lab(
         val after = line(lines, "切換後，畫面顯示：")
         val active = line(lines, "切換後，正在收行情的交易對：")
         when {
-            before == null || !before.contains("BTC_JPY 價格") -> "切換前沒有收到 BTC_JPY 的價格：LaunchedEffect 裡要 collect feed.prices(symbol)，把值寫進 price"
-            after?.contains("ETH_JPY 價格") == true -> "切換後畫面已經是 ETH_JPY 的價格：Bug 版的 key 要寫 Unit，讓 effect 不會跟著 symbol 重新啟動"
+            before == null || !before.contains(
+                "BTC_JPY 價格",
+            ) -> "切換前沒有收到 BTC_JPY 的價格：LaunchedEffect 裡要 collect feed.prices(symbol)，把值寫進 price"
+
+            after?.contains(
+                "ETH_JPY 價格",
+            ) == true -> "切換後畫面已經是 ETH_JPY 的價格：Bug 版的 key 要寫 Unit，讓 effect 不會跟著 symbol 重新啟動"
+
             active != "BTC_JPY" -> "舊的訂閱被取消了（現在在收：$active）：Bug 版的 key 要寫 Unit"
+
             else -> null
         }
     },
@@ -126,9 +158,16 @@ val l02 = Lab(
         val after = line(lines, "切換後，畫面顯示：")
         val active = line(lines, "切換後，正在收行情的交易對：")
         when {
-            before == null || !before.contains("BTC_JPY 價格") -> "切換前沒有收到 BTC_JPY 的價格：LaunchedEffect 裡要 collect feed.prices(symbol)，把值寫進 price"
-            after?.contains("ETH_JPY 價格") != true -> "切換後畫面還不是 ETH_JPY 的價格：key 要寫 symbol，symbol 變了 effect 才會重新啟動"
+            before == null || !before.contains(
+                "BTC_JPY 價格",
+            ) -> "切換前沒有收到 BTC_JPY 的價格：LaunchedEffect 裡要 collect feed.prices(symbol)，把值寫進 price"
+
+            after?.contains(
+                "ETH_JPY 價格",
+            ) != true -> "切換後畫面還不是 ETH_JPY 的價格：key 要寫 symbol，symbol 變了 effect 才會重新啟動"
+
             active != "ETH_JPY" -> "舊的訂閱還在（現在在收：$active）：key 要寫 symbol，才會取消舊的 coroutine"
+
             else -> null
         }
     },

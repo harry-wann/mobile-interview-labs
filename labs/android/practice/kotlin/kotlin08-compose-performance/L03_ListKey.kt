@@ -1,12 +1,17 @@
 // L03：在清單最前面插入一檔幣種，原本的每一列都跟著重組（LazyColumn 沒給 key）
-// 對應複習站：Kotlin08ComposePerformance 第 3 題「LazyColumn 為什麼一定要給 key？contentType 是什麼？」
+// 對應複習站：Kotlin08ComposePerformance 第 3 題「LazyColumn 為什麼一定要給
+// key？contentType 是什麼？」
 //
-// 情境：自選清單用 LazyColumn 顯示 6 檔幣種，每一列右邊的橘色數字是這一列重組了幾次。按「在最上面插入 SOL」新增一檔。
+// 情境：自選清單用 LazyColumn 顯示 6 檔幣種，
+// 每一列右邊的橘色數字是這一列重組了幾次。按「在最上面插入 SOL」新增一檔。
 //
 // 你要寫：
-//   ① Bug 版（L03BugList）：items(coins) { coin -> L03CoinRow(coin) }，不給 key。插入新幣種後，每個位置的資料都變了，現有的列全部重組。
-//   ② 修正版（L03FixedList）：items(coins, key = { it.symbol }) { … }，用 symbol 當身分，只有新插入的那一列需要組合。
-// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，看橘色的重組次數是不是照預期。
+//   ① Bug 版（L03BugList）：items(coins) { coin -> L03CoinRow(coin) }，不給
+// key。插入新幣種後，每個位置的資料都變了，現有的列全部重組。
+//   ② 修正版（L03FixedList）：items(coins, key = { it.symbol }) { … }，用
+// symbol 當身分，只有新插入的那一列需要組合。
+// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，
+// 看橘色的重組次數是不是照預期。
 // 解答：solution/kotlin/kotlin08-compose-performance/L03_ListKey.kt
 package tw.harry.labs.practice.kotlin08composeperformance
 
@@ -36,7 +41,10 @@ private class L03Coin(val symbol: String)
 /** 一列（兩個版本共用）：參數沒變時會被跳過，橘色數字是這一列重組的次數 */
 @Composable
 private fun L03CoinRow(coin: L03Coin) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(coin.symbol, Modifier.width(64.dp))
         RecomposeCounter(coin.symbol)
     }
@@ -46,7 +54,8 @@ private fun L03CoinRow(coin: L03Coin) {
 @Composable
 private fun L03BugList(coins: List<L03Coin>) {
     LazyColumn(Modifier.height(280.dp)) {
-        // TODO ①：items(coins) { coin -> L03CoinRow(coin) }（不給 key：Compose 用位置當身分）
+        // TODO ①：items(coins) { coin -> L03CoinRow(coin) }（不給 key：Compose
+        // 用位置當身分）
     }
 }
 
@@ -54,14 +63,20 @@ private fun L03BugList(coins: List<L03Coin>) {
 @Composable
 private fun L03FixedList(coins: List<L03Coin>) {
     LazyColumn(Modifier.height(280.dp)) {
-        // TODO ②：items(coins, key = { it.symbol }) { coin -> L03CoinRow(coin) }（用 symbol 當身分）
+        // TODO ②：items(coins, key = { it.symbol }) { coin -> L03CoinRow(coin)
+        // }（用 symbol 當身分）
     }
 }
 
 // MARK: - 演練設定
 @Composable
 private fun L03Demo(variant: Variant, log: LabLog) {
-    val coins = remember { listOf("BTC", "ETH", "XRP", "ADA", "DOGE", "LTC").map { L03Coin(it) }.toMutableStateList() }
+    val coins =
+        remember {
+            listOf("BTC", "ETH", "XRP", "ADA", "DOGE", "LTC").map {
+                L03Coin(it)
+            }.toMutableStateList()
+        }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             enabled = coins.none { it.symbol == "SOL" },

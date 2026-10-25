@@ -1,16 +1,27 @@
-// L03：沒有設定指紋的手機、驗證失敗太多次的人，鎖定畫面直接放行（生物辨識失敗後的降級流程）
-// 對應複習站：Exchange10AccountSecurity 第 3 題「生物辨識只看『成功』為什麼不夠安全？」
-//        （生物辨識綁在金鑰上、不能只看布林值，Platform04 的演練 6 已經練過；這題練的是「失敗、不能用、金鑰失效」之後怎麼辦。）
+// L03：沒有設定指紋的手機、驗證失敗太多次的人，
+// 鎖定畫面直接放行（生物辨識失敗後的降級流程）
+// 對應複習站：Exchange10AccountSecurity 第 3 題「生物辨識只看『成功』
+// 為什麼不夠安全？」
+//        （生物辨識綁在金鑰上、不能只看布林值，Platform04 的演練 6 已經練過；
+// 這題練的是「失敗、不能用、金鑰失效」之後怎麼辦。）
 //
-// 情境：鎖定畫面要求生物辨識才能解鎖。系統會回報 7 種結果：成功、失敗（第 N 次）、使用者按了取消、被系統鎖定（嘗試太多次）、
-//        金鑰失效（使用者新增了別人的指紋或臉部，KeyPermanentlyInvalidatedException）、這支手機不能用生物辨識（沒設定或被關閉）。
-//        每一種結果都要決定下一步：放行、再試一次、維持鎖定、改用密碼加兩步驟驗證（2FA）、或要求密碼加 2FA 之後重新註冊金鑰。
-//        規則：只有「成功」可以放行；失敗累積 3 次、被鎖定、不能用，都改用密碼加 2FA；金鑰失效要重新註冊，而且重新註冊本身也要密碼加 2FA。
+// 情境：鎖定畫面要求生物辨識才能解鎖。系統會回報 7 種結果：成功、失敗（第 N
+// 次）、使用者按了取消、被系統鎖定（嘗試太多次）、
+//        金鑰失效（使用者新增了別人的指紋或臉部，
+// KeyPermanentlyInvalidatedException）、
+// 這支手機不能用生物辨識（沒設定或被關閉）。
+//        每一種結果都要決定下一步：放行、再試一次、維持鎖定、
+// 改用密碼加兩步驟驗證（2FA）、或要求密碼加 2FA 之後重新註冊金鑰。
+//        規則：只有「成功」可以放行；失敗累積 3 次、被鎖定、不能用，
+// 都改用密碼加 2FA；金鑰失效要重新註冊，而且重新註冊本身也要密碼加 2FA。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.decide）：Success → Unlock；Failed → Retry；UserCancelled → StayLocked；else 一律 Unlock。
-//   ② 修正版（L03Fixed.decide）：Success → Unlock；Failed 累積 3 次（attempt >= 3）→ PasswordAnd2FA，沒到 3 次 → Retry；
-//      UserCancelled → StayLocked；LockedOut、Unavailable → PasswordAnd2FA；KeyInvalidated → Reenroll。不寫 else。
+//   ① Bug 版（L03Bug.decide）：Success → Unlock；Failed → Retry；UserCancelled
+// → StayLocked；else 一律 Unlock。
+//   ② 修正版（L03Fixed.decide）：Success → Unlock；Failed 累積 3 次（attempt
+// >= 3）→ PasswordAnd2FA，沒到 3 次 → Retry；
+//      UserCancelled → StayLocked；LockedOut、Unavailable → PasswordAnd2FA；
+// KeyInvalidated → Reenroll。不寫 else。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange10-account-security/L03_BiometricFallback.kt
 package tw.harry.labs.practice.exchange10accountsecurity
@@ -21,11 +32,17 @@ import tw.harry.labs.kit.Variant
 
 private sealed interface L03Bio {
     data object Success : L03Bio
-    data class Failed(val attempt: Int) : L03Bio     // 這是第幾次失敗
+    data class Failed(val attempt: Int) : L03Bio // 這是第幾次失敗
     data object UserCancelled : L03Bio
-    data object LockedOut : L03Bio                   // 嘗試太多次，系統鎖定生物辨識
-    data object KeyInvalidated : L03Bio              // 使用者新增了指紋或臉部，綁定的金鑰失效
-    data object Unavailable : L03Bio                 // 沒設定生物辨識，或被關閉
+
+    // 嘗試太多次，系統鎖定生物辨識
+    data object LockedOut : L03Bio
+
+    // 使用者新增了指紋或臉部，綁定的金鑰失效
+    data object KeyInvalidated : L03Bio
+
+    // 沒設定生物辨識，或被關閉
+    data object Unavailable : L03Bio
 }
 
 private enum class L03Decision(val text: String) {
@@ -67,7 +84,8 @@ private fun scenario(log: LabLog, decide: (L03Bio) -> L03Decision) {
 // MARK: - Bug 版
 private object L03Bug {
     fun decide(result: L03Bio): L03Decision {
-        // TODO ①：用 when (result)：Success → Unlock；is Failed → Retry；UserCancelled → StayLocked；else → Unlock（其他錯誤一律放行）
+        // TODO ①：用 when (result)：Success → Unlock；is Failed → Retry；
+        // UserCancelled → StayLocked；else → Unlock（其他錯誤一律放行）
         return L03Decision.StayLocked
     }
 
@@ -77,8 +95,10 @@ private object L03Bug {
 // MARK: - 修正版
 private object L03Fixed {
     fun decide(result: L03Bio): L03Decision {
-        // TODO ②：用 when (result)（不寫 else）：Success → Unlock；is Failed → attempt >= 3 就 PasswordAnd2FA，否則 Retry；
-        //        UserCancelled → StayLocked；LockedOut、Unavailable → PasswordAnd2FA；KeyInvalidated → Reenroll
+        // TODO ②：用 when (result)（不寫 else）：Success → Unlock；is Failed →
+        // attempt >= 3 就 PasswordAnd2FA，否則 Retry；
+        //        UserCancelled → StayLocked；LockedOut、Unavailable →
+        // PasswordAnd2FA；KeyInvalidated → Reenroll
         return L03Decision.StayLocked
     }
 

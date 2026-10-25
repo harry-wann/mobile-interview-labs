@@ -1,13 +1,18 @@
 // L05：加了快取，API 還是被打了好幾次（class delegation 的陷阱）
-// 對應複習站：Kotlin02Functions 第 4 題「by 委派是什麼？class delegation 有什麼陷阱？」
+// 對應複習站：Kotlin02Functions 第 4 題「by 委派是什麼？class delegation
+// 有什麼陷阱？」
 //
-// 情境：PriceApi 有 price()（打 API 取價格）和 priceWithFee()（含手續費的價格，內部呼叫 price()）。
-//        用 CachedApi 包一層：class CachedApi(inner: PriceApi) : PriceApi by inner（宣告已經寫好）。
+// 情境：PriceApi 有 price()（打 API 取價格）和 priceWithFee()（含手續費的價格，
+// 內部呼叫 price()）。
+//        用 CachedApi 包一層：class CachedApi(inner: PriceApi)  PriceApi by
+// inner（宣告已經寫好）。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug）：只覆寫 price() 加上快取。priceWithFee() 沒有覆寫，會直接轉給 RealApi，
+//   ① Bug 版（L05Bug）：只覆寫 price() 加上快取。priceWithFee() 沒有覆寫，
+// 會直接轉給 RealApi，
 //      RealApi 裡呼叫的 price() 是它自己的，繞過快取，API 照打。
-//   ② 修正版（L05Fixed）：連 priceWithFee() 也覆寫，改成呼叫 CachedApi 自己的 price()。
+//   ② 修正版（L05Fixed）：連 priceWithFee() 也覆寫，改成呼叫 CachedApi 自己的
+// price()。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin02-functions/L05_ClassDelegation.kt
 package tw.harry.labs.practice.kotlin02functions
@@ -31,7 +36,9 @@ private class RealApi(private val log: LabLog) : PriceApi {
         return 1_000_000
     }
 
-    override fun priceWithFee(symbol: String): Long = price(symbol) * 1001 / 1000   // 這裡的 price() 是 RealApi 自己的
+    // 這裡的 price() 是 RealApi 自己的
+    override fun priceWithFee(symbol: String): Long =
+        price(symbol) * 1001 / 1000
 }
 
 /** 演練流程（兩個版本共用）：各取價格 3 次，看 API 被打了幾次 */
@@ -47,7 +54,8 @@ private object L05Bug {
     class CachedApi(private val inner: PriceApi) : PriceApi by inner {
         private val cache = HashMap<String, Long>()
 
-        // TODO ①：只覆寫 price()：用 cache.getOrPut(symbol) { inner.price(symbol) } 加上快取
+        // TODO ①：只覆寫 price()：用 cache.getOrPut(symbol) { inner.
+        // price(symbol) } 加上快取
         //        （不要覆寫 priceWithFee()，看看它會不會經過快取）
     }
 
@@ -62,9 +70,11 @@ private object L05Fixed {
     class CachedApi(private val inner: PriceApi) : PriceApi by inner {
         private val cache = HashMap<String, Long>()
 
-        // TODO ②-1：覆寫 price()：用 cache.getOrPut(symbol) { inner.price(symbol) } 加上快取
+        // TODO ②-1：覆寫 price()：用 cache.getOrPut(symbol) { inner.
+        // price(symbol) } 加上快取
 
-        // TODO ②-2：也覆寫 priceWithFee()：改成 price(symbol) * 1001 / 1000，呼叫的是 CachedApi 自己的 price()
+        // TODO ②-2：也覆寫 priceWithFee()：改成 price(symbol) * 1001 / 1000，
+        // 呼叫的是 CachedApi 自己的 price()
     }
 
     fun run(log: LabLog) {

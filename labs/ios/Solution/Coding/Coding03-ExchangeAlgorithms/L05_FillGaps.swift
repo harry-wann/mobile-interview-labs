@@ -1,11 +1,17 @@
-// L05：沒有成交的時段補了 K 線，價格卻是很久以前的收盤價（補 K 線用錯前一根的收盤價）
-// 對應複習站：Coding03ExchangeAlgorithms 第 3 題「某些時段沒有成交時，K 線要怎麼補？」
+// L05：沒有成交的時段補了 K 線，價格卻是很久以前的收盤價（補 K
+// 線用錯前一根的收盤價）
+// 對應複習站：Coding03ExchangeAlgorithms 第 3 題「某些時段沒有成交時，K
+// 線要怎麼補？」
 //
-// 情境：1 分鐘 K 線（週期 60 秒），API 沒有回傳沒成交的那幾分鐘。收到的 K 線時間是 0、180、240、420，
-//       中間缺 60、120（第 1 個缺口，前一根收盤 102）和 300、360（第 2 個缺口，前一根是 240 那根，收盤 115）。
+// 情境：1 分鐘 K 線（週期 60 秒），API 沒有回傳沒成交的那幾分鐘。收到的 K
+// 線時間是 0、180、240、420，
+//       中間缺 60、120（第 1 個缺口，前一根收盤 102）和 300、360（第 2 個缺口，
+// 前一根是 240 那根，收盤 115）。
 //       缺的時段要補一根開高低收都等於「前一根收盤價」、成交量 0 的 K 線。
-// Bug 版：用一個變數 lastClose 記住收盤價，一開始設成第一根的收盤價，之後忘了更新。第 1 個缺口剛好是對的，
-//        第 2 個缺口卻還在用第一根的 102，圖上 300、360 兩根的價格比實際低了 13 円。
+// Bug 版：用一個變數 lastClose 記住收盤價，一開始設成第一根的收盤價，
+// 之後忘了更新。第 1 個缺口剛好是對的，
+//        第 2 個缺口卻還在用第一根的 102，圖上 300、360 兩根的價格比實際低了
+// 13 円。
 // 修正版：每放進一根真正的 K 線，就把 lastClose 更新成這一根的收盤價。
 import LabKit
 
@@ -19,13 +25,20 @@ private let candles = [
 ]
 
 /// 演練流程（兩個版本共用）：補洞，列出時間軸與補出來的 K 線
-private func scenario(_ log: LabLog, fillGaps: ([C03Candle], Int) -> [C03Candle]) {
+private func scenario(
+    _ log: LabLog, fillGaps: ([C03Candle], Int) -> [C03Candle]
+) {
     let result = fillGaps(candles, period)
     let originalTimes = Set(candles.map(\.time))
     let filled = result.filter { !originalTimes.contains($0.time) }
     log("時間軸：\(result.map(\.time))（共 \(result.count) 根）")
-    log("補了 \(filled.count) 根（時間→價格）：\(filled.map { "\($0.time)→\($0.close)" }.joined(separator: ", "))")
-    let flat = filled.allSatisfy { $0.open == $0.close && $0.high == $0.close && $0.low == $0.close && $0.volume == 0 }
+    log(
+        "補了 \(filled.count) 根（時間→價格）：\(filled.map { "\($0.time)→\($0.close)" }.joined(separator: ", "))"
+    )
+    let flat = filled.allSatisfy {
+        $0.open == $0.close && $0.high == $0.close && $0.low == $0.close
+            && $0.volume == 0
+    }
     log("補的 K 線開高低收一樣、成交量 0：\(flat ? "是" : "否")")
 }
 
@@ -34,14 +47,19 @@ private enum L05Bug {
     static func fillGaps(_ candles: [C03Candle], period: Int) -> [C03Candle] {
         guard let first = candles.first else { return [] }
         var result = [first]
-        let lastClose = first.close                                      // 一開始記下第一根的收盤價，之後都沒有更新
+        // 一開始記下第一根的收盤價，之後都沒有更新
+        let lastClose = first.close
         for candle in candles.dropFirst() {
             var t = result[result.count - 1].time + period
             while t < candle.time {
-                result.append(C03Candle(time: t, open: lastClose, high: lastClose, low: lastClose, close: lastClose, volume: 0))
+                result.append(
+                    C03Candle(
+                        time: t, open: lastClose, high: lastClose,
+                        low: lastClose, close: lastClose, volume: 0))
                 t += period
             }
-            result.append(candle)                                        // 忘了更新 lastClose
+            // 忘了更新 lastClose
+            result.append(candle)
         }
         return result
     }
@@ -60,11 +78,15 @@ private enum L05Fixed {
         for candle in candles.dropFirst() {
             var t = result[result.count - 1].time + period
             while t < candle.time {
-                result.append(C03Candle(time: t, open: lastClose, high: lastClose, low: lastClose, close: lastClose, volume: 0))
+                result.append(
+                    C03Candle(
+                        time: t, open: lastClose, high: lastClose,
+                        low: lastClose, close: lastClose, volume: 0))
                 t += period
             }
             result.append(candle)
-            lastClose = candle.close                                     // 每放進一根真的 K 線，就更新「前一根的收盤價」
+            // 每放進一根真的 K 線，就更新「前一根的收盤價」
+            lastClose = candle.close
         }
         return result
     }
@@ -86,8 +108,10 @@ extension Coding03ExchangeAlgorithms {
             "選「修正版」執行，確認補的價格是 60→102、120→102、300→115、360→115。",
             "想一想：如果漏了 t += period，會發生什麼事？（無限迴圈）開始寫之前要先確認什麼？（時間有沒有對齊週期）",
         ],
-        expectBug: "「補了 4 根（時間→價格）：60→102, 120→102, 300→102, 360→102」：第 2 個缺口還在用第一根的收盤價。",
-        expectFixed: "「補了 4 根（時間→價格）：60→102, 120→102, 300→115, 360→115」，時間軸 0 到 420 共 8 根。",
+        expectBug:
+            "「補了 4 根（時間→價格）：60→102, 120→102, 300→102, 360→102」：第 2 個缺口還在用第一根的收盤價。",
+        expectFixed:
+            "「補了 4 根（時間→價格）：60→102, 120→102, 300→115, 360→115」，時間軸 0 到 420 共 8 根。",
         run: { variant, log in
             switch variant {
             case .bug: await L05Bug.run(log)
@@ -95,18 +119,31 @@ extension Coding03ExchangeAlgorithms {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("補了") }) { return "演練沒有跑完：要用 scenario(log, fillGaps:) 執行" }
-            if lines.contains(where: { $0.hasPrefix("補了 0 根") }) { return "fillGaps 還沒寫：缺的時段要補 K 線" }
-            return lines.contains("補了 4 根（時間→價格）：60→102, 120→102, 300→102, 360→102")
-                ? nil : "Bug 還沒重現：lastClose 只在一開始設成第一根的收盤價，之後不更新，第 2 個缺口才會用到 102"
+            if !lines.contains(where: { $0.hasPrefix("補了") }) {
+                return "演練沒有跑完：要用 scenario(log, fillGaps:) 執行"
+            }
+            if lines.contains(where: { $0.hasPrefix("補了 0 根") }) {
+                return "fillGaps 還沒寫：缺的時段要補 K 線"
+            }
+            return lines.contains(
+                "補了 4 根（時間→價格）：60→102, 120→102, 300→102, 360→102")
+                ? nil
+                : "Bug 還沒重現：lastClose 只在一開始設成第一根的收盤價，之後不更新，第 2 個缺口才會用到 102"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("補了") }) { return "演練沒有跑完：要用 scenario(log, fillGaps:) 執行" }
-            if lines.contains(where: { $0.hasPrefix("補了 0 根") }) { return "fillGaps 還沒寫：缺的時段要補 K 線" }
-            if !lines.contains("補了 4 根（時間→價格）：60→102, 120→102, 300→115, 360→115") {
+            if !lines.contains(where: { $0.hasPrefix("補了") }) {
+                return "演練沒有跑完：要用 scenario(log, fillGaps:) 執行"
+            }
+            if lines.contains(where: { $0.hasPrefix("補了 0 根") }) {
+                return "fillGaps 還沒寫：缺的時段要補 K 線"
+            }
+            if !lines.contains(
+                "補了 4 根（時間→價格）：60→102, 120→102, 300→115, 360→115")
+            {
                 return "第 2 個缺口要用 240 那根的收盤價 115：每放進一根真的 K 線，就更新 lastClose"
             }
-            return lines.contains("補的 K 線開高低收一樣、成交量 0：是") ? nil : "補的 K 線開高低收都要等於 lastClose，成交量是 0"
+            return lines.contains("補的 K 線開高低收一樣、成交量 0：是")
+                ? nil : "補的 K 線開高低收都要等於 lastClose，成交量是 0"
         }
     )
 }

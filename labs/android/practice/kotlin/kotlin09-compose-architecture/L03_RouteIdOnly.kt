@@ -1,12 +1,16 @@
 // L03：從訂單列表點進詳情，看到的狀態是點擊當下的舊資料（路由只傳識別碼）
-// 對應複習站：Kotlin09ComposeArchitecture 第 3 題「Navigation Compose 的 type-safe 路由怎麼寫？」
+// 對應複習站：Kotlin09ComposeArchitecture 第 3 題「Navigation Compose 的
+// type-safe 路由怎麼寫？」
 //
-// 情境：訂單列表點進第 1 筆（A1001，狀態「待成交」）。點擊 100 ms 後，伺服器把這筆訂單更新成「已成交」，
+// 情境：訂單列表點進第 1 筆（A1001，狀態「待成交」）。點擊 100 ms 後，
+// 伺服器把這筆訂單更新成「已成交」，
 //        再過 100 ms 詳情畫面才完成載入。詳情畫面應該顯示最新的狀態。
-//        路由（route）用一個 data class 代表目的地，和 type-safe navigation 的寫法一樣；這個演練只看路由裡放什麼。
+//        路由（route）用一個 data class 代表目的地，和 type-safe navigation
+// 的寫法一樣；這個演練只看路由裡放什麼。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug）：路由帶整個 Order（OrderDetail(order)），詳情畫面直接顯示 route.order.status。
+//   ① Bug 版（L03Bug）：路由帶整個 Order（OrderDetail(order)），
+// 詳情畫面直接顯示 route.order.status。
 //   ② 修正版（L03Fixed）：路由只帶 orderId，詳情畫面向 repo 取最新的訂單。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin09-compose-architecture/L03_RouteIdOnly.kt
@@ -41,9 +45,11 @@ private suspend fun <Route> scenario(
     val repo = L03OrderRepository()
     val tapped = repo.all().first()
     log("列表上的訂單 ${tapped.id}：${tapped.status}")
-    val route = navigate(tapped)                            // 點擊：導航，路由裡放什麼由版本決定
+    // 點擊：導航，路由裡放什麼由版本決定
+    val route = navigate(tapped)
     delay(100)
-    repo.update(tapped.id, "已成交")                         // 導航期間，伺服器更新了這筆訂單
+    // 導航期間，伺服器更新了這筆訂單
+    repo.update(tapped.id, "已成交")
     delay(100)
     log("詳情畫面顯示：訂單 ${tapped.id}：${showDetail(route, repo)}")
     log("伺服器上的最新狀態：${repo.find(tapped.id).status}")
@@ -51,7 +57,8 @@ private suspend fun <Route> scenario(
 
 // MARK: - Bug 版
 private object L03Bug {
-    // TODO ①-1：路由帶整個 Order：把下面改成 data class OrderDetail(val order: L03Order)
+    // TODO ①-1：路由帶整個 Order：把下面改成 data class OrderDetail(val order:
+    // L03Order)
     class OrderDetail
 
     // TODO ①-2：點擊訂單，建立路由：回傳 OrderDetail(order)
@@ -60,26 +67,31 @@ private object L03Bug {
     // TODO ①-3：詳情畫面直接顯示路由帶來的物件：回傳 route.order.status
     fun showDetail(route: OrderDetail): String = ""
 
-    suspend fun run(log: LabLog) = scenario(log, ::navigate) { route, _ -> showDetail(route) }
+    suspend fun run(log: LabLog) = scenario(log, ::navigate) { route, _ ->
+        showDetail(route)
+    }
 }
 
 // MARK: - 修正版
 private object L03Fixed {
-    // TODO ②-1：路由只帶識別碼：把下面改成 data class OrderDetail(val orderId: String)
+    // TODO ②-1：路由只帶識別碼：把下面改成 data class OrderDetail(val orderId:
+    // String)
     class OrderDetail
 
     // TODO ②-2：點擊訂單，建立路由：回傳 OrderDetail(order.id)
     fun navigate(order: L03Order) = OrderDetail()
 
-    // TODO ②-3：詳情畫面向 repository 取最新的訂單：回傳 repo.find(route.orderId).status
+    // TODO ②-3：詳情畫面向 repository 取最新的訂單：回傳 repo.find(route.
+    // orderId).status
     fun showDetail(route: OrderDetail, repo: L03OrderRepository): String = ""
 
     suspend fun run(log: LabLog) = scenario(log, ::navigate, ::showDetail)
 }
 
 // MARK: - 演練設定
-private fun shown(lines: List<String>): String? =
-    lines.firstOrNull { it.startsWith("詳情畫面顯示：訂單 A1001：") }?.removePrefix("詳情畫面顯示：訂單 A1001：")
+private fun shown(lines: List<String>): String? = lines.firstOrNull {
+    it.startsWith("詳情畫面顯示：訂單 A1001：")
+}?.removePrefix("詳情畫面顯示：訂單 A1001：")
 
 val l03 = Lab(
     id = "L03",

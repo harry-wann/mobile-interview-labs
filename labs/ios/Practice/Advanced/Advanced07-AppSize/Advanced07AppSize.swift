@@ -6,6 +6,7 @@ enum Advanced07AppSize {
         id: "advanced-app-size",
         code: "Advanced07AppSize",
         title: "App 體積",
-        labs: [l01, l02, l03, l04]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04]
     )
 }

@@ -1,11 +1,17 @@
 // L04：在 leg { } 裡寫錯，改到的卻是整張訂單的 symbol（@DslMarker）
-// 對應複習站：Kotlin02Functions 第 3 題「什麼是 lambda with receiver？DSL 怎麼做，@DslMarker 是做什麼的？」
+// 對應複習站：Kotlin02Functions 第 3 題「什麼是 lambda with receiver？DSL
+// 怎麼做，@DslMarker 是做什麼的？」
 //
-// 情境：用 DSL 組訂單：order { symbol = …; leg { price = …; qty = … } }。每個 leg（一筆分批委託）只有 price 和 qty，沒有 symbol。
-// Bug 版：builder 沒有加 @DslMarker。在 leg { } 裡面寫 symbol = "ETH_JPY"，LegBuilder 沒有 symbol，
-//        Kotlin 就往外層找，找到 OrderBuilder.symbol 並且默默改掉。編譯器不會提醒，整張訂單的 symbol 被改成 ETH_JPY。
-// 修正版：定義 @DslMarker 標註，標在 OrderBuilder 和 LegBuilder 上。區塊裡只能隱含地使用最近的一層 receiver，
-//        在 leg { } 裡寫 symbol = … 會編譯錯誤，要用外層必須明確寫 this@order.symbol。
+// 情境：用 DSL 組訂單：order { symbol = …; leg { price = …; qty = … } }。每個
+// leg（一筆分批委託）只有 price 和 qty，沒有 symbol。
+// Bug 版：builder 沒有加 @DslMarker。在 leg { } 裡面寫 symbol = "ETH_JPY"，
+// LegBuilder 沒有 symbol，
+//        Kotlin 就往外層找，找到 OrderBuilder.symbol 並且默默改掉。
+// 編譯器不會提醒，整張訂單的 symbol 被改成 ETH_JPY。
+// 修正版：定義 @DslMarker 標註，標在 OrderBuilder 和 LegBuilder 上。
+// 區塊裡只能隱含地使用最近的一層 receiver，
+//        在 leg { } 裡寫 symbol = … 會編譯錯誤，要用外層必須明確寫 this@order.
+// symbol。
 package tw.harry.labs.solution.kotlin02functions
 
 import java.math.BigDecimal
@@ -33,13 +39,16 @@ private object L04Bug {
         fun build() = DslOrder(symbol, legs.toList())
     }
 
-    fun order(block: OrderBuilder.() -> Unit): DslOrder = OrderBuilder().apply(block).build()
+    fun order(block: OrderBuilder.() -> Unit): DslOrder =
+        OrderBuilder().apply(block).build()
 
     fun run(log: LabLog) {
         val o = order {
             symbol = "BTC_JPY"
             leg {
-                symbol = "ETH_JPY"                         // 手滑：LegBuilder 沒有 symbol，往外層找到 OrderBuilder.symbol，默默改掉
+                // 手滑：LegBuilder 沒有 symbol，往外層找到 OrderBuilder.
+                // symbol，默默改掉
+                symbol = "ETH_JPY"
                 price = BigDecimal("100")
                 qty = BigDecimal("0.5")
             }
@@ -52,7 +61,8 @@ private object L04Bug {
 private object L04Fixed {
     @DslMarker
     @Retention(AnnotationRetention.RUNTIME)
-    annotation class OrderDsl                              // 自己定義的 DSL 標註
+    // 自己定義的 DSL 標註
+    annotation class OrderDsl
 
     @OrderDsl
     class LegBuilder {
@@ -71,21 +81,31 @@ private object L04Fixed {
         fun build() = DslOrder(symbol, legs.toList())
     }
 
-    fun order(block: OrderBuilder.() -> Unit): DslOrder = OrderBuilder().apply(block).build()
+    fun order(block: OrderBuilder.() -> Unit): DslOrder =
+        OrderBuilder().apply(block).build()
 
     fun run(log: LabLog) {
         val o = order {
             symbol = "BTC_JPY"
             leg {
-                // symbol = "ETH_JPY"                      // 取消註解看看：有 @DslMarker 之後，這一行會編譯錯誤
+                // symbol = "ETH_JPY"                      // 取消註解看看：有
+                // @DslMarker 之後，這一行會編譯錯誤
                 price = BigDecimal("100")
                 qty = BigDecimal("0.5")
             }
         }
         log("訂單 symbol = ${o.symbol}，${o.legs.size} 筆 leg")
         // @DslMarker 要標在每一層 builder 上才有效（用反射確認）
-        log("OrderBuilder 標了 @OrderDsl：${OrderBuilder::class.java.isAnnotationPresent(OrderDsl::class.java)}")
-        log("LegBuilder 標了 @OrderDsl：${LegBuilder::class.java.isAnnotationPresent(OrderDsl::class.java)}")
+        log(
+            "OrderBuilder 標了 @OrderDsl：${OrderBuilder::class.java.isAnnotationPresent(
+                OrderDsl::class.java,
+            )}",
+        )
+        log(
+            "LegBuilder 標了 @OrderDsl：${LegBuilder::class.java.isAnnotationPresent(
+                OrderDsl::class.java,
+            )}",
+        )
     }
 }
 
@@ -111,8 +131,12 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("訂單 symbol = ") } -> "沒有組出訂單：order { } 要回傳 DslOrder"
+            lines.none {
+                it.startsWith("訂單 symbol = ")
+            } -> "沒有組出訂單：order { } 要回傳 DslOrder"
+
             "訂單 symbol = ETH_JPY，1 筆 leg" !in lines -> "Bug 版 symbol 要被 leg 區塊裡的 symbol = \"ETH_JPY\" 默默改掉：builder 先不要加 @DslMarker"
+
             else -> null
         }
     },

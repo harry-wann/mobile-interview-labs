@@ -1,16 +1,26 @@
-// L02：輸錯一次卡片密碼，App 自動重試了好幾次，卡片被鎖住了（NFC 讀卡失敗要依狀態碼分類處理）
+// L02：輸錯一次卡片密碼，App 自動重試了好幾次，卡片被鎖住了（NFC
+// 讀卡失敗要依狀態碼分類處理）
 // 對應複習站：Exchange11eKYC 第 3 題「NFC 讀卡失敗時要怎麼處理？」
 //
-// 情境：用 NFC 讀個人編號卡之類的 IC 卡時，App 送 APDU 指令給卡片（Android 是 IsoDep.transceive），卡片回應的最後兩個位元組是狀態碼（SW1、SW2）。
-//        這裡用一張假卡片，狀態碼用的是 ISO 7816-4 的通用定義：9000 成功；63Cx 密碼驗證失敗、還剩 x 次機會；6983 密碼已被鎖定。
-//        假卡片的密碼是 1234（演練用，不是真的），剩餘 3 次，錯到 0 次就鎖定。（卡片的實際規格以官方資料為準，這裡只演練「依狀態碼分類」。）
-//        App 的做法是：送出密碼，依狀態碼決定下一步（成功／自動重試／顯示密碼錯誤與剩餘次數／顯示已鎖定／顯示讀取失敗），整個流程最多送 5 次。
-//        兩個情境：①使用者輸錯一次密碼（輸入 1243）②使用者輸入正確密碼，但卡片在中途移開了一次（第一次送出沒有收到回應，IsoDep 會丟 IOException）。
+// 情境：用 NFC 讀個人編號卡之類的 IC 卡時，App 送 APDU 指令給卡片（Android 是
+// IsoDep.transceive），卡片回應的最後兩個位元組是狀態碼（SW1、SW2）。
+//        這裡用一張假卡片，狀態碼用的是 ISO 7816-4 的通用定義：9000 成功；63Cx
+// 密碼驗證失敗、還剩 x 次機會；6983 密碼已被鎖定。
+//        假卡片的密碼是 1234（演練用，不是真的），剩餘 3 次，錯到 0 次就鎖定。
+// （卡片的實際規格以官方資料為準，這裡只演練「依狀態碼分類」。）
+//        App 的做法是：送出密碼，
+// 依狀態碼決定下一步（成功／自動重試／顯示密碼錯誤與剩餘次數／顯示已鎖定／顯示讀取失敗），
+// 整個流程最多送 5 次。
+//        兩個情境：①使用者輸錯一次密碼（輸入 1243）②使用者輸入正確密碼，
+// 但卡片在中途移開了一次（第一次送出沒有收到回應，IsoDep 會丟 IOException）。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.classify）：sw 是 0x9000 回傳 Done，其他（包含 null）一律回傳 Retry。
-//   ② 修正版（L02Fixed.classify）：sw 是 null → Retry；0x9000 → Done；(sw and 0xFFF0) == 0x63C0 → 剩餘次數是 sw and 0x000F，
-//      大於 0 回傳 ShowWrongPin(left)，等於 0 回傳 ShowLocked；0x6983 → ShowLocked；其他 → ShowFailed。
+//   ① Bug 版（L02Bug.classify）：sw 是 0x9000 回傳 Done，其他（包含 null）
+// 一律回傳 Retry。
+//   ② 修正版（L02Fixed.classify）：sw 是 null → Retry；0x9000 → Done；(sw and
+// 0xFFF0) == 0x63C0 → 剩餘次數是 sw and 0x000F，
+//      大於 0 回傳 ShowWrongPin(left)，等於 0 回傳 ShowLocked；0x6983 →
+// ShowLocked；其他 → ShowFailed。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange11-ekyc/L02_CardPin.kt
 package tw.harry.labs.practice.exchange11ekyc
@@ -28,9 +38,14 @@ private class L02Card(dropFirst: Int = 0) {
         private set
     var sendCount = 0
         private set
-    private var dropNext = dropFirst                 // 前幾次送出會因為卡片移開而沒有回應
 
-    /** 送出密碼。回傳狀態碼；null 代表沒有收到回應（卡片移開），這種情況不會消耗剩餘次數 */
+    // 前幾次送出會因為卡片移開而沒有回應
+    private var dropNext = dropFirst
+
+    /**
+     * 送出密碼。回傳狀態碼；null 代表沒有收到回應（卡片移開），
+     * 這種情況不會消耗剩餘次數
+     */
     fun verify(pin: String): Int? {
         sendCount++
         if (dropNext > 0) {
@@ -57,7 +72,11 @@ private sealed interface L02Action {
 }
 
 /** 送出密碼並依分類結果處理，最多送 5 次。回傳畫面上要顯示的訊息 */
-private fun submit(pin: String, card: L02Card, classify: (Int?) -> L02Action): String {
+private fun submit(
+    pin: String,
+    card: L02Card,
+    classify: (Int?) -> L02Action,
+): String {
     repeat(5) {
         when (val action = classify(card.verify(pin))) {
             L02Action.Done -> return "讀取成功"
@@ -74,7 +93,9 @@ private fun submit(pin: String, card: L02Card, classify: (Int?) -> L02Action): S
 private fun scenario(log: LabLog, classify: (Int?) -> L02Action) {
     val card1 = L02Card()
     val message1 = submit("1243", card1, classify)
-    log("情境 1（輸錯一次密碼）：卡片收到 ${card1.sendCount} 次密碼，剩餘嘗試次數 ${card1.triesLeft}，卡片鎖定：${if (card1.locked) "是" else "否"}")
+    log(
+        "情境 1（輸錯一次密碼）：卡片收到 ${card1.sendCount} 次密碼，剩餘嘗試次數 ${card1.triesLeft}，卡片鎖定：${if (card1.locked) "是" else "否"}",
+    )
     log("情境 1 畫面顯示：$message1")
 
     val card2 = L02Card(dropFirst = 1)
@@ -85,7 +106,8 @@ private fun scenario(log: LabLog, classify: (Int?) -> L02Action) {
 // MARK: - Bug 版
 private object L02Bug {
     fun classify(sw: Int?): L02Action {
-        // TODO ①：sw 等於 0x9000 回傳 L02Action.Done，其他（包含 null）一律回傳 L02Action.Retry
+        // TODO ①：sw 等於 0x9000 回傳 L02Action.Done，其他（包含 null）
+        // 一律回傳 L02Action.Retry
         return L02Action.ShowFailed
     }
 
@@ -95,7 +117,9 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun classify(sw: Int?): L02Action {
-        // TODO ②：sw 是 null → Retry；0x9000 → Done；(sw and 0xFFF0) == 0x63C0 → left = sw and 0x000F，大於 0 回傳 ShowWrongPin(left)，等於 0 回傳 ShowLocked；
+        // TODO ②：sw 是 null → Retry；0x9000 → Done；(sw and 0xFFF0) == 0x63C0
+        // → left = sw and 0x000F，大於 0 回傳 ShowWrongPin(left)，等於 0 回傳
+        // ShowLocked；
         //        0x6983 → ShowLocked；其他 → ShowFailed
         return L02Action.ShowFailed
     }
@@ -127,21 +151,44 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("情境 2") } -> "演練沒有跑完：要用 scenario(log) { sw -> … } 執行"
-            "情境 2（卡片中途移開一次）：卡片收到 2 次指令，畫面顯示：讀取成功" !in lines -> "Bug 版的卡片移開要自動重試，第二次送出後讀取成功"
-            "情境 1（輸錯一次密碼）：卡片收到 5 次密碼，剩餘嘗試次數 0，卡片鎖定：是" !in lines ->
+            lines.none { it.startsWith("情境 2") } -> {
+                "演練沒有跑完：要用 scenario(log) { sw -> … } 執行"
+            }
+
+            "情境 2（卡片中途移開一次）：卡片收到 2 次指令，畫面顯示：讀取成功" !in lines -> {
+                "Bug 版的卡片移開要自動重試，第二次送出後讀取成功"
+            }
+
+            "情境 1（輸錯一次密碼）：卡片收到 5 次密碼，剩餘嘗試次數 0，卡片鎖定：是" !in lines -> {
                 "Bug 還沒重現：不是 9000 就一律自動重試，同一個錯的密碼會被送 5 次，卡片被鎖定"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("情境 2") } -> "演練沒有跑完：要用 scenario(log) { sw -> … } 執行"
-            "情境 2（卡片中途移開一次）：卡片收到 2 次指令，畫面顯示：讀取成功" !in lines -> "情境 2：沒有回應（null）要重試，重試後會成功"
-            "情境 1（輸錯一次密碼）：卡片收到 1 次密碼，剩餘嘗試次數 2，卡片鎖定：否" !in lines ->
+            lines.none { it.startsWith("情境 2") } -> {
+                "演練沒有跑完：要用 scenario(log) { sw -> … } 執行"
+            }
+
+            "情境 2（卡片中途移開一次）：卡片收到 2 次指令，畫面顯示：讀取成功" !in lines -> {
+                "情境 2：沒有回應（null）要重試，重試後會成功"
+            }
+
+            "情境 1（輸錯一次密碼）：卡片收到 1 次密碼，剩餘嘗試次數 2，卡片鎖定：否" !in lines -> {
                 "情境 1：密碼錯誤（63Cx）要停止，不能自動重試，卡片只應該收到 1 次密碼"
-            "情境 1 畫面顯示：密碼錯誤，還剩 2 次" !in lines -> "情境 1 的畫面要顯示「密碼錯誤，還剩 2 次」（剩餘次數是狀態碼最後一位）"
-            else -> null
+            }
+
+            "情境 1 畫面顯示：密碼錯誤，還剩 2 次" !in lines -> {
+                "情境 1 的畫面要顯示「密碼錯誤，還剩 2 次」（剩餘次數是狀態碼最後一位）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

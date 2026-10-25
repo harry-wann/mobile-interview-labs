@@ -1,12 +1,18 @@
 // L02：「撤單」測試單獨跑就失敗，換個順序也失敗（測試依賴別的測試留下的資料）
-// 對應複習站：Testing04E2E 第 2 題「交易所 App 的測試環境要注意什麼？」（每次測試前重設資料）
+// 對應複習站：Testing04E2E 第 2 題「交易所 App 的測試環境要注意什麼？」
+// （每次測試前重設資料）
 //
-// 情境：兩個 E2E 測試：A「限價買單後，未成交列表有這筆訂單」、B「撤單後，未成交列表是空的」。
-//       後端是 T04FakeExchange（每個帳號有自己的未成交訂單；createAccount() 建立全新的帳號）。
-//       演練用三種方式跑：依序 A→B、順序換成 B→A、只跑 B（例如只重跑失敗的測試）。每一輪開始前，後端都是乾淨的。
-// Bug 版：兩個測試共用同一個測試帳號 "e2e-user"，B 假設 A 已經下過單，自己沒有準備資料。
+// 情境：兩個 E2E 測試：A「限價買單後，未成交列表有這筆訂單」、B「撤單後，
+// 未成交列表是空的」。
+//       後端是 T04FakeExchange（每個帳號有自己的未成交訂單；createAccount()
+// 建立全新的帳號）。
+//       演練用三種方式跑：依序 A→B、順序換成 B→A、只跑
+// B（例如只重跑失敗的測試）。每一輪開始前，後端都是乾淨的。
+// Bug 版：兩個測試共用同一個測試帳號 "e2e-user"，B 假設 A 已經下過單，
+// 自己沒有準備資料。
 //        A→B 通過；B→A 和只跑 B，B 一開始就沒有訂單可以撤，失敗。
-// 修正版：每個測試用 createAccount() 建立自己的帳號，B 自己先下一筆單當作前置條件再撤單。三種跑法都通過。
+// 修正版：每個測試用 createAccount() 建立自己的帳號，B
+// 自己先下一筆單當作前置條件再撤單。三種跑法都通過。
 package tw.harry.labs.solution.testing04e2e
 
 import tw.harry.labs.kit.Lab
@@ -16,9 +22,17 @@ import tw.harry.labs.kit.Variant
 private typealias L02Test = Pair<String, suspend (T04Expect) -> Unit>
 
 /** 演練流程（兩個版本共用）：同樣兩個測試，用三種順序各跑一輪 */
-private suspend fun scenario(log: LabLog, makeTests: (T04FakeExchange) -> List<L02Test>) {
-    for ((label, order) in listOf("順序 A→B" to listOf(0, 1), "順序 B→A" to listOf(1, 0), "只跑 B" to listOf(1))) {
-        val exchange = T04FakeExchange()                           // 每一輪開始前，後端都是乾淨的
+private suspend fun scenario(
+    log: LabLog,
+    makeTests: (T04FakeExchange) -> List<L02Test>,
+) {
+    for ((label, order) in listOf(
+        "順序 A→B" to listOf(0, 1),
+        "順序 B→A" to listOf(1, 0),
+        "只跑 B" to listOf(1),
+    )) {
+        // 每一輪開始前，後端都是乾淨的
+        val exchange = T04FakeExchange()
         val all = makeTests(exchange)
         val suite = T04Suite()
         for (i in order) suite.test(all[i].first, all[i].second)
@@ -34,7 +48,8 @@ private object L02Bug {
             t.equal(exchange.openOrders("e2e-user").size, 1)
         },
         "B 撤單後，未成交列表是空的" to { t ->
-            t.isTrue(exchange.cancelFirst("e2e-user"), "沒有未成交的訂單可以撤")      // 假設 A 已經下過單
+            // 假設 A 已經下過單
+            t.isTrue(exchange.cancelFirst("e2e-user"), "沒有未成交的訂單可以撤")
             t.equal(exchange.openOrders("e2e-user").size, 0)
         },
     )
@@ -46,13 +61,14 @@ private object L02Bug {
 private object L02Fixed {
     fun tests(exchange: T04FakeExchange): List<L02Test> = listOf(
         "A 限價買單後，未成交列表有這筆訂單" to { t ->
-            val account = exchange.createAccount()                 // 自己的帳號
+            val account = exchange.createAccount() // 自己的帳號
             exchange.placeLimitBuy(account, 15_000_000)
             t.equal(exchange.openOrders(account).size, 1)
         },
         "B 撤單後，未成交列表是空的" to { t ->
             val account = exchange.createAccount()
-            exchange.placeLimitBuy(account, 15_000_000)            // 自己準備前置條件：先有一筆未成交訂單
+            // 自己準備前置條件：先有一筆未成交訂單
+            exchange.placeLimitBuy(account, 15_000_000)
             t.isTrue(exchange.cancelFirst(account), "沒有未成交的訂單可以撤")
             t.equal(exchange.openOrders(account).size, 0)
         },

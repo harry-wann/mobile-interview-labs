@@ -1,13 +1,18 @@
 // L03：後端欄位型別變了，轉型沒擋住，錯在使用的地方才爆（reified）
-// 對應複習站：Kotlin01Types 第 3 題「inline、reified、crossinline、noinline 各自解決什麼問題？」
+// 對應複習站：Kotlin01Types 第 3 題「inline、reified、crossinline、noinline
+// 各自解決什麼問題？」
 //
-// 情境：App 把後端回傳的 JSON 解析成 Map<String, Any?>，再用自己寫的 getAs 取出欄位。
-//        後端把 amount 從數字 0.5 改成字串 "0.5"（交易所常見：為了避免浮點數誤差，改用字串傳金額）。
+// 情境：App 把後端回傳的 JSON 解析成 Map<String, Any?>，再用自己寫的 getAs
+// 取出欄位。
+//        後端把 amount 從數字 0.5 改成字串 "0.5"（交易所常見：
+// 為了避免浮點數誤差，改用字串傳金額）。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug）：寫沒有 reified 的泛型函式 getAs，用 as? T 取值。T 在執行時被擦除，沒有真的檢查，
+//   ① Bug 版（L03Bug）：寫沒有 reified 的泛型函式 getAs，用 as? T 取值。T
+// 在執行時被擦除，沒有真的檢查，
 //      字串被當成 Double 傳出來，用到的那一行才 ClassCastException。
-//   ② 修正版（L03Fixed）：改成 inline + reified，as? T 真的會檢查，型別不對就回傳 null。
+//   ② 修正版（L03Fixed）：改成 inline + reified，as? T 真的會檢查，
+// 型別不對就回傳 null。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin01-types/L03_Reified.kt
 package tw.harry.labs.practice.kotlin01types
@@ -18,18 +23,24 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 後端回傳的資料：amount 這次是字串 */
-private val response: Map<String, Any?> = mapOf("symbol" to "BTC_JPY", "amount" to "0.5")
+private val response: Map<String, Any?> = mapOf(
+    "symbol" to "BTC_JPY",
+    "amount" to "0.5",
+)
 
 // MARK: - Bug 版
 private object L03Bug {
-    // TODO ①：寫 fun <T> Map<String, Any?>.getAs(key: String): T?，用 this[key] as? T 回傳。
-    //        不要加 inline、reified（編譯器會警告 unchecked cast，加 @Suppress("UNCHECKED_CAST") 即可）
+    // TODO ①：寫 fun <T> Map<String, Any?>.getAs(key: String): T?，用
+    // this[key] as? T 回傳。
+    //        不要加 inline、reified（編譯器會警告 unchecked cast，加
+    // @Suppress("UNCHECKED_CAST") 即可）
     fun <T> Map<String, Any?>.getAs(key: String): T? = null
 
     fun run(log: LabLog) {
         log("symbol = ${response.getAs<String>("symbol")}")
         try {
-            val amount: Double = response.getAs("amount") ?: 0.0            // 沒有回傳 null，字串被當成 Double 傳出來
+            // 沒有回傳 null，字串被當成 Double 傳出來
+            val amount: Double = response.getAs("amount") ?: 0.0
             log("amount = $amount")
         } catch (e: ClassCastException) {
             log("取 amount 時 ClassCastException")
@@ -39,16 +50,19 @@ private object L03Bug {
 
 // MARK: - 修正版
 private object L03Fixed {
-    // TODO ②：改成 inline fun <reified T> Map<String, Any?>.getAs(key: String): T?，一樣用 this[key] as? T
+    // TODO ②：改成 inline fun <reified T> Map<String, Any?>.getAs(key:
+    // String): T?，一樣用 this[key] as? T
     fun <T> Map<String, Any?>.getAs(key: String): T? = null
 
     fun run(log: LabLog) {
         log("symbol = ${response.getAs<String>("symbol")}")
-        val amount: Double? = response.getAs("amount")                      // 型別不對，回傳 null
+        // 型別不對，回傳 null
+        val amount: Double? = response.getAs("amount")
         if (amount != null) {
             log("amount = $amount")
         } else {
-            val text = response.getAs<String>("amount")                     // 改成用字串解析，金額用 BigDecimal
+            // 改成用字串解析，金額用 BigDecimal
+            val text = response.getAs<String>("amount")
             log("amount 不是數字，改用字串解析：${text?.let { BigDecimal(it) }}")
         }
     }
@@ -85,8 +99,13 @@ val l03 = Lab(
     checkFixed = { lines ->
         when {
             "symbol = BTC_JPY" !in lines -> "getAs<String>(\"symbol\") 要能取到 BTC_JPY"
-            lines.any { it.contains("ClassCastException") } -> "還是 ClassCastException：getAs 要加上 inline 和 reified"
+
+            lines.any {
+                it.contains("ClassCastException")
+            } -> "還是 ClassCastException：getAs 要加上 inline 和 reified"
+
             "amount 不是數字，改用字串解析：0.5" !in lines -> "getAs<Double> 型別不對時要回傳 null，再改用字串解析"
+
             else -> null
         }
     },

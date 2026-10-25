@@ -1,16 +1,22 @@
 // L05：私有頻道連上了，卻一直收不到自己的訂單（還沒認證成功就送 sub）
-// 對應複習站：Exchange03WebSocket 第 5 題「私有頻道怎麼用？認證、限流、順序不保證是什麼意思？」
+// 對應複習站：Exchange03WebSocket 第 5 題「私有頻道怎麼用？認證、限流、
+// 順序不保證是什麼意思？」
 //
-// 情境：連上私有頻道 /ws/v2 之後，要先送簽名過的 auth（認證），收到 {"action":"req","code":200,"ch":"auth",...} 才能訂閱。
-//       假伺服器：auth 的結果要過一小段時間才會回來；認證成功之前收到的 sub 一律拒絕，
-//       回 {"action":"sub","code":2002,...}（錯誤碼與文字是演練的假設，不是交易所的規格）。
+// 情境：連上私有頻道 /ws/v2 之後，要先送簽名過的 auth（認證），收到 {"action":
+// "req","code":200,"ch":"auth",...} 才能訂閱。
+//       假伺服器：auth 的結果要過一小段時間才會回來；認證成功之前收到的 sub
+// 一律拒絕，
+//       回 {"action":"sub","code":2002,...}（錯誤碼與文字是演練的假設，
+// 不是交易所的規格）。
 //       App 想訂閱 orders#btcjpy（自己的訂單）。
-// Bug 版：連上之後把 auth 和 sub 連續送出。sub 比認證結果先到伺服器，被拒絕；之後認證成功了，App 卻不會再訂閱一次，畫面永遠收不到訂單。
+// Bug 版：連上之後把 auth 和 sub 連續送出。sub 比認證結果先到伺服器，被拒絕；
+// 之後認證成功了，App 卻不會再訂閱一次，畫面永遠收不到訂單。
 // 修正版：連上之後只送 auth；收到認證成功（code 200）的回覆，才送 sub。
 import Foundation
 import LabKit
 
-private let authRequest = #"{"action":"req","ch":"auth","params":{"authType":"api","signatureMethod":"HmacSHA256","signatureVersion":"2.1"}}"#
+private let authRequest =
+    #"{"action":"req","ch":"auth","params":{"authType":"api","signatureMethod":"HmacSHA256","signatureVersion":"2.1"}}"#
 private let subRequest = #"{"action":"sub","ch":"orders#btcjpy"}"#
 
 /// 假的私有頻道伺服器
@@ -21,15 +27,22 @@ private final class PrivateServer {
     private(set) var rejectedSubs = 0
 
     func receive(_ text: String) {
-        guard let json = e03Parse(text), let action = json["action"] as? String, let ch = json["ch"] as? String else { return }
+        guard let json = e03Parse(text), let action = json["action"] as? String,
+            let ch = json["ch"] as? String
+        else { return }
         if action == "req", ch == "auth" {
-            authPending = true                                  // 認證要過一小段時間才有結果
+            // 認證要過一小段時間才有結果
+            authPending = true
         } else if action == "sub" {
             if authenticated {
-                outbox.append("{\"action\":\"sub\",\"code\":200,\"ch\":\"\(ch)\",\"data\":{}}")
+                outbox.append(
+                    "{\"action\":\"sub\",\"code\":200,\"ch\":\"\(ch)\",\"data\":{}}"
+                )
             } else {
                 rejectedSubs += 1
-                outbox.append("{\"action\":\"sub\",\"code\":2002,\"ch\":\"\(ch)\",\"message\":\"invalid.auth.state\"}")
+                outbox.append(
+                    "{\"action\":\"sub\",\"code\":2002,\"ch\":\"\(ch)\",\"message\":\"invalid.auth.state\"}"
+                )
             }
         }
     }
@@ -39,15 +52,21 @@ private final class PrivateServer {
         if authPending {
             authPending = false
             authenticated = true
-            outbox.insert("{\"action\":\"req\",\"code\":200,\"ch\":\"auth\",\"data\":{}}", at: 0)
+            outbox.insert(
+                "{\"action\":\"req\",\"code\":200,\"ch\":\"auth\",\"data\":{}}",
+                at: 0)
         }
         defer { outbox = [] }
         return outbox
     }
 }
 
-/// 演練流程（兩個版本共用）：連上 → 伺服器每過一小段時間把結果送回來，App 逐一處理
-private func scenario(_ log: LabLog, onOpen: (PrivateServer) -> Void, onMessage: (String, PrivateServer) -> Void, subscribed: () -> Bool) {
+/// 演練流程（兩個版本共用）：連上 → 伺服器每過一小段時間把結果送回來，App
+/// 逐一處理
+private func scenario(
+    _ log: LabLog, onOpen: (PrivateServer) -> Void,
+    onMessage: (String, PrivateServer) -> Void, subscribed: () -> Bool
+) {
     let server = PrivateServer()
     onOpen(server)
     for _ in 0..<3 {
@@ -67,18 +86,26 @@ private enum L05Bug {
 
         func onOpen(_ server: PrivateServer) {
             server.receive(authRequest)
-            server.receive(subRequest)                          // 不等認證結果，馬上訂閱
+            // 不等認證結果，馬上訂閱
+            server.receive(subRequest)
         }
 
         func onMessage(_ text: String) {
             guard let json = e03Parse(text) else { return }
-            if json["action"] as? String == "sub", (json["code"] as? NSNumber)?.intValue == 200 { subscribed = true }
+            if json["action"] as? String == "sub",
+                (json["code"] as? NSNumber)?.intValue == 200
+            {
+                subscribed = true
+            }
         }
     }
 
     static func run(_ log: LabLog) async {
         let client = Client()
-        scenario(log, onOpen: client.onOpen, onMessage: { text, _ in client.onMessage(text) }, subscribed: { client.subscribed })
+        scenario(
+            log, onOpen: client.onOpen,
+            onMessage: { text, _ in client.onMessage(text) },
+            subscribed: { client.subscribed })
     }
 }
 
@@ -88,22 +115,28 @@ private enum L05Fixed {
         var subscribed = false
 
         func onOpen(_ server: PrivateServer) {
-            server.receive(authRequest)                         // 連上之後只送 auth
+            // 連上之後只送 auth
+            server.receive(authRequest)
         }
 
         func onMessage(_ text: String, _ server: PrivateServer) {
             guard let json = e03Parse(text) else { return }
             let code = (json["code"] as? NSNumber)?.intValue
-            if json["ch"] as? String == "auth", code == 200 {   // 認證成功了，才訂閱
+            // 認證成功了，才訂閱
+            if json["ch"] as? String == "auth", code == 200 {
                 server.receive(subRequest)
             }
-            if json["action"] as? String == "sub", code == 200 { subscribed = true }
+            if json["action"] as? String == "sub", code == 200 {
+                subscribed = true
+            }
         }
     }
 
     static func run(_ log: LabLog) async {
         let client = Client()
-        scenario(log, onOpen: client.onOpen, onMessage: client.onMessage, subscribed: { client.subscribed })
+        scenario(
+            log, onOpen: client.onOpen, onMessage: client.onMessage,
+            subscribed: { client.subscribed })
     }
 }
 
@@ -120,8 +153,10 @@ extension Exchange03WebSocket {
             "選「修正版」執行，看 sub 是在收到哪一則訊息之後才送出。",
             "進階：成交和取消的通知順序不保證，狀態合併要容許亂序（見下單流程單元）；限流的 429 或 too.many.connection 要退避再連（見連線韌性單元）。",
         ],
-        expectBug: "「伺服器拒絕了 1 次 sub」，認證成功之後 App 沒有再送 sub，「訂閱 orders#btcjpy：沒有成功，畫面永遠收不到訂單」。",
-        expectFixed: "「伺服器拒絕了 0 次 sub」，收到認證成功之後才送 sub，「訂閱 orders#btcjpy：成功，會收到自己的訂單」。",
+        expectBug:
+            "「伺服器拒絕了 1 次 sub」，認證成功之後 App 沒有再送 sub，「訂閱 orders#btcjpy：沒有成功，畫面永遠收不到訂單」。",
+        expectFixed:
+            "「伺服器拒絕了 0 次 sub」，收到認證成功之後才送 sub，「訂閱 orders#btcjpy：成功，會收到自己的訂單」。",
         run: { variant, log in
             switch variant {
             case .bug: await L05Bug.run(log)
@@ -129,14 +164,25 @@ extension Exchange03WebSocket {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("伺服器拒絕了") }) { return "演練沒有跑完：要用 scenario(log, onOpen:, onMessage:, subscribed:) 執行" }
-            return lines.contains("伺服器拒絕了 1 次 sub") && lines.contains("訂閱 orders#btcjpy：沒有成功，畫面永遠收不到訂單")
+            if !lines.contains(where: { $0.hasPrefix("伺服器拒絕了") }) {
+                return
+                    "演練沒有跑完：要用 scenario(log, onOpen:, onMessage:, subscribed:) 執行"
+            }
+            return lines.contains("伺服器拒絕了 1 次 sub")
+                && lines.contains("訂閱 orders#btcjpy：沒有成功，畫面永遠收不到訂單")
                 ? nil : "Bug 還沒重現：onOpen 要把 auth 和 sub 連續送出（不等認證結果），sub 會被拒絕一次"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("伺服器拒絕了") }) { return "演練沒有跑完：要用 scenario(log, onOpen:, onMessage:, subscribed:) 執行" }
-            if !lines.contains("伺服器拒絕了 0 次 sub") { return "sub 不能比認證結果先送出：onOpen 只送 auth" }
-            return lines.contains("訂閱 orders#btcjpy：成功，會收到自己的訂單") ? nil : "收到認證成功（ch 是 auth、code 是 200）之後，要送 sub；收到 sub 的成功回覆才算訂閱成功"
+            if !lines.contains(where: { $0.hasPrefix("伺服器拒絕了") }) {
+                return
+                    "演練沒有跑完：要用 scenario(log, onOpen:, onMessage:, subscribed:) 執行"
+            }
+            if !lines.contains("伺服器拒絕了 0 次 sub") {
+                return "sub 不能比認證結果先送出：onOpen 只送 auth"
+            }
+            return lines.contains("訂閱 orders#btcjpy：成功，會收到自己的訂單")
+                ? nil
+                : "收到認證成功（ch 是 auth、code 是 200）之後，要送 sub；收到 sub 的成功回覆才算訂閱成功"
         }
     )
 }

@@ -1,13 +1,20 @@
-// L02：維護中的價格顯示成 -1，還觸發了誤報的跌破提醒（舊 SDK 的怪習慣要擋在邊界，不要滲進新程式）
-// 對應複習站：Advanced09Architecture 第 1 題「面對已經上線的舊專案，怎麼逐步演進，而不是整個重寫？」（anti-corruption layer）
+// L02：維護中的價格顯示成 -1，還觸發了誤報的跌破提醒（舊 SDK
+// 的怪習慣要擋在邊界，不要滲進新程式）
+// 對應複習站：Advanced09Architecture 第 1 題「面對已經上線的舊專案，
+// 怎麼逐步演進，而不是整個重寫？」（anti-corruption layer）
 //
-// 情境：新的畫面要從舊的行情 SDK 取價格。舊 SDK 的習慣是：沒有價格（維護中）時，last 傳 -1。
-//       新程式裡有三個地方會用到價格：價格標籤、下單表單的預設價格、「跌破 14000000 時通知我」的價格提醒。
+// 情境：新的畫面要從舊的行情 SDK 取價格。舊 SDK 的習慣是：沒有價格（維護中）
+// 時，last 傳 -1。
+//       新程式裡有三個地方會用到價格：價格標籤、下單表單的預設價格、「跌破
+// 14000000 時通知我」的價格提醒。
 //       演練各用一個正常的報價與一個維護中的報價（last 是 -1）測試。
-// Bug 版：新程式直接使用舊 SDK 的型別，三個地方各自假設 last 是真的價格。維護中時，標籤顯示「-1 JPY」，
+// Bug 版：新程式直接使用舊 SDK 的型別，三個地方各自假設 last 是真的價格。
+// 維護中時，標籤顯示「-1 JPY」，
 //        下單表單預設價格是 -1，「跌破」提醒還因為 -1 小於 14000000 而觸發。
-// 修正版：在邊界放一層 anti-corruption layer（adapter／mapper）：把舊 SDK 的型別轉成新程式自己的 Ticker，
-//        「沒有價格」轉成 null。三個地方都只認 Ticker，每個都明確處理 null。以後 SDK 換了，只改這一層。
+// 修正版：在邊界放一層 anti-corruption layer（adapter／mapper）：把舊 SDK
+// 的型別轉成新程式自己的 Ticker，
+//        「沒有價格」轉成 null。三個地方都只認 Ticker，每個都明確處理 null。
+// 以後 SDK 換了，只改這一層。
 package tw.harry.labs.solution.advanced09architecture
 
 import java.math.BigDecimal
@@ -20,7 +27,13 @@ private class L02LegacyTicker(val symbol: String, val last: Double)
 
 private object L02LegacySdk {
     /** 0 是正常的報價，1 是維護中 */
-    fun fetch(index: Int) = if (index == 0) L02LegacyTicker("BTC_JPY", 15_000_000.0) else L02LegacyTicker("BTC_JPY", -1.0)
+    fun fetch(index: Int) = if (index ==
+        0
+    ) {
+        L02LegacyTicker("BTC_JPY", 15_000_000.0)
+    } else {
+        L02LegacyTicker("BTC_JPY", -1.0)
+    }
 }
 
 private const val ALERT_THRESHOLD = 14_000_000.0
@@ -38,7 +51,16 @@ private fun <T> scenario(
         val price = defaultPrice(ticker)
         log("[$name] 價格標籤：${label(ticker)}")
         log("[$name] 下單表單的預設價格：${price.ifEmpty { "（空白，請使用者輸入）" }}")
-        log("[$name] 跌破 14000000 的提醒：${if (belowAlert(ticker)) "觸發" else "不觸發"}")
+        log(
+            "[$name] 跌破 14000000 的提醒：${if (belowAlert(
+                    ticker,
+                )
+            ) {
+                "觸發"
+            } else {
+                "不觸發"
+            }}",
+        )
     }
 }
 
@@ -49,7 +71,13 @@ private object L02Bug {
     fun defaultPrice(ticker: L02LegacyTicker) = "${ticker.last.toInt()}"
     fun belowAlert(ticker: L02LegacyTicker) = ticker.last <= ALERT_THRESHOLD
 
-    suspend fun run(log: LabLog) = scenario(log, L02LegacySdk::fetch, ::label, ::defaultPrice, ::belowAlert)
+    suspend fun run(log: LabLog) = scenario(
+        log,
+        L02LegacySdk::fetch,
+        ::label,
+        ::defaultPrice,
+        ::belowAlert,
+    )
 }
 
 // MARK: - 修正版
@@ -60,17 +88,28 @@ private object L02Fixed {
     /** anti-corruption layer：舊 SDK 的型別只出現在這裡 */
     fun adapt(legacy: L02LegacyTicker) = Ticker(
         pair = legacy.symbol.replace("_", "/"),
-        last = if (legacy.last < 0) null else BigDecimal.valueOf(legacy.last.toLong()),   // -1 代表沒有價格 → null
+        // -1 代表沒有價格 → null
+        last = if (legacy.last <
+            0
+        ) {
+            null
+        } else {
+            BigDecimal.valueOf(legacy.last.toLong())
+        },
     )
 
-    fun label(ticker: Ticker) = ticker.last?.let { "${it.toPlainString()} JPY" } ?: "—"
+    fun label(ticker: Ticker) =
+        ticker.last?.let { "${it.toPlainString()} JPY" } ?: "—"
     fun defaultPrice(ticker: Ticker) = ticker.last?.toPlainString() ?: ""
     fun belowAlert(ticker: Ticker): Boolean {
-        val last = ticker.last ?: return false                  // 沒有價格，不能拿來比較
+        // 沒有價格，不能拿來比較
+        val last = ticker.last ?: return false
         return last.toDouble() <= ALERT_THRESHOLD
     }
 
-    suspend fun run(log: LabLog) = scenario(log, { adapt(L02LegacySdk.fetch(it)) }, ::label, ::defaultPrice, ::belowAlert)
+    suspend fun run(log: LabLog) = scenario(log, {
+        adapt(L02LegacySdk.fetch(it))
+    }, ::label, ::defaultPrice, ::belowAlert)
 }
 
 // MARK: - 演練設定

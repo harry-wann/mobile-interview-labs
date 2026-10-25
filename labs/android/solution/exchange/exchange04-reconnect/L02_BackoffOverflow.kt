@@ -1,13 +1,22 @@
-// L02：伺服器維護了 10 分鐘，之後重連的等待時間變成負數或 0，手機狂打伺服器（退避的位移溢位）
-// 對應複習站：Exchange04Reconnect 第 2 題「斷線後要等多久再重連？指數退避和 jitter 是什麼？」
+// L02：伺服器維護了 10 分鐘，之後重連的等待時間變成負數或 0，
+// 手機狂打伺服器（退避的位移溢位）
+// 對應複習站：Exchange04Reconnect 第 2 題「斷線後要等多久再重連？指數退避和
+// jitter 是什麼？」
 //
-// 情境：等待時間 = 隨機(0, min(上限, 起始 × 2 的 attempt 次方))，起始 500 毫秒、上限 8 秒。attempt 是目前連續失敗的次數。
-//        伺服器維護 10 分鐘，每次最多等 8 秒，重試了六十幾次還是失敗，attempt 一路加到很大。
-//        演練把亂數固定成 0.5，所以 attempt 4 以後，等待時間都應該是 4000 毫秒（上限 8000 的一半）。
-//        （jitter 本身為什麼要加，Platform05 的演練 6 練過；這題看的是 attempt 變大之後的溢位。）
-// Bug 版：用位移直接算：上限 = min(8000, 500 shl attempt)。attempt 到 55 以後，500 左移的結果超出 64 位元整數，變成負數或 0，
-//        min 把負數留了下來，等待時間變成負數或 0，重連的計時器馬上響，手機一直重連。
-//        （Kotlin 的 shl 還會把位移數字對 64 取餘數：attempt 64 等於位移 0 位，等待時間又回到 250 毫秒。）
+// 情境：等待時間 = 隨機(0, min(上限, 起始 × 2 的 attempt 次方))，起始 500
+// 毫秒、上限 8 秒。attempt 是目前連續失敗的次數。
+//        伺服器維護 10 分鐘，每次最多等 8 秒，重試了六十幾次還是失敗，attempt
+// 一路加到很大。
+//        演練把亂數固定成 0.5，所以 attempt 4 以後，等待時間都應該是 4000
+// 毫秒（上限 8000 的一半）。
+//        （jitter 本身為什麼要加，Platform05 的演練 6 練過；這題看的是 attempt
+// 變大之後的溢位。）
+// Bug 版：用位移直接算：上限 = min(8000, 500 shl attempt)。attempt 到 55 以後，
+// 500 左移的結果超出 64 位元整數，變成負數或 0，
+//        min 把負數留了下來，等待時間變成負數或 0，重連的計時器馬上響，
+// 手機一直重連。
+//        （Kotlin 的 shl 還會把位移數字對 64 取餘數：attempt 64 等於位移 0 位，
+// 等待時間又回到 250 毫秒。）
 // 修正版：先封頂再計算：用迴圈一次翻一倍，到 cap 就停，attempt 再大也不會溢位。
 package tw.harry.labs.solution.exchange04reconnect
 
@@ -33,35 +42,56 @@ private fun scenario(log: LabLog, delayMs: (Int, Double) -> Long) {
 
 // MARK: - Bug 版
 private object L02Bug {
-    fun delayMs(attempt: Int, random: Double, baseMs: Long = 500, capMs: Long = 8000): Long {
-        val ceiling = minOf(capMs, baseMs shl attempt)          // 500 shl 55 超出 64 位元：變成負數；shl 62 以上變成 0
+    fun delayMs(
+        attempt: Int,
+        random: Double,
+        baseMs: Long = 500,
+        capMs: Long = 8000,
+    ): Long {
+        // 500 shl 55 超出 64 位元：變成負數；shl 62 以上變成 0
+        val ceiling = minOf(capMs, baseMs shl attempt)
         return (ceiling * random).toLong()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { attempt, random -> delayMs(attempt, random) }
+    suspend fun run(log: LabLog) = scenario(log) { attempt, random ->
+        delayMs(attempt, random)
+    }
 }
 
 // MARK: - 修正版
 private object L02Fixed {
-    fun delayMs(attempt: Int, random: Double, baseMs: Long = 500, capMs: Long = 8000): Long {
+    fun delayMs(
+        attempt: Int,
+        random: Double,
+        baseMs: Long = 500,
+        capMs: Long = 8000,
+    ): Long {
         var ceiling = baseMs
         var i = 0
-        while (i < attempt && ceiling < capMs) {                // 一次翻一倍，到 cap 就停：attempt 再大也不會溢位
+        // 一次翻一倍，到 cap 就停：attempt 再大也不會溢位
+        while (i < attempt && ceiling < capMs) {
             ceiling = minOf(ceiling * 2, capMs)
             i++
         }
         return (minOf(ceiling, capMs) * random).toLong()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { attempt, random -> delayMs(attempt, random) }
+    suspend fun run(log: LabLog) = scenario(log) { attempt, random ->
+        delayMs(attempt, random)
+    }
 }
 
 // MARK: - 演練設定
-private fun problemCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 9 種 attempt") }?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun problemCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 9 種 attempt")
+}?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
 
 private fun delay(lines: List<String>, attempt: Int): Long? =
-    lines.firstOrNull { it.startsWith("連續失敗 $attempt 次後") }?.let { Regex("下一次等待 (-?\\d+) ms").find(it)?.groupValues?.get(1)?.toLong() }
+    lines.firstOrNull {
+        it.startsWith("連續失敗 $attempt 次後")
+    }?.let {
+        Regex("下一次等待 (-?\\d+) ms").find(it)?.groupValues?.get(1)?.toLong()
+    }
 
 val l02 = Lab(
     id = "L02",
@@ -87,10 +117,19 @@ val l02 = Lab(
         val d55 = delay(lines, 55)
         val d62 = delay(lines, 62)
         when {
-            problemCount(lines) == null -> "演練沒有跑完：要用 scenario(log) { attempt, random -> … } 執行"
-            delay(lines, 4) != 4000L -> "Bug 版在 attempt 還小的時候要算對：上限 = min(8000, 500 shl attempt)，attempt 4 應該是 4000"
+            problemCount(
+                lines,
+            ) == null -> "演練沒有跑完：要用 scenario(log) { attempt, random -> … } 執行"
+
+            delay(
+                lines,
+                4,
+            ) != 4000L -> "Bug 版在 attempt 還小的時候要算對：上限 = min(8000, 500 shl attempt)，attempt 4 應該是 4000"
+
             d55 == null || d55 >= 0 -> "Bug 還沒重現：用 baseMs shl attempt 算，attempt 55 時會溢位成負數（目前 $d55）"
+
             d62 != 0L -> "Bug 還沒重現：attempt 62 時 500 shl 62 會變成 0（目前 $d62）"
+
             else -> null
         }
     },

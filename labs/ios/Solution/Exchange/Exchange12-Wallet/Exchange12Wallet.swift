@@ -6,6 +6,7 @@ enum Exchange12Wallet {
         id: "exchange-wallet-web3",
         code: "Exchange12Wallet",
         title: "錢包與 Web3",
-        labs: [l01, l02, l03, l04, l05, l06, l07, l08]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05, l06, l07, l08]
     )
 }

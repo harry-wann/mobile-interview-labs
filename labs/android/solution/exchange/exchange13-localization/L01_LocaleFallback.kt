@@ -1,14 +1,24 @@
-// L01：香港和簡體區的使用者看到的是英文介面（語系標籤寫死 zh-CN、zh-TW，沒有降級鏈）
-// 對應複習站：Exchange13Localization 第 1 題「四種語言（日文、簡體中文、繁體中文、英文）要怎麼標記與降級？」
+// L01：香港和簡體區的使用者看到的是英文介面（語系標籤寫死 zh-CN、zh-TW，
+// 沒有降級鏈）
+// 對應複習站：Exchange13Localization 第 1 題「四種語言（日文、簡體中文、
+// 繁體中文、英文）要怎麼標記與降級？」
 //
-// 情境：App 提供四種語言：ja、en、zh-Hans（簡體）、zh-Hant（繁體）。使用者的系統語言標籤五花八門：zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、
-//        舊式的 zh-TW／zh-CN／zh-HK、ja-JP、en-US，甚至沒有支援的 fr-FR。簡體和繁體是「文字（script）」的差異，不是地區的差異。
-//        resolve 要回傳 App 該用的語言；找不到時，依「完整標籤、去掉最後一段、繁簡推斷、預設語言 en」的順序降級。九個標籤：
-//        ja-JP、en-US、zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、zh-TW、zh-CN、zh-HK、fr-FR。
-// Bug 版：把 zh-CN 和 zh-TW 寫死成簡體和繁體，其他的標籤只比對「語言」（去掉第一個 - 後面的部分）。zh-Hant-TW 去掉後面剩 zh，
-//        App 沒有 zh，退回英文；香港（zh-Hant-HK、zh-HK）和新式的 zh-Hans-CN 也都變成英文。
-// 修正版：先看完整標籤是不是支援的；中文用 script（Hans／Hant）決定，沒有 script 時用地區推斷
-//        （TW、HK、MO 是繁體，其他是簡體）；再看語言碼；還是找不到就用預設語言 en。
+// 情境：App 提供四種語言：ja、en、zh-Hans（簡體）、zh-Hant（繁體）。
+// 使用者的系統語言標籤五花八門：zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、
+//        舊式的 zh-TW／zh-CN／zh-HK、ja-JP、en-US，甚至沒有支援的 fr-FR。
+// 簡體和繁體是「文字（script）」的差異，不是地區的差異。
+//        resolve 要回傳 App 該用的語言；找不到時，依「完整標籤、去掉最後一段、
+// 繁簡推斷、預設語言 en」的順序降級。九個標籤：
+//        ja-JP、en-US、zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、zh-TW、zh-CN、
+// zh-HK、fr-FR。
+// Bug 版：把 zh-CN 和 zh-TW 寫死成簡體和繁體，其他的標籤只比對「語言」
+// （去掉第一個 - 後面的部分）。zh-Hant-TW 去掉後面剩 zh，
+//        App 沒有 zh，退回英文；香港（zh-Hant-HK、zh-HK）和新式的 zh-Hans-CN
+// 也都變成英文。
+// 修正版：先看完整標籤是不是支援的；中文用 script（Hans／Hant）決定，沒有
+// script 時用地區推斷
+//        （TW、HK、MO 是繁體，其他是簡體）；再看語言碼；還是找不到就用預設語言
+// en。
 package tw.harry.labs.solution.exchange13localization
 
 import tw.harry.labs.kit.Lab
@@ -48,36 +58,54 @@ private fun scenario(log: LabLog, resolve: (String, List<String>) -> String) {
 // MARK: - Bug 版
 private object L01Bug {
     fun resolve(requested: String, supported: List<String>): String {
-        if (requested == "zh-CN") return "zh-Hans"                  // 寫死兩個舊式的標籤
+        // 寫死兩個舊式的標籤
+        if (requested == "zh-CN") return "zh-Hans"
         if (requested == "zh-TW") return "zh-Hant"
         val language = requested.substringBefore("-")
-        return if (language in supported) language else "en"          // zh-Hant-TW 只剩 zh，不在 supported 裡，退回英文
+        // zh-Hant-TW 只剩 zh，不在 supported 裡，退回英文
+        return if (language in supported) language else "en"
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { requested, supported -> resolve(requested, supported) }
+    suspend fun run(log: LabLog) = scenario(log) { requested, supported ->
+        resolve(requested, supported)
+    }
 }
 
 // MARK: - 修正版
 private object L01Fixed {
     fun resolve(requested: String, supported: List<String>): String {
-        if (requested in supported) return requested                                    // (1) 完整標籤
+        // (1) 完整標籤
+        if (requested in supported) return requested
         val parts = requested.split("-")
         val language = parts.first()
-        if (language == "zh") {                                                         // (2) 中文：簡體和繁體是文字（script）的差異
+        // (2) 中文：簡體和繁體是文字（script）的差異
+        if (language == "zh") {
             val rest = parts.drop(1)
-            val script = rest.firstOrNull { it.length == 4 }                            // Hans、Hant
-                ?: if (rest.any { it in listOf("TW", "HK", "MO") }) "Hant" else "Hans"
+            // Hans、Hant
+            val script = rest.firstOrNull { it.length == 4 }
+                ?: if (rest.any {
+                        it in listOf("TW", "HK", "MO")
+                    }
+                ) {
+                    "Hant"
+                } else {
+                    "Hans"
+                }
             return "zh-$script"
         }
-        return if (language in supported) language else "en"                            // (3) 語言碼，(4) 預設語言
+        // (3) 語言碼，(4) 預設語言
+        return if (language in supported) language else "en"
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { requested, supported -> resolve(requested, supported) }
+    suspend fun run(log: LabLog) = scenario(log) { requested, supported ->
+        resolve(requested, supported)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 9 個語言標籤") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 9 個語言標籤")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",

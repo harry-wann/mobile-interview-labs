@@ -1,11 +1,16 @@
 // L04：每一版只大了一點點，兩年後 App 卻大了 12 MB（CI 的體積檢查要跟基準比）
-// 對應複習站：Advanced07AppSize 第 6 題「縮小體積有什麼風險？怎麼確認沒有弄壞東西？」（把體積檢查加進 CI）
+// 對應複習站：Advanced07AppSize 第 6
+// 題「縮小體積有什麼風險？怎麼確認沒有弄壞東西？」（把體積檢查加進 CI）
 //
-// 情境：團隊在 CI 加了體積檢查，避免 App 悄悄變大。基準版本是 100.0 MB；之後連續 12 個 build，每個都只比上一個大 0.6 MB（新功能、新圖片的正常成長），
-//       第 13 個 build 一次大了 4.5 MB（有人不小心把原圖放進去）。團隊的預算是：整體不超過基準 + 3 MB，單一 build 不超過上一個 + 1 MB。
-// Bug 版：只檢查「這個 build 比上一個大多少」，超過 1 MB 就擋下。每個 build 都只大 0.6 MB，一路放行；
+// 情境：團隊在 CI 加了體積檢查，避免 App 悄悄變大。基準版本是 100.0 MB；
+// 之後連續 12 個 build，每個都只比上一個大 0.6 MB（新功能、新圖片的正常成長），
+//       第 13 個 build 一次大了 4.5 MB（有人不小心把原圖放進去）。
+// 團隊的預算是：整體不超過基準 + 3 MB，單一 build 不超過上一個 + 1 MB。
+// Bug 版：只檢查「這個 build 比上一個大多少」，超過 1 MB 就擋下。每個 build
+// 都只大 0.6 MB，一路放行；
 //        只擋到第 13 個，而 App 已經悄悄大了 7.2 MB，沒有人發現。
-// 修正版：除了單一 build 的增幅，還要檢查「比基準版本大多少」（整體預算 3 MB）。第 6 個 build 累積超過預算就開始擋下，
+// 修正版：除了單一 build 的增幅，還要檢查「比基準版本大多少」（整體預算 3
+// MB）。第 6 個 build 累積超過預算就開始擋下，
 //        團隊必須說明原因，或有意識地調整基準。
 package tw.harry.labs.solution.advanced07appsize
 
@@ -18,37 +23,59 @@ private const val BASELINE_KB = 100_000
 private const val PER_BUILD_LIMIT_KB = 1_000
 private const val BUDGET_KB = 3_000
 
-/** 13 個 build 的大小（KB）：前 12 個每次 +600 KB，第 13 個 +4500 KB（兩個版本共用） */
+/**
+ * 13 個 build 的大小（KB）：前 12 個每次 +600 KB，第 13 個 +4500
+ * KB（兩個版本共用）
+ */
 private val builds: List<Int> = buildList {
     var size = BASELINE_KB
     repeat(12) { size += 600; add(size) }
     add(size + 4_500)
 }
 
-/** 演練流程（兩個版本共用）：passes(這個 build 的大小, 上一個 build 的大小) 回傳這個 build 能不能通過檢查 */
-private fun scenario(log: LabLog, passes: (size: Int, previous: Int) -> Boolean) {
+/**
+ * 演練流程（兩個版本共用）：passes(這個 build 的大小, 上一個 build 的大小)
+ * 回傳這個 build 能不能通過檢查
+ */
+private fun scenario(
+    log: LabLog,
+    passes: (size: Int, previous: Int) -> Boolean,
+) {
     val blocked = mutableListOf<Int>()
     var previous = BASELINE_KB
     builds.forEachIndexed { index, size ->
         if (!passes(size, previous)) blocked += index + 1
-        previous = size                                          // 擋下的 build 在演練裡仍然當作「已經存在」，只是被標記
+        // 擋下的 build 在演練裡仍然當作「已經存在」，只是被標記
+        previous = size
     }
-    log("共 ${builds.size} 個 build，被擋下 ${blocked.size} 個：${blocked.joinToString("、") { "#$it" }}")
-    log("最後一個 build 比基準版本大 ${String.format(Locale.ROOT, "%.1f", (builds.last() - BASELINE_KB) / 1_000.0)} MB")
+    log(
+        "共 ${builds.size} 個 build，被擋下 ${blocked.size} 個：${blocked.joinToString(
+            "、",
+        ) {
+            "#$it"
+        }}",
+    )
+    log(
+        "最後一個 build 比基準版本大 ${String.format(
+            Locale.ROOT,
+            "%.1f",
+            (builds.last() - BASELINE_KB) / 1_000.0,
+        )} MB",
+    )
 }
 
 // MARK: - Bug 版
 private object L04Bug {
-    fun passes(size: Int, previous: Int): Boolean =
-        size - previous <= PER_BUILD_LIMIT_KB                   // 只跟上一個 build 比
+    fun passes(size: Int, previous: Int): Boolean = // 只跟上一個 build 比
+        size - previous <= PER_BUILD_LIMIT_KB
 
     suspend fun run(log: LabLog) = scenario(log, ::passes)
 }
 
 // MARK: - 修正版
 private object L04Fixed {
-    fun passes(size: Int, previous: Int): Boolean =
-        size - previous <= PER_BUILD_LIMIT_KB && size - BASELINE_KB <= BUDGET_KB   // 單一 build 的增幅，加上整體預算
+    fun passes(size: Int, previous: Int): Boolean = // 單一 build 的增幅，加上整體預算
+        size - previous <= PER_BUILD_LIMIT_KB && size - BASELINE_KB <= BUDGET_KB
 
     suspend fun run(log: LabLog) = scenario(log, ::passes)
 }
@@ -76,17 +103,28 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("共 13 個 build") } -> "演練沒有跑完：要用 scenario 執行"
+            lines.none {
+                it.startsWith("共 13 個 build")
+            } -> "演練沒有跑完：要用 scenario 執行"
+
             "共 13 個 build，被擋下 1 個：#13" !in lines -> "Bug 還沒重現：只比上一個 build 的增幅（> 1 MB 才擋），應該只擋下 #13"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("共 13 個 build") } -> "演練沒有跑完：要用 scenario 執行"
-            "共 13 個 build，被擋下 8 個：#6、#7、#8、#9、#10、#11、#12、#13" !in lines ->
+            lines.none { it.startsWith("共 13 個 build") } -> {
+                "演練沒有跑完：要用 scenario 執行"
+            }
+
+            "共 13 個 build，被擋下 8 個：#6、#7、#8、#9、#10、#11、#12、#13" !in lines -> {
                 "應該從 #6 開始擋下（比基準大 3.6 MB，超過 3 MB 預算）：除了單一 build 的增幅，還要檢查 size - BASELINE_KB 不超過 BUDGET_KB"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

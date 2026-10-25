@@ -1,13 +1,22 @@
-// L01：驗證碼有時候少一位、有時候是負數（TOTP 的動態截斷沒清最高位元、沒有補零）
-// 對應複習站：Exchange10AccountSecurity 第 1 題「兩步驟驗證的 6 位數驗證碼（TOTP）是怎麼算出來的？」
+// L01：驗證碼有時候少一位、有時候是負數（TOTP 的動態截斷沒清最高位元、
+// 沒有補零）
+// 對應複習站：Exchange10AccountSecurity 第 1 題「兩步驟驗證的 6
+// 位數驗證碼（TOTP）是怎麼算出來的？」
 //
-// 情境：TOTP（RFC 6238）把「現在是第幾個 30 秒」當 counter，用秘密算 HMAC-SHA-1（20 個位元組），再做動態截斷：
-//        取最後一個位元組的低 4 位元當 offset，從 offset 取 4 個位元組，最高位元清成 0（and 0x7f），對 1,000,000 取餘數，不足 6 位時左邊補零。
-//        演練拿 RFC 6238 附錄 B 的 6 組測試資料（秘密 12345678901234567890）：時間 59、1111111109、1111111111、1234567890、2000000000、20000000000 秒，
-//        答案分別是 287082、081804、050471、005924、279037、353130。HMAC 已經算好（在 Exchange10Support.kt），這題只寫「20 個位元組 → 6 位數碼」。
-// Bug 版：取 4 個位元組組成整數時，第一個位元組沒有清最高位元（沒有 and 0x7f），取餘數後直接轉成文字，沒有補零。
-//        Kotlin 的 Int 有正負號：最高位元是 1 的資料（6 組裡有 4 組）整數變成負數，取餘數的結果是負數；開頭是 0 的碼（081804）變成 5 位數。
-// 修正版：第一個位元組先 and 0x7f 再組成整數；取後 6 位之後用 padStart(6, '0') 補零。
+// 情境：TOTP（RFC 6238）把「現在是第幾個 30 秒」當 counter，用秘密算
+// HMAC-SHA-1（20 個位元組），再做動態截斷：
+//        取最後一個位元組的低 4 位元當 offset，從 offset 取 4 個位元組，
+// 最高位元清成 0（and 0x7f），對 1,000,000 取餘數，不足 6 位時左邊補零。
+//        演練拿 RFC 6238 附錄 B 的 6 組測試資料（秘密 12345678901234567890）：
+// 時間 59、1111111109、1111111111、1234567890、2000000000、20000000000 秒，
+//        答案分別是 287082、081804、050471、005924、279037、353130。HMAC
+// 已經算好（在 Exchange10Support.kt），這題只寫「20 個位元組 → 6 位數碼」。
+// Bug 版：取 4 個位元組組成整數時，第一個位元組沒有清最高位元（沒有 and
+// 0x7f），取餘數後直接轉成文字，沒有補零。
+//        Kotlin 的 Int 有正負號：最高位元是 1 的資料（6 組裡有 4 組）
+// 整數變成負數，取餘數的結果是負數；開頭是 0 的碼（081804）變成 5 位數。
+// 修正版：第一個位元組先 and 0x7f 再組成整數；取後 6 位之後用 padStart(6, '0')
+// 補零。
 package tw.harry.labs.solution.exchange10accountsecurity
 
 import tw.harry.labs.kit.Lab
@@ -28,7 +37,8 @@ private val vectors = listOf(
 private fun scenario(log: LabLog, code: (ByteArray) -> String) {
     var wrong = 0
     for ((time, expected) in vectors) {
-        val mac = E10.mac(E10.rfcSecret, time / 30)              // counter = 第幾個 30 秒
+        // counter = 第幾個 30 秒
+        val mac = E10.mac(E10.rfcSecret, time / 30)
         val result = code(mac)
         if (result == expected) {
             log("時間 $time 秒 → 驗證碼 $result ✓")
@@ -43,12 +53,15 @@ private fun scenario(log: LabLog, code: (ByteArray) -> String) {
 // MARK: - Bug 版
 private object L01Bug {
     fun code(mac: ByteArray): String {
-        val offset = mac[mac.size - 1].toInt() and 0x0f                   // 最後一個位元組的低 4 位元
-        val binary = (mac[offset].toInt() shl 24) or                      // 沒有 and 0x7f：最高位元可能是 1，Int 變成負數
+        // 最後一個位元組的低 4 位元
+        val offset = mac[mac.size - 1].toInt() and 0x0f
+        // 沒有 and 0x7f：最高位元可能是 1，Int 變成負數
+        val binary = (mac[offset].toInt() shl 24) or
             ((mac[offset + 1].toInt() and 0xff) shl 16) or
             ((mac[offset + 2].toInt() and 0xff) shl 8) or
             (mac[offset + 3].toInt() and 0xff)
-        return (binary % 1_000_000).toString()                            // 沒有補零：081804 變成 81804
+        // 沒有補零：081804 變成 81804
+        return (binary % 1_000_000).toString()
     }
 
     suspend fun run(log: LabLog) = scenario(log) { code(it) }
@@ -58,19 +71,23 @@ private object L01Bug {
 private object L01Fixed {
     fun code(mac: ByteArray): String {
         val offset = mac[mac.size - 1].toInt() and 0x0f
-        val binary = ((mac[offset].toInt() and 0x7f) shl 24) or           // 第一個位元組 and 0x7f：最高位元清成 0
-            ((mac[offset + 1].toInt() and 0xff) shl 16) or               // 其他位元組 and 0xff：Byte 有正負號
+        // 第一個位元組 and 0x7f：最高位元清成 0
+        val binary = ((mac[offset].toInt() and 0x7f) shl 24) or
+            // 其他位元組 and 0xff：Byte 有正負號
+            ((mac[offset + 1].toInt() and 0xff) shl 16) or
             ((mac[offset + 2].toInt() and 0xff) shl 8) or
             (mac[offset + 3].toInt() and 0xff)
-        return (binary % 1_000_000).toString().padStart(6, '0')           // 補零到 6 位
+        // 補零到 6 位
+        return (binary % 1_000_000).toString().padStart(6, '0')
     }
 
     suspend fun run(log: LabLog) = scenario(log) { code(it) }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 6 組") }?.let { Regex("(\\d+) 組$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 6 組")
+}?.let { Regex("(\\d+) 組$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",
@@ -95,13 +112,27 @@ val l01 = Lab(
     checkBug = { lines ->
         val n = wrongCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log) { mac -> … } 執行"
-            lines.none { it.startsWith("時間 2000000000 秒") && it.endsWith("✓") } ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log) { mac -> … } 執行"
+            }
+
+            lines.none {
+                it.startsWith("時間 2000000000 秒") && it.endsWith("✓")
+            } -> {
                 "Bug 版也要算出大部分的碼：時間 2000000000 秒的結果應該是 279037（這一組不需要補零，最高位元也是 0）"
-            "時間 1111111109 秒 → 驗證碼 81804 ✗（RFC 的答案是 081804）" !in lines ->
+            }
+
+            "時間 1111111109 秒 → 驗證碼 81804 ✗（RFC 的答案是 081804）" !in lines -> {
                 "Bug 還沒重現：取餘數之後直接轉成文字、不補零，081804 會變成 81804"
-            n < 3 -> "Bug 還沒重現：至少有 3 組開頭是 0 的碼會算錯（目前錯 $n 組）"
-            else -> null
+            }
+
+            n < 3 -> {
+                "Bug 還沒重現：至少有 3 組開頭是 0 的碼會算錯（目前錯 $n 組）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

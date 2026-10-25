@@ -1,14 +1,23 @@
-// L04：Debug 版正常，Release 版一打開訂單畫面就當掉（R8 混淆後，反射找不到建構子與欄位）
-// 對應複習站：Platform07Release 第 6 題「上線後 crash 報告看不懂，要怎麼處理？（dSYM 與 mapping）」（R8 與 keep rules）
+// L04：Debug 版正常，Release 版一打開訂單畫面就當掉（R8 混淆後，
+// 反射找不到建構子與欄位）
+// 對應複習站：Platform07Release 第 6 題「上線後 crash 報告看不懂，
+// 要怎麼處理？（dSYM 與 mapping）」（R8 與 keep rules）
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 solution/platform/test/Platform07ReleaseTest.kt，
-// 它會真的呼叫 R8（Android 的程式碼縮減與混淆工具），用你寫的規則處理下面三個類別，再載入結果執行。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// solution/platform/test/Platform07ReleaseTest.kt，
+// 它會真的呼叫 R8（Android 的程式碼縮減與混淆工具），
+// 用你寫的規則處理下面三個類別，再載入結果執行。
 //
-// 情境：App 用反射把伺服器回傳的 JSON 對應到 Kotlin 物件，做法跟 Gson 的反射模式一樣：用 getDeclaredConstructor() 建立物件，
-//        欄位名稱等於 JSON 的 key，就把值寫進去。Debug 版沒開 R8，一切正常；Release 版開了 R8，沒有任何程式碼「直接」
-//        呼叫那個建構子、讀寫那些欄位，R8 判斷它們沒用到：把建構子刪掉，類別和欄位改成 a、b。
-// Bug 版：proguard-rules.pro 只寫了入口類別的規則。DTO（Data Transfer Object，專門裝伺服器資料的物件）的建構子被刪、名稱被改，
-//        一打開訂單畫面就丟 NoSuchMethodException。（Debug 版因為沒有混淆，完全看不出來。）
+// 情境：App 用反射把伺服器回傳的 JSON 對應到 Kotlin 物件，做法跟 Gson
+// 的反射模式一樣：用 getDeclaredConstructor() 建立物件，
+//        欄位名稱等於 JSON 的 key，就把值寫進去。Debug 版沒開 R8，一切正常；
+// Release 版開了 R8，沒有任何程式碼「直接」
+//        呼叫那個建構子、讀寫那些欄位，R8 判斷它們沒用到：把建構子刪掉，
+// 類別和欄位改成 a、b。
+// Bug 版：proguard-rules.pro 只寫了入口類別的規則。DTO（Data Transfer Object，
+// 專門裝伺服器資料的物件）的建構子被刪、名稱被改，
+//        一打開訂單畫面就丟 NoSuchMethodException。（Debug 版因為沒有混淆，
+// 完全看不出來。）
 // 修正版：用 -keepclassmembers 保留 DTO 的建構子與欄位，名稱不改、也不刪。
 package tw.harry.labs.solution.platform07release
 
@@ -20,7 +29,9 @@ internal class L04OrderDto {
     var amount: String = ""
 }
 
-/** 反射版的 JSON 對應（兩個版本共用）：JSON 的 key 等於欄位名稱，就把值寫進去 */
+/**
+ * 反射版的 JSON 對應（兩個版本共用）：JSON 的 key 等於欄位名稱，就把值寫進去
+ */
 internal object L04Mapper {
     fun <T : Any> fromJson(json: Map<String, String>, type: Class<T>): T {
         val instance = type.getDeclaredConstructor().newInstance()
@@ -33,17 +44,29 @@ internal object L04Mapper {
     }
 }
 
-/** App 的入口（兩個版本共用）：收到伺服器的訂單 JSON（已經拆成 Map），回傳畫面上要顯示的文字 */
+/**
+ * App 的入口（兩個版本共用）：收到伺服器的訂單 JSON（已經拆成 Map），
+ * 回傳畫面上要顯示的文字
+ */
 class L04Entry {
     fun describe(): String {
-        val dto = L04Mapper.fromJson(mapOf("symbol" to "BTC/JPY", "amount" to "0.5"), L04OrderDto::class.java)
+        val dto = L04Mapper.fromJson(
+            mapOf(
+                "symbol" to "BTC/JPY",
+                "amount" to "0.5",
+            ),
+            L04OrderDto::class.java,
+        )
         return "symbol=${dto.symbol}, amount=${dto.amount}"
     }
 }
 
 // MARK: - Bug 版
 internal object L04Bug {
-    /** proguard-rules.pro 的內容：只寫了入口類別（沒有它，整個 App 都被 R8 當成沒用到而刪掉） */
+    /**
+     * proguard-rules.pro 的內容：只寫了入口類別（沒有它，整個 App 都被 R8
+     * 當成沒用到而刪掉）
+     */
     val rules: List<String> = listOf(
         "-keep class ${L04Entry::class.java.name} { public *; }",
     )
@@ -53,7 +76,8 @@ internal object L04Bug {
 internal object L04Fixed {
     val rules: List<String> = listOf(
         "-keep class ${L04Entry::class.java.name} { public *; }",
-        "-keepclassmembers class ${L04OrderDto::class.java.name} { <init>(); <fields>; }",   // DTO 的建構子與欄位：不改名、不刪除
+        // DTO 的建構子與欄位：不改名、不刪除
+        "-keepclassmembers class ${L04OrderDto::class.java.name} { <init>(); <fields>; }",
     )
 }
 

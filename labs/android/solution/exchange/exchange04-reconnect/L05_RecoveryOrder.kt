@@ -1,12 +1,18 @@
 // L05：斷線重連後，價格倒退回舊的（快照比後續推送晚到，卻把畫面蓋回舊資料）
-// 對應複習站：Exchange04Reconnect 第 5 題「App 進背景、回前景，以及重連成功之後，要依什麼順序恢復？」
+// 對應複習站：Exchange04Reconnect 第 5 題「App 進背景、回前景，
+// 以及重連成功之後，要依什麼順序恢復？」
 //
-// 情境：重連後要重新訂閱，並對狀態型資料取一份完整的最新資料（snapshot，快照）補洞。每則資料都有序號 seq（BBO 的 seqId）。
-//        畫面原本停在 seq 95、價格 9,999,500。重新訂閱之後，快照的請求還在路上，推送先到了：seq 100、101、102（價格各增加 100）；
+// 情境：重連後要重新訂閱，並對狀態型資料取一份完整的最新資料（snapshot，快照）
+// 補洞。每則資料都有序號 seq（BBO 的 seqId）。
+//        畫面原本停在 seq 95、價格 9,999,500。重新訂閱之後，
+// 快照的請求還在路上，推送先到了：seq 100、101、102（價格各增加 100）；
 //        最後快照才回來，它是在 seq 100 的時候產生的（價格 10,000,000）。
-//        （訂單簿的快照與增量，會在訂單簿單元用同樣的做法練習；這裡看的是恢復的順序。）
-// Bug 版：推送一到就直接套用到畫面（序號比現在新就換）；快照一到就整份蓋上去。畫面先到 seq 102，快照回來又被蓋回 seq 100，價格倒退，要等下一則推送才會對。
-// 修正版：快照還沒回來之前，推送先暫存起來；快照回來後，先套用快照，再依序套用暫存裡序號比快照新的推送（101、102），之後的推送才直接套用。
+//        （訂單簿的快照與增量，會在訂單簿單元用同樣的做法練習；
+// 這裡看的是恢復的順序。）
+// Bug 版：推送一到就直接套用到畫面（序號比現在新就換）；快照一到就整份蓋上去。
+// 畫面先到 seq 102，快照回來又被蓋回 seq 100，價格倒退，要等下一則推送才會對。
+// 修正版：快照還沒回來之前，推送先暫存起來；快照回來後，先套用快照，
+// 再依序套用暫存裡序號比快照新的推送（101、102），之後的推送才直接套用。
 package tw.harry.labs.solution.exchange04reconnect
 
 import java.math.BigDecimal
@@ -31,23 +37,32 @@ private fun price(text: String) = BigDecimal(text)
 /** 演練流程（兩個版本共用）：重連、重新訂閱之後，訊息依序到達 */
 private fun scenario(log: LabLog, feed: PriceFeed) {
     val arrivals = listOf(
-        Arrival.Push(100, price("10000000")), Arrival.Push(101, price("10000100")),
-        Arrival.Push(102, price("10000200")), Arrival.Snapshot(100, price("10000000")),
+        Arrival.Push(100, price("10000000")),
+        Arrival.Push(101, price("10000100")),
+        Arrival.Push(102, price("10000200")),
+        Arrival.Snapshot(100, price("10000000")),
     )
     log("重連前：畫面停在 seq ${feed.seq}，價格 ${feed.price.toPlainString()}")
     for (arrival in arrivals) {
         when (arrival) {
             is Arrival.Push -> {
                 feed.onPush(arrival.seq, arrival.price)
-                log("收到推送 seq ${arrival.seq} → 畫面 seq ${feed.seq}，價格 ${feed.price.toPlainString()}")
+                log(
+                    "收到推送 seq ${arrival.seq} → 畫面 seq ${feed.seq}，價格 ${feed.price.toPlainString()}",
+                )
             }
+
             is Arrival.Snapshot -> {
                 feed.onSnapshot(arrival.seq, arrival.price)
-                log("收到快照 seq ${arrival.seq} → 畫面 seq ${feed.seq}，價格 ${feed.price.toPlainString()}")
+                log(
+                    "收到快照 seq ${arrival.seq} → 畫面 seq ${feed.seq}，價格 ${feed.price.toPlainString()}",
+                )
             }
         }
     }
-    log("最後畫面：seq ${feed.seq}，價格 ${feed.price.toPlainString()}（伺服器最新是 seq 102，價格 10000200）")
+    log(
+        "最後畫面：seq ${feed.seq}，價格 ${feed.price.toPlainString()}（伺服器最新是 seq 102，價格 10000200）",
+    )
 }
 
 // MARK: - Bug 版
@@ -59,11 +74,13 @@ private object L05Bug {
             private set
 
         override fun onPush(seq: Int, price: BigDecimal) {
-            if (seq > this.seq) { this.seq = seq; this.price = price }      // 推送一到就直接套用
+            // 推送一到就直接套用
+            if (seq > this.seq) { this.seq = seq; this.price = price }
         }
 
         override fun onSnapshot(seq: Int, price: BigDecimal) {
-            this.seq = seq                                                  // 快照一到就整份蓋上去
+            // 快照一到就整份蓋上去
+            this.seq = seq
             this.price = price
         }
     }
@@ -82,7 +99,8 @@ private object L05Fixed {
         private val buffered = mutableListOf<Pair<Int, BigDecimal>>()
 
         override fun onPush(seq: Int, price: BigDecimal) {
-            if (!snapshotArrived) {                                         // 快照還沒回來：先暫存
+            // 快照還沒回來：先暫存
+            if (!snapshotArrived) {
                 buffered += seq to price
                 return
             }
@@ -90,10 +108,12 @@ private object L05Fixed {
         }
 
         override fun onSnapshot(seq: Int, price: BigDecimal) {
-            this.seq = seq                                                  // 先套用快照
+            // 先套用快照
+            this.seq = seq
             this.price = price
             snapshotArrived = true
-            for ((s, p) in buffered.sortedBy { it.first }) {                // 再依序套用比快照新的推送
+            // 再依序套用比快照新的推送
+            for ((s, p) in buffered.sortedBy { it.first }) {
                 if (s > this.seq) { this.seq = s; this.price = p }
             }
             buffered.clear()
@@ -126,17 +146,31 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後畫面") } -> "演練沒有跑完：要用 scenario(log, feed) 執行"
+            lines.none {
+                it.startsWith("最後畫面")
+            } -> "演練沒有跑完：要用 scenario(log, feed) 執行"
+
             "收到推送 seq 102 → 畫面 seq 102，價格 10000200" !in lines -> "Bug 版的推送要直接套用：序號比現在新（seq > this.seq）就換掉 seq 和價格"
-            lines.none { it.startsWith("最後畫面：seq 100，價格 10000000") } -> "Bug 還沒重現：快照一到就把 seq、價格整份蓋上去，畫面會從 seq 102 倒退回 seq 100"
+
+            lines.none {
+                it.startsWith("最後畫面：seq 100，價格 10000000")
+            } -> "Bug 還沒重現：快照一到就把 seq、價格整份蓋上去，畫面會從 seq 102 倒退回 seq 100"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後畫面") } -> "演練沒有跑完：要用 scenario(log, feed) 執行"
+            lines.none {
+                it.startsWith("最後畫面")
+            } -> "演練沒有跑完：要用 scenario(log, feed) 執行"
+
             "收到推送 seq 102 → 畫面 seq 102，價格 10000200" in lines -> "快照還沒回來之前，推送不能直接套用到畫面，要先暫存"
-            lines.none { it.startsWith("最後畫面：seq 102，價格 10000200") } -> "快照回來後，先套用快照（seq 100），再依序套用暫存裡序號比快照新的推送（101、102）"
+
+            lines.none {
+                it.startsWith("最後畫面：seq 102，價格 10000200")
+            } -> "快照回來後，先套用快照（seq 100），再依序套用暫存裡序號比快照新的推送（101、102）"
+
             else -> null
         }
     },

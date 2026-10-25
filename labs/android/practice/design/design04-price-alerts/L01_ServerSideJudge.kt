@@ -1,14 +1,21 @@
-// L01：App 被關掉之後，價格到了卻沒有提醒（提醒的條件只存在 App 裡，由 App 判斷）
+// L01：App 被關掉之後，價格到了卻沒有提醒（提醒的條件只存在 App 裡，由 App
+// 判斷）
 // 對應複習站：Design04PriceAlerts 第 2 題「為什麼價格的判斷一定要放在伺服器？」
 //
-// 情境：使用者建立兩個提醒：a1「BTC 高於 9,960,000 円」、a2「BTC 高於 10,000,000 円」。價格依序是 9,900,000、9,970,000、10,020,000、10,050,000。
-//       在第三個價格出現之前，使用者把 App 從最近使用的 App 清單滑掉（App 被關閉）。
-//       行情只會送到還活著的 App；伺服器的價格串流則一直都在。手機的通知列不管通知是 App 自己發的，還是伺服器透過 FCM 推播來的，
-//       App 關掉之後都看得到推播（本機通知要靠 App 活著才發得出來）。看手機最後收到哪些通知。
+// 情境：使用者建立兩個提醒：a1「BTC 高於 9,960,000 円」、a2「BTC 高於 10,000,
+// 000 円」。價格依序是 9,900,000、9,970,000、10,020,000、10,050,000。
+//       在第三個價格出現之前，使用者把 App 從最近使用的 App 清單滑掉（App
+// 被關閉）。
+//       行情只會送到還活著的 App；伺服器的價格串流則一直都在。
+// 手機的通知列不管通知是 App 自己發的，還是伺服器透過 FCM 推播來的，
+//       App 關掉之後都看得到推播（本機通知要靠 App 活著才發得出來）。
+// 看手機最後收到哪些通知。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.App）：createAlert 把提醒存在 App 裡；onPrice 在 App 裡比對價格，條件成立就發通知。
-//   ② 修正版（L01Fixed.App.createAlert）：把提醒送到伺服器（register）。App 自己不判斷價格（onPrice 已經是空的）。
+//   ① Bug 版（L01Bug.App）：createAlert 把提醒存在 App 裡；onPrice 在 App
+// 裡比對價格，條件成立就發通知。
+//   ② 修正版（L01Fixed.App.createAlert）：把提醒送到伺服器（register）。App
+// 自己不判斷價格（onPrice 已經是空的）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/design/design04-price-alerts/L01_ServerSideJudge.kt
 package tw.harry.labs.practice.design04pricealerts
@@ -26,10 +33,19 @@ private class L01Phone {
         notifications += alertId
     }
 
-    val summary: String get() = if (notifications.isEmpty()) "（沒有）" else notifications.joinToString("、")
+    val summary: String get() = if (notifications.isEmpty()) {
+        "（沒有）"
+    } else {
+        notifications.joinToString(
+            "、",
+        )
+    }
 }
 
-/** 伺服器（兩個版本共用，已經寫好）：記下 App 登記的提醒；每來一個價格，條件成立又還沒觸發過的，就推播到手機 */
+/**
+ * 伺服器（兩個版本共用，已經寫好）：記下 App 登記的提醒；每來一個價格，
+ * 條件成立又還沒觸發過的，就推播到手機
+ */
 private class L01FakeServer {
     private val alerts = mutableListOf<L01Alert>()
     private val fired = mutableSetOf<String>()
@@ -53,11 +69,15 @@ private interface L01AlertApp {
     fun onPrice(price: Int)
 }
 
-private val l01Alerts = listOf(L01Alert("a1", 9_960_000), L01Alert("a2", 10_000_000))
+private val l01Alerts =
+    listOf(L01Alert("a1", 9_960_000), L01Alert("a2", 10_000_000))
 private val l01Prices = listOf(9_900_000, 9_970_000, 10_020_000, 10_050_000)
 
 /** 演練流程（兩個版本共用） */
-private fun scenario(log: LabLog, makeApp: (L01FakeServer, L01Phone) -> L01AlertApp) {
+private fun scenario(
+    log: LabLog,
+    makeApp: (L01FakeServer, L01Phone) -> L01AlertApp,
+) {
     val phone = L01Phone()
     val server = L01FakeServer()
     val app = makeApp(server, phone)
@@ -71,8 +91,10 @@ private fun scenario(log: LabLog, makeApp: (L01FakeServer, L01Phone) -> L01Alert
             appRunning = false
             log("使用者把 App 從最近使用的 App 清單滑掉（App 被關閉）")
         }
-        if (appRunning) app.onPrice(price)                           // 行情只送到還活著的 App
-        server.onPrice(price) { phone.show(it) }                     // 伺服器的價格串流一直都在
+        // 行情只送到還活著的 App
+        if (appRunning) app.onPrice(price)
+        // 伺服器的價格串流一直都在
+        server.onPrice(price) { phone.show(it) }
         log("價格 ${d04Yen(price)} 円 → 手機收到的通知：${phone.summary}")
     }
     log("最後：手機收到 ${phone.notifications.size} 則通知：${phone.summary}")
@@ -89,7 +111,8 @@ private object L01Bug {
         }
 
         override fun onPrice(price: Int) {
-            // TODO ①-2：App 自己比對：走過 alerts，價格 >= 門檻、而且還沒觸發過（id 不在 fired 裡）的提醒，
+            // TODO ①-2：App 自己比對：走過 alerts，價格 >= 門檻、
+            // 而且還沒觸發過（id 不在 fired 裡）的提醒，
             //           把 id 記進 fired，並呼叫 phone.show(alert.id)
         }
     }
@@ -104,7 +127,8 @@ private object L01Fixed {
             // TODO ②：條件送到伺服器，由伺服器判斷：呼叫 server.register(alert)
         }
 
-        override fun onPrice(price: Int) {}                          // App 不判斷價格
+        // App 不判斷價格
+        override fun onPrice(price: Int) {}
     }
 
     suspend fun run(log: LabLog) = scenario(log) { server, _ -> App(server) }
@@ -136,8 +160,13 @@ val l01 = Lab(
         val last = lines.lastOrNull { it.startsWith("最後") }
         when {
             last == null -> "演練沒有跑完：要用 scenario(log, makeApp) 執行"
-            last.startsWith("最後：手機收到 0 則通知") -> "App 還沒判斷價格：createAlert 要把提醒存進 alerts，onPrice 要比對價格並呼叫 phone.show"
+
+            last.startsWith(
+                "最後：手機收到 0 則通知",
+            ) -> "App 還沒判斷價格：createAlert 要把提醒存進 alerts，onPrice 要比對價格並呼叫 phone.show"
+
             last != "最後：手機收到 1 則通知：a1" -> "Bug 還沒重現：App 活著的時候比對價格、發通知（a1 會響）；App 被關閉之後沒有人比對，a2 不會響"
+
             else -> null
         }
     },
@@ -145,8 +174,13 @@ val l01 = Lab(
         val last = lines.lastOrNull { it.startsWith("最後") }
         when {
             last == null -> "演練沒有跑完：要用 scenario(log, makeApp) 執行"
-            last.startsWith("最後：手機收到 0 則通知") -> "createAlert 還沒把條件送給伺服器：呼叫 server.register(alert)"
+
+            last.startsWith(
+                "最後：手機收到 0 則通知",
+            ) -> "createAlert 還沒把條件送給伺服器：呼叫 server.register(alert)"
+
             last != "最後：手機收到 2 則通知：a1、a2" -> "App 不判斷價格：createAlert 只要 server.register(alert)，a1、a2 都由伺服器推播"
+
             else -> null
         }
     },

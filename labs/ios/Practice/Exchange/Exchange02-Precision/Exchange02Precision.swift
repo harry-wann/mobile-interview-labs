@@ -6,6 +6,7 @@ enum Exchange02Precision {
         id: "exchange-precision",
         code: "Exchange02Precision",
         title: "精度與金額",
-        labs: [l01, l02, l03, l04, l05, l06, l07]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05, l06, l07]
     )
 }

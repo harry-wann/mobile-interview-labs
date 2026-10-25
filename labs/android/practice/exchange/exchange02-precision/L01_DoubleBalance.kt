@@ -1,13 +1,18 @@
 // L01：明明剛好夠，卻顯示「餘額不足」（可用餘額用 Double 算）
 // 對應複習站：Exchange02Precision 第 1 題「為什麼金額不能用 `Double`？」
 //
-// 情境：使用者的資產有一部分掛在還沒成交的單上（凍結）。可用餘額 = 總額 − 凍結。
-//        API 回傳的總額與凍結是字串。三個交易對的情況：總額 1.0 凍結 0.9、總額 0.3 凍結 0.2、總額 0.7 凍結 0.6，可用餘額都是剛好 0.1。
-//        使用者按「全部賣出」，輸入框填入 0.1，App 判斷「輸入的數量不超過可用餘額」才能送出。
-//        （Platform08 的演練 2 練過「Double 對齊 tick size 出錯」，這題看的是餘額的加減。）
+// 情境：使用者的資產有一部分掛在還沒成交的單上（凍結）。可用餘額 = 總額 −
+// 凍結。
+//        API 回傳的總額與凍結是字串。三個交易對的情況：總額 1.0 凍結 0.9、總額
+// 0.3 凍結 0.2、總額 0.7 凍結 0.6，可用餘額都是剛好 0.1。
+//        使用者按「全部賣出」，輸入框填入 0.1，App
+// 判斷「輸入的數量不超過可用餘額」才能送出。
+//        （Platform08 的演練 2 練過「Double 對齊 tick size 出錯」，
+// 這題看的是餘額的加減。）
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.check）：用 Double 算可用餘額 = 總額 − 凍結，再比較輸入的數量。
+//   ① Bug 版（L01Bug.check）：用 Double 算可用餘額 = 總額 − 凍結，
+// 再比較輸入的數量。
 //   ② 修正版（L01Fixed.check）：改用 BigDecimal(String) 算。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange02-precision/L01_DoubleBalance.kt
@@ -19,11 +24,20 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 演練流程（兩個版本共用）：三種情況各按一次「全部賣出」 */
-private fun scenario(log: LabLog, check: (String, String, String) -> Pair<String, Boolean>) {
+private fun scenario(
+    log: LabLog,
+    check: (String, String, String) -> Pair<String, Boolean>,
+) {
     var refused = 0
-    for ((total, locked) in listOf("1.0" to "0.9", "0.3" to "0.2", "0.7" to "0.6")) {
+    for ((total, locked) in listOf(
+        "1.0" to "0.9",
+        "0.3" to "0.2",
+        "0.7" to "0.6",
+    )) {
         val (available, enough) = check(total, locked, "0.1")
-        log("總額 $total − 凍結 $locked = 可用 $available，輸入 0.1 → ${if (enough) "可以送出" else "顯示「餘額不足」"}")
+        log(
+            "總額 $total − 凍結 $locked = 可用 $available，輸入 0.1 → ${if (enough) "可以送出" else "顯示「餘額不足」"}",
+        )
         if (!enough) refused++
     }
     log("3 次「全部賣出」，被誤判餘額不足 $refused 次")
@@ -32,9 +46,15 @@ private fun scenario(log: LabLog, check: (String, String, String) -> Pair<String
 // MARK: - Bug 版
 private object L01Bug {
     /** 回傳可用餘額（文字）和「輸入的數量夠不夠」 */
-    fun check(total: String, locked: String, input: String): Pair<String, Boolean> {
-        // TODO ①：用 total.toDouble()、locked.toDouble() 算出可用餘額 available = 總額 − 凍結；
-        //        回傳 "$available" to (輸入的數量 input.toDouble() 是不是不超過 available)
+    fun check(
+        total: String,
+        locked: String,
+        input: String,
+    ): Pair<String, Boolean> {
+        // TODO ①：用 total.toDouble()、locked.toDouble() 算出可用餘額
+        // available = 總額 − 凍結；
+        //        回傳 "$available" to (輸入的數量 input.toDouble()
+        // 是不是不超過 available)
         return "" to true
     }
 
@@ -43,8 +63,13 @@ private object L01Bug {
 
 // MARK: - 修正版
 private object L01Fixed {
-    fun check(total: String, locked: String, input: String): Pair<String, Boolean> {
-        // TODO ②：改用 BigDecimal(String) 建立 total、locked、input，一樣算可用餘額並比較（顯示用 e02Text(available)）
+    fun check(
+        total: String,
+        locked: String,
+        input: String,
+    ): Pair<String, Boolean> {
+        // TODO ②：改用 BigDecimal(String) 建立 total、locked、input，
+        // 一樣算可用餘額並比較（顯示用 e02Text(available)）
         return "" to false
     }
 
@@ -52,8 +77,9 @@ private object L01Fixed {
 }
 
 // MARK: - 演練設定
-private fun refusedCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("3 次") }?.let { Regex("(\\d+) 次$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun refusedCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("3 次")
+}?.let { Regex("(\\d+) 次$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",
@@ -79,11 +105,22 @@ val l01 = Lab(
     checkBug = { lines ->
         val n = refusedCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log, ::check) 執行"
-            "總額 1.0 − 凍結 0.9 = 可用 0.09999999999999998，輸入 0.1 → 顯示「餘額不足」" !in lines ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log, ::check) 執行"
+            }
+
+            "總額 1.0 − 凍結 0.9 = 可用 0.09999999999999998，輸入 0.1 → 顯示「餘額不足」" !in
+                lines -> {
                 "Bug 還沒重現：用 total.toDouble() − locked.toDouble() 算可用餘額，1.0 − 0.9 應該是 0.09999999999999998，比 0.1 小一點點"
-            n != 3 -> "Bug 還沒重現：三次都應該比 0.1 小一點點（目前誤判 $n 次）"
-            else -> null
+            }
+
+            n != 3 -> {
+                "Bug 還沒重現：三次都應該比 0.1 小一點點（目前誤判 $n 次）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

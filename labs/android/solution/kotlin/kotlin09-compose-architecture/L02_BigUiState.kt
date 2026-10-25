@@ -1,12 +1,18 @@
 // L02：價格每秒跳好幾次，連不相干的下單表單也跟著重組（UiState 裡塞了行情）
-// 對應複習站：Kotlin09ComposeArchitecture 第 2 題「UDF 和 MVI 是什麼？怎麼取捨？」
+// 對應複習站：Kotlin09ComposeArchitecture 第 2 題「UDF 和 MVI
+// 是什麼？怎麼取捨？」
 //
-// 情境：下單畫面有表單（OrderForm，只用到數量 qty）和即時價格（PriceText）。價格更新 10 次（每 30 ms 一次），qty 整個過程都沒變。
+// 情境：下單畫面有表單（OrderForm，只用到數量 qty）和即時價格（PriceText）。
+// 價格更新 10 次（每 30 ms 一次），qty 整個過程都沒變。
 //        演練計算 OrderForm 與 PriceText 各重組了幾次。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
-// Bug 版：整個畫面只有一個 UiState（qty 加 price）。價格一變，整個 UiState 就換成新的，
-//        把整個 state 傳給 OrderForm，它的參數跟著變了，表單每次都重組，雖然它根本沒有用到價格。
-// 修正版：表單用單一 UiState（只有 qty），每秒更新很多次的行情拆成獨立的 StateFlow，
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
+// Bug 版：整個畫面只有一個 UiState（qty 加 price）。價格一變，整個 UiState
+// 就換成新的，
+//        把整個 state 傳給 OrderForm，它的參數跟著變了，表單每次都重組，
+// 雖然它根本沒有用到價格。
+// 修正版：表單用單一 UiState（只有 qty），每秒更新很多次的行情拆成獨立的
+// StateFlow，
 //        讓 PriceText 自己去收集。價格變的時候，只有 PriceText 重組。
 package tw.harry.labs.solution.kotlin09composearchitecture
 
@@ -30,8 +36,16 @@ private class L02Counts {
     val price = AtomicInteger()
 }
 
-/** 演練流程（兩個版本共用）：組合畫面 → 價格每 30 ms 更新一次，共 10 次 → 看兩個 Composable 各重組了幾次 */
-private suspend fun scenario(log: LabLog, counts: L02Counts, updatePrice: (Long) -> Unit, screen: @Composable () -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：組合畫面 → 價格每 30 ms 更新一次，共 10 次 →
+ * 看兩個 Composable 各重組了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    counts: L02Counts,
+    updatePrice: (Long) -> Unit,
+    screen: @Composable () -> Unit,
+) {
     withHeadlessCompose {
         setContent { screen() }
         settle()
@@ -51,20 +65,22 @@ private object L02Bug {
     data class OrderUiState(val qty: String, val price: Long)
 
     class OrderViewModel {
-        val state = MutableStateFlow(OrderUiState(qty = "0.5", price = 100_000L))
+        val state =
+            MutableStateFlow(OrderUiState(qty = "0.5", price = 100_000L))
     }
 
     @Composable
     fun OrderScreen(vm: OrderViewModel, counts: L02Counts) {
         val state by vm.state.collectAsState()
-        OrderForm(state, counts)                            // 把整個 state 傳下去
+        // 把整個 state 傳下去
+        OrderForm(state, counts)
         PriceText(state.price, counts)
     }
 
     @Composable
     fun OrderForm(state: OrderUiState, counts: L02Counts) {
         SideEffect { counts.form.incrementAndGet() }
-        HeadlessText("數量 ${state.qty}")                   // 只用到 qty
+        HeadlessText("數量 ${state.qty}") // 只用到 qty
     }
 
     @Composable
@@ -76,7 +92,10 @@ private object L02Bug {
     suspend fun run(log: LabLog) {
         val vm = OrderViewModel()
         val counts = L02Counts()
-        scenario(log, counts, { price -> vm.state.value = vm.state.value.copy(price = price) }) { OrderScreen(vm, counts) }
+        scenario(log, counts, { price ->
+            vm.state.value =
+                vm.state.value.copy(price = price)
+        }) { OrderScreen(vm, counts) }
     }
 }
 
@@ -87,14 +106,17 @@ private object L02Fixed {
 
     class OrderViewModel {
         val form = MutableStateFlow(OrderFormState(qty = "0.5"))
-        val price = MutableStateFlow(100_000L)              // 每秒更新很多次的行情，獨立成自己的 Flow
+
+        // 每秒更新很多次的行情，獨立成自己的 Flow
+        val price = MutableStateFlow(100_000L)
     }
 
     @Composable
     fun OrderScreen(vm: OrderViewModel, counts: L02Counts) {
         val form by vm.form.collectAsState()
         OrderForm(form, counts)
-        PriceText(vm.price, counts)                         // 這裡只傳 Flow，沒有讀價格
+        // 這裡只傳 Flow，沒有讀價格
+        PriceText(vm.price, counts)
     }
 
     @Composable
@@ -105,7 +127,8 @@ private object L02Fixed {
 
     @Composable
     fun PriceText(price: StateFlow<Long>, counts: L02Counts) {
-        val value by price.collectAsState()                 // 讀價格只發生在這個小函式裡
+        // 讀價格只發生在這個小函式裡
+        val value by price.collectAsState()
         SideEffect { counts.price.incrementAndGet() }
         HeadlessText("價格 $value")
     }
@@ -113,13 +136,17 @@ private object L02Fixed {
     suspend fun run(log: LabLog) {
         val vm = OrderViewModel()
         val counts = L02Counts()
-        scenario(log, counts, { price -> vm.price.value = price }) { OrderScreen(vm, counts) }
+        scenario(log, counts, { price ->
+            vm.price.value = price
+        }) { OrderScreen(vm, counts) }
     }
 }
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
 
 private const val FORM = "價格更新 10 次：OrderForm 執行了 "
 private const val PRICE = "價格更新 10 次：PriceText 執行了 "

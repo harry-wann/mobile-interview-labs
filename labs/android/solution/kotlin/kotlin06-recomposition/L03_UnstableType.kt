@@ -1,12 +1,18 @@
 // L03：資料明明沒變，卡片還是每次都重組（含 List 的 class 是 unstable）
-// 對應複習站：Kotlin06Recomposition 第 3 題「為什麼資料沒變，這個 Composable 還是每次都重組？」
+// 對應複習站：Kotlin06Recomposition 第 3 題「為什麼資料沒變，這個 Composable
+// 還是每次都重組？」
 //
-// 情境：自選清單畫面上方有一個「最後更新」計數（每 300 ms 加 1，共 20 次），下方是 WatchlistCard，顯示一個 Board（名稱 + 幣種清單）。
-//        Board 的內容整個過程都沒變，只是畫面每次重組都用同樣的內容建立一個新的 Board 傳給卡片。
+// 情境：自選清單畫面上方有一個「最後更新」計數（每 300 ms 加 1，共 20 次），
+// 下方是 WatchlistCard，顯示一個 Board（名稱 + 幣種清單）。
+//        Board 的內容整個過程都沒變，
+// 只是畫面每次重組都用同樣的內容建立一個新的 Board 傳給卡片。
 //        專案用的是 Kotlin 2.x，strong skipping 預設開啟。
-// Bug 版：Board 的 ticks 欄位是 List<WatchTick>。List 是介面，編譯器無法保證它不會被改動，所以 Board 是 unstable。
-//        strong skipping 對 unstable 的參數用 === 比較：每次都是新的 Board 物件，=== 不相等，卡片每次都重組。
-// 修正版：ticks 改成 ImmutableList<WatchTick>（kotlinx.collections.immutable）。Compose compiler 認得它是 stable，
+// Bug 版：Board 的 ticks 欄位是 List<WatchTick>。List 是介面，
+// 編譯器無法保證它不會被改動，所以 Board 是 unstable。
+//        strong skipping 對 unstable 的參數用 === 比較：每次都是新的 Board
+// 物件，=== 不相等，卡片每次都重組。
+// 修正版：ticks 改成 ImmutableList<WatchTick>（kotlinx.collections.
+// immutable）。Compose compiler 認得它是 stable，
 //        Board 變成 stable，改用 equals 比較：內容一樣就算沒變，卡片被跳過。
 package tw.harry.labs.solution.kotlin06recomposition
 
@@ -35,7 +41,8 @@ private data class WatchTick(val symbol: String, val price: Long)
 
 // MARK: - Bug 版
 private object L03Bug {
-    data class Board(val name: String, val ticks: List<WatchTick>)       // List 是介面 → Board 是 unstable
+    // List 是介面 → Board 是 unstable
+    data class Board(val name: String, val ticks: List<WatchTick>)
 
     @Composable
     fun WatchlistCard(board: Board) {
@@ -45,17 +52,27 @@ private object L03Bug {
 
     @Composable
     fun WatchlistScreen(updates: Int) {
-        val ticks = remember { listOf(WatchTick("BTC", 10_000_000), WatchTick("ETH", 400_000), WatchTick("XRP", 80)) }
+        val ticks =
+            remember {
+                listOf(
+                    WatchTick("BTC", 10_000_000),
+                    WatchTick("ETH", 400_000),
+                    WatchTick("XRP", 80),
+                )
+            }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("最後更新：第 $updates 次")                          // 讀 updates：每次更新，WatchlistScreen 重組
-            WatchlistCard(Board("主要幣種", ticks))                  // 內容一樣，但每次都是新的 Board 物件
+            // 讀 updates：每次更新，WatchlistScreen 重組
+            Text("最後更新：第 $updates 次")
+            // 內容一樣，但每次都是新的 Board 物件
+            WatchlistCard(Board("主要幣種", ticks))
         }
     }
 }
 
 // MARK: - 修正版
 private object L03Fixed {
-    data class Board(val name: String, val ticks: ImmutableList<WatchTick>)   // ImmutableList 是 stable → Board 是 stable
+    // ImmutableList 是 stable → Board 是 stable
+    data class Board(val name: String, val ticks: ImmutableList<WatchTick>)
 
     @Composable
     fun WatchlistCard(board: Board) {
@@ -65,10 +82,18 @@ private object L03Fixed {
 
     @Composable
     fun WatchlistScreen(updates: Int) {
-        val ticks = remember { listOf(WatchTick("BTC", 10_000_000), WatchTick("ETH", 400_000), WatchTick("XRP", 80)).toImmutableList() }
+        val ticks =
+            remember {
+                listOf(
+                    WatchTick("BTC", 10_000_000),
+                    WatchTick("ETH", 400_000),
+                    WatchTick("XRP", 80),
+                ).toImmutableList()
+            }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("最後更新：第 $updates 次")
-            WatchlistCard(Board("主要幣種", ticks))                  // 一樣是新的 Board 物件，但 equals 相等 → 跳過
+            // 一樣是新的 Board 物件，但 equals 相等 → 跳過
+            WatchlistCard(Board("主要幣種", ticks))
         }
     }
 }

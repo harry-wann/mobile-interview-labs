@@ -1,5 +1,6 @@
 // Coding04Async 共用的小工具（和 bug 本身無關，已經寫好，不用改）。
-// 內容：數「同時有幾個在進行」的計數器、一個要抓的項目、API 的錯誤種類（哪些值得重試）、記錄等待時間的假 sleep。
+// 內容：數「同時有幾個在進行」的計數器、一個要抓的項目、API
+// 的錯誤種類（哪些值得重試）、記錄等待時間的假 sleep。
 import Foundation
 
 /// 數同時有幾個請求在進行，並記下最多的時候是幾個（任何執行緒都可以呼叫）
@@ -38,10 +39,10 @@ struct C04Job: Sendable {
 /// API 可能回傳的錯誤
 enum C04ApiError: Error, Equatable {
     case timeout
-    case serverBusy            // HTTP 503
-    case rateLimited           // HTTP 429
-    case badRequest            // HTTP 400
-    case insufficientBalance   // 餘額不足
+    case serverBusy  // HTTP 503
+    case rateLimited  // HTTP 429
+    case badRequest  // HTTP 400
+    case insufficientBalance  // 餘額不足
 
     /// 暫時性的錯誤，等一下再試有機會成功；其他的錯誤重試結果都一樣
     var isTransient: Bool {

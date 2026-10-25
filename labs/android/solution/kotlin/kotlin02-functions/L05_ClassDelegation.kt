@@ -1,11 +1,17 @@
 // L05：加了快取，API 還是被打了好幾次（class delegation 的陷阱）
-// 對應複習站：Kotlin02Functions 第 4 題「by 委派是什麼？class delegation 有什麼陷阱？」
+// 對應複習站：Kotlin02Functions 第 4 題「by 委派是什麼？class delegation
+// 有什麼陷阱？」
 //
-// 情境：PriceApi 有 price()（打 API 取價格）和 priceWithFee()（含手續費的價格，內部呼叫 price()）。
-//        用 CachedApi 包一層：class CachedApi(inner: PriceApi) : PriceApi by inner，只覆寫 price() 加上快取。
-// Bug 版：price() 有快取，沒問題。但 priceWithFee() 沒有覆寫，編譯器產生的轉發方法直接交給 RealApi 去執行，
-//        RealApi.priceWithFee() 裡呼叫的 price() 是 RealApi 自己的，完全不知道外面還有一層快取，所以每次都打 API。
-// 修正版：連 priceWithFee() 也覆寫，改成呼叫 CachedApi 自己的 price()，才會走到快取。
+// 情境：PriceApi 有 price()（打 API 取價格）和 priceWithFee()（含手續費的價格，
+// 內部呼叫 price()）。
+//        用 CachedApi 包一層：class CachedApi(inner: PriceApi)  PriceApi by
+// inner，只覆寫 price() 加上快取。
+// Bug 版：price() 有快取，沒問題。但 priceWithFee() 沒有覆寫，
+// 編譯器產生的轉發方法直接交給 RealApi 去執行，
+//        RealApi.priceWithFee() 裡呼叫的 price() 是 RealApi 自己的，
+// 完全不知道外面還有一層快取，所以每次都打 API。
+// 修正版：連 priceWithFee() 也覆寫，改成呼叫 CachedApi 自己的 price()，
+// 才會走到快取。
 package tw.harry.labs.solution.kotlin02functions
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,7 +33,9 @@ private class RealApi(private val log: LabLog) : PriceApi {
         return 1_000_000
     }
 
-    override fun priceWithFee(symbol: String): Long = price(symbol) * 1001 / 1000   // 這裡的 price() 是 RealApi 自己的
+    // 這裡的 price() 是 RealApi 自己的
+    override fun priceWithFee(symbol: String): Long =
+        price(symbol) * 1001 / 1000
 }
 
 /** 演練流程（兩個版本共用）：各取價格 3 次，看 API 被打了幾次 */
@@ -43,7 +51,9 @@ private object L05Bug {
     class CachedApi(private val inner: PriceApi) : PriceApi by inner {
         private val cache = HashMap<String, Long>()
 
-        override fun price(symbol: String): Long = cache.getOrPut(symbol) { inner.price(symbol) }   // 只覆寫 price()
+        // 只覆寫 price()
+        override fun price(symbol: String): Long =
+            cache.getOrPut(symbol) { inner.price(symbol) }
     }
 
     fun run(log: LabLog) {
@@ -57,9 +67,13 @@ private object L05Fixed {
     class CachedApi(private val inner: PriceApi) : PriceApi by inner {
         private val cache = HashMap<String, Long>()
 
-        override fun price(symbol: String): Long = cache.getOrPut(symbol) { inner.price(symbol) }
+        override fun price(symbol: String): Long = cache.getOrPut(symbol) {
+            inner.price(symbol)
+        }
 
-        override fun priceWithFee(symbol: String): Long = price(symbol) * 1001 / 1000                // 也覆寫：走自己的 price()
+        // 也覆寫：走自己的 price()
+        override fun priceWithFee(symbol: String): Long =
+            price(symbol) * 1001 / 1000
     }
 
     fun run(log: LabLog) {

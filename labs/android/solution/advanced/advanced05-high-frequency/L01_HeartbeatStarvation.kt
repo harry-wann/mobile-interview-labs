@@ -1,12 +1,19 @@
-// L01：資料一大包進來，心跳來不及回，伺服器把連線切掉（管線切段：socket 這一段不能被解析和畫面卡住）
-// 對應複習站：Advanced05HighFrequency 第 2 題「行情從伺服器到畫面，整條處理管線怎麼切？」
+// L01：資料一大包進來，心跳來不及回，伺服器把連線切掉（管線切段：socket
+// 這一段不能被解析和畫面卡住）
+// 對應複習站：Advanced05HighFrequency 第 2 題「行情從伺服器到畫面，
+// 整條處理管線怎麼切？」
 //
-// 情境：伺服器的規則：每 150 毫秒送一次 ping，client 要在 300 毫秒內回 pong；連續兩次逾時就切斷連線。
-//        連線一開始，伺服器就推來一大包行情（解析 JSON、解壓縮要花 800 毫秒）。後面接著是 4 次 ping。
+// 情境：伺服器的規則：每 150 毫秒送一次 ping，client 要在 300 毫秒內回 pong；
+// 連續兩次逾時就切斷連線。
+//        連線一開始，伺服器就推來一大包行情（解析 JSON、解壓縮要花 800 毫秒）。
+// 後面接著是 4 次 ping。
 //        （演練把真實的「約 5 秒一次、連續兩次沒回」縮小了，邏輯一樣。）
-// Bug 版：收到的所有訊息（資料與 ping）都丟給同一條單執行緒的 executor 處理。那 800 毫秒的解析把它占滿，排在後面的 ping 要等解析做完才輪到，
-//        pong 晚了 650、500、350 毫秒，連續逾時，伺服器切斷連線，使用者莫名其妙被斷線重連。
-// 修正版：ping 在 socket 這一段（收訊息的執行緒）立刻回 pong；資料交給另一條單執行緒的 executor 去解析。解析再慢，心跳也不受影響。
+// Bug 版：收到的所有訊息（資料與 ping）都丟給同一條單執行緒的 executor 處理。
+// 那 800 毫秒的解析把它占滿，排在後面的 ping 要等解析做完才輪到，
+//        pong 晚了 650、500、350 毫秒，連續逾時，伺服器切斷連線，
+// 使用者莫名其妙被斷線重連。
+// 修正版：ping 在 socket 這一段（收訊息的執行緒）立刻回 pong；
+// 資料交給另一條單執行緒的 executor 去解析。解析再慢，心跳也不受影響。
 package tw.harry.labs.solution.advanced05highfrequency
 
 import java.util.concurrent.ConcurrentHashMap
@@ -37,7 +44,10 @@ private sealed interface Message {
  */
 private suspend fun scenario(
     log: LabLog,
-    makeClient: (onPong: (index: Int, delayMs: Double) -> Unit, onParsed: () -> Unit) -> (Message) -> Unit,
+    makeClient: (
+        onPong: (index: Int, delayMs: Double) -> Unit,
+        onParsed: () -> Unit,
+    ) -> (Message) -> Unit,
 ) = withContext(Dispatchers.Default) {
     val delays = ConcurrentHashMap<Int, Double>()
     val parsed = java.util.concurrent.atomic.AtomicInteger()
@@ -49,14 +59,16 @@ private suspend fun scenario(
     )
 
     thread(name = "socket") {
-        onMessage(Message.Data)                                    // 連線一開始：一大包行情
+        // 連線一開始：一大包行情
+        onMessage(Message.Data)
         repeat(PING_COUNT) {
             Thread.sleep(PING_INTERVAL_MS)
             onMessage(Message.Ping(a05NowMs()))
         }
     }
-    allPongs.await(3, TimeUnit.SECONDS)                            // 等 4 次 pong 都回了
-    parsedDone.await(3, TimeUnit.SECONDS)                          // 等解析做完
+    // 等 4 次 pong 都回了
+    allPongs.await(3, TimeUnit.SECONDS)
+    parsedDone.await(3, TimeUnit.SECONDS) // 等解析做完
 
     var misses = 0
     var disconnected = false
@@ -64,28 +76,44 @@ private suspend fun scenario(
         val delay = delays[i] ?: 99_999.0
         val late = delay > PONG_DEADLINE_MS
         misses = if (late) misses + 1 else 0
-        log("第 $i 次 ping，pong 延遲 ${minOf(delay, 99_999.0).toInt()} ms${if (late) "（逾時）" else ""}")
+        log(
+            "第 $i 次 ping，pong 延遲 ${minOf(
+                delay,
+                99_999.0,
+            ).toInt()} ms${if (late) "（逾時）" else ""}",
+        )
         if (misses >= 2) disconnected = true
     }
-    log(if (disconnected) "連續 2 次逾時：伺服器切斷連線" else "每次 pong 都在 $PONG_DEADLINE_MS ms 內送出：連線正常")
+    log(
+        if (disconnected) "連續 2 次逾時：伺服器切斷連線" else "每次 pong 都在 $PONG_DEADLINE_MS ms 內送出：連線正常",
+    )
     log("資料解析完成：${parsed.get()} 包")
 }
 
 // MARK: - Bug 版
 private object L01Bug {
     suspend fun run(log: LabLog) = scenario(log) { onPong, onParsed ->
-        val everything = Executors.newSingleThreadExecutor { Thread(it, "everything").apply { isDaemon = true } }       // 所有訊息都排進同一條執行緒
+        // 所有訊息都排進同一條執行緒
+        val everything = Executors.newSingleThreadExecutor {
+            Thread(it, "everything").apply {
+                isDaemon =
+                    true
+            }
+        }
         var pingIndex = 0
         val handler: (Message) -> Unit = { message ->
             everything.execute {
                 when (message) {
                     Message.Data -> {
-                        Thread.sleep(PARSE_COST_MS)                                           // 解析 JSON、解壓縮：800 毫秒
+                        // 解析 JSON、解壓縮：800 毫秒
+                        Thread.sleep(PARSE_COST_MS)
                         onParsed()
                     }
+
                     is Message.Ping -> {
                         pingIndex++
-                        onPong(pingIndex, a05NowMs() - message.sentAt)                        // 回 pong：輪到的時候才回
+                        // 回 pong：輪到的時候才回
+                        onPong(pingIndex, a05NowMs() - message.sentAt)
                     }
                 }
             }
@@ -97,17 +125,27 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     suspend fun run(log: LabLog) = scenario(log) { onPong, onParsed ->
-        val parser = Executors.newSingleThreadExecutor { Thread(it, "parser").apply { isDaemon = true } }               // 解析另外用一條執行緒
+        // 解析另外用一條執行緒
+        val parser = Executors.newSingleThreadExecutor {
+            Thread(it, "parser").apply {
+                isDaemon =
+                    true
+            }
+        }
         var pingIndex = 0
         val handler: (Message) -> Unit = { message ->
             when (message) {
-                Message.Data -> parser.execute {
-                    Thread.sleep(PARSE_COST_MS)
-                    onParsed()
+                Message.Data -> {
+                    parser.execute {
+                        Thread.sleep(PARSE_COST_MS)
+                        onParsed()
+                    }
                 }
+
                 is Message.Ping -> {
                     pingIndex++
-                    onPong(pingIndex, a05NowMs() - message.sentAt)                            // 在 socket 這一段立刻回，不排隊
+                    // 在 socket 這一段立刻回，不排隊
+                    onPong(pingIndex, a05NowMs() - message.sentAt)
                 }
             }
         }
@@ -138,16 +176,25 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("資料解析完成：1") } -> "資料要解析完成（onParsed 要被呼叫）：Bug 版也會解析，只是排在同一條執行緒"
+            lines.none {
+                it.startsWith("資料解析完成：1")
+            } -> "資料要解析完成（onParsed 要被呼叫）：Bug 版也會解析，只是排在同一條執行緒"
+
             "連續 2 次逾時：伺服器切斷連線" !in lines -> "Bug 還沒重現：資料與 ping 要排進同一條執行緒，ping 才會排在 800 毫秒的解析後面"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
             "連續 2 次逾時：伺服器切斷連線" in lines -> "還是被切斷：ping 要在收到的當下立刻回 pong，不能排在解析後面"
+
             lines.none { it.startsWith("每次 pong 都在") } -> "演練沒有跑完"
-            lines.none { it.startsWith("資料解析完成：1") } -> "資料沒有解析完成：Message.Data 要交給 parser 去解析"
+
+            lines.none {
+                it.startsWith("資料解析完成：1")
+            } -> "資料沒有解析完成：Message.Data 要交給 parser 去解析"
+
             else -> null
         }
     },

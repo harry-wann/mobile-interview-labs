@@ -1,13 +1,18 @@
 // L05：輸入到一半的數量，旋轉螢幕後不見了（remember 與 rememberSaveable）
-// 對應複習站：Kotlin06Recomposition 第 6 題「remember、rememberSaveable 和 key 怎麼用？」
+// 對應複習站：Kotlin06Recomposition 第 6 題「remember、rememberSaveable 和 key
+// 怎麼用？」
 //
-// 情境：下單畫面有一個「下單數量」輸入欄。使用者輸入到一半旋轉螢幕，Activity 會被銷毀再重建。
-//        這個演練的按鈕「模擬旋轉螢幕」會呼叫 Activity.recreate()，和真的旋轉一樣；也可以直接旋轉模擬器（Ctrl+左/右方向鍵）。
+// 情境：下單畫面有一個「下單數量」輸入欄。使用者輸入到一半旋轉螢幕，Activity
+// 會被銷毀再重建。
+//        這個演練的按鈕「模擬旋轉螢幕」會呼叫 Activity.recreate()，
+// 和真的旋轉一樣；也可以直接旋轉模擬器（Ctrl+左/右方向鍵）。
 //
 // 你要寫：
-//   ① Bug 版：用 remember { mutableStateOf("") } 保存輸入的文字。Activity 重建後就消失了。
+//   ① Bug 版：用 remember { mutableStateOf("") } 保存輸入的文字。Activity
+// 重建後就消失了。
 //   ② 修正版：改用 rememberSaveable { mutableStateOf("") }，旋轉後還在。
-// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，看橘色的重組次數（或畫面）是不是照預期。
+// 只改有 TODO 的地方。寫完在 App 選「練習」「Bug 版」「修正版」，
+// 看橘色的重組次數（或畫面）是不是照預期。
 // 解答：solution/kotlin/kotlin06-recomposition/L05_RememberSaveable.kt
 package tw.harry.labs.practice.kotlin06recomposition
 
@@ -38,13 +43,18 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-/** 演練畫面（兩個版本共用）：[qty] 是輸入欄的文字，[onQtyChange] 是使用者輸入時要做的事 */
+/**
+ * 演練畫面（兩個版本共用）：[qty] 是輸入欄的文字，[onQtyChange]
+ * 是使用者輸入時要做的事
+ */
 @Composable
 private fun OrderForm(qty: String, onQtyChange: (String) -> Unit, log: LabLog) {
     val activity = LocalContext.current.findActivity()
     LaunchedEffect(Unit) { log("畫面建立：下單數量欄位是「$qty」") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = qty, onValueChange = onQtyChange, label = { Text("下單數量") })
+        OutlinedTextField(value = qty, onValueChange = onQtyChange, label = {
+            Text("下單數量")
+        })
         Button(onClick = {
             log("模擬旋轉螢幕：Activity.recreate()")
             activity?.recreate()
@@ -55,7 +65,8 @@ private fun OrderForm(qty: String, onQtyChange: (String) -> Unit, log: LabLog) {
 // MARK: - Bug 版
 @Composable
 private fun L05BugScreen(log: LabLog) {
-    // TODO ①：var qty by remember { mutableStateOf("") }（只活過重組）。目前 qty 是普通變數，輸入欄會打不進字
+    // TODO ①：var qty by remember { mutableStateOf("") }（只活過重組）。目前
+    // qty 是普通變數，輸入欄會打不進字
     var qty = ""
     OrderForm(qty, { qty = it }, log)
 }
@@ -63,7 +74,8 @@ private fun L05BugScreen(log: LabLog) {
 // MARK: - 修正版
 @Composable
 private fun L05FixedScreen(log: LabLog) {
-    // TODO ②：var qty by rememberSaveable { mutableStateOf("") }（存進 saved instance state：旋轉後還在）。目前 qty 是普通變數
+    // TODO ②：var qty by rememberSaveable { mutableStateOf("") }（存進 saved
+    // instance state：旋轉後還在）。目前 qty 是普通變數
     var qty = ""
     OrderForm(qty, { qty = it }, log)
 }

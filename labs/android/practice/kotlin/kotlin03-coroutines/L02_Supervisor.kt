@@ -1,13 +1,19 @@
 // L02：一個幣種斷線，整個行情列表都停了（SupervisorJob／supervisorScope）
-// 對應複習站：Kotlin03Coroutines 第 2 題「SupervisorJob 和 supervisorScope 改變了哪一條規則？」
+// 對應複習站：Kotlin03Coroutines 第 2 題「SupervisorJob 和 supervisorScope
+// 改變了哪一條規則？」
 //
-// 情境：行情列表同時訂閱 BTC、ETH、XRP 三個幣種，每個幣種一個 coroutine。XRP 的連線在第 3 筆時出錯。
+// 情境：行情列表同時訂閱 BTC、ETH、XRP 三個幣種，每個幣種一個 coroutine。XRP
+// 的連線在第 3 筆時出錯。
 //
 // 你要寫：
-//   ① Bug 版：三個幣種開在 coroutineScope 裡。跑起來會看到 XRP 一出錯，BTC、ETH 也被取消。
-//   ② 修正版：改用 supervisorScope，並用 CoroutineExceptionHandler 處理 XRP 的錯誤。
-//      提示：先只換成 supervisorScope、不加 handler 跑一次，看看在手機上會發生什麼事。
-// 只改有 TODO 的地方。解答：solution/kotlin/kotlin03-coroutines/L02_Supervisor.kt
+//   ① Bug 版：三個幣種開在 coroutineScope 裡。跑起來會看到 XRP 一出錯，BTC、
+// ETH 也被取消。
+//   ② 修正版：改用 supervisorScope，並用 CoroutineExceptionHandler 處理 XRP
+// 的錯誤。
+//      提示：先只換成 supervisorScope、不加 handler 跑一次，
+// 看看在手機上會發生什麼事。
+// 只改有 TODO 的地方。解答：solution/kotlin/kotlin03-coroutines/L02_Supervisor.
+// kt
 package tw.harry.labs.practice.kotlin03coroutines
 
 import java.io.IOException
@@ -23,8 +29,15 @@ import tw.harry.labs.kit.Variant
 
 private val symbols = listOf("BTC", "ETH", "XRP")
 
-/** 模擬一個幣種的行情訂閱（已寫好）：每 100 ms 收到一筆，共 5 筆；XRP 在第 3 筆時丟出 IOException */
-private suspend fun subscribe(symbol: String, received: MutableMap<String, Int>, log: LabLog) {
+/**
+ * 模擬一個幣種的行情訂閱（已寫好）：每 100 ms 收到一筆，共 5 筆；XRP 在第 3
+ * 筆時丟出 IOException
+ */
+private suspend fun subscribe(
+    symbol: String,
+    received: MutableMap<String, Int>,
+    log: LabLog,
+) {
     repeat(5) { i ->
         delay(100)
         if (symbol == "XRP" && i == 2) throw IOException("XRP 連線中斷")
@@ -41,7 +54,8 @@ private object L02Bug {
     suspend fun run(log: LabLog) {
         val received = ConcurrentHashMap<String, Int>()
         try {
-            // TODO ①：寫一個 coroutineScope { }，在裡面對 symbols 的每個幣種 launch 一個 coroutine，
+            // TODO ①：寫一個 coroutineScope { }，在裡面對 symbols 的每個幣種
+            // launch 一個 coroutine，
             //        呼叫 subscribe(symbol, received, log)
         } catch (e: IOException) {
             log("整個列表停止：${e.message}")
@@ -54,8 +68,10 @@ private object L02Bug {
 private object L02Fixed {
     suspend fun run(log: LabLog) {
         val received = ConcurrentHashMap<String, Int>()
-        // TODO ②-1：建立 CoroutineExceptionHandler，收到例外時 log("只有這個幣種失敗：${e.message}")
-        // TODO ②-2：寫一個 supervisorScope { }，對每個幣種 launch(handler) { subscribe(symbol, received, log) }
+        // TODO ②-1：建立 CoroutineExceptionHandler，收到例外時
+        // log("只有這個幣種失敗：${e.message}")
+        // TODO ②-2：寫一個 supervisorScope { }，對每個幣種 launch(handler) {
+        // subscribe(symbol, received, log) }
         log(summary(received))
     }
 }
@@ -82,15 +98,23 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("整個列表停止") } -> "沒有看到「整個列表停止」：三個幣種要開在 coroutineScope 裡"
+            lines.none {
+                it.startsWith("整個列表停止")
+            } -> "沒有看到「整個列表停止」：三個幣種要開在 coroutineScope 裡"
+
             lines.any { it == "BTC 收完 5 筆" } -> "BTC 還是收完了：Bug 還沒重現"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("只有這個幣種失敗") } -> "沒有處理 XRP 的錯誤：要加 CoroutineExceptionHandler"
+            lines.none {
+                it.startsWith("只有這個幣種失敗")
+            } -> "沒有處理 XRP 的錯誤：要加 CoroutineExceptionHandler"
+
             "收到的筆數：BTC=5, ETH=5, XRP=2" !in lines -> "BTC、ETH 應該各收完 5 筆：要改用 supervisorScope"
+
             else -> null
         }
     },

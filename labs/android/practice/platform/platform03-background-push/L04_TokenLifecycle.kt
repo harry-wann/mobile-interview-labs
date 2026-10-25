@@ -1,15 +1,23 @@
-// L04：登出之後還收到前一個帳號的提醒，換了 token 之後卻收不到提醒（推播 token 的管理）
-// 對應複習站：Platform03BackgroundPush 第 4 題「推播怎麼從伺服器送到手機？token 是什麼？」
+// L04：登出之後還收到前一個帳號的提醒，換了 token 之後卻收不到提醒（推播 token
+// 的管理）
+// 對應複習站：Platform03BackgroundPush 第 4
+// 題「推播怎麼從伺服器送到手機？token 是什麼？」
 //
-// 情境：推播 token 是 FCM 給「這支手機上這個 App」的地址（iOS 是 APNs 的 device token），伺服器靠它把價格提醒送到手機。
+// 情境：推播 token 是 FCM 給「這支手機上這個 App」的地址（iOS 是 APNs 的
+// device token），伺服器靠它把價格提醒送到手機。
 //        伺服器的對照表是「帳號 → 這個帳號登入過的裝置 token」。演練跑兩段：
-//        ① App 啟動時系統發了 token T1，帳號 A 登入、登出，帳號 B 登入。看 A 的價格提醒還會不會送到這支手機。
-//        ② 帳號 B 登入之後，系統因為重新安裝／還原備份換了新的 token T2。看 B 的價格提醒會送到哪一個 token。
-//        系統通知 App 的時機：Android 是 FirebaseMessagingService.onNewToken，iOS 是 didRegisterForRemoteNotificationsWithDeviceToken。
+//        ① App 啟動時系統發了 token T1，帳號 A 登入、登出，帳號 B 登入。看 A
+// 的價格提醒還會不會送到這支手機。
+//        ② 帳號 B 登入之後，系統因為重新安裝／還原備份換了新的 token T2。看 B
+// 的價格提醒會送到哪一個 token。
+//        系統通知 App 的時機：Android 是 FirebaseMessagingService.onNewToken，
+// iOS 是 didRegisterForRemoteNotificationsWithDeviceToken。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug）：登入時上傳 token 一次；token 換新不處理；登出什麼都不做。
-//   ② 修正版（L04Fixed）：拿到 token 存起來，已登入就立刻上傳並註銷舊的；登入時綁定帳號；登出時註銷。
+//   ① Bug 版（L04Bug）：登入時上傳 token 一次；token 換新不處理；
+// 登出什麼都不做。
+//   ② 修正版（L04Fixed）：拿到 token 存起來，已登入就立刻上傳並註銷舊的；
+// 登入時綁定帳號；登出時註銷。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform03-background-push/L04_TokenLifecycle.kt
 package tw.harry.labs.practice.platform03backgroundpush
@@ -22,8 +30,17 @@ import tw.harry.labs.kit.Variant
 private class L04PushServer {
     private val tokensByUser = mutableMapOf<String, MutableSet<String>>()
 
-    fun register(user: String, token: String) { tokensByUser.getOrPut(user) { mutableSetOf() } += token }
-    fun unregister(user: String, token: String) { tokensByUser[user]?.remove(token) }
+    fun register(user: String, token: String) {
+        tokensByUser.getOrPut(user) {
+            mutableSetOf()
+        } +=
+            token
+    }
+    fun unregister(user: String, token: String) {
+        tokensByUser[user]?.remove(
+            token,
+        )
+    }
 
     /** 價格提醒要送給某個帳號：會送到哪些 token */
     fun deliver(user: String): Set<String> = tokensByUser[user].orEmpty()
@@ -31,13 +48,17 @@ private class L04PushServer {
 
 /** App 這一邊管理推播 token 的物件（兩個版本各自實作） */
 private interface L04PushClient {
-    fun onNewToken(token: String)          // 系統給了 token（Android：FirebaseMessagingService.onNewToken）
+    // 系統給了 token（Android：FirebaseMessagingService.onNewToken）
+    fun onNewToken(token: String)
     fun onLogin(user: String)
     fun onLogout()
 }
 
 /** 演練流程（兩個版本共用） */
-private fun scenario(log: LabLog, makeClient: (L04PushServer) -> L04PushClient) {
+private fun scenario(
+    log: LabLog,
+    makeClient: (L04PushServer) -> L04PushClient,
+) {
     // ① 帳號 A 登入、登出，帳號 B 登入
     val server1 = L04PushServer()
     val client1 = makeClient(server1)
@@ -53,7 +74,11 @@ private fun scenario(log: LabLog, makeClient: (L04PushServer) -> L04PushClient) 
     client2.onNewToken("T1")
     client2.onLogin("B")
     client2.onNewToken("T2")
-    log("token 換新（T1 → T2）之後，B 的價格提醒會送到：${server2.deliver("B").sorted().joinToString("、")}")
+    log(
+        "token 換新（T1 → T2）之後，B 的價格提醒會送到：${server2.deliver(
+            "B",
+        ).sorted().joinToString("、")}",
+    )
 }
 
 // MARK: - Bug 版
@@ -66,10 +91,11 @@ private object L04Bug {
         }
 
         override fun onLogin(user: String) {
-            // TODO ①-2：登入時，如果手上有 token，就 server.register(user, token) 上傳一次
+            // TODO ①-2：登入時，如果手上有 token，就 server.register(user,
+            // token) 上傳一次
         }
 
-        override fun onLogout() {}                     // 登出什麼都不做
+        override fun onLogout() {} // 登出什麼都不做
     }
 
     fun run(log: LabLog) = scenario(log) { Client(it) }
@@ -82,15 +108,19 @@ private object L04Fixed {
         private var user: String? = null
 
         override fun onNewToken(token: String) {
-            // TODO ②-1：把新 token 記下來；如果已經登入（user 不是 null），要把舊的 token 註銷（server.unregister），再把新的上傳（server.register）
+            // TODO ②-1：把新 token 記下來；如果已經登入（user 不是 null），
+            // 要把舊的 token 註銷（server.unregister），再把新的上傳（server.
+            // register）
         }
 
         override fun onLogin(user: String) {
-            // TODO ②-2：記下 user；如果手上有 token，就 server.register 綁定這個帳號
+            // TODO ②-2：記下 user；如果手上有 token，就 server.register
+            // 綁定這個帳號
         }
 
         override fun onLogout() {
-            // TODO ②-3：如果有 user 和 token，就 server.unregister 註銷；再把 user 清成 null
+            // TODO ②-3：如果有 user 和 token，就 server.unregister 註銷；再把
+            // user 清成 null
         }
     }
 
@@ -100,7 +130,9 @@ private object L04Fixed {
 // MARK: - 演練設定
 private fun leakedDevices(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("A 登出、B 登入之後，A 的價格提醒還會送到 ") }
-        ?.removePrefix("A 登出、B 登入之後，A 的價格提醒還會送到 ")?.removeSuffix(" 台裝置")?.toIntOrNull()
+        ?.removePrefix(
+            "A 登出、B 登入之後，A 的價格提醒還會送到 ",
+        )?.removeSuffix(" 台裝置")?.toIntOrNull()
 
 private fun deliveredTokens(lines: List<String>): String? =
     lines.firstOrNull { it.startsWith("token 換新（T1 → T2）之後，B 的價格提醒會送到：") }

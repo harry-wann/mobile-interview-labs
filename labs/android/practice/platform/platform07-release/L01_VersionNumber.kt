@@ -1,13 +1,20 @@
-// L01：發 3.10.0 時，商店說這個版本號比以前上傳的小（用字串拼出來的 versionCode）
-// 對應複習站：Platform07Release 第 3 題「測試版怎麼發給測試人員？TestFlight 和 Google Play 的測試軌差在哪？」（版本號要遞增）
+// L01：發 3.10.0 時，商店說這個版本號比以前上傳的小（用字串拼出來的
+// versionCode）
+// 對應複習站：Platform07Release 第 3 題「測試版怎麼發給測試人員？TestFlight 和
+// Google Play 的測試軌差在哪？」（版本號要遞增）
 //
-// 情境：CI 腳本要自動從版本名稱算出 versionCode（iOS 是 build 號），免得人工忘記遞增。
-//        商店規定：新上傳的 versionCode 必須比以前上傳過的都大，否則拒絕。演練依序發布 7 個版本：
-//        3.2.9、3.2.10、3.9.0、3.9.10、3.10.0、3.20.0、3.21.0，看有幾個版本被商店拒絕。
+// 情境：CI 腳本要自動從版本名稱算出 versionCode（iOS 是 build 號），
+// 免得人工忘記遞增。
+//        商店規定：新上傳的 versionCode 必須比以前上傳過的都大，否則拒絕。
+// 演練依序發布 7 個版本：
+//        3.2.9、3.2.10、3.9.0、3.9.10、3.10.0、3.20.0、3.21.0，
+// 看有幾個版本被商店拒絕。
 //
 // 你要寫：
-//   ① Bug 版：versionCode 把版本名稱的「.」拿掉，直接轉成整數（3.2.10 → 3210）。
-//   ② 修正版：用「.」切成三段整數（每段要小於 1000），回傳 主版號 × 1_000_000 ＋ 次版號 × 1_000 ＋ 修訂號。
+//   ① Bug 版：versionCode 把版本名稱的「.」拿掉，直接轉成整數（3.2.10 →
+// 3210）。
+//   ② 修正版：用「.」切成三段整數（每段要小於 1000），回傳 主版號 × 1_000_000
+// ＋ 次版號 × 1_000 ＋ 修訂號。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform07-release/L01_VersionNumber.kt
 package tw.harry.labs.practice.platform07release
@@ -17,9 +24,13 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 要依序發布的版本（兩個版本共用） */
-private val releases = listOf("3.2.9", "3.2.10", "3.9.0", "3.9.10", "3.10.0", "3.20.0", "3.21.0")
+private val releases =
+    listOf("3.2.9", "3.2.10", "3.9.0", "3.9.10", "3.10.0", "3.20.0", "3.21.0")
 
-/** 演練流程（兩個版本共用）：依序「上傳」，versionCode 要比之前上傳過的最大值還大 */
+/**
+ * 演練流程（兩個版本共用）：依序「上傳」，versionCode
+ * 要比之前上傳過的最大值還大
+ */
 private fun scenario(log: LabLog, versionCode: (String) -> Int) {
     var highest = 0
     var rejected = 0
@@ -39,7 +50,8 @@ private fun scenario(log: LabLog, versionCode: (String) -> Int) {
 // MARK: - Bug 版
 private object L01Bug {
     fun versionCode(version: String): Int {
-        // TODO ①：把 version 裡的 "." 拿掉（replace），直接轉成 Int（轉不成就回傳 0）
+        // TODO ①：把 version 裡的 "." 拿掉（replace），直接轉成
+        // Int（轉不成就回傳 0）
         return 0
     }
 
@@ -49,7 +61,8 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     fun versionCode(version: String): Int {
-        // TODO ②：用 "." 切成三段整數 parts（不是三段、或有一段 >= 1000 就回傳 0），
+        // TODO ②：用 "." 切成三段整數 parts（不是三段、或有一段 >= 1000 就回傳
+        // 0），
         //        回傳 parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
         return 0
     }
@@ -58,8 +71,9 @@ private object L01Fixed {
 }
 
 // MARK: - 演練設定
-private fun rejectedCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 ") && "被商店拒絕" in it }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun rejectedCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 ") && "被商店拒絕" in it
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",

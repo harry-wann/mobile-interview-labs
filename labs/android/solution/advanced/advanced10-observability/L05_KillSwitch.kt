@@ -1,13 +1,22 @@
-// L05：營運按下了 kill switch，使用者離線重開 App，被關掉的功能又出現了（預設值與快取）
-// 對應複習站：Advanced10Observability 第 4 題「商店不能回復版本，出問題時有哪些安全網？（kill switch、強制更新）」
+// L05：營運按下了 kill switch，使用者離線重開 App，
+// 被關掉的功能又出現了（預設值與快取）
+// 對應複習站：Advanced10Observability 第 4 題「商店不能回復版本，
+// 出問題時有哪些安全網？（kill switch、強制更新）」
 //
-// 情境：新的出金流程放在遠端 kill switch（newWithdrawFlow）後面，平常是開的。出事時營運把遠端設定改成關。
-//       演練依序發生：① 使用者在線上啟動 App，遠端是開；② 營運按下 kill switch（遠端改成關），使用者把 App 切到背景再回到前景；
-//       ③ 使用者進了地鐵（沒有網路），重新啟動 App；④ 另一位新使用者在沒有網路的地方，剛裝好 App 就打開。
-//       「遠端設定」與「本機儲存」都是假的物件，用來模擬 Remote Config 與 DataStore。
-// Bug 版：只在啟動時取一次遠端設定，回到前景不重新取；取不到時用寫在程式裡的預設值 true（開），也沒有把上一次的結果存起來。
-//        結果：回到前景時功能還開著；離線重開 App，被關掉的功能又出現；全新安裝離線時，高風險功能預設是開的。
-// 修正版：啟動與回到前景都重新取得設定，成功就存起來；取不到時用上一次存的值；連存的值都沒有，才用「保守」的預設值（關）。
+// 情境：新的出金流程放在遠端 kill switch（newWithdrawFlow）後面，平常是開的。
+// 出事時營運把遠端設定改成關。
+//       演練依序發生：① 使用者在線上啟動 App，遠端是開；② 營運按下 kill
+// switch（遠端改成關），使用者把 App 切到背景再回到前景；
+//       ③ 使用者進了地鐵（沒有網路），重新啟動 App；④
+// 另一位新使用者在沒有網路的地方，剛裝好 App 就打開。
+//       「遠端設定」與「本機儲存」都是假的物件，用來模擬 Remote Config 與
+// DataStore。
+// Bug 版：只在啟動時取一次遠端設定，回到前景不重新取；
+// 取不到時用寫在程式裡的預設值 true（開），也沒有把上一次的結果存起來。
+//        結果：回到前景時功能還開著；離線重開 App，被關掉的功能又出現；
+// 全新安裝離線時，高風險功能預設是開的。
+// 修正版：啟動與回到前景都重新取得設定，成功就存起來；取不到時用上一次存的值；
+// 連存的值都沒有，才用「保守」的預設值（關）。
 package tw.harry.labs.solution.advanced10observability
 
 import tw.harry.labs.kit.Lab
@@ -17,7 +26,9 @@ import tw.harry.labs.kit.Variant
 /** 假的遠端設定（Remote Config）：online 為 false 時取不到（兩個版本共用） */
 private class L05FakeRemote {
     var online = true
-    var value = true                                            // 遠端目前的值：功能開或關
+
+    // 遠端目前的值：功能開或關
+    var value = true
 
     fun fetch(): Boolean? = if (online) value else null
 }
@@ -33,8 +44,14 @@ private interface L05KillSwitch {
     fun onForeground()
 }
 
-/** 演練流程（兩個版本共用）：makeSwitch 建立一個「這次啟動的 App」使用的 kill switch */
-private fun scenario(log: LabLog, makeSwitch: (L05FakeRemote, L05FakeStore) -> L05KillSwitch) {
+/**
+ * 演練流程（兩個版本共用）：makeSwitch 建立一個「這次啟動的 App」使用的 kill
+ * switch
+ */
+private fun scenario(
+    log: LabLog,
+    makeSwitch: (L05FakeRemote, L05FakeStore) -> L05KillSwitch,
+) {
     val remote = L05FakeRemote()
     val store = L05FakeStore()
     fun text(on: Boolean) = if (on) "開" else "關"
@@ -66,10 +83,14 @@ private object L05Bug {
     class Switch(private val remote: L05FakeRemote) : L05KillSwitch {
         private var fetched: Boolean? = null
 
-        override val isEnabled: Boolean get() = fetched ?: true     // 取不到就用寫在程式裡的預設值 true
+        // 取不到就用寫在程式裡的預設值 true
+        override val isEnabled: Boolean get() = fetched ?: true
 
-        override fun onLaunch() { fetched = remote.fetch() }        // 只有啟動時取一次，也沒有存起來
-        override fun onForeground() {}                              // 回到前景什麼都不做
+        // 只有啟動時取一次，也沒有存起來
+        override fun onLaunch() { fetched = remote.fetch() }
+
+        // 回到前景什麼都不做
+        override fun onForeground() {}
     }
 
     suspend fun run(log: LabLog) = scenario(log) { remote, _ -> Switch(remote) }
@@ -77,18 +98,27 @@ private object L05Bug {
 
 // MARK: - 修正版
 private object L05Fixed {
-    class Switch(private val remote: L05FakeRemote, private val store: L05FakeStore) : L05KillSwitch {
-        override val isEnabled: Boolean get() = store.cached ?: false   // 取不到用上一次存的值；都沒有就用保守的預設值（關）
+    class Switch(
+        private val remote: L05FakeRemote,
+        private val store: L05FakeStore,
+    ) : L05KillSwitch {
+        // 取不到用上一次存的值；都沒有就用保守的預設值（關）
+        override val isEnabled: Boolean get() = store.cached ?: false
 
         override fun onLaunch() = refresh()
-        override fun onForeground() = refresh()                     // 回到前景也重新取得
+
+        // 回到前景也重新取得
+        override fun onForeground() = refresh()
 
         private fun refresh() {
-            remote.fetch()?.let { store.cached = it }               // 成功就存起來，離線時還能用
+            // 成功就存起來，離線時還能用
+            remote.fetch()?.let { store.cached = it }
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { remote, store -> Switch(remote, store) }
+    suspend fun run(log: LabLog) = scenario(log) { remote, store ->
+        Switch(remote, store)
+    }
 }
 
 // MARK: - 演練設定

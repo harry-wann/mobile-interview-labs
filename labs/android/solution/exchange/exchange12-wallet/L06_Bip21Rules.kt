@@ -1,17 +1,28 @@
-// L06：掃到的付款連結帶 amount=1e3，欄位被填入 1000 BTC（BIP21 的嚴格解析：指數、req- 參數、重複的參數）
-// 對應複習站：Exchange12Wallet 第 4 題「掃描 QR 得到的付款連結（BIP21）要怎麼解析？」
+// L06：掃到的付款連結帶 amount=1e3，欄位被填入 1000 BTC（BIP21 的嚴格解析：
+// 指數、req- 參數、重複的參數）
+// 對應複習站：Exchange12Wallet 第 4 題「掃描 QR 得到的付款連結（BIP21）
+// 要怎麼解析？」
 //
-// 情境：掃描或貼上的付款連結是不可信的輸入，要嚴格解析。這個單元採用比 BIP21 文法更嚴格的自訂規則：
+// 情境：掃描或貼上的付款連結是不可信的輸入，要嚴格解析。這個單元採用比 BIP21
+// 文法更嚴格的自訂規則：
 //        ・scheme（bitcoin:）不分大小寫
-//        ・amount 的單位是 BTC，只接受「數字，可以有最多 8 位小數」，不能有指數、正負號、千分位
-//        ・名稱以 req- 開頭的參數代表「必須理解」，不認識就要拒絕整個連結；其他不認識的參數可以忽略
+//        ・amount 的單位是 BTC，只接受「數字，可以有最多 8 位小數」，
+// 不能有指數、正負號、千分位
+//        ・名稱以 req- 開頭的參數代表「必須理解」，不認識就要拒絕整個連結；
+// 其他不認識的參數可以忽略
 //        ・同一個參數出現兩次是有歧義的，拒絕
-//        連結的切分（E12.splitBip21：scheme、地址、query 的原始 key 與 value）已經寫好在 Exchange12Support.kt，
-//        parse 要回傳「受理（金額）」或「拒絕」。七個連結：金額 20.3 加 label／大寫的 BITCOIN: 加金額 0.01／沒有 amount／
-//        amount=1e3／amount=1 加 req-pay=x／amount=1&amount=2／amount=1 加不認識的 foo=bar（要忽略）。
-// Bug 版：query 轉成 Map（同名的參數後面的蓋掉前面的）、略過所有不認識的參數（包含 req-）、amount 直接丟給 BigDecimal(String)。
-//        BigDecimal 認得科學記號：amount=1e3 變成 1000 BTC；req- 的參數被忽略；amount=1&amount=2 取了後面的 2。
-// 修正版：先檢查有沒有 req- 開頭的參數與重複的參數（有就拒絕）；amount 用嚴格的格式檢查（只接受數字加最多 8 位小數）通過後才轉成 BigDecimal。
+//        連結的切分（E12.splitBip21：scheme、地址、query 的原始 key 與 value）
+// 已經寫好在 Exchange12Support.kt，
+//        parse 要回傳「受理（金額）」或「拒絕」。七個連結：金額 20.3 加
+// label／大寫的 BITCOIN: 加金額 0.01／沒有 amount／
+//        amount=1e3／amount=1 加 req-pay=x／amount=1&amount=2／amount=1
+// 加不認識的 foo=bar（要忽略）。
+// Bug 版：query 轉成 Map（同名的參數後面的蓋掉前面的）、
+// 略過所有不認識的參數（包含 req-）、amount 直接丟給 BigDecimal(String)。
+//        BigDecimal 認得科學記號：amount=1e3 變成 1000 BTC；req- 的參數被忽略；
+// amount=1&amount=2 取了後面的 2。
+// 修正版：先檢查有沒有 req- 開頭的參數與重複的參數（有就拒絕）；amount
+// 用嚴格的格式檢查（只接受數字加最多 8 位小數）通過後才轉成 BigDecimal。
 package tw.harry.labs.solution.exchange12wallet
 
 import java.math.BigDecimal
@@ -19,31 +30,64 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 受理時的金額用「不帶指數、沒有多餘 0 的字串」表示（BigDecimal 的 equals 會比較 scale，直接比較不方便） */
+/**
+ * 受理時的金額用「不帶指數、沒有多餘 0 的字串」表示（BigDecimal 的 equals
+ * 會比較 scale，直接比較不方便）
+ */
 private sealed interface L06Outcome {
     data class Accepted(val amount: String?) : L06Outcome
     data object Rejected : L06Outcome
 }
 
-private fun plain(value: BigDecimal): String = value.stripTrailingZeros().toPlainString()
+private fun plain(value: BigDecimal): String =
+    value.stripTrailingZeros().toPlainString()
 
 private fun text(o: L06Outcome): String = when (o) {
     is L06Outcome.Accepted -> "受理，金額 " + (o.amount?.let { "$it BTC" } ?: "沒有")
     L06Outcome.Rejected -> "拒絕"
 }
 
-private const val ADDRESS = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"        // 公開的測試地址（比特幣創世區塊）
+// 公開的測試地址（比特幣創世區塊）
+private const val ADDRESS = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
 
-private class L06Case(val name: String, val uri: String, val expected: L06Outcome)
+private class L06Case(
+    val name: String,
+    val uri: String,
+    val expected: L06Outcome,
+)
 
 private val cases = listOf(
-    L06Case("金額 20.3 加 label", "bitcoin:$ADDRESS?amount=20.3&label=Luke-Jr", L06Outcome.Accepted("20.3")),
-    L06Case("大寫的 BITCOIN:", "BITCOIN:$ADDRESS?amount=0.01", L06Outcome.Accepted("0.01")),
-    L06Case("沒有 amount", "bitcoin:$ADDRESS?label=donation", L06Outcome.Accepted(null)),
+    L06Case(
+        "金額 20.3 加 label",
+        "bitcoin:$ADDRESS?amount=20.3&label=Luke-Jr",
+        L06Outcome.Accepted("20.3"),
+    ),
+    L06Case(
+        "大寫的 BITCOIN:",
+        "BITCOIN:$ADDRESS?amount=0.01",
+        L06Outcome.Accepted("0.01"),
+    ),
+    L06Case(
+        "沒有 amount",
+        "bitcoin:$ADDRESS?label=donation",
+        L06Outcome.Accepted(null),
+    ),
     L06Case("amount=1e3", "bitcoin:$ADDRESS?amount=1e3", L06Outcome.Rejected),
-    L06Case("不認識的 req- 參數", "bitcoin:$ADDRESS?amount=1&req-pay=x", L06Outcome.Rejected),
-    L06Case("amount 出現兩次", "bitcoin:$ADDRESS?amount=1&amount=2", L06Outcome.Rejected),
-    L06Case("不認識的一般參數（忽略）", "bitcoin:$ADDRESS?amount=1&foo=bar", L06Outcome.Accepted("1")),
+    L06Case(
+        "不認識的 req- 參數",
+        "bitcoin:$ADDRESS?amount=1&req-pay=x",
+        L06Outcome.Rejected,
+    ),
+    L06Case(
+        "amount 出現兩次",
+        "bitcoin:$ADDRESS?amount=1&amount=2",
+        L06Outcome.Rejected,
+    ),
+    L06Case(
+        "不認識的一般參數（忽略）",
+        "bitcoin:$ADDRESS?amount=1&foo=bar",
+        L06Outcome.Accepted("1"),
+    ),
 )
 
 /** 演練流程（兩個版本共用）：7 個連結逐一解析，和正確答案比對 */
@@ -70,8 +114,12 @@ private fun scenario(log: LabLog, parse: (E12.Bip21Parts) -> L06Outcome) {
 // MARK: - Bug 版
 private object L06Bug {
     fun parse(parts: E12.Bip21Parts): L06Outcome {
-        val map = parts.query.toMap()                                              // 同名的後面蓋掉前面；req- 也當成普通參數
-        val amount = map["amount"]?.let { runCatching { BigDecimal(it) }.getOrNull() }   // BigDecimal 認得 1e3
+        // 同名的後面蓋掉前面；req- 也當成普通參數
+        val map = parts.query.toMap()
+        // BigDecimal 認得 1e3
+        val amount = map["amount"]?.let {
+            runCatching { BigDecimal(it) }.getOrNull()
+        }
         return L06Outcome.Accepted(amount?.let { plain(it) })
     }
 
@@ -83,11 +131,21 @@ private object L06Fixed {
     fun parse(parts: E12.Bip21Parts): L06Outcome {
         val seen = mutableSetOf<String>()
         for ((key, _) in parts.query) {
-            if (key.startsWith("req-")) return L06Outcome.Rejected                // 必須理解的參數，不認識就拒絕整個連結
-            if (!seen.add(key)) return L06Outcome.Rejected                        // 同一個參數出現兩次：有歧義，拒絕
+            // 必須理解的參數，不認識就拒絕整個連結
+            if (key.startsWith("req-")) return L06Outcome.Rejected
+            // 同一個參數出現兩次：有歧義，拒絕
+            if (!seen.add(key)) return L06Outcome.Rejected
         }
-        val raw = parts.query.firstOrNull { it.first == "amount" }?.second ?: return L06Outcome.Accepted(null)
-        if (!Regex("^[0-9]+(\\.[0-9]{1,8})?$").matches(raw)) return L06Outcome.Rejected   // 只接受數字加最多 8 位小數
+        val raw =
+            parts.query.firstOrNull { it.first == "amount" }?.second
+                ?: return L06Outcome.Accepted(null)
+        // 只接受數字加最多 8 位小數
+        if (!Regex(
+                "^[0-9]+(\\.[0-9]{1,8})?$",
+            ).matches(raw)
+        ) {
+            return L06Outcome.Rejected
+        }
         return L06Outcome.Accepted(plain(BigDecimal(raw)))
     }
 
@@ -95,8 +153,9 @@ private object L06Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 7 個連結") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 7 個連結")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l06 = Lab(
     id = "L06",

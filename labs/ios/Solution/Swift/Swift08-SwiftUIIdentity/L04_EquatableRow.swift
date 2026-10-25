@@ -1,9 +1,14 @@
 // L04：每一檔行情的列都跟著重算（傳 closure 的子 view 沒辦法比較）
-// 對應複習站：Swift08SwiftUIIdentity 第 4 題「怎麼讓沒有變的子 view 被跳過，不要白做工？」
+// 對應複習站：Swift08SwiftUIIdentity 第 4 題「怎麼讓沒有變的子 view 被跳過，
+// 不要白做工？」
 //
-// 情境：行情列表有 3 檔，每一列有一個 onTap closure，內容會用到父層「目前更新了幾次」。每次更新只有 BTC 的價格在變，ETH、XRP 都沒變。
-// Bug 版：closure 捕獲了每次都在變的值，SwiftUI 沒辦法比較 closure，每次都當作「有變」，3 列的 body 每次都重算。
-// 修正版：TickerRow 遵守 Equatable，自己定義 ==（只比較 ticker，忽略 closure），使用時加上 .equatable()。沒變的列就被跳過。
+// 情境：行情列表有 3 檔，每一列有一個 onTap closure，
+// 內容會用到父層「目前更新了幾次」。每次更新只有 BTC 的價格在變，ETH、XRP
+// 都沒變。
+// Bug 版：closure 捕獲了每次都在變的值，SwiftUI 沒辦法比較 closure，
+// 每次都當作「有變」，3 列的 body 每次都重算。
+// 修正版：TickerRow 遵守 Equatable，自己定義 ==（只比較 ticker，忽略
+// closure），使用時加上 equatable()。沒變的列就被跳過。
 import SwiftUI
 import LabKit
 
@@ -18,7 +23,12 @@ private final class QuoteClock: ObservableObject {
     func tick() { updates += 1 }
 
     /// 目前的 3 檔行情：每次更新只有 BTC 的價格在變
-    var tickers: [Ticker] { [Ticker(id: "BTC", price: 1_000 + updates), Ticker(id: "ETH", price: 500), Ticker(id: "XRP", price: 60)] }
+    var tickers: [Ticker] {
+        [
+            Ticker(id: "BTC", price: 1_000 + updates),
+            Ticker(id: "ETH", price: 500), Ticker(id: "XRP", price: 60),
+        ]
+    }
 }
 
 /// 演練流程（兩個版本共用）：父層更新 3 次，看每一列的 body 一共算了幾次
@@ -60,7 +70,8 @@ private struct L04Demo: View {
 private enum L04Bug {
     struct TickerRow: View {
         let ticker: Ticker
-        let onTap: () -> Void                      // closure 沒辦法比較
+        // closure 沒辦法比較
+        let onTap: () -> Void
 
         var body: some View {
             let _ = BodyCount.tick("L04 \(ticker.id) 列")
@@ -81,7 +92,9 @@ private enum L04Bug {
             VStack {
                 ForEach(clock.tickers) { t in
                     TickerRow(ticker: t) {
-                        SwiftUILabProbe.note("L04 最後一次點擊", "\(t.id)，第 \(updates) 次更新時")   // 捕獲了每次都在變的 updates
+                        // 捕獲了每次都在變的 updates
+                        SwiftUILabProbe.note(
+                            "L04 最後一次點擊", "\(t.id)，第 \(updates) 次更新時")
                     }
                 }
             }
@@ -96,7 +109,9 @@ private enum L04Fixed {
         let onTap: () -> Void
 
         // 只比較 ticker：ticker 沒變，這一列的 body 就可以跳過（closure 不比）
-        nonisolated static func == (l: Self, r: Self) -> Bool { l.ticker == r.ticker }
+        nonisolated static func == (l: Self, r: Self) -> Bool {
+            l.ticker == r.ticker
+        }
 
         var body: some View {
             let _ = BodyCount.tick("L04 \(ticker.id) 列")
@@ -117,9 +132,11 @@ private enum L04Fixed {
             VStack {
                 ForEach(clock.tickers) { t in
                     TickerRow(ticker: t) {
-                        SwiftUILabProbe.note("L04 最後一次點擊", "\(t.id)，第 \(updates) 次更新時")
+                        SwiftUILabProbe.note(
+                            "L04 最後一次點擊", "\(t.id)，第 \(updates) 次更新時")
                     }
-                    .equatable()                    // 告訴 SwiftUI：比較時用上面定義的 ==
+                    // 告訴 SwiftUI：比較時用上面定義的 ==
+                    .equatable()
                 }
             }
         }
@@ -139,8 +156,10 @@ extension Swift08SwiftUIIdentity {
             "選「修正版」，同樣操作：只有 BTC 那一列增加，ETH、XRP 維持 1 次。",
             "對照兩個版本的 TickerRow：修正版多了 Equatable 與 .equatable()。",
         ],
-        expectBug: "父層更新 3 次後，BTC、ETH、XRP 三列的 body 都算了 4 次：closure 每次都不一樣，SwiftUI 沒辦法比較。",
-        expectFixed: "BTC 那一列算了 4 次（價格每次都變），ETH、XRP 各只算 1 次：== 只比較 ticker，沒變的列被跳過。",
+        expectBug:
+            "父層更新 3 次後，BTC、ETH、XRP 三列的 body 都算了 4 次：closure 每次都不一樣，SwiftUI 沒辦法比較。",
+        expectFixed:
+            "BTC 那一列算了 4 次（價格每次都變），ETH、XRP 各只算 1 次：== 只比較 ticker，沒變的列被跳過。",
         run: { variant, log in
             switch variant {
             case .bug: await scenario(log) { L04Bug.Screen(clock: $0) }
@@ -149,15 +168,29 @@ extension Swift08SwiftUIIdentity {
         },
         demo: { variant, _ in AnyView(L04Demo(variant: variant)) },
         checkBug: { lines in
-            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") { return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次" }
-            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 4 次") { return "Bug 還沒重現：ETH 沒變，但它的 body 也要每次都重算（4 次）：TickerRow 要傳一個會捕獲 updates 的 closure" }
-            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 4 次") { return "Bug 還沒重現：XRP 沒變，但它的 body 也要每次都重算（4 次）" }
+            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") {
+                return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次"
+            }
+            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 4 次") {
+                return
+                    "Bug 還沒重現：ETH 沒變，但它的 body 也要每次都重算（4 次）：TickerRow 要傳一個會捕獲 updates 的 closure"
+            }
+            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 4 次") {
+                return "Bug 還沒重現：XRP 沒變，但它的 body 也要每次都重算（4 次）"
+            }
             return nil
         },
         checkFixed: { lines in
-            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") { return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次" }
-            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 1 次") { return "ETH 沒變，它的 body 應該只算 1 次：TickerRow 遵守 Equatable、== 只比較 ticker，並加上 .equatable()" }
-            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 1 次") { return "XRP 沒變，它的 body 應該只算 1 次" }
+            if !lines.contains("父層更新 3 次後，BTC 那一列的 body 算了 4 次") {
+                return "BTC 的價格每次都變，BTC 那一列的 body 應該算 4 次"
+            }
+            if !lines.contains("父層更新 3 次後，ETH 那一列的 body 算了 1 次") {
+                return
+                    "ETH 沒變，它的 body 應該只算 1 次：TickerRow 遵守 Equatable、== 只比較 ticker，並加上 .equatable()"
+            }
+            if !lines.contains("父層更新 3 次後，XRP 那一列的 body 算了 1 次") {
+                return "XRP 沒變，它的 body 應該只算 1 次"
+            }
             return nil
         }
     )

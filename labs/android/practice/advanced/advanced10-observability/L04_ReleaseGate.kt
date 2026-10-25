@@ -1,14 +1,21 @@
-// L04：放量 1% 時只有 40 位使用者，gate 卻憑這個數字決定要擴大或暫停（樣本太少的數字不能拿來決定）
-// 對應複習站：Advanced10Observability 第 3 題「新版本發布時，怎麼用指標決定要不要繼續擴大？」
+// L04：放量 1% 時只有 40 位使用者，gate
+// 卻憑這個數字決定要擴大或暫停（樣本太少的數字不能拿來決定）
+// 對應複習站：Advanced10Observability 第 3 題「新版本發布時，
+// 怎麼用指標決定要不要繼續擴大？」
 //
-// 情境：新版本分階段放量，每一階段結束時 gate 要決定「擴大」或「暫停」。比較的指標是 crash-free users，基準是上一版的 99.2%。
+// 情境：新版本分階段放量，每一階段結束時 gate 要決定「擴大」或「暫停」。
+// 比較的指標是 crash-free users，基準是上一版的 99.2%。
 //       演練有四個階段的資料：
-//         A. 放量 1%，只有 40 位使用者，沒有人 crash（100%）。B. 放量 1%，40 位使用者，1 位 crash（97.5%）。
-//         C. 放量 5%，2000 位使用者，60 位 crash（97.0%）。D. 放量 5%，2000 位使用者，14 位 crash（99.3%）。
+//         A. 放量 1%，只有 40 位使用者，沒有人 crash（100%）。B. 放量 1%，40
+// 位使用者，1 位 crash（97.5%）。
+//         C. 放量 5%，2000 位使用者，60 位 crash（97.0%）。D. 放量 5%，2000
+// 位使用者，14 位 crash（99.3%）。
 //
 // 你要寫：
-//   ① Bug 版：只比數字（新版 crash-free users 大於等於上一版就擴大），不管樣本有多少。40 位使用者也決定。
-//   ② 修正版：先看樣本數（不到 1000 位就等待）；樣本夠了才比較，並容許 0.3 個百分點的誤差。
+//   ① Bug 版：只比數字（新版 crash-free users 大於等於上一版就擴大），
+// 不管樣本有多少。40 位使用者也決定。
+//   ② 修正版：先看樣本數（不到 1000 位就等待）；樣本夠了才比較，並容許 0.3
+// 個百分點的誤差。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced10-observability/L04_ReleaseGate.kt
 package tw.harry.labs.practice.advanced10observability
@@ -17,7 +24,11 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private class L04Stage(val name: String, val users: Int, val crashedUsers: Int) {
+private class L04Stage(
+    val name: String,
+    val users: Int,
+    val crashedUsers: Int,
+) {
     val crashFree get() = 1.0 - crashedUsers.toDouble() / users
 }
 
@@ -29,15 +40,23 @@ private val stages = listOf(
     L04Stage("D. 放量 5%（2000 位，14 位 crash）", 2_000, 14),
 )
 
-/** 演練流程（兩個版本共用）：decide(階段, 上一版的 crash-free users) 回傳「擴大」「暫停」或「等待」 */
+/**
+ * 演練流程（兩個版本共用）：decide(階段, 上一版的 crash-free users)
+ * 回傳「擴大」「暫停」或「等待」
+ */
 private fun scenario(log: LabLog, decide: (L04Stage, Double) -> String) {
-    for (stage in stages) log("${stage.name}：${decide(stage, PREVIOUS_CRASH_FREE)}")
+    for (stage in stages) {
+        log(
+            "${stage.name}：${decide(stage, PREVIOUS_CRASH_FREE)}",
+        )
+    }
 }
 
 // MARK: - Bug 版
 private object L04Bug {
     fun decide(stage: L04Stage, previous: Double): String {
-        // TODO ①：只比數字，不管樣本有多少：stage.crashFree 大於等於 previous 就回傳 "擴大"，否則 "暫停"
+        // TODO ①：只比數字，不管樣本有多少：stage.crashFree 大於等於 previous
+        // 就回傳 "擴大"，否則 "暫停"
         return "等待"
     }
 
@@ -50,8 +69,10 @@ private object L04Fixed {
     private const val TOLERANCE = 0.003
 
     fun decide(stage: L04Stage, previous: Double): String {
-        // TODO ②：先看樣本數：stage.users 小於 MINIMUM_USERS 就回傳 "等待（樣本不足，繼續收集）"；
-        //         樣本夠了才比較：stage.crashFree 大於等於 previous - TOLERANCE 回傳 "擴大"，否則 "暫停"
+        // TODO ②：先看樣本數：stage.users 小於 MINIMUM_USERS 就回傳
+        // "等待（樣本不足，繼續收集）"；
+        //         樣本夠了才比較：stage.crashFree 大於等於 previous -
+        // TOLERANCE 回傳 "擴大"，否則 "暫停"
         return "等待"
     }
 

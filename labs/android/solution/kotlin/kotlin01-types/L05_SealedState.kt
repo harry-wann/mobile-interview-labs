@@ -1,11 +1,15 @@
 // L05：後端新增「已過期」訂單狀態，App 卻顯示「處理中」還讓人取消（sealed）
 // 對應複習站：Kotlin01Types 第 5 題「為什麼訂單狀態要用 sealed 來寫？」
 //
-// 情境：後端新增訂單狀態 EXPIRED（限價單超過有效期限，已作廢）。畫面依狀態顯示文字，並決定「取消」按鈕要不要出現。
-// Bug 版：狀態是 enum，when 為了「保險」寫了 else。新增的 EXPIRED 沒有人處理，默默走進 else，
+// 情境：後端新增訂單狀態 EXPIRED（限價單超過有效期限，已作廢）。
+// 畫面依狀態顯示文字，並決定「取消」按鈕要不要出現。
+// Bug 版：狀態是 enum，when 為了「保險」寫了 else。新增的 EXPIRED 沒有人處理，
+// 默默走進 else，
 //        顯示成「處理中」，而且 else 也讓它可以取消。編譯器完全沒有提醒。
-// 修正版：狀態用 sealed interface，when 不寫 else，每個子型別都要處理。少處理任何一個，編譯器就報錯。
-//        從 API 解析回來、還不認識的狀態，在解析時轉成 Unknown，不會變成執行時的例外。
+// 修正版：狀態用 sealed interface，when 不寫 else，每個子型別都要處理。
+// 少處理任何一個，編譯器就報錯。
+//        從 API 解析回來、還不認識的狀態，在解析時轉成 Unknown，
+// 不會變成執行時的例外。
 package tw.harry.labs.solution.kotlin01types
 
 import tw.harry.labs.kit.Lab
@@ -19,23 +23,33 @@ private val statusesFromApi = listOf("NEW", "FILLED", "EXPIRED", "EXPIRED_V2")
 private object L05Bug {
     enum class Status { NEW, FILLED, EXPIRED }
 
-    fun parse(raw: String): Status = Status.entries.firstOrNull { it.name == raw } ?: Status.NEW
+    fun parse(raw: String): Status =
+        Status.entries.firstOrNull { it.name == raw } ?: Status.NEW
 
     fun label(status: Status): String = when (status) {
         Status.NEW -> "已送出"
+
         Status.FILLED -> "全部成交"
-        else -> "處理中"                                    // 為了保險寫的 else：EXPIRED 默默走進這裡
+
+        // 為了保險寫的 else：EXPIRED 默默走進這裡
+        else -> "處理中"
     }
 
     fun canCancel(status: Status): Boolean = when (status) {
         Status.FILLED -> false
-        else -> true                                        // EXPIRED 也可以取消？
+
+        // EXPIRED 也可以取消？
+        else -> true
     }
 
     fun run(log: LabLog) {
         for (raw in statusesFromApi) {
             val status = parse(raw)
-            log("$raw：${label(status)}，${if (canCancel(status)) "可以取消" else "不能取消"}")
+            log(
+                "$raw：${label(
+                    status,
+                )}，${if (canCancel(status)) "可以取消" else "不能取消"}",
+            )
         }
     }
 }
@@ -46,17 +60,24 @@ private object L05Fixed {
         data object New : OrderState
         data object Filled : OrderState
         data object Expired : OrderState
-        data class Unknown(val raw: String) : OrderState    // 還不認識的狀態，在解析時就接住
+
+        // 還不認識的狀態，在解析時就接住
+        data class Unknown(val raw: String) : OrderState
     }
 
     fun parse(raw: String): OrderState = when (raw) {
         "NEW" -> OrderState.New
+
         "FILLED" -> OrderState.Filled
+
         "EXPIRED" -> OrderState.Expired
-        else -> OrderState.Unknown(raw)                     // 邊界處的 else 是故意的：把未知狀態轉成 Unknown
+
+        // 邊界處的 else 是故意的：把未知狀態轉成 Unknown
+        else -> OrderState.Unknown(raw)
     }
 
-    fun label(state: OrderState): String = when (state) {   // 沒有 else：新增子型別卻漏寫，這裡編譯不過
+    // 沒有 else：新增子型別卻漏寫，這裡編譯不過
+    fun label(state: OrderState): String = when (state) {
         OrderState.New -> "已送出"
         OrderState.Filled -> "全部成交"
         OrderState.Expired -> "已過期"
@@ -71,7 +92,11 @@ private object L05Fixed {
     fun run(log: LabLog) {
         for (raw in statusesFromApi) {
             val state = parse(raw)
-            log("$raw：${label(state)}，${if (canCancel(state)) "可以取消" else "不能取消"}")
+            log(
+                "$raw：${label(
+                    state,
+                )}，${if (canCancel(state)) "可以取消" else "不能取消"}",
+            )
         }
     }
 }

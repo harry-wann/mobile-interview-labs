@@ -6,6 +6,7 @@ enum Exchange03WebSocket {
         id: "exchange-ws-protocol",
         code: "Exchange03WebSocket",
         title: "WebSocket 協定",
-        labs: [l01, l02, l03, l04, l05, l06, l07]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05, l06, l07]
     )
 }

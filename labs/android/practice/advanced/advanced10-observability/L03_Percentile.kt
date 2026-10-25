@@ -1,12 +1,18 @@
-// L03：看板上平均延遲 311 ms 很健康，但每 100 個使用者就有 6 個等了 3 秒（平均值掩蓋長尾，要看 p95／p99）
-// 對應複習站：Advanced10Observability 第 2 題「上線之後要監控哪些指標？用什麼工具？」（p95 與業務指標）
+// L03：看板上平均延遲 311 ms 很健康，但每 100 個使用者就有 6 個等了 3
+// 秒（平均值掩蓋長尾，要看 p95／p99）
+// 對應複習站：Advanced10Observability 第 2
+// 題「上線之後要監控哪些指標？用什麼工具？」（p95 與業務指標）
 //
-// 情境：新版本放量時，release gate 看「下單 API 的延遲」。演練有 200 筆下單請求的延遲：188 筆在 100 到 180 毫秒之間，
-//       12 筆（6%）因為伺服器逾時重試，花了 3000 毫秒。gate 的門檻是 1000 毫秒，超過就暫停放量。
+// 情境：新版本放量時，release gate 看「下單 API 的延遲」。演練有 200
+// 筆下單請求的延遲：188 筆在 100 到 180 毫秒之間，
+//       12 筆（6%）因為伺服器逾時重試，花了 3000 毫秒。gate 的門檻是 1000
+// 毫秒，超過就暫停放量。
 //
 // 你要寫：
-//   ① Bug 版：看板顯示平均延遲（311 ms），低於門檻，gate 通過，但 6% 的使用者等了 3 秒。
-//   ② 修正版：看 p95：用 nearest-rank 法，排序後取第 ⌈0.95 × 筆數⌉ 筆。p95 超過門檻，gate 不通過。
+//   ① Bug 版：看板顯示平均延遲（311 ms），低於門檻，gate 通過，但 6%
+// 的使用者等了 3 秒。
+//   ② 修正版：看 p95：用 nearest-rank 法，排序後取第 ⌈0.95 × 筆數⌉ 筆。p95
+// 超過門檻，gate 不通過。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced10-observability/L03_Percentile.kt
 package tw.harry.labs.practice.advanced10observability
@@ -17,16 +23,21 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 200 筆延遲（毫秒）：188 筆正常、12 筆 3000 */
-private val latencies: List<Int> = (0 until 188).map { 100 + (it % 9) * 10 } + List(12) { 3_000 }
+private val latencies: List<Int> =
+    (0 until 188).map { 100 + (it % 9) * 10 } + List(12) { 3_000 }
 private const val GATE_THRESHOLD_MS = 1_000
 
 /** 演練流程（兩個版本共用）：dashboard 回傳看板顯示的指標名稱與數值（毫秒） */
 private fun scenario(log: LabLog, dashboard: (List<Int>) -> Pair<String, Int>) {
     val slow = latencies.count { it >= 3_000 }
-    log("實際情況：${latencies.size} 筆請求裡有 $slow 筆（${slow * 100 / latencies.size}%）等了 3000 ms")
+    log(
+        "實際情況：${latencies.size} 筆請求裡有 $slow 筆（${slow * 100 / latencies.size}%）等了 3000 ms",
+    )
     val (name, value) = dashboard(latencies)
     log("看板顯示：$name $value ms")
-    log("release gate（門檻 $GATE_THRESHOLD_MS ms）：${if (value < GATE_THRESHOLD_MS) "通過，繼續放量" else "不通過，暫停放量"}")
+    log(
+        "release gate（門檻 $GATE_THRESHOLD_MS ms）：${if (value < GATE_THRESHOLD_MS) "通過，繼續放量" else "不通過，暫停放量"}",
+    )
 }
 
 // MARK: - Bug 版
@@ -43,7 +54,8 @@ private object L03Bug {
 private object L03Fixed {
     /** nearest-rank：排序後取第 ⌈p% × 筆數⌉ 筆（從 1 開始算） */
     fun percentile(values: List<Int>, p: Int): Int {
-        // TODO ②-1：先排序；名次 = p% × 筆數，無條件進位（ceil）；回傳排序後第「名次」筆（名次從 1 開始，索引要減 1）
+        // TODO ②-1：先排序；名次 = p% × 筆數，無條件進位（ceil）；
+        // 回傳排序後第「名次」筆（名次從 1 開始，索引要減 1）
         return 0
     }
 

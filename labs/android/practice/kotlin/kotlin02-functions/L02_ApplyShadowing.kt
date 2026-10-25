@@ -1,10 +1,13 @@
-// L02：apply 區塊裡設定了數量，送出的訂單數量卻是 0（scope function 與同名變數）
+// L02：apply 區塊裡設定了數量，送出的訂單數量卻是 0（scope function
+// 與同名變數）
 // 對應複習站：Kotlin02Functions 第 2 題「let、run、with、apply、also 怎麼選？」
 //
-// 情境：下單畫面把輸入框目前的文字存在區域變數 qty，建立 OrderRequest 時用 apply 設定它的欄位。
+// 情境：下單畫面把輸入框目前的文字存在區域變數 qty，建立 OrderRequest 時用
+// apply 設定它的欄位。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug）：在 apply { } 裡直接寫 qty = "0.5"。外面有同名的區域變數，被改到的是區域變數，不是 OrderRequest。
+//   ① Bug 版（L02Bug）：在 apply { } 裡直接寫 qty = "0.5"。
+// 外面有同名的區域變數，被改到的是區域變數，不是 OrderRequest。
 //   ② 修正版（L02Fixed）：明確寫 this.qty = "0.5"。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin02-functions/L02_ApplyShadowing.kt
@@ -23,10 +26,13 @@ private class OrderRequest {
 // MARK: - Bug 版
 private object L02Bug {
     fun run(log: LabLog) {
-        var qty = "0"                                      // 輸入框目前的文字（區域變數）
+        // 輸入框目前的文字（區域變數）
+        var qty = "0"
         val request = OrderRequest().apply {
-            symbol = "BTC_JPY"                             // 沒有同名的區域變數，這行改的是 OrderRequest.symbol
-            // TODO ①：直接寫 qty = "0.5"（不要加 this）。外面有同名的區域變數，Kotlin 會優先用它
+            // 沒有同名的區域變數，這行改的是 OrderRequest.symbol
+            symbol = "BTC_JPY"
+            // TODO ①：直接寫 qty = "0.5"（不要加 this）。外面有同名的區域變數，
+            // Kotlin 會優先用它
         }
         log("送出的 symbol = ${request.symbol}")
         log("送出的 qty = ${request.qty}")
@@ -40,7 +46,8 @@ private object L02Fixed {
         var qty = "0"
         val request = OrderRequest().apply {
             symbol = "BTC_JPY"
-            // TODO ②：明確寫 this.qty = "0.5"，指定要設定的是 OrderRequest 的 qty
+            // TODO ②：明確寫 this.qty = "0.5"，指定要設定的是 OrderRequest 的
+            // qty
         }
         log("送出的 symbol = ${request.symbol}")
         log("送出的 qty = ${request.qty}")

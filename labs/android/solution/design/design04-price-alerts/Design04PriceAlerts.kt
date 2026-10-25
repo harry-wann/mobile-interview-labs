@@ -8,6 +8,10 @@ val unit = LabUnit(
     code = "Design04PriceAlerts",
     title = "價格提醒",
     labs = listOf(
-        l01, l02, l03, l04,   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        l01,
+        l02,
+        l03,
+        l04,
     ),
 )

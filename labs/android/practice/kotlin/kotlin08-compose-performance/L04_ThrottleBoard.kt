@@ -1,12 +1,19 @@
-// L04：WebSocket 每來一筆就更新一次畫面，不到一秒更新上百次（資料層降低更新頻率）
-// 對應複習站：Kotlin08ComposePerformance 第 5 題「上百個幣種、每秒更新數十次，整個行情列表怎麼設計才不卡？」
+// L04：WebSocket 每來一筆就更新一次畫面，
+// 不到一秒更新上百次（資料層降低更新頻率）
+// 對應複習站：Kotlin08ComposePerformance 第 5 題「上百個幣種、每秒更新數十次，
+// 整個行情列表怎麼設計才不卡？」
 //
-// 情境：WebSocket 每 5 ms 推一筆行情，共 120 筆，輪流更新 20 個幣種（約 0.7 秒）。畫面每收到一份清單就更新一次，
-//        演練計算「畫面總共更新了幾次」，以及最後一份清單是不是每個幣種都是最新價。
+// 情境：WebSocket 每 5 ms 推一筆行情，共 120 筆，輪流更新 20 個幣種（約 0.7
+// 秒）。畫面每收到一份清單就更新一次，
+//        演練計算「畫面總共更新了幾次」，
+// 以及最後一份清單是不是每個幣種都是最新價。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.MarketRepository.board）：socket.collect 裡每收到一筆，就 emit(latest.values.toList()) 給畫面。
-//   ② 修正版（L04Fixed.MarketRepository）：在 scope 裡收集 socket，用 latest.update 合併成「每個幣種最新的一筆」；board 每 200 ms 輸出一份，內容沒變就不送。
+//   ① Bug 版（L04Bug.MarketRepository.board）：socket.collect 裡每收到一筆，就
+// emit(latest.values.toList()) 給畫面。
+//   ② 修正版（L04Fixed.MarketRepository）：在 scope 裡收集 socket，用 latest.
+// update 合併成「每個幣種最新的一筆」；board 每 200 ms 輸出一份，
+// 內容沒變就不送。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin08-compose-performance/L04_ThrottleBoard.kt
 package tw.harry.labs.practice.kotlin08composeperformance
@@ -42,7 +49,13 @@ private val symbols = List(20) { "COIN${it + 1}_JPY" }
  * 演練流程（兩個版本共用）：WebSocket 每 5 ms 推一筆，共 120 筆，第 i 筆更新第 i % 20 個幣種，價格是 100000 + i。
  * [makeBoard] 決定怎麼把 WebSocket 的訊息變成給畫面的清單。
  */
-private suspend fun scenario(log: LabLog, makeBoard: (socket: Flow<L04Tick>, scope: CoroutineScope) -> Flow<List<L04TickUi>>) {
+private suspend fun scenario(
+    log: LabLog,
+    makeBoard: (
+        socket: Flow<L04Tick>,
+        scope: CoroutineScope,
+    ) -> Flow<List<L04TickUi>>,
+) {
     val socketDone = CompletableDeferred<Unit>()
     val socket = flow {
         repeat(120) { i ->
@@ -54,18 +67,26 @@ private suspend fun scenario(log: LabLog, makeBoard: (socket: Flow<L04Tick>, sco
     var last = emptyList<L04TickUi>()
     coroutineScope {
         val ui = launch {
-            makeBoard(socket, this@coroutineScope).collect {      // 畫面：每收到一份清單就更新一次
+            // 畫面：每收到一份清單就更新一次
+            makeBoard(socket, this@coroutineScope).collect {
                 updates++
                 last = it
             }
         }
-        withTimeoutOrNull(3_000) { socketDone.await() }           // 等 WebSocket 送完（最多等 3 秒）
-        delay(500)                                                // 再多等 500 ms（兩個多輸出週期），讓最後一批送出去
+        // 等 WebSocket 送完（最多等 3 秒）
+        withTimeoutOrNull(3_000) { socketDone.await() }
+        // 再多等 500 ms（兩個多輸出週期），讓最後一批送出去
+        delay(500)
         ui.cancel()
         coroutineContext.cancelChildren()
     }
     // 第 k 個幣種最後一次更新是第 100 + k 筆，價格 100000 + 100 + k
-    val allLatest = last.size == 20 && last.all { it.priceText == (100_100L + symbols.indexOf(it.symbol)).toString() }
+    val allLatest =
+        last.size == 20 &&
+            last.all {
+                it.priceText ==
+                    (100_100L + symbols.indexOf(it.symbol)).toString()
+            }
     log("WebSocket 推了 120 筆，畫面共更新了 $updates 次")
     log("最後一份清單有 ${last.size} 檔，每一檔都是最新價：${if (allLatest) "是" else "否"}")
 }
@@ -73,34 +94,45 @@ private suspend fun scenario(log: LabLog, makeBoard: (socket: Flow<L04Tick>, sco
 // MARK: - Bug 版
 private object L04Bug {
     class MarketRepository(private val socket: Flow<L04Tick>) {
-        // TODO ①：board 用 flow { … }：準備一個 LinkedHashMap<String, L04TickUi>，socket.collect 每收到一筆，
-        //         就更新這個幣種的 tick.toUi()，並 emit(latest.values.toList())（每筆訊息都送一份完整的清單給畫面）
+        // TODO ①：board 用 flow { … }：準備一個 LinkedHashMap<String,
+        // L04TickUi>，socket.collect 每收到一筆，
+        //         就更新這個幣種的 tick.toUi()，並 emit(latest.values.toList())
+        // （每筆訊息都送一份完整的清單給畫面）
         val board: Flow<List<L04TickUi>> = emptyFlow()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { socket, _ -> MarketRepository(socket).board }
+    suspend fun run(log: LabLog) = scenario(log) { socket, _ ->
+        MarketRepository(socket).board
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
     class MarketRepository(socket: Flow<L04Tick>, scope: CoroutineScope) {
-        private val latest = MutableStateFlow<Map<String, L04TickUi>>(emptyMap())
+        private val latest =
+            MutableStateFlow<Map<String, L04TickUi>>(emptyMap())
 
-        // TODO ②-1：init { scope.launch { … } }：收集 socket，每一筆用 latest.update { it + (tick.symbol to tick.toUi()) } 合併
+        // TODO ②-1：init { scope.launch { … } }：收集 socket，每一筆用 latest.
+        // update { it + (tick.symbol to tick.toUi()) } 合併
         //           （只保留每個幣種最新的一筆，不通知畫面）
 
-        // TODO ②-2：board 改成固定週期輸出：flow { while (true) { emit(latest.value.values.toList()); delay(200) } }，
+        // TODO ②-2：board 改成固定週期輸出：flow { while (true) { emit(latest.
+        // value.values.toList()); delay(200) } }，
         //           後面接 .distinctUntilChanged()（內容完全沒變就不往下送）
         val board: Flow<List<L04TickUi>> = emptyFlow()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { socket, scope -> MarketRepository(socket, scope).board }
+    suspend fun run(log: LabLog) = scenario(log) { socket, scope ->
+        MarketRepository(socket, scope).board
+    }
 }
 
 // MARK: - 演練設定
 private fun updates(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("WebSocket 推了 120 筆，畫面共更新了 ") }
-        ?.removePrefix("WebSocket 推了 120 筆，畫面共更新了 ")?.removeSuffix(" 次")?.toIntOrNull()
+        ?.removePrefix(
+            "WebSocket 推了 120 筆，畫面共更新了 ",
+        )?.removeSuffix(" 次")?.toIntOrNull()
 
 private fun allLatest(lines: List<String>): Boolean =
     lines.any { it.endsWith("每一檔都是最新價：是") }
@@ -137,8 +169,13 @@ val l04 = Lab(
         val n = updates(lines) ?: 0
         when {
             n == 0 -> "畫面沒有收到任何清單：board 要每 200 ms emit 一次 latest.value.values.toList()"
+
             n > 30 -> "畫面更新了 $n 次，太頻繁：改成固定週期（delay(200)）輸出，不要每筆訊息都送"
-            !allLatest(lines) -> "最後一份清單不是每一檔都是最新價：socket 的每一筆都要合併進 latest（update { it + (symbol to ui) }）"
+
+            !allLatest(
+                lines,
+            ) -> "最後一份清單不是每一檔都是最新價：socket 的每一筆都要合併進 latest（update { it + (symbol to ui) }）"
+
             else -> null
         }
     },

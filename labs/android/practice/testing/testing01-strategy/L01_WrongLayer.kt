@@ -1,16 +1,22 @@
 // L01：12 條下單規則全用 UI 測試驗，慢又時過時不過（選錯測試層級）
 // 對應複習站：Testing01Strategy 第 1 題「測試分成哪幾層？每一層測什麼？」
 //
-// 情境：下單有 12 個案例要驗（價格要是 1,000 日圓的倍數、數量不能低於 0.0001 BTC、不能超過 5 BTC…）。
+// 情境：下單有 12 個案例要驗（價格要是 1,000 日圓的倍數、數量不能低於 0.0001
+// BTC、不能超過 5 BTC…）。
 //       規則本身是一個純函式 T01OrderRules.validate（已經寫好）。
-//       UI 測試用 T01FakeOrderScreen 模擬：每個案例要冷啟動加登入 120 ms、輸入 40 ms、點確認 20 ms，
+//       UI 測試用 T01FakeOrderScreen 模擬：每個案例要冷啟動加登入 120 ms、輸入
+// 40 ms、點確認 20 ms，
 //       錯誤訊息要等動畫結束才會出現在畫面上（有的案例動畫超過 100 ms）。
 //
 // 你要寫：
-//   ① Bug 版：每個案例都走 UI 測試：建立 T01FakeOrderScreen(c.animationMs)，依序
-//      launch()、type(c.priceJpy, c.amountSatoshi)、tapConfirm()，再用 delay(100) 固定等 100 ms，最後 t.equal(screen.errorLabel(), c.expected)。
-//   ② 修正版：規則是純邏輯，直接 t.equal(T01OrderRules.validate(…), c.expected)，不經過 T01FakeOrderScreen。
-// 只改有 TODO 的地方。解答：solution/testing/testing01-strategy/L01_WrongLayer.kt
+//   ① Bug 版：每個案例都走 UI 測試：建立 T01FakeOrderScreen(c.animationMs)，
+// 依序
+//      launch()、type(c.priceJpy, c.amountSatoshi)、tapConfirm()，再用
+// delay(100) 固定等 100 ms，最後 t.equal(screen.errorLabel(), c.expected)。
+//   ② 修正版：規則是純邏輯，直接 t.equal(T01OrderRules.validate(…), c.
+// expected)，不經過 T01FakeOrderScreen。
+// 只改有 TODO 的地方。解答：solution/testing/testing01-strategy/L01_WrongLayer.
+// kt
 package tw.harry.labs.practice.testing01strategy
 
 import tw.harry.labs.kit.Lab
@@ -23,7 +29,9 @@ private object L01Bug {
         val suite = T01Suite()
         for (c in T01OrderCase.all) {
             suite.test(c.name) { t ->
-                // TODO ①：用 UI 測試的方式驗證這個案例（寫法見檔案開頭的說明）。固定等待用 kotlinx.coroutines.delay(100)
+                // TODO ①：用 UI
+                // 測試的方式驗證這個案例（寫法見檔案開頭的說明）。固定等待用
+                // kotlinx.coroutines.delay(100)
             }
         }
         suite.run("UI 層", log)
@@ -36,7 +44,8 @@ private object L01Fixed {
         val suite = T01Suite()
         for (c in T01OrderCase.all) {
             suite.test(c.name) { t ->
-                // TODO ②：直接呼叫 T01OrderRules.validate(priceJpy, amountSatoshi)，用 t.equal 比較結果和 c.expected
+                // TODO ②：直接呼叫 T01OrderRules.validate(priceJpy,
+                // amountSatoshi)，用 t.equal 比較結果和 c.expected
             }
         }
         suite.run("單元層", log)

@@ -1,13 +1,18 @@
-// L04：在電梯裡按了買入，畫面沒反應，一分鐘後走出電梯，單卻自己下出去了（沒有網路時把下單排隊，等連線恢復再補送）
-// 對應複習站：Design03OrderAssets 第 7 題「有哪些例外情況？怎麼測試和監控？」（斷線時按下單）
+// L04：在電梯裡按了買入，畫面沒反應，一分鐘後走出電梯，
+// 單卻自己下出去了（沒有網路時把下單排隊，等連線恢復再補送）
+// 對應複習站：Design03OrderAssets 第 7 題「有哪些例外情況？怎麼測試和監控？」
+// （斷線時按下單）
 //
-// 情境：使用者在電梯裡（沒有網路）按下「買入 0.01 BTC，限價 10,000,000 円」。下單頁等了 10 秒沒有結果，使用者以為沒下成功，放棄、關掉畫面。
+// 情境：使用者在電梯裡（沒有網路）按下「買入 0.01 BTC，限價 10,000,000 円」。
+// 下單頁等了 10 秒沒有結果，使用者以為沒下成功，放棄、關掉畫面。
 //       一分鐘後走出電梯，網路恢復，這時市價已經跌到 9,800,000 円。
 //       看畫面上顯示什麼，以及網路恢復之後，伺服器收到了幾張單。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug.Gateway）：沒有網路時，submit 把單存進 queue、回傳「已送出，等待連線」；connectionRestored 把 queue 裡的單補送給伺服器。
-//   ② 修正版（L04Fixed.Gateway.submit）：沒有網路時，不排隊，直接回傳「現在無法下單，請確認網路連線」。
+//   ① Bug 版（L04Bug.Gateway）：沒有網路時，submit 把單存進 queue、
+// 回傳「已送出，等待連線」；connectionRestored 把 queue 裡的單補送給伺服器。
+//   ② 修正版（L04Fixed.Gateway.submit）：沒有網路時，不排隊，
+// 直接回傳「現在無法下單，請確認網路連線」。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Design/Design03-OrderAssets/L04_OfflineQueue.swift
 import LabKit
@@ -33,7 +38,9 @@ private protocol OrderGateway: AnyObject {
 private let order = "買 0.01 BTC，限價 10,000,000 円"
 
 /// 演練流程（兩個版本共用）
-private func scenario(_ log: LabLog, makeGateway: (FakeNetwork, FakeServer) -> OrderGateway) {
+private func scenario(
+    _ log: LabLog, makeGateway: (FakeNetwork, FakeServer) -> OrderGateway
+) {
     let network = FakeNetwork()
     let server = FakeServer()
     let gateway = makeGateway(network, server)
@@ -54,19 +61,23 @@ private enum L04Bug {
         private let network: FakeNetwork
         private let server: FakeServer
         private var queue: [String] = []
-        init(network: FakeNetwork, server: FakeServer) { self.network = network; self.server = server }
+        init(network: FakeNetwork, server: FakeServer) {
+            self.network = network; self.server = server
+        }
 
         func submit(_ order: String) -> String {
             if network.isOnline {
                 server.place(order)
                 return "已送出"
             }
-            // TODO ①-1：沒有網路：先把 order 存進 queue（等網路恢復再送），回傳「已送出，等待連線」。目前先回傳「（還沒寫）」當佔位
+            // TODO ①-1：沒有網路：先把 order 存進 queue（等網路恢復再送），
+            // 回傳「已送出，等待連線」。目前先回傳「（還沒寫）」當佔位
             return "（還沒寫）"
         }
 
         func connectionRestored() {
-            // TODO ①-2：網路恢復了：把 queue 裡的單依序 server.place 補送出去，再清空 queue
+            // TODO ①-2：網路恢復了：把 queue 裡的單依序 server.place 補送出去，
+            // 再清空 queue
         }
     }
 
@@ -80,15 +91,20 @@ private enum L04Fixed {
     final class Gateway: OrderGateway {
         private let network: FakeNetwork
         private let server: FakeServer
-        init(network: FakeNetwork, server: FakeServer) { self.network = network; self.server = server }
+        init(network: FakeNetwork, server: FakeServer) {
+            self.network = network; self.server = server
+        }
 
         func submit(_ order: String) -> String {
-            // TODO ②：沒有網路（network.isOnline 是 false）時，不排隊，直接回傳「現在無法下單，請確認網路連線」；
-            //         有網路才 server.place(order)，回傳「已送出」。目前先回傳「（還沒寫）」當佔位
+            // TODO ②：沒有網路（network.isOnline 是 false）時，不排隊，
+            // 直接回傳「現在無法下單，請確認網路連線」；
+            //         有網路才 server.place(order)，回傳「已送出」。
+            // 目前先回傳「（還沒寫）」當佔位
             return "（還沒寫）"
         }
 
-        func connectionRestored() {}                                  // 沒有排隊的單，沒有東西要補送
+        // 沒有排隊的單，沒有東西要補送
+        func connectionRestored() {}
     }
 
     static func run(_ log: LabLog) async {
@@ -102,7 +118,8 @@ extension Design03OrderAssets {
         id: "L04",
         title: "在電梯裡按的買入，走出電梯後自己下出去了",
         question: "第 7 題：有哪些例外情況？怎麼測試和監控？",
-        goal: "斷線時按下單，不排隊、不等連線恢復後自動補送：直接告訴使用者現在無法下單。下單是有時效的操作，價格已經變了的單，不能由使用者看不到的背景補送。先寫出會排隊補送的 Bug 版，再寫修正版。",
+        goal:
+            "斷線時按下單，不排隊、不等連線恢復後自動補送：直接告訴使用者現在無法下單。下單是有時效的操作，價格已經變了的單，不能由使用者看不到的背景補送。先寫出會排隊補送的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Design/Design03-OrderAssets/L04_OfflineQueue.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，看畫面顯示什麼、網路恢復之後伺服器收到幾張單。",
@@ -110,8 +127,10 @@ extension Design03OrderAssets {
             "寫 TODO ②（修正版），選「修正版」執行：畫面顯示「現在無法下單，請確認網路連線」，網路恢復之後伺服器收到 0 張單。",
             "想一想：行情的訂閱可以在網路恢復後自動補上，下單為什麼不行？（訂閱是冪等的，補上沒有副作用；下單有副作用，而且價格已經不同了。）",
         ],
-        expectBug: "畫面顯示「已送出，等待連線」，網路恢復後伺服器自動收到 1 張單：「最後：畫面顯示「已送出，等待連線」；網路恢復後伺服器收到 1 張單」。",
-        expectFixed: "畫面顯示「現在無法下單，請確認網路連線」，伺服器沒有收到任何單：「最後：畫面顯示「現在無法下單，請確認網路連線」；網路恢復後伺服器收到 0 張單」。",
+        expectBug:
+            "畫面顯示「已送出，等待連線」，網路恢復後伺服器自動收到 1 張單：「最後：畫面顯示「已送出，等待連線」；網路恢復後伺服器收到 1 張單」。",
+        expectFixed:
+            "畫面顯示「現在無法下單，請確認網路連線」，伺服器沒有收到任何單：「最後：畫面顯示「現在無法下單，請確認網路連線」；網路恢復後伺服器收到 0 張單」。",
         run: { variant, log in
             switch variant {
             case .bug: await L04Bug.run(log)
@@ -119,14 +138,20 @@ extension Design03OrderAssets {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("最後") }) { return "演練沒有跑完：要用 scenario(log, makeGateway:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("最後") }) {
+                return "演練沒有跑完：要用 scenario(log, makeGateway:) 執行"
+            }
             return lines.contains("最後：畫面顯示「已送出，等待連線」；網路恢復後伺服器收到 1 張單")
-                ? nil : "Bug 還沒重現：沒有網路時 submit 把單存進 queue、回傳「已送出，等待連線」；connectionRestored 把 queue 裡的單補送給伺服器"
+                ? nil
+                : "Bug 還沒重現：沒有網路時 submit 把單存進 queue、回傳「已送出，等待連線」；connectionRestored 把 queue 裡的單補送給伺服器"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("最後") }) { return "演練沒有跑完：要用 scenario(log, makeGateway:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("最後") }) {
+                return "演練沒有跑完：要用 scenario(log, makeGateway:) 執行"
+            }
             return lines.contains("最後：畫面顯示「現在無法下單，請確認網路連線」；網路恢復後伺服器收到 0 張單")
-                ? nil : "沒有網路（network.isOnline 是 false）時，submit 直接回傳「現在無法下單，請確認網路連線」，不要排隊"
+                ? nil
+                : "沒有網路（network.isOnline 是 false）時，submit 直接回傳「現在無法下單，請確認網路連線」，不要排隊"
         }
     )
 }

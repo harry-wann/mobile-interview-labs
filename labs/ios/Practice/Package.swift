@@ -7,20 +7,49 @@ let package = Package(
     name: "Practice",
     platforms: [.iOS(.v17)],
     products: [
-        .library(name: "Practice", targets: ["PracticeSwift", "PracticePlatform", "PracticeAdvanced", "PracticeExchange", "PracticeTesting", "PracticeDesign", "PracticeCoding"]),
+        .library(
+            name: "Practice",
+            targets: [
+                "PracticeSwift", "PracticePlatform", "PracticeAdvanced",
+                "PracticeExchange", "PracticeTesting", "PracticeDesign",
+                "PracticeCoding",
+            ])
     ],
     dependencies: [
-        .package(path: "../LabKit"),
+        .package(path: "../LabKit")
     ],
     targets: [
         .target(name: "PracticeSwiftObjC", path: "SwiftObjC"),
-        .target(name: "PracticeSwift", dependencies: [.product(name: "LabKit", package: "LabKit"), "PracticeSwiftObjC"], path: "Swift"),
-        .target(name: "PracticePlatform", dependencies: [.product(name: "LabKit", package: "LabKit")], path: "Platform"),
-        .target(name: "PracticeAdvanced", dependencies: [.product(name: "LabKit", package: "LabKit")], path: "Advanced"),
-        .target(name: "PracticeExchange", dependencies: [.product(name: "LabKit", package: "LabKit")], path: "Exchange"),
-        .target(name: "PracticeTesting", dependencies: [.product(name: "LabKit", package: "LabKit")], path: "Testing"),
-        .target(name: "PracticeDesign", dependencies: [.product(name: "LabKit", package: "LabKit")], path: "Design"),
-        .target(name: "PracticeCoding", dependencies: [.product(name: "LabKit", package: "LabKit")], path: "Coding"),
+        .target(
+            name: "PracticeSwift",
+            dependencies: [
+                .product(name: "LabKit", package: "LabKit"),
+                "PracticeSwiftObjC",
+            ], path: "Swift"),
+        .target(
+            name: "PracticePlatform",
+            dependencies: [.product(name: "LabKit", package: "LabKit")],
+            path: "Platform"),
+        .target(
+            name: "PracticeAdvanced",
+            dependencies: [.product(name: "LabKit", package: "LabKit")],
+            path: "Advanced"),
+        .target(
+            name: "PracticeExchange",
+            dependencies: [.product(name: "LabKit", package: "LabKit")],
+            path: "Exchange"),
+        .target(
+            name: "PracticeTesting",
+            dependencies: [.product(name: "LabKit", package: "LabKit")],
+            path: "Testing"),
+        .target(
+            name: "PracticeDesign",
+            dependencies: [.product(name: "LabKit", package: "LabKit")],
+            path: "Design"),
+        .target(
+            name: "PracticeCoding",
+            dependencies: [.product(name: "LabKit", package: "LabKit")],
+            path: "Coding"),
     ],
     swiftLanguageModes: [.v5]
 )

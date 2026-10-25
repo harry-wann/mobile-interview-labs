@@ -1,12 +1,17 @@
-// L02：為了讓編譯通過硬轉型，手續費混進整數清單，排序時才 ClassCastException（variance）
-// 對應複習站：Kotlin01Types 第 2 題「泛型的 out、in、* 是什麼意思？為什麼 MutableList<Int> 不能當 MutableList<Number> 用？」
+// L02：為了讓編譯通過硬轉型，手續費混進整數清單，排序時才
+// ClassCastException（variance）
+// 對應複習站：Kotlin01Types 第 2 題「泛型的 out、in、* 是什麼意思？為什麼
+// MutableList<Int> 不能當 MutableList<Number> 用？」
 //
-// 情境：下單畫面的數量是 MutableList<Int>（單位：張）。要把手續費 0.5 加進清單，算「含手續費」的總量。
+// 情境：下單畫面的數量是 MutableList<Int>（單位：張）。要把手續費 0.5
+// 加進清單，算「含手續費」的總量。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug）：withFee 的參數是 MutableList<Number>，把手續費 add 進去；呼叫時用 as 強制轉型繞過編譯器。
+//   ① Bug 版（L02Bug）：withFee 的參數是 MutableList<Number>，把手續費 add
+// 進去；呼叫時用 as 強制轉型繞過編譯器。
 //      跑起來會看到加總默默少算，排序時才 ClassCastException。
-//   ② 修正版（L02Fixed）：withFee 只讀，參數改成 List<Number>，回傳新的清單，不用轉型。
+//   ② 修正版（L02Fixed）：withFee 只讀，參數改成 List<Number>，回傳新的清單，
+// 不用轉型。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin01-types/L02_Variance.kt
 package tw.harry.labs.practice.kotlin01types
@@ -25,9 +30,11 @@ private object L02Bug {
     @Suppress("UNCHECKED_CAST")
     fun run(log: LabLog) {
         val lots: MutableList<Int> = mutableListOf(3, 1, 2)
-        // TODO ①-2：呼叫 withFee(…, 0.5)。編譯器不讓 MutableList<Int> 直接傳進 MutableList<Number>，用 as MutableList<Number> 強制轉型
+        // TODO ①-2：呼叫 withFee(…, 0.5)。編譯器不讓 MutableList<Int> 直接傳進
+        // MutableList<Number>，用 as MutableList<Number> 強制轉型
         log("含手續費後的 lots：$lots")
-        log("加總：${lots.sum()}")                          // 把 0.5 當成 0 加進去，默默少算，沒有任何錯誤
+        // 把 0.5 當成 0 加進去，默默少算，沒有任何錯誤
+        log("加總：${lots.sum()}")
         try {
             log("由小到大排序：${lots.sorted()}")
         } catch (e: ClassCastException) {
@@ -38,13 +45,18 @@ private object L02Bug {
 
 // MARK: - 修正版
 private object L02Fixed {
-    /** 只讀：List<out E> 可以放寬，List<Int> 直接當 List<Number> 傳進來；回傳新的清單 */
-    // TODO ②：參數改成 List<Number>，回傳一個新的 List<Number>（原清單 + fee），不要修改傳進來的清單
+    /**
+     * 只讀：List<out E> 可以放寬，List<Int> 直接當 List<Number> 傳進來；
+     * 回傳新的清單
+     */
+    // TODO ②：參數改成 List<Number>，回傳一個新的 List<Number>（原清單 +
+    // fee），不要修改傳進來的清單
     fun withFee(amounts: List<Number>, fee: Double): List<Number> = amounts
 
     fun run(log: LabLog) {
         val lots: MutableList<Int> = mutableListOf(3, 1, 2)
-        val withFee = withFee(lots, 0.5)                    // 不用轉型；lots 本身沒有被動到
+        // 不用轉型；lots 本身沒有被動到
+        val withFee = withFee(lots, 0.5)
         log("含手續費後的 lots：$withFee")
         log("加總：${lots.sum()}")
         try {

@@ -1,5 +1,6 @@
 // Coding04Async 共用的小工具（和 bug 本身無關，已經寫好，不用改）。
-// 內容：數「同時有幾個在進行」的計數器、一個要抓的項目、API 的錯誤種類（哪些值得重試）、記錄等待時間的假 sleep。
+// 內容：數「同時有幾個在進行」的計數器、一個要抓的項目、API
+// 的錯誤種類（哪些值得重試）、記錄等待時間的假 sleep。
 package tw.harry.labs.solution.coding04async
 
 import java.util.concurrent.CopyOnWriteArrayList
@@ -35,7 +36,10 @@ enum class C04ApiError(val text: String, val isTransient: Boolean) {
     INSUFFICIENT_BALANCE("餘額不足", false),
 }
 
-/** API 回傳錯誤時丟出的例外。isTransient 是 true 的才值得重試：等一下再試有機會成功；其他錯誤重試結果都一樣 */
+/**
+ * API 回傳錯誤時丟出的例外。isTransient 是 true 的才值得重試：
+ * 等一下再試有機會成功；其他錯誤重試結果都一樣
+ */
 class C04ApiException(val error: C04ApiError) : Exception(error.text)
 
 /** 假的 sleep：不真的等，只記下「被要求等多久」（毫秒） */

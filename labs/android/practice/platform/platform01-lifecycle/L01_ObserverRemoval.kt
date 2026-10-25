@@ -1,11 +1,15 @@
 // L01：每回到前景一次，同一筆報價就多處理一次（onStart 會重複執行）
-// 對應複習站：Platform01Lifecycle 第 1 題「畫面從打開到關掉，iOS 和 Android 各會經過哪些階段？」
+// 對應複習站：Platform01Lifecycle 第 1 題「畫面從打開到關掉，iOS 和 Android
+// 各會經過哪些階段？」
 //
-// 情境：行情頁（Activity）一變成可見就訂閱價格。使用者按 Home 回桌面、再從最近工作清單回來，來回三次，最後來一筆新報價。
-//        演練用 Jetpack 的 LifecycleRegistry 依序送出 onCreate、onStart、onResume、onPause、onStop 這些事件（和真的 Activity 一樣的順序）。
+// 情境：行情頁（Activity）一變成可見就訂閱價格。使用者按 Home 回桌面、
+// 再從最近工作清單回來，來回三次，最後來一筆新報價。
+//        演練用 Jetpack 的 LifecycleRegistry 依序送出 onCreate、onStart、
+// onResume、onPause、onStop 這些事件（和真的 Activity 一樣的順序）。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug）：在 onStart 訂閱行情，而且不取消。來回三次，一筆報價會被處理好幾次。
+//   ① Bug 版（L01Bug）：在 onStart 訂閱行情，而且不取消。來回三次，
+// 一筆報價會被處理好幾次。
 //   ② 修正版（L01Fixed）：在 onStop 取消 onStart 的訂閱，兩個成對。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform01-lifecycle/L01_ObserverRemoval.kt
@@ -32,19 +36,33 @@ private class L01PriceFeed {
 private class L01FakeActivity : LifecycleOwner {
     private val registry = LifecycleRegistry.createUnsafe(this)
     override val lifecycle: Lifecycle get() = registry
-    fun move(vararg events: Lifecycle.Event) = events.forEach { registry.handleLifecycleEvent(it) }
+    fun move(vararg events: Lifecycle.Event) =
+        events.forEach { registry.handleLifecycleEvent(it) }
 }
 
-/** 演練流程（兩個版本共用）：打開行情頁，按 Home 再回來，來回三次，最後來一筆報價 */
-private fun scenario(log: LabLog, makeScreen: (L01PriceFeed, () -> Unit) -> DefaultLifecycleObserver) {
+/**
+ * 演練流程（兩個版本共用）：打開行情頁，按 Home 再回來，來回三次，
+ * 最後來一筆報價
+ */
+private fun scenario(
+    log: LabLog,
+    makeScreen: (L01PriceFeed, () -> Unit) -> DefaultLifecycleObserver,
+) {
     val feed = L01PriceFeed()
     var handled = 0
     val activity = L01FakeActivity()
     activity.lifecycle.addObserver(makeScreen(feed) { handled++ })
-    activity.move(Lifecycle.Event.ON_CREATE, Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME)      // 打開行情頁
+    // 打開行情頁
+    activity.move(
+        Lifecycle.Event.ON_CREATE,
+        Lifecycle.Event.ON_START,
+        Lifecycle.Event.ON_RESUME,
+    )
     repeat(3) {
-        activity.move(Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP)                                // 按 Home 回桌面
-        activity.move(Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME)                              // 從最近工作清單回來
+        // 按 Home 回桌面
+        activity.move(Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP)
+        // 從最近工作清單回來
+        activity.move(Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME)
     }
     feed.publish(10_000_000)
     log("來回 3 次後，行情來源有 ${feed.listenerCount} 個訂閱者")
@@ -53,34 +71,46 @@ private fun scenario(log: LabLog, makeScreen: (L01PriceFeed, () -> Unit) -> Defa
 
 // MARK: - Bug 版
 private object L01Bug {
-    class MarketScreen(private val feed: L01PriceFeed, private val onPrice: () -> Unit) : DefaultLifecycleObserver {
+    class MarketScreen(
+        private val feed: L01PriceFeed,
+        private val onPrice: () -> Unit,
+    ) : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            // TODO ①：在這裡訂閱行情：feed.add { onPrice() }。Bug 版訂閱之後不取消
+            // TODO ①：在這裡訂閱行情：feed.add { onPrice() }。Bug
+            // 版訂閱之後不取消
         }
     }
 
-    fun run(log: LabLog) = scenario(log) { feed, onPrice -> MarketScreen(feed, onPrice) }
+    fun run(log: LabLog) = scenario(log) { feed, onPrice ->
+        MarketScreen(feed, onPrice)
+    }
 }
 
 // MARK: - 修正版
 private object L01Fixed {
-    class MarketScreen(private val feed: L01PriceFeed, onPrice: () -> Unit) : DefaultLifecycleObserver {
+    class MarketScreen(private val feed: L01PriceFeed, onPrice: () -> Unit) :
+        DefaultLifecycleObserver {
         private val listener: (Int) -> Unit = { onPrice() }
 
         override fun onStart(owner: LifecycleOwner) {
             feed.add(listener)
         }
 
-        // TODO ②：覆寫 onStop(owner: LifecycleOwner)，在裡面把 listener 從 feed 移除（feed.remove），和 onStart 成對
+        // TODO ②：覆寫 onStop(owner: LifecycleOwner)，在裡面把 listener 從
+        // feed 移除（feed.remove），和 onStart 成對
     }
 
-    fun run(log: LabLog) = scenario(log) { feed, onPrice -> MarketScreen(feed, onPrice) }
+    fun run(log: LabLog) = scenario(log) { feed, onPrice ->
+        MarketScreen(feed, onPrice)
+    }
 }
 
 // MARK: - 演練設定
 private fun handled(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("來回 3 次後，來一筆新報價，行情頁處理了 ") }
-        ?.removePrefix("來回 3 次後，來一筆新報價，行情頁處理了 ")?.removeSuffix(" 次")?.toIntOrNull()
+        ?.removePrefix(
+            "來回 3 次後，來一筆新報價，行情頁處理了 ",
+        )?.removeSuffix(" 次")?.toIntOrNull()
 
 val l01 = Lab(
     id = "L01",

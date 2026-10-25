@@ -1,14 +1,21 @@
-// L01：頭像一路滑下去，快取越來越大，收到 onTrimMemory 也不放（沒有上限的 HashMap 快取，對照 LruCache）
-// 對應複習站：Advanced03Memory 第 1 題「iOS 和 Android 是怎麼因為記憶體不足而殺掉 App 的？收到警告時該做什麼？」
+// L01：頭像一路滑下去，快取越來越大，收到 onTrimMemory 也不放（沒有上限的
+// HashMap 快取，對照 LruCache）
+// 對應複習站：Advanced03Memory 第 1 題「iOS 和 Android
+// 是怎麼因為記憶體不足而殺掉 App 的？收到警告時該做什麼？」
 //
-// 情境：行情與社群頁會顯示很多幣種與用戶的頭像。每張解碼後的頭像約 100 KB，使用者一路往下滑，總共經過 200 張（約 20 MB）。
-//        接著系統呼叫 ComponentCallbacks2.onTrimMemory(TRIM_MEMORY_UI_HIDDEN)：畫面已經看不到了，要釋放畫面相關的資源。
-//        Java heap 超過 App 的上限會 OutOfMemoryError；系統整體吃緊時 LMK 會殺背景行程，都不會有一般的 crash log，
-//        所以要平常就讓用量有上限，收到通知時馬上放掉「可以重建」的東西（圖片快取）。
+// 情境：行情與社群頁會顯示很多幣種與用戶的頭像。每張解碼後的頭像約 100 KB，
+// 使用者一路往下滑，總共經過 200 張（約 20 MB）。
+//        接著系統呼叫 ComponentCallbacks2.onTrimMemory(TRIM_MEMORY_UI_HIDDEN)：
+// 畫面已經看不到了，要釋放畫面相關的資源。
+//        Java heap 超過 App 的上限會 OutOfMemoryError；系統整體吃緊時 LMK
+// 會殺背景行程，都不會有一般的 crash log，
+//        所以要平常就讓用量有上限，收到通知時馬上放掉「可以重建」
+// 的東西（圖片快取）。
 //
 // 你要寫：
 //   ① Bug 版 MapCache：用 HashMap 存，沒有上限，也不處理 onTrimMemory。
-//   ② 修正版 BoundedCache：LruCache（maxSize 以 KB 為單位，設 5 * 1024，sizeOf 回傳 value.size / 1024）；
+//   ② 修正版 BoundedCache：LruCache（maxSize 以 KB 為單位，設 5 * 1024，sizeOf
+// 回傳 value.size / 1024）；
 //      onTrimMemory 的 level 大於等於 TRIM_MEMORY_UI_HIDDEN 時 evictAll()。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced03-memory/L01_BoundedCache.kt
@@ -23,19 +30,28 @@ import tw.harry.labs.kit.Variant
 private const val IMAGE_COUNT = 200
 private const val IMAGE_BYTES = 100 * 1024
 
-/** 頭像快取的共同介面（兩個版本共用）；onTrimMemory 就是 ComponentCallbacks2 的那個函式 */
+/**
+ * 頭像快取的共同介面（兩個版本共用）；onTrimMemory 就是 ComponentCallbacks2
+ * 的那個函式
+ */
 private interface AvatarCache {
     fun put(key: String, bytes: ByteArray)
     fun contains(key: String): Boolean
     fun onTrimMemory(level: Int)
 }
 
-/** 演練流程（兩個版本共用）：滑過 200 張頭像 → 看快取留了幾張 → 系統通知 UI 看不到了 → 再看一次 */
+/**
+ * 演練流程（兩個版本共用）：滑過 200 張頭像 → 看快取留了幾張 → 系統通知 UI
+ * 看不到了 → 再看一次
+ */
 private fun scenario(log: LabLog, cache: AvatarCache) {
     val keys = List(IMAGE_COUNT) { "avatar-$it" }
-    for (key in keys) cache.put(key, ByteArray(IMAGE_BYTES))              // 解碼後的頭像，約 100 KB
+    // 解碼後的頭像，約 100 KB
+    for (key in keys) cache.put(key, ByteArray(IMAGE_BYTES))
     val before = keys.count { cache.contains(it) }
-    log("滑過 $IMAGE_COUNT 張頭像，快取裡還留著 $before 張（約 ${before * IMAGE_BYTES / 1_048_576} MB）")
+    log(
+        "滑過 $IMAGE_COUNT 張頭像，快取裡還留著 $before 張（約 ${before * IMAGE_BYTES / 1_048_576} MB）",
+    )
     cache.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
     val after = keys.count { cache.contains(it) }
     log("收到 onTrimMemory 之後，快取裡還有 $after 張")
@@ -44,7 +60,8 @@ private fun scenario(log: LabLog, cache: AvatarCache) {
 // MARK: - Bug 版
 private object L01Bug {
     class MapCache : AvatarCache {
-        private val map = HashMap<String, ByteArray>()                    // 沒有上限，也不會自己清
+        // 沒有上限，也不會自己清
+        private val map = HashMap<String, ByteArray>()
 
         override fun put(key: String, bytes: ByteArray) {
             // TODO ①-1：map[key] = bytes
@@ -66,8 +83,11 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     class BoundedCache : AvatarCache {
-        // TODO ②-1：maxSize 以 KB 為單位，設 5 * 1024（最多約 5 MB）；override sizeOf，回傳 value.size / 1024（這一筆占幾 KB）
-        private val cache = object : LruCache<String, ByteArray>(Int.MAX_VALUE) {
+        // TODO ②-1：maxSize 以 KB 為單位，設 5 * 1024（最多約 5 MB）；override
+        // sizeOf，回傳 value.size / 1024（這一筆占幾 KB）
+        private val cache = object : LruCache<String, ByteArray>(
+            Int.MAX_VALUE,
+        ) {
             override fun sizeOf(key: String, value: ByteArray): Int = 0
         }
 
@@ -78,7 +98,8 @@ private object L01Fixed {
         override fun contains(key: String) = cache.get(key) != null
 
         override fun onTrimMemory(level: Int) {
-            // TODO ②-3：level 大於等於 ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN 時，呼叫 cache.evictAll()：可以重建的全放掉
+            // TODO ②-3：level 大於等於 ComponentCallbacks2.
+            // TRIM_MEMORY_UI_HIDDEN 時，呼叫 cache.evictAll()：可以重建的全放掉
         }
     }
 

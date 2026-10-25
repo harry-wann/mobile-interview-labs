@@ -1,15 +1,20 @@
 // L02：同一個測試，半夜跑就失敗（測試依賴真實的系統時間）
 // 對應複習站：Testing01Strategy 第 3 題「怎麼把程式設計成好測試的樣子？」
 //
-// 情境：交易所每天日本時間 04:00 到 04:30 維護，這段時間不能下單。MaintenanceGuard.canPlaceOrder() 判斷現在能不能下單。
+// 情境：交易所每天日本時間 04:00 到 04:30 維護，這段時間不能下單。
+// MaintenanceGuard.canPlaceOrder() 判斷現在能不能下單。
 //       有人寫了測試「平日白天應該可以下單」，在公司下午跑都是綠燈。
-//       演練用 T01SystemClock 模擬「系統時間」（程式裡直接寫 ZonedDateTime.now() 讀到的就是它），
+//       演練用 T01SystemClock 模擬「系統時間」（程式裡直接寫 ZonedDateTime.
+// now() 讀到的就是它），
 //       並讓同一個測試分別跑在 10:00、04:10、23:50，代表 CI 不同時間點的執行。
 //
 // 你要寫：
-//   ① Bug 版：canPlaceOrder() 在裡面直接讀系統時間：T01Time.isInMaintenance(T01SystemClock.now())，在維護時段回傳 false。
-//   ② 修正版：MaintenanceGuard 的 clock（java.time.Clock）從建構子注入，canPlaceOrder() 用 ZonedDateTime.now(clock) 判斷，不能讀 T01SystemClock。
-// 只改有 TODO 的地方。解答：solution/testing/testing01-strategy/L02_RealClock.kt
+//   ① Bug 版：canPlaceOrder() 在裡面直接讀系統時間：T01Time.
+// isInMaintenance(T01SystemClock.now())，在維護時段回傳 false。
+//   ② 修正版：MaintenanceGuard 的 clock（java.time.Clock）從建構子注入，
+// canPlaceOrder() 用 ZonedDateTime.now(clock) 判斷，不能讀 T01SystemClock。
+// 只改有 TODO 的地方。解答：solution/testing/testing01-strategy/L02_RealClock.
+// kt
 package tw.harry.labs.practice.testing01strategy
 
 import java.time.Clock
@@ -18,9 +23,17 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 同一個測試跑在三個不同的系統時間（已寫好） */
-private suspend fun runAtDifferentTimes(log: LabLog, makeSuite: () -> T01Suite) {
-    for ((label, time) in listOf("10:00" to (10 to 0), "04:10" to (4 to 10), "23:50" to (23 to 50))) {
-        T01SystemClock.clock = T01Time.fixedClock(time.first, time.second)   // 模擬：這次測試剛好跑在這個時間點
+private suspend fun runAtDifferentTimes(
+    log: LabLog,
+    makeSuite: () -> T01Suite,
+) {
+    for ((label, time) in listOf(
+        "10:00" to (10 to 0),
+        "04:10" to (4 to 10),
+        "23:50" to (23 to 50),
+    )) {
+        // 模擬：這次測試剛好跑在這個時間點
+        T01SystemClock.clock = T01Time.fixedClock(time.first, time.second)
         makeSuite().run("跑在 $label", log)
     }
 }
@@ -29,7 +42,8 @@ private suspend fun runAtDifferentTimes(log: LabLog, makeSuite: () -> T01Suite) 
 private object L02Bug {
     class MaintenanceGuard {
         fun canPlaceOrder(): Boolean {
-            // TODO ①：直接讀系統時間 T01SystemClock.now()，用 T01Time.isInMaintenance 判斷；維護時段不能下單
+            // TODO ①：直接讀系統時間 T01SystemClock.now()，用 T01Time.
+            // isInMaintenance 判斷；維護時段不能下單
             return true
         }
     }
@@ -39,7 +53,8 @@ private object L02Bug {
         runAtDifferentTimes(log) {
             val suite = T01Suite()
             suite.test("平日白天應該可以下單") { t ->
-                t.isTrue(MaintenanceGuard().canPlaceOrder(), "不能下單")        // 沒有指定時間：跑在哪個時間就用哪個
+                // 沒有指定時間：跑在哪個時間就用哪個
+                t.isTrue(MaintenanceGuard().canPlaceOrder(), "不能下單")
             }
             suite
         }
@@ -48,9 +63,11 @@ private object L02Bug {
 
 // MARK: - 修正版
 private object L02Fixed {
-    class MaintenanceGuard(private val clock: Clock) {                       // 時鐘從外面注入
+    // 時鐘從外面注入
+    class MaintenanceGuard(private val clock: Clock) {
         fun canPlaceOrder(): Boolean {
-            // TODO ②：用注入的 clock 取得現在時間（ZonedDateTime.now(clock)）判斷，不要讀 T01SystemClock；維護時段不能下單
+            // TODO ②：用注入的 clock 取得現在時間（ZonedDateTime.now(clock)）
+            // 判斷，不要讀 T01SystemClock；維護時段不能下單
             return true
         }
     }
@@ -67,7 +84,11 @@ private object L02Fixed {
             )
             for ((name, time, expected) in cases) {
                 suite.test(name) { t ->
-                    val guard = MaintenanceGuard(T01Time.fixedClock(time.first, time.second))   // 測試自己指定時間
+                    // 測試自己指定時間
+                    val guard =
+                        MaintenanceGuard(
+                            T01Time.fixedClock(time.first, time.second),
+                        )
                     t.equal(guard.canPlaceOrder(), expected)
                 }
             }

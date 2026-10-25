@@ -1,11 +1,18 @@
-// L03：數量填了正確的數字，送出按鈕卻還是灰的；改成亂碼，按鈕反而亮著（狀態有兩個地方在管）
-// 對應複習站：Advanced09Architecture 第 2 題「MVVM、MVI、Clean Architecture、TCA 各解決什麼問題？代價是什麼？」（單向資料流）
+// L03：數量填了正確的數字，送出按鈕卻還是灰的；改成亂碼，
+// 按鈕反而亮著（狀態有兩個地方在管）
+// 對應複習站：Advanced09Architecture 第 2 題「MVVM、MVI、Clean Architecture、
+// TCA 各解決什麼問題？代價是什麼？」（單向資料流）
 //
-// 情境：下單畫面有價格、數量兩個輸入框和一個送出按鈕。按鈕能不能按（canSubmit）取決於兩個欄位是不是都是大於 0 的數字。
-//       演練依序輸入：價格 15000000、數量 0.5、價格 15000001、數量 abc，每次輸入之後看按鈕該不該亮。
-// Bug 版：ViewModel 裡 price、quantity、canSubmit 各自是一個 MutableStateFlow（或普通屬性）。價格改變時有記得重算 canSubmit，
-//        數量改變時忘了，canSubmit 就和兩個欄位不一致：數量填對了按鈕還是灰的，數量改成亂碼按鈕反而亮著。
-// 修正版：單向資料流：畫面只有一份 state（price、quantity），所有操作都送進 reduce 這一個地方修改；
+// 情境：下單畫面有價格、數量兩個輸入框和一個送出按鈕。按鈕能不能按（canSubmit）
+// 取決於兩個欄位是不是都是大於 0 的數字。
+//       演練依序輸入：價格 15000000、數量 0.5、價格 15000001、數量 abc，
+// 每次輸入之後看按鈕該不該亮。
+// Bug 版：ViewModel 裡 price、quantity、canSubmit 各自是一個
+// MutableStateFlow（或普通屬性）。價格改變時有記得重算 canSubmit，
+//        數量改變時忘了，canSubmit 就和兩個欄位不一致：數量填對了按鈕還是灰的，
+// 數量改成亂碼按鈕反而亮著。
+// 修正版：單向資料流：畫面只有一份 state（price、quantity），所有操作都送進
+// reduce 這一個地方修改；
 //        canSubmit 由 state 算出來（計算屬性），不可能和欄位不一致。
 package tw.harry.labs.solution.advanced09architecture
 
@@ -15,10 +22,16 @@ import tw.harry.labs.kit.Variant
 
 /** 大於 0 的數字才算有效（兩個版本共用） */
 private fun isValid(text: String): Boolean =
-    Regex("""^\d+(\.\d+)?$""").matches(text) && (text.toDoubleOrNull() ?: 0.0) > 0
+    Regex("""^\d+(\.\d+)?$""").matches(text) &&
+        (text.toDoubleOrNull() ?: 0.0) > 0
 
 /** 演練流程（兩個版本共用）：依序輸入，記下每次輸入之後送出按鈕的狀態 */
-private fun scenario(log: LabLog, typePrice: (String) -> Unit, typeQuantity: (String) -> Unit, canSubmit: () -> Boolean) {
+private fun scenario(
+    log: LabLog,
+    typePrice: (String) -> Unit,
+    typeQuantity: (String) -> Unit,
+    canSubmit: () -> Boolean,
+) {
     fun button() = if (canSubmit()) "可以按" else "不能按"
 
     typePrice("15000000")
@@ -38,7 +51,9 @@ private object L03Bug {
             private set
         var quantity = ""
             private set
-        var canSubmit = false                                   // 另一個儲存的屬性，要自己記得同步
+
+        // 另一個儲存的屬性，要自己記得同步
+        var canSubmit = false
             private set
 
         fun priceChanged(text: String) {
@@ -47,20 +62,24 @@ private object L03Bug {
         }
 
         fun quantityChanged(text: String) {
-            quantity = text                                     // 忘了重算 canSubmit
+            // 忘了重算 canSubmit
+            quantity = text
         }
     }
 
     suspend fun run(log: LabLog) {
         val viewModel = OrderViewModel()
-        scenario(log, viewModel::priceChanged, viewModel::quantityChanged) { viewModel.canSubmit }
+        scenario(log, viewModel::priceChanged, viewModel::quantityChanged) {
+            viewModel.canSubmit
+        }
     }
 }
 
 // MARK: - 修正版
 private object L03Fixed {
     data class OrderState(val price: String = "", val quantity: String = "") {
-        val canSubmit: Boolean get() = isValid(price) && isValid(quantity)   // 由兩個欄位算出來，不會不一致
+        // 由兩個欄位算出來，不會不一致
+        val canSubmit: Boolean get() = isValid(price) && isValid(quantity)
     }
 
     sealed interface OrderAction {
@@ -69,10 +88,11 @@ private object L03Fixed {
     }
 
     /** 狀態怎麼變，只有這一個地方決定 */
-    fun reduce(state: OrderState, action: OrderAction): OrderState = when (action) {
-        is OrderAction.PriceChanged -> state.copy(price = action.text)
-        is OrderAction.QuantityChanged -> state.copy(quantity = action.text)
-    }
+    fun reduce(state: OrderState, action: OrderAction): OrderState =
+        when (action) {
+            is OrderAction.PriceChanged -> state.copy(price = action.text)
+            is OrderAction.QuantityChanged -> state.copy(quantity = action.text)
+        }
 
     class OrderViewModel {
         var state = OrderState()

@@ -1,11 +1,17 @@
-// L05：沒有成交的時段補了 K 線，價格卻是很久以前的收盤價（補 K 線用錯前一根的收盤價）
-// 對應複習站：Coding03ExchangeAlgorithms 第 3 題「某些時段沒有成交時，K 線要怎麼補？」
+// L05：沒有成交的時段補了 K 線，價格卻是很久以前的收盤價（補 K
+// 線用錯前一根的收盤價）
+// 對應複習站：Coding03ExchangeAlgorithms 第 3 題「某些時段沒有成交時，K
+// 線要怎麼補？」
 //
-// 情境：1 分鐘 K 線（週期 60 秒），API 沒有回傳沒成交的那幾分鐘。收到的 K 線時間是 0、180、240、420，
-//       中間缺 60、120（第 1 個缺口，前一根收盤 102）和 300、360（第 2 個缺口，前一根是 240 那根，收盤 115）。
+// 情境：1 分鐘 K 線（週期 60 秒），API 沒有回傳沒成交的那幾分鐘。收到的 K
+// 線時間是 0、180、240、420，
+//       中間缺 60、120（第 1 個缺口，前一根收盤 102）和 300、360（第 2 個缺口，
+// 前一根是 240 那根，收盤 115）。
 //       缺的時段要補一根開高低收都等於「前一根收盤價」、成交量 0 的 K 線。
-// Bug 版：用一個變數 lastClose 記住收盤價，一開始設成第一根的收盤價，之後忘了更新。第 1 個缺口剛好是對的，
-//        第 2 個缺口卻還在用第一根的 102，圖上 300、360 兩根的價格比實際低了 13 円。
+// Bug 版：用一個變數 lastClose 記住收盤價，一開始設成第一根的收盤價，
+// 之後忘了更新。第 1 個缺口剛好是對的，
+//        第 2 個缺口卻還在用第一根的 102，圖上 300、360 兩根的價格比實際低了
+// 13 円。
 // 修正版：每放進一根真正的 K 線，就把 lastClose 更新成這一根的收盤價。
 package tw.harry.labs.solution.coding03exchangealgorithms
 
@@ -23,13 +29,24 @@ private val candles = listOf(
 )
 
 /** 演練流程（兩個版本共用）：補洞，列出時間軸與補出來的 K 線 */
-private fun scenario(log: LabLog, fillGaps: (List<C03Candle>, Int) -> List<C03Candle>) {
+private fun scenario(
+    log: LabLog,
+    fillGaps: (List<C03Candle>, Int) -> List<C03Candle>,
+) {
     val result = fillGaps(candles, PERIOD)
     val originalTimes = candles.map { it.time }.toSet()
     val filled = result.filter { it.time !in originalTimes }
     log("時間軸：${result.map { it.time }}（共 ${result.size} 根）")
-    log("補了 ${filled.size} 根（時間→價格）：${filled.joinToString(", ") { "${it.time}→${it.close}" }}")
-    val flat = filled.all { it.open == it.close && it.high == it.close && it.low == it.close && it.volume == 0 }
+    log(
+        "補了 ${filled.size} 根（時間→價格）：${filled.joinToString(", ") {
+            "${it.time}→${it.close}"
+        }}",
+    )
+    val flat = filled.all {
+        it.open == it.close && it.high == it.close &&
+            it.low == it.close &&
+            it.volume == 0
+    }
     log("補的 K 線開高低收一樣、成交量 0：${if (flat) "是" else "否"}")
 }
 
@@ -38,14 +55,18 @@ private object L05Bug {
     fun fillGaps(candles: List<C03Candle>, period: Int): List<C03Candle> {
         val first = candles.firstOrNull() ?: return emptyList()
         val result = arrayListOf(first)
-        val lastClose = first.close                                     // 一開始記下第一根的收盤價，之後都沒有更新
+        // 一開始記下第一根的收盤價，之後都沒有更新
+        val lastClose = first.close
         for (candle in candles.drop(1)) {
             var t = result.last().time + period
             while (t < candle.time) {
-                result.add(C03Candle(t, lastClose, lastClose, lastClose, lastClose, 0))
+                result.add(
+                    C03Candle(t, lastClose, lastClose, lastClose, lastClose, 0),
+                )
                 t += period
             }
-            result.add(candle)                                          // 忘了更新 lastClose
+            // 忘了更新 lastClose
+            result.add(candle)
         }
         return result
     }
@@ -62,11 +83,14 @@ private object L05Fixed {
         for (candle in candles.drop(1)) {
             var t = result.last().time + period
             while (t < candle.time) {
-                result.add(C03Candle(t, lastClose, lastClose, lastClose, lastClose, 0))
+                result.add(
+                    C03Candle(t, lastClose, lastClose, lastClose, lastClose, 0),
+                )
                 t += period
             }
             result.add(candle)
-            lastClose = candle.close                                    // 每放進一根真的 K 線，就更新「前一根的收盤價」
+            // 每放進一根真的 K 線，就更新「前一根的收盤價」
+            lastClose = candle.close
         }
         return result
     }
@@ -96,21 +120,44 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("補了") } -> "演練沒有跑完：要用 scenario(log, fillGaps) 執行"
-            lines.any { it.startsWith("補了 0 根") } -> "fillGaps 還沒寫：缺的時段要補 K 線"
-            "補了 4 根（時間→價格）：60→102, 120→102, 300→102, 360→102" !in lines ->
+            lines.none { it.startsWith("補了") } -> {
+                "演練沒有跑完：要用 scenario(log, fillGaps) 執行"
+            }
+
+            lines.any { it.startsWith("補了 0 根") } -> {
+                "fillGaps 還沒寫：缺的時段要補 K 線"
+            }
+
+            "補了 4 根（時間→價格）：60→102, 120→102, 300→102, 360→102" !in lines -> {
                 "Bug 還沒重現：lastClose 只在一開始設成第一根的收盤價，之後不更新，第 2 個缺口才會用到 102"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("補了") } -> "演練沒有跑完：要用 scenario(log, fillGaps) 執行"
-            lines.any { it.startsWith("補了 0 根") } -> "fillGaps 還沒寫：缺的時段要補 K 線"
-            "補了 4 根（時間→價格）：60→102, 120→102, 300→115, 360→115" !in lines ->
+            lines.none { it.startsWith("補了") } -> {
+                "演練沒有跑完：要用 scenario(log, fillGaps) 執行"
+            }
+
+            lines.any { it.startsWith("補了 0 根") } -> {
+                "fillGaps 還沒寫：缺的時段要補 K 線"
+            }
+
+            "補了 4 根（時間→價格）：60→102, 120→102, 300→115, 360→115" !in lines -> {
                 "第 2 個缺口要用 240 那根的收盤價 115：每放進一根真的 K 線，就更新 lastClose"
-            "補的 K 線開高低收一樣、成交量 0：是" !in lines -> "補的 K 線開高低收都要等於 lastClose，成交量是 0"
-            else -> null
+            }
+
+            "補的 K 線開高低收一樣、成交量 0：是" !in lines -> {
+                "補的 K 線開高低收都要等於 lastClose，成交量是 0"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

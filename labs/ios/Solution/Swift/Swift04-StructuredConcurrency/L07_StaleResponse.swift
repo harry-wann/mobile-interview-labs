@@ -1,14 +1,18 @@
 // L07：切換到 ETH，畫面卻顯示 BTC 的深度（舊請求的回應蓋掉新資料）
 // 對應複習站：Swift04StructuredConcurrency 第 4 題「Task 的取消是怎麼運作的？」
 //
-// 情境：下單頁可以切換交易對，切換時重新抓訂單簿深度。BTC 的回應要 300 毫秒，ETH 只要 100 毫秒。
+// 情境：下單頁可以切換交易對，切換時重新抓訂單簿深度。BTC 的回應要 300 毫秒，
+// ETH 只要 100 毫秒。
 //       使用者先選 BTC，50 毫秒後改選 ETH。
-// Bug 版：每次切換都開一個新 Task 抓深度，抓到就寫進畫面。ETH 的回應先到，BTC 的舊回應後到，把 ETH 蓋掉。
-// 修正版：切換時先 cancel() 舊的 Task（模擬 SwiftUI 的 .task(id: symbol)），回應回來時再確認交易對沒有變，才寫進畫面。
+// Bug 版：每次切換都開一個新 Task 抓深度，抓到就寫進畫面。ETH 的回應先到，BTC
+// 的舊回應後到，把 ETH 蓋掉。
+// 修正版：切換時先 cancel() 舊的 Task（模擬 SwiftUI 的 task(id: symbol)），
+// 回應回來時再確認交易對沒有變，才寫進畫面。
 import Foundation
 import LabKit
 
-/// 假的深度 API（兩個版本共用）：BTC 慢、ETH 快；被取消時 Task.sleep 會丟出 CancellationError
+/// 假的深度 API（兩個版本共用）：BTC 慢、ETH 快；被取消時 Task.sleep 會丟出
+/// CancellationError
 private func fetchDepth(_ symbol: String) async throws -> String {
     try await Task.sleep(for: .milliseconds(symbol == "BTC/JPY" ? 300 : 100))
     return "\(symbol) 的深度"
@@ -23,7 +27,8 @@ private enum L07Bug {
         func select(_ symbol: String) {
             Task {
                 if let depth = try? await fetchDepth(symbol) {
-                    shown = depth                               // 不管現在選的是哪個，抓到就寫進畫面
+                    // 不管現在選的是哪個，抓到就寫進畫面
+                    shown = depth
                 }
             }
         }
@@ -33,8 +38,10 @@ private enum L07Bug {
         let screen = await DepthScreen()
         await screen.select("BTC/JPY")
         try? await Task.sleep(for: .milliseconds(50))
-        await screen.select("ETH/JPY")                          // 使用者改選 ETH
-        try? await Task.sleep(for: .milliseconds(500))          // 等兩個回應都回來
+        // 使用者改選 ETH
+        await screen.select("ETH/JPY")
+        // 等兩個回應都回來
+        try? await Task.sleep(for: .milliseconds(500))
         log("選擇的交易對：ETH/JPY，畫面顯示：\(await screen.shown)")
     }
 }
@@ -48,11 +55,14 @@ private enum L07Fixed {
         private var loading: Task<Void, Never>?
 
         func select(_ symbol: String) {
-            loading?.cancel()                                   // 舊的請求不需要了：舉旗子
+            // 舊的請求不需要了：舉旗子
+            loading?.cancel()
             selected = symbol
             loading = Task {
-                guard let depth = try? await fetchDepth(symbol) else { return }   // 被取消就丟錯，這裡直接結束
-                guard symbol == selected else { return }        // 回應回來時已經換了交易對：丟掉
+                // 被取消就丟錯，這裡直接結束
+                guard let depth = try? await fetchDepth(symbol) else { return }
+                // 回應回來時已經換了交易對：丟掉
+                guard symbol == selected else { return }
                 shown = depth
             }
         }

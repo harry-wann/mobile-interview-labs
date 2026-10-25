@@ -1,10 +1,14 @@
-// L01：兩個畫面元件各收一次行情，開了兩條 WebSocket（cold flow 與 shareIn／stateIn）
+// L01：兩個畫面元件各收一次行情，開了兩條 WebSocket（cold flow 與
+// shareIn／stateIn）
 // 對應複習站：Kotlin05Flow 第 1 題「Flow 是什麼？cold 和 hot 差在哪？」
 //
-// 情境：行情的上游是「開一條 WebSocket 訂閱價格」（用 flow { } 寫的 cold flow，已經寫好）。
+// 情境：行情的上游是「開一條 WebSocket 訂閱價格」（用 flow { } 寫的 cold flow，
+// 已經寫好）。
 //        行情頁上有兩個元件（價格看板、迷你走勢圖）同時收集同一份價格。
-// Bug 版：ViewModel 把 cold flow 直接給畫面。cold flow 每個 collector 各自從頭跑一次，兩個元件就開了兩條 WebSocket。
-// 修正版：用 stateIn(viewModelScope, WhileSubscribed(5000), 初始值) 轉成 hot flow，所有元件共用同一條上游。
+// Bug 版：ViewModel 把 cold flow 直接給畫面。cold flow 每個 collector
+// 各自從頭跑一次，兩個元件就開了兩條 WebSocket。
+// 修正版：用 stateIn(viewModelScope, WhileSubscribed(5000), 初始值) 轉成 hot
+// flow，所有元件共用同一條上游。
 package tw.harry.labs.solution.kotlin05flow
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -25,7 +29,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 行情來源：每次有人開始收集，就「開一條 WebSocket」，每 50 ms 送出一個價格（1 到 5） */
+/**
+ * 行情來源：每次有人開始收集，就「開一條 WebSocket」，每 50 ms 送出一個價格（1
+ * 到 5）
+ */
 private class TickerRepo(private val log: LabLog) {
     val opened = AtomicInteger(0)
 
@@ -54,7 +61,8 @@ private suspend fun scenario(log: LabLog, repo: TickerRepo, prices: Flow<Int>) {
 // MARK: - Bug 版
 private object L01Bug {
     class TickerViewModel(repo: TickerRepo) {
-        val prices: Flow<Int> = repo.tickers()               // cold flow 直接給畫面：每個 collector 都重新開一條
+        // cold flow 直接給畫面：每個 collector 都重新開一條
+        val prices: Flow<Int> = repo.tickers()
     }
 
     suspend fun run(log: LabLog) {
@@ -67,12 +75,14 @@ private object L01Bug {
 private object L01Fixed {
     class TickerViewModel(repo: TickerRepo, scope: CoroutineScope) {
         val prices: Flow<Int> = repo.tickers()
-            .stateIn(scope, SharingStarted.WhileSubscribed(5_000), 0)   // 轉成 hot：所有 collector 共用同一條上游
+            // 轉成 hot：所有 collector 共用同一條上游
+            .stateIn(scope, SharingStarted.WhileSubscribed(5_000), 0)
     }
 
     suspend fun run(log: LabLog) {
         val repo = TickerRepo(log)
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)   // 代表 viewModelScope
+        // 代表 viewModelScope
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             scenario(log, repo, TickerViewModel(repo, scope).prices)
         } finally {

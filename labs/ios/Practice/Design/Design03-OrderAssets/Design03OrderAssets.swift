@@ -6,6 +6,7 @@ enum Design03OrderAssets {
         id: "sysdesign-order",
         code: "Design03OrderAssets",
         title: "下單與資產一致性",
-        labs: [l01, l02, l03, l04]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04]
     )
 }

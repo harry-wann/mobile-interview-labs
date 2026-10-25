@@ -14,7 +14,8 @@ import SolutionTesting
 import SolutionDesign
 import SolutionCoding
 
-/// App 首頁列出的所有區。新增一區時，在 Practice／Solution 的 Package.swift 加 target，再在這裡各加一行。
+/// App 首頁列出的所有區。新增一區時，在 Practice／Solution 的 Package.swift 加
+/// target，再在這裡各加一行。
 enum Catalog {
     static let practice: [LabSection] = [
         PracticeSwift.section,

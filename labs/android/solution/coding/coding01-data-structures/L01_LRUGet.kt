@@ -1,9 +1,13 @@
 // L01：剛讀過的圖示，下一次放新圖示時反而被淘汰（LRU 的 get 沒有更新使用順序）
-// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put 都很快？」
+// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put
+// 都很快？」
 //
-// 情境：圖示快取，容量 3。依序放進 BTC、ETH、XRP；使用者又點開 BTC（get），接著放進 SOL，快取滿了要淘汰一筆。
-// Bug 版：get 只查 Map 就回傳，沒有把節點移到串列最前面。BTC 剛被讀過，在串列裡卻還是排在最久沒用的位置，被淘汰的就是它。
-// 修正版：get 找到節點後，先從串列拿出來，再放到最前面（代表剛用過）。淘汰的才是真正最久沒用的 ETH。
+// 情境：圖示快取，容量 3。依序放進 BTC、ETH、XRP；使用者又點開 BTC（get），
+// 接著放進 SOL，快取滿了要淘汰一筆。
+// Bug 版：get 只查 Map 就回傳，沒有把節點移到串列最前面。BTC 剛被讀過，
+// 在串列裡卻還是排在最久沒用的位置，被淘汰的就是它。
+// 修正版：get 找到節點後，先從串列拿出來，再放到最前面（代表剛用過）。
+// 淘汰的才是真正最久沒用的 ETH。
 package tw.harry.labs.solution.coding01datastructures
 
 import tw.harry.labs.kit.Lab
@@ -40,7 +44,8 @@ private object L01Bug {
         private val list = C01RecencyList()
 
         override fun get(key: String): Int? {
-            return map[key]?.value                           // 只查 Map，沒有更新使用順序
+            // 只查 Map，沒有更新使用順序
+            return map[key]?.value
         }
 
         override fun put(key: String, value: Int) {
@@ -55,7 +60,8 @@ private object L01Bug {
             map[key] = node
             list.insertAfterHead(node)
             if (map.size > capacity) {
-                list.removeLast()?.let { map.remove(it.key) }    // 淘汰串列最後面的那一筆
+                // 淘汰串列最後面的那一筆
+                list.removeLast()?.let { map.remove(it.key) }
             }
         }
 
@@ -73,8 +79,9 @@ private object L01Fixed {
 
         override fun get(key: String): Int? {
             val node = map[key] ?: return null
-            list.unlink(node)                                // 讀取也算「最近使用」：拿出來
-            list.insertAfterHead(node)                       // 再放到最前面
+            // 讀取也算「最近使用」：拿出來
+            list.unlink(node)
+            list.insertAfterHead(node) // 再放到最前面
             return node.value
         }
 
@@ -90,7 +97,8 @@ private object L01Fixed {
             map[key] = node
             list.insertAfterHead(node)
             if (map.size > capacity) {
-                list.removeLast()?.let { map.remove(it.key) }    // 淘汰串列最後面的那一筆
+                // 淘汰串列最後面的那一筆
+                list.removeLast()?.let { map.remove(it.key) }
             }
         }
 
@@ -122,18 +130,32 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            "get(BTC) → 1" !in lines -> "get 還沒寫：要用 Map 找到 BTC 的節點，回傳它的 value"
-            "最後：快取裡有 [SOL, XRP, ETH]，被淘汰的是 BTC" !in lines ->
+            "get(BTC) → 1" !in lines -> {
+                "get 還沒寫：要用 Map 找到 BTC 的節點，回傳它的 value"
+            }
+
+            "最後：快取裡有 [SOL, XRP, ETH]，被淘汰的是 BTC" !in lines -> {
                 "Bug 還沒重現：get 只能查 Map、不能動串列，BTC 才會一直排在最久沒用的位置"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            "get(BTC) → 1" !in lines -> "get 還沒寫：要用 Map 找到 BTC 的節點，回傳它的 value"
-            "最後：快取裡有 [SOL, BTC, XRP]，被淘汰的是 ETH" !in lines ->
+            "get(BTC) → 1" !in lines -> {
+                "get 還沒寫：要用 Map 找到 BTC 的節點，回傳它的 value"
+            }
+
+            "最後：快取裡有 [SOL, BTC, XRP]，被淘汰的是 ETH" !in lines -> {
                 "get 找到節點後要 list.unlink(node) 再 list.insertAfterHead(node)，BTC 才會移到最前面"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

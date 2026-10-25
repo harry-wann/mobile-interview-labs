@@ -1,14 +1,21 @@
-// L06：把警示線調高了，畫面還是顯示「超過警示線」（derivedStateOf 只追蹤 State，不追蹤一般參數）
-// 對應複習站：Kotlin11ComposeState 第 6 題「derivedStateOf、snapshotFlow、produceState 怎麼選？」
+// L06：把警示線調高了，畫面還是顯示「超過警示線」（derivedStateOf 只追蹤
+// State，不追蹤一般參數）
+// 對應複習站：Kotlin11ComposeState 第 6 題「derivedStateOf、snapshotFlow、
+// produceState 怎麼選？」
 //
-// 情境：價格提醒元件 PriceAlert 的價格是 State（每秒變很多次），警示線 alertLine 是使用者設定、從外面傳進來的一般參數。
+// 情境：價格提醒元件 PriceAlert 的價格是 State（每秒變很多次），警示線
+// alertLine 是使用者設定、從外面傳進來的一般參數。
 //        畫面只關心「價格有沒有超過警示線」這個布林值，所以用 derivedStateOf。
-//        價格 120、警示線 100：超過。使用者把警示線調高到 200，價格仍是 120：應該變成「未超過」。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
+//        價格 120、警示線 100：超過。使用者把警示線調高到 200，價格仍是 120：
+// 應該變成「未超過」。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
 //
 // 你要寫：
-//   ① Bug 版（L06Bug）：val over by remember { derivedStateOf { price.value > alertLine } }。remember 沒有 key，derivedStateOf 一直用第一次的 alertLine。
-//   ② 修正版（L06Fixed）：remember(alertLine) { derivedStateOf { … } }，一般參數要當成 remember 的 key。
+//   ① Bug 版（L06Bug）：val over by remember { derivedStateOf { price.value >
+// alertLine } }。remember 沒有 key，derivedStateOf 一直用第一次的 alertLine。
+//   ② 修正版（L06Fixed）：remember(alertLine) { derivedStateOf { … } }，
+// 一般參數要當成 remember 的 key。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin11-compose-state/L06_DerivedParam.kt
 package tw.harry.labs.practice.kotlin11composestate
@@ -25,12 +32,23 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 import tw.harry.labs.kit.withHeadlessCompose
 
-/** 演練流程（兩個版本共用）：價格 120、警示線 100 → 使用者把警示線調高到 200（價格不變）→ 看畫面顯示什麼 */
-private suspend fun scenario(log: LabLog, alert: @Composable (price: State<Long>, alertLine: Long, onShow: (String) -> Unit) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：價格 120、警示線 100 → 使用者把警示線調高到
+ * 200（價格不變）→ 看畫面顯示什麼
+ */
+private suspend fun scenario(
+    log: LabLog,
+    alert: @Composable (
+        price: State<Long>,
+        alertLine: Long,
+        onShow: (String) -> Unit,
+    ) -> Unit,
+) {
     var shown = ""
     withHeadlessCompose {
         val price = mutableLongStateOf(120)
-        val alertLine = mutableLongStateOf(100)                     // 使用者設定的警示線：父層的 State，傳給 alert 時變成一般的 Long
+        // 使用者設定的警示線：父層的 State，傳給 alert 時變成一般的 Long
+        val alertLine = mutableLongStateOf(100)
         setContent { alert(price, alertLine.longValue) { shown = it } }
         settle()
         log("價格 120、警示線 100，畫面顯示：$shown")
@@ -43,25 +61,39 @@ private suspend fun scenario(log: LabLog, alert: @Composable (price: State<Long>
 // MARK: - Bug 版
 private object L06Bug {
     @Composable
-    fun PriceAlert(price: State<Long>, alertLine: Long, onShow: (String) -> Unit) {
-        // TODO ①：val over by remember { derivedStateOf { price.value > alertLine } }（remember 不給 key）
+    fun PriceAlert(
+        price: State<Long>,
+        alertLine: Long,
+        onShow: (String) -> Unit,
+    ) {
+        // TODO ①：val over by remember { derivedStateOf { price.value >
+        // alertLine } }（remember 不給 key）
         val over = false
         HeadlessText(if (over) "超過警示線" else "未超過警示線", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { price, alertLine, onShow -> PriceAlert(price, alertLine, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { price, alertLine, onShow ->
+        PriceAlert(price, alertLine, onShow)
+    }
 }
 
 // MARK: - 修正版
 private object L06Fixed {
     @Composable
-    fun PriceAlert(price: State<Long>, alertLine: Long, onShow: (String) -> Unit) {
-        // TODO ②：remember 加上 key：val over by remember(alertLine) { derivedStateOf { price.value > alertLine } }
+    fun PriceAlert(
+        price: State<Long>,
+        alertLine: Long,
+        onShow: (String) -> Unit,
+    ) {
+        // TODO ②：remember 加上 key：val over by remember(alertLine) {
+        // derivedStateOf { price.value > alertLine } }
         val over = false
         HeadlessText(if (over) "超過警示線" else "未超過警示線", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { price, alertLine, onShow -> PriceAlert(price, alertLine, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { price, alertLine, onShow ->
+        PriceAlert(price, alertLine, onShow)
+    }
 }
 
 // MARK: - 演練設定

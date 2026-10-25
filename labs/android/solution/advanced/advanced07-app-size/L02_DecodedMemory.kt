@@ -1,14 +1,22 @@
 // L02：縮圖列表吃掉幾百 MB 記憶體（檔案大小不等於記憶體大小）
-// 對應複習站：Advanced07AppSize 第 3 題「Android 要怎麼縮小？」（圖片格式與品質；縮小的是檔案，不是記憶體）
+// 對應複習站：Advanced07AppSize 第 3 題「Android 要怎麼縮小？」
+// （圖片格式與品質；縮小的是檔案，不是記憶體）
 //
-// 情境：KYC（身分驗證）頁的列表，用 100 dp 寬的縮圖顯示 20 張證件照（螢幕密度 3，也就是 300 像素）。
-//       每張證件照是 4000 × 3000 的 JPEG（約 12 百萬像素）。有人想「把圖壓小一點」，把 JPEG 品質從 80 降到 30：
+// 情境：KYC（身分驗證）頁的列表，用 100 dp 寬的縮圖顯示 20 張證件照（螢幕密度
+// 3，也就是 300 像素）。
+//       每張證件照是 4000 × 3000 的 JPEG（約 12 百萬像素）。
+// 有人想「把圖壓小一點」，把 JPEG 品質從 80 降到 30：
 //       檔案確實小了，但這真的是在省使用者的資源嗎？
-//       （JVM 單元測試沒有 BitmapFactory，演練用公式算出解碼後的記憶體：ARGB_8888 一個像素 4 位元組；
-//        真正的 App 用 BitmapFactory.Options 的 inJustDecodeBounds 先讀尺寸，再設 inSampleSize 解碼。）
-// Bug 版：inSampleSize 一律是 1，整張圖完整解碼。點陣圖大小是「寬 × 高 × 4 位元組」，和檔案壓得多小無關：
-//        每張約 46 MB，20 張就是將近 1 GB（一般 App 的記憶體上限只有幾百 MB，會 OutOfMemoryError）。
-// 修正版：用 Android 官方文件的算法算出 inSampleSize（2 的次方，縮到仍然不小於顯示大小為止），解碼出來的圖小得多。
+//       （JVM 單元測試沒有 BitmapFactory，演練用公式算出解碼後的記憶體：
+// ARGB_8888 一個像素 4 位元組；
+//        真正的 App 用 BitmapFactory.Options 的 inJustDecodeBounds 先讀尺寸，
+// 再設 inSampleSize 解碼。）
+// Bug 版：inSampleSize 一律是 1，整張圖完整解碼。點陣圖大小是「寬 × 高 × 4
+// 位元組」，和檔案壓得多小無關：
+//        每張約 46 MB，20 張就是將近 1 GB（一般 App 的記憶體上限只有幾百 MB，
+// 會 OutOfMemoryError）。
+// 修正版：用 Android 官方文件的算法算出 inSampleSize（2 的次方，
+// 縮到仍然不小於顯示大小為止），解碼出來的圖小得多。
 package tw.harry.labs.solution.advanced07appsize
 
 import java.util.Locale
@@ -18,19 +26,38 @@ import tw.harry.labs.kit.Variant
 
 private const val PHOTO_WIDTH = 4000
 private const val PHOTO_HEIGHT = 3000
-private const val THUMB_PX = 300                                 // 100 dp × 3 倍
+
+// 100 dp × 3 倍
+private const val THUMB_PX = 300
 
 /** ARGB_8888 解碼後的點陣圖大小（位元組） */
-private fun decodedBytes(width: Int, height: Int): Long = width.toLong() * height * 4
+private fun decodedBytes(width: Int, height: Int): Long =
+    width.toLong() * height * 4
 
-private fun megabytes(bytes: Long) = String.format(Locale.ROOT, "%.1f MB", bytes / 1_048_576.0)
+private fun megabytes(bytes: Long) = String.format(
+    Locale.ROOT,
+    "%.1f MB",
+    bytes / 1_048_576.0,
+)
 
-/** 演練流程（兩個版本共用）：calculateInSampleSize(照片寬, 照片高, 要的寬, 要的高) 回傳 inSampleSize */
-private fun scenario(log: LabLog, calculateInSampleSize: (Int, Int, Int, Int) -> Int) {
-    // 把品質降低：檔案變小了，那解碼後的記憶體呢？（檔案大小是假設的數字，記憶體用公式算）
-    log("JPEG 品質 80 → 30：檔案 3200 KB → 1100 KB，完整解碼後 ${megabytes(decodedBytes(PHOTO_WIDTH, PHOTO_HEIGHT))} → ${megabytes(decodedBytes(PHOTO_WIDTH, PHOTO_HEIGHT))}")
+/**
+ * 演練流程（兩個版本共用）：calculateInSampleSize(照片寬, 照片高, 要的寬,
+ * 要的高) 回傳 inSampleSize
+ */
+private fun scenario(
+    log: LabLog,
+    calculateInSampleSize: (Int, Int, Int, Int) -> Int,
+) {
+    // 把品質降低：檔案變小了，那解碼後的記憶體呢？（檔案大小是假設的數字，
+    // 記憶體用公式算）
+    log(
+        "JPEG 品質 80 → 30：檔案 3200 KB → 1100 KB，完整解碼後 ${megabytes(
+            decodedBytes(PHOTO_WIDTH, PHOTO_HEIGHT),
+        )} → ${megabytes(decodedBytes(PHOTO_WIDTH, PHOTO_HEIGHT))}",
+    )
 
-    val sample = calculateInSampleSize(PHOTO_WIDTH, PHOTO_HEIGHT, THUMB_PX, THUMB_PX)
+    val sample =
+        calculateInSampleSize(PHOTO_WIDTH, PHOTO_HEIGHT, THUMB_PX, THUMB_PX)
     if (sample < 1) {
         log("inSampleSize 是 $sample：還沒寫（至少要是 1）")
         return
@@ -44,21 +71,36 @@ private fun scenario(log: LabLog, calculateInSampleSize: (Int, Int, Int, Int) ->
 
 // MARK: - Bug 版
 private object L02Bug {
-    fun calculateInSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int =
-        1                                                       // 不縮：整張圖完整解碼，再交給畫面縮小
+    fun calculateInSampleSize(
+        width: Int,
+        height: Int,
+        reqWidth: Int,
+        reqHeight: Int,
+    ): Int = // 不縮：整張圖完整解碼，再交給畫面縮小
+        1
 
     suspend fun run(log: LabLog) = scenario(log, ::calculateInSampleSize)
 }
 
 // MARK: - 修正版
 private object L02Fixed {
-    /** Android 官方文件的算法：inSampleSize 取 2 的次方，縮到「寬高仍然不小於要的大小」為止 */
-    fun calculateInSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int {
+    /**
+     * Android 官方文件的算法：inSampleSize 取 2 的次方，
+     * 縮到「寬高仍然不小於要的大小」為止
+     */
+    fun calculateInSampleSize(
+        width: Int,
+        height: Int,
+        reqWidth: Int,
+        reqHeight: Int,
+    ): Int {
         var inSampleSize = 1
         if (height > reqHeight || width > reqWidth) {
             val halfHeight = height / 2
             val halfWidth = width / 2
-            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            while (halfHeight / inSampleSize >= reqHeight &&
+                halfWidth / inSampleSize >= reqWidth
+            ) {
                 inSampleSize *= 2
             }
         }
@@ -70,7 +112,9 @@ private object L02Fixed {
 
 // MARK: - 演練設定
 private fun megabytesValue(lines: List<String>, prefix: String): Double? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" MB")?.toDoubleOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" MB")?.toDoubleOrNull()
 
 val l02 = Lab(
     id = "L02",
@@ -95,18 +139,28 @@ val l02 = Lab(
     checkBug = { lines ->
         val total = megabytesValue(lines, "列表 20 張縮圖共佔記憶體：")
         when {
-            lines.any { it.startsWith("inSampleSize 是") } -> "calculateInSampleSize 還沒寫：Bug 版要回傳 1（不縮）"
+            lines.any {
+                it.startsWith("inSampleSize 是")
+            } -> "calculateInSampleSize 還沒寫：Bug 版要回傳 1（不縮）"
+
             total == null -> "演練沒有跑完：要用 scenario 執行"
+
             total < 500 -> "Bug 還沒重現：inSampleSize 要是 1（整張圖完整解碼），20 張應該超過 500 MB"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         val total = megabytesValue(lines, "列表 20 張縮圖共佔記憶體：")
         when {
-            lines.any { it.startsWith("inSampleSize 是") } -> "calculateInSampleSize 還沒寫：要算出 2 的次方的 inSampleSize"
+            lines.any {
+                it.startsWith("inSampleSize 是")
+            } -> "calculateInSampleSize 還沒寫：要算出 2 的次方的 inSampleSize"
+
             total == null -> "演練沒有跑完：要用 scenario 執行"
+
             total > 20 -> "記憶體還是太大（$total MB）：要算出 inSampleSize（2 的次方，縮到寬高仍不小於 300 像素為止）"
+
             else -> null
         }
     },

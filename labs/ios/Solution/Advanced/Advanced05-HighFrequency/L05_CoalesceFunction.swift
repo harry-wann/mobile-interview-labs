@@ -1,15 +1,23 @@
-// L05：行情列表每次更新，各列的順序一直亂跳；資料量一大還很慢（「同一個交易對只留最新一筆」的合併函式）
-// 對應複習站：Advanced05HighFrequency 第 6 題「「同一個交易對只保留最新一筆」的合併函式怎麼寫？」（面試現場寫程式常考）
+// L05：行情列表每次更新，各列的順序一直亂跳；
+// 資料量一大還很慢（「同一個交易對只留最新一筆」的合併函式）
+// 對應複習站：Advanced05HighFrequency 第 6 題「「同一個交易對只保留最新一筆」
+// 的合併函式怎麼寫？」（面試現場寫程式常考）
 //
-// 情境：輸入一串更新，同一個交易對只留最後一筆，輸出順序依該交易對「第一次出現」的順序。例如 [A1, B1, A2] 要變成 [A2, B1]。
-//        演練用 4 組不同順序的資料檢查結果與順序，再用 1 萬筆更新、500 個交易對，數「比較兩個交易對相不相等」做了幾次，量演算法的成本。
-// Bug 版：只用字典存每個交易對的最新值，輸出時直接取 latest.values。值是對的，但字典沒有固定的順序，列表的列每次更新都可能換位置。
-// 修正版：字典存最新值，另外用陣列記錄交易對第一次出現的順序，只掃一次，O(n)：比較約 1.5 萬次。
-//        （不能用巢狀迴圈：每一筆更新都從頭找一次，O(n²)，這個資料量要比較上百萬次。）
+// 情境：輸入一串更新，同一個交易對只留最後一筆，
+// 輸出順序依該交易對「第一次出現」的順序。例如 [A1, B1, A2] 要變成 [A2, B1]。
+//        演練用 4 組不同順序的資料檢查結果與順序，再用 1 萬筆更新、500
+// 個交易對，數「比較兩個交易對相不相等」做了幾次，量演算法的成本。
+// Bug 版：只用字典存每個交易對的最新值，輸出時直接取 latest.values。值是對的，
+// 但字典沒有固定的順序，列表的列每次更新都可能換位置。
+// 修正版：字典存最新值，另外用陣列記錄交易對第一次出現的順序，只掃一次，O(n)：
+// 比較約 1.5 萬次。
+//        （不能用巢狀迴圈：每一筆更新都從頭找一次，O(n²)，
+// 這個資料量要比較上百萬次。）
 import Foundation
 import LabKit
 
-/// 會數「== 被呼叫幾次」的交易對型別：用來量演算法做了多少次比較（兩個版本共用）
+/// 會數「== 被呼叫幾次」的交易對型別：
+/// 用來量演算法做了多少次比較（兩個版本共用）
 private struct CountedSymbol: Hashable {
     static var comparisons = 0
     let name: String
@@ -22,7 +30,8 @@ private struct CountedSymbol: Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(name) }
 }
 
-/// 合併函式：Bug 版與修正版各自實作（泛型：交易對可以是 String，也可以是會數比較次數的型別）
+/// 合併函式：Bug 版與修正版各自實作（泛型：交易對可以是 String，
+/// 也可以是會數比較次數的型別）
 private protocol Coalescer {
     func coalesce<S: Hashable>(_ updates: [A05Tick<S>]) -> [A05Tick<S>]
 }
@@ -32,20 +41,29 @@ private func scenario(_ log: LabLog, _ coalescer: some Coalescer) {
     let symbols = ["XRP", "BTC", "ETH", "DOGE", "ADA", "SOL"]
     var latestOK = 0, orderOK = 0
     for k in 0..<4 {
-        let order = Array(symbols[k...] + symbols[..<k])                       // 第 k 組：換一個第一次出現的順序
+        // 第 k 組：換一個第一次出現的順序
+        let order = Array(symbols[k...] + symbols[..<k])
         // 每個交易對先出現一次（價格 1），再用相反的順序各更新一次（價格 2）
-        let updates = order.map { A05Tick(symbol: $0, price: 1) } + order.reversed().map { A05Tick(symbol: $0, price: 2) }
+        let updates =
+            order.map { A05Tick(symbol: $0, price: 1) }
+            + order.reversed().map { A05Tick(symbol: $0, price: 2) }
         let result = coalescer.coalesce(updates)
-        if result.count == order.count && result.allSatisfy({ $0.price == 2 }) { latestOK += 1 }
+        if result.count == order.count && result.allSatisfy({ $0.price == 2 }) {
+            latestOK += 1
+        }
         if result.map(\.symbol) == order { orderOK += 1 }
     }
     log("合併後每個交易對都是最新價的組數：\(latestOK)／4")
     log("順序和第一次出現的順序一致的組數：\(orderOK)／4")
 
-    let big = (0..<10_000).map { A05Tick(symbol: CountedSymbol(name: "S\($0 % 500)"), price: $0) }
+    let big = (0..<10_000).map {
+        A05Tick(symbol: CountedSymbol(name: "S\($0 % 500)"), price: $0)
+    }
     CountedSymbol.comparisons = 0
     let merged = coalescer.coalesce(big)
-    log("1 萬筆更新、500 個交易對：合併成 \(merged.count) 筆，比較交易對 \(CountedSymbol.comparisons) 次")
+    log(
+        "1 萬筆更新、500 個交易對：合併成 \(merged.count) 筆，比較交易對 \(CountedSymbol.comparisons) 次"
+    )
 }
 
 // MARK: - Bug 版
@@ -53,8 +71,10 @@ private enum L05Bug {
     struct DictionaryOnly: Coalescer {
         func coalesce<S: Hashable>(_ updates: [A05Tick<S>]) -> [A05Tick<S>] {
             var latest: [S: A05Tick<S>] = [:]
-            for update in updates { latest[update.symbol] = update }           // 每個交易對的最新值
-            return Array(latest.values)                                        // 字典沒有固定順序：順序亂掉
+            // 每個交易對的最新值
+            for update in updates { latest[update.symbol] = update }
+            // 字典沒有固定順序：順序亂掉
+            return Array(latest.values)
         }
     }
 
@@ -67,11 +87,15 @@ private enum L05Bug {
 private enum L05Fixed {
     struct DictionaryAndOrder: Coalescer {
         func coalesce<S: Hashable>(_ updates: [A05Tick<S>]) -> [A05Tick<S>] {
-            var order: [S] = []                                                // 交易對第一次出現的順序
-            var latest: [S: A05Tick<S>] = [:]                                  // 每個交易對的最新值
+            // 交易對第一次出現的順序
+            var order: [S] = []
+            // 每個交易對的最新值
+            var latest: [S: A05Tick<S>] = [:]
             for update in updates {
                 // updateValue 回傳舊值；舊值是 nil，代表這個交易對是第一次出現
-                if latest.updateValue(update, forKey: update.symbol) == nil { order.append(update.symbol) }
+                if latest.updateValue(update, forKey: update.symbol) == nil {
+                    order.append(update.symbol)
+                }
             }
             return order.compactMap { latest[$0] }
         }
@@ -95,8 +119,10 @@ extension Advanced05HighFrequency {
             "想一想：如果改用「每一筆更新都從頭找有沒有同一個交易對」的巢狀迴圈，第三行會變成多少？為什麼面試官會問時間複雜度？（見這個單元的第 6 題）",
             "想一想：Kotlin 的 LinkedHashMap 為什麼不需要另外的順序陣列？（覆蓋 key 不改變它第一次插入的位置，見 Android 版的解答）",
         ],
-        expectBug: "合併後每個交易對都是最新價的組數：4／4；順序和第一次出現的順序一致的組數：0／4（字典的順序每次執行都不同，偶爾會有 1 組湊巧一致）；比較約 1.5 萬次。",
-        expectFixed: "兩個組數都是 4／4；1 萬筆更新、500 個交易對：合併成 500 筆，比較交易對約 1.5 萬次（巢狀迴圈的寫法會超過 100 萬次）。",
+        expectBug:
+            "合併後每個交易對都是最新價的組數：4／4；順序和第一次出現的順序一致的組數：0／4（字典的順序每次執行都不同，偶爾會有 1 組湊巧一致）；比較約 1.5 萬次。",
+        expectFixed:
+            "兩個組數都是 4／4；1 萬筆更新、500 個交易對：合併成 500 筆，比較交易對約 1.5 萬次（巢狀迴圈的寫法會超過 100 萬次）。",
         run: { variant, log in
             switch variant {
             case .bug: await L05Bug.run(log)
@@ -104,20 +130,30 @@ extension Advanced05HighFrequency {
             }
         },
         checkBug: { lines in
-            guard let latest = a05Number(in: lines, prefix: "合併後每個交易對都是最新價的組數："),
-                  let order = a05Number(in: lines, prefix: "順序和第一次出現的順序一致的組數：") else { return "演練沒有跑完" }
-            if latest < 4 { return "值要是對的：同一個交易對留最後一筆（latest[symbol] = update）" }
+            guard
+                let latest = a05Number(in: lines, prefix: "合併後每個交易對都是最新價的組數："),
+                let order = a05Number(in: lines, prefix: "順序和第一次出現的順序一致的組數：")
+            else { return "演練沒有跑完" }
+            if latest < 4 {
+                return "值要是對的：同一個交易對留最後一筆（latest[symbol] = update）"
+            }
             return order < 4 ? nil : "Bug 還沒重現：只用字典、直接取 latest.values，順序就不會固定"
         },
         checkFixed: { lines in
-            guard let latest = a05Number(in: lines, prefix: "合併後每個交易對都是最新價的組數："),
-                  let order = a05Number(in: lines, prefix: "順序和第一次出現的順序一致的組數："),
-                  let compares = a05Number(in: lines, prefix: "1 萬筆更新、500 個交易對：合併成 500 筆，比較交易對 ") else {
+            guard
+                let latest = a05Number(in: lines, prefix: "合併後每個交易對都是最新價的組數："),
+                let order = a05Number(in: lines, prefix: "順序和第一次出現的順序一致的組數："),
+                let compares = a05Number(
+                    in: lines, prefix: "1 萬筆更新、500 個交易對：合併成 500 筆，比較交易對 ")
+            else {
                 return "演練沒有跑完（合併 1 萬筆更新要得到 500 筆）"
             }
             if latest < 4 { return "每個交易對要留最後一筆（價格 2）" }
-            if order < 4 { return "順序要依第一次出現的順序：用陣列記下第一次出現的交易對（updateValue 回傳 nil 的時候）" }
-            return compares < 100_000 ? nil : "比較了 \(Int(compares)) 次，太多了：只能掃一次，用字典找，不要每一筆都從頭找（O(n²)）"
+            if order < 4 {
+                return "順序要依第一次出現的順序：用陣列記下第一次出現的交易對（updateValue 回傳 nil 的時候）"
+            }
+            return compares < 100_000
+                ? nil : "比較了 \(Int(compares)) 次，太多了：只能掃一次，用字典找，不要每一筆都從頭找（O(n²)）"
         }
     )
 }

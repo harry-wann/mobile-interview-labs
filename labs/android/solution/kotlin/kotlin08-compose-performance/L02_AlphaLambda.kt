@@ -1,11 +1,17 @@
-// L02：警示標籤淡入淡出，連父層的卡片也每格重組（把動畫值傳給子層，改傳 () -> Float）
-// 對應複習站：Kotlin08ComposePerformance 第 2 題「延後讀取（deferred read）是什麼？」
+// L02：警示標籤淡入淡出，連父層的卡片也每格重組（把動畫值傳給子層，改傳 () ->
+// Float）
+// 對應複習站：Kotlin08ComposePerformance 第 2 題「延後讀取（deferred read）
+// 是什麼？」
 //
-// 情境：交易卡片（TradeCard）有一個警示標籤（AlertBadge），按「切換警示」時，標籤用 600 ms 淡入或淡出。
+// 情境：交易卡片（TradeCard）有一個警示標籤（AlertBadge），按「切換警示」時，
+// 標籤用 600 ms 淡入或淡出。
 //        畫面上的橘色數字顯示 TradeCard 與 AlertBadge 各重組了幾次。
-// Bug 版：TradeCard 用 animateFloatAsState 取得 alpha，直接把 Float 傳給 AlertBadge，AlertBadge 再用 Modifier.alpha(alpha)。
-//        讀取動畫值發生在 TradeCard 的 Composition 階段，動畫期間每一格，TradeCard 與 AlertBadge 都重組。
-// 修正版：TradeCard 只把 State 包成函式 { alpha.value } 傳下去，AlertBadge 在 graphicsLayer { } 的大括號裡才呼叫它。
+// Bug 版：TradeCard 用 animateFloatAsState 取得 alpha，直接把 Float 傳給
+// AlertBadge，AlertBadge 再用 Modifier.alpha(alpha)。
+//        讀取動畫值發生在 TradeCard 的 Composition 階段，動畫期間每一格，
+// TradeCard 與 AlertBadge 都重組。
+// 修正版：TradeCard 只把 State 包成函式 { alpha.value } 傳下去，AlertBadge 在
+// graphicsLayer { } 的大括號裡才呼叫它。
 //        讀取延後到 Drawing 階段，動畫期間 TradeCard 與 AlertBadge 都不用重組。
 package tw.harry.labs.solution.kotlin08composeperformance
 
@@ -36,17 +42,25 @@ import tw.harry.labs.kit.Variant
 private object L02Bug {
     @Composable
     fun TradeCard(alert: Boolean) {
-        val alpha by animateFloatAsState(if (alert) 1f else 0.15f, tween(600), label = "alert")
+        val alpha by animateFloatAsState(
+            if (alert) 1f else 0.15f,
+            tween(600),
+            label = "alert",
+        )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             RecomposeCounter("TradeCard")
-            AlertBadge(alpha = alpha)                       // 在這裡讀 alpha：Composition 階段
+            // 在這裡讀 alpha：Composition 階段
+            AlertBadge(alpha = alpha)
         }
     }
 
     @Composable
     fun AlertBadge(alpha: Float) {
         RecomposeCounter("AlertBadge")
-        Text("警示：價格偏離", Modifier.alpha(alpha).background(Color(0xFFFFCDD2)).padding(8.dp))
+        Text(
+            "警示：價格偏離",
+            Modifier.alpha(alpha).background(Color(0xFFFFCDD2)).padding(8.dp),
+        )
     }
 }
 
@@ -54,10 +68,16 @@ private object L02Bug {
 private object L02Fixed {
     @Composable
     fun TradeCard(alert: Boolean) {
-        val alpha = animateFloatAsState(if (alert) 1f else 0.15f, tween(600), label = "alert")
+        val alpha =
+            animateFloatAsState(
+                if (alert) 1f else 0.15f,
+                tween(600),
+                label = "alert",
+            )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             RecomposeCounter("TradeCard")
-            AlertBadge(alpha = { alpha.value })             // 只傳函式，沒有讀 alpha.value
+            // 只傳函式，沒有讀 alpha.value
+            AlertBadge(alpha = { alpha.value })
         }
     }
 
@@ -67,7 +87,8 @@ private object L02Fixed {
         Text(
             "警示：價格偏離",
             Modifier
-                .graphicsLayer { this.alpha = alpha() }     // 大括號在 Drawing 階段才執行，這時才讀 alpha
+                // 大括號在 Drawing 階段才執行，這時才讀 alpha
+                .graphicsLayer { this.alpha = alpha() }
                 .background(Color(0xFFFFCDD2))
                 .padding(8.dp),
         )

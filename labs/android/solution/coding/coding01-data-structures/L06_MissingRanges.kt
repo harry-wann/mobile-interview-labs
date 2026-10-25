@@ -1,18 +1,30 @@
-// L06：算出來的缺口多包了一根已經載入的 K 線，相鄰的兩段還被當成有缺口（區間的 +1、-1 寫錯）
-// 對應複習站：Coding01DataStructures 第 5 題「已經載入幾段 K 線，怎麼算出還缺哪幾段？」
+// L06：算出來的缺口多包了一根已經載入的 K 線，相鄰的兩段還被當成有缺口（區間的
+// +1、-1 寫錯）
+// 對應複習站：Coding01DataStructures 第 5 題「已經載入幾段 K 線，
+// 怎麼算出還缺哪幾段？」
 //
-// 情境：K 線分段載入，區間用 K 線的索引表示，兩端都包含（閉區間），`3..4` 代表第 3、4 根。
-//       使用者要看一個範圍，只該請求「還沒載入」的部分。演練用 5 組固定的資料檢查答案。
-// Bug 版：先排序，游標從範圍起點往右掃。遇到空隙時，缺口的終點寫成這一段的起點（少減 1，把已經載入的那一根也算進去），
-//        掃過一段之後，游標只移到這一段的終點（少加 1）。結果缺口多包一根，相鄰的 `1..3` 與 `4..6` 還被判成中間有缺口。
-// 修正版：缺口 = 游標 .. 這一段的起點 - 1；掃過之後游標移到終點 + 1。已經超出範圍終點的區間不用看。
+// 情境：K 線分段載入，區間用 K 線的索引表示，兩端都包含（閉區間），`3..4`
+// 代表第 3、4 根。
+//       使用者要看一個範圍，只該請求「還沒載入」的部分。演練用 5
+// 組固定的資料檢查答案。
+// Bug 版：先排序，游標從範圍起點往右掃。遇到空隙時，
+// 缺口的終點寫成這一段的起點（少減 1，把已經載入的那一根也算進去），
+//        掃過一段之後，游標只移到這一段的終點（少加 1）。結果缺口多包一根，
+// 相鄰的 `1..3` 與 `4..6` 還被判成中間有缺口。
+// 修正版：缺口 = 游標  這一段的起點 - 1；掃過之後游標移到終點 + 1。
+// 已經超出範圍終點的區間不用看。
 package tw.harry.labs.solution.coding01datastructures
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private class L06Case(val title: String, val loaded: List<IntRange>, val request: IntRange, val expected: List<IntRange>)
+private class L06Case(
+    val title: String,
+    val loaded: List<IntRange>,
+    val request: IntRange,
+    val expected: List<IntRange>,
+)
 
 private val cases = listOf(
     L06Case("中間缺兩段", listOf(6..8, 3..4), 1..10, listOf(1..2, 5..5, 9..10)),
@@ -23,13 +35,20 @@ private val cases = listOf(
 )
 
 /** 演練流程（兩個版本共用）：5 組資料各算一次，和標準答案比對 */
-private fun scenario(log: LabLog, missing: (List<IntRange>, IntRange) -> List<IntRange>) {
+private fun scenario(
+    log: LabLog,
+    missing: (List<IntRange>, IntRange) -> List<IntRange>,
+) {
     var right = 0
     cases.forEachIndexed { index, item ->
         val got = missing(item.loaded, item.request)
         val ok = got == item.expected
         if (ok) right++
-        log("案例 ${index + 1}（${item.title}）：得到 ${c01RangesText(got)}，期待 ${c01RangesText(item.expected)} ${if (ok) "✓" else "✗"}")
+        log(
+            "案例 ${index + 1}（${item.title}）：得到 ${c01RangesText(
+                got,
+            )}，期待 ${c01RangesText(item.expected)} ${if (ok) "✓" else "✗"}",
+        )
     }
     log("答對 $right/${cases.size}")
 }
@@ -41,9 +60,11 @@ private object L06Bug {
         var cursor = request.first
         for (range in loaded.sortedBy { it.first }) {
             if (range.first > cursor) {
-                gaps.add(cursor..range.first)                    // 少減 1：缺口多包了這一段的第一根
+                // 少減 1：缺口多包了這一段的第一根
+                gaps.add(cursor..range.first)
             }
-            cursor = maxOf(cursor, range.last)                   // 少加 1：游標停在已經載入的最後一根
+            // 少加 1：游標停在已經載入的最後一根
+            cursor = maxOf(cursor, range.last)
         }
         if (cursor < request.last) {
             gaps.add(cursor..request.last)
@@ -60,14 +81,18 @@ private object L06Fixed {
         val gaps = ArrayList<IntRange>()
         var cursor = request.first
         for (range in loaded.sortedBy { it.first }) {
-            if (range.first > request.last) break                         // 這一段已經在範圍外面了
+            // 這一段已經在範圍外面了
+            if (range.first > request.last) break
             if (range.first > cursor) {
-                gaps.add(cursor..(range.first - 1))                       // 缺口停在這一段的前一根
+                // 缺口停在這一段的前一根
+                gaps.add(cursor..(range.first - 1))
             }
-            cursor = maxOf(cursor, range.last + 1)                        // 游標移到這一段的下一根
+            // 游標移到這一段的下一根
+            cursor = maxOf(cursor, range.last + 1)
         }
         if (cursor <= request.last) {
-            gaps.add(cursor..request.last)                                // 最後剩下的尾巴
+            // 最後剩下的尾巴
+            gaps.add(cursor..request.last)
         }
         return gaps
     }
@@ -97,20 +122,37 @@ val l06 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("答對") } -> "演練沒有跑完：要用 scenario(log, missing) 執行"
-            "案例 1（中間缺兩段）：得到 [1...3, 4...6, 8...10]，期待 [1...2, 5...5, 9...10] ✗" !in lines ->
+            lines.none { it.startsWith("答對") } -> {
+                "演練沒有跑完：要用 scenario(log, missing) 執行"
+            }
+
+            "案例 1（中間缺兩段）：得到 [1...3, 4...6, 8...10]，期待 [1...2, 5...5, 9...10] ✗" !in
+                lines -> {
                 "Bug 還沒重現：缺口寫成 cursor..range.first（少減 1），游標只移到 range.last（少加 1）"
-            "案例 2（相鄰的兩段）：得到 [3...4, 6...10]，期待 [7...10] ✗" !in lines ->
+            }
+
+            "案例 2（相鄰的兩段）：得到 [3...4, 6...10]，期待 [7...10] ✗" !in lines -> {
                 "Bug 還沒重現：游標少加 1，相鄰的 1..3 與 4..6 才會被當成中間有缺口"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
-        val wrong = lines.firstOrNull { it.startsWith("案例") && it.endsWith("✗") }
+        val wrong = lines.firstOrNull {
+            it.startsWith("案例") && it.endsWith("✗")
+        }
         when {
-            lines.none { it.startsWith("答對") } -> "演練沒有跑完：要用 scenario(log, missing) 執行"
+            lines.none {
+                it.startsWith("答對")
+            } -> "演練沒有跑完：要用 scenario(log, missing) 執行"
+
             wrong != null -> "還有案例答錯：$wrong"
+
             "答對 5/5" !in lines -> "5 個案例都要答對：缺口 = cursor..(first - 1)，游標 = last + 1"
+
             else -> null
         }
     },

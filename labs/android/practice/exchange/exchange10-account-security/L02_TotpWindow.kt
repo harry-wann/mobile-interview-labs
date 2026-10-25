@@ -1,17 +1,28 @@
-// L02：使用者剛好在換碼的瞬間輸入就被拒絕，而同一個碼卻可以被重複使用（TOTP 的驗證視窗與重放）
-// 對應複習站：Exchange10AccountSecurity 第 2 題「伺服器驗證 TOTP 時要注意什麼？」
+// L02：使用者剛好在換碼的瞬間輸入就被拒絕，而同一個碼卻可以被重複使用（TOTP
+// 的驗證視窗與重放）
+// 對應複習站：Exchange10AccountSecurity 第 2 題「伺服器驗證 TOTP
+// 時要注意什麼？」
 //
-// 情境：伺服器收到使用者輸入的 6 位數驗證碼，要判斷對不對。手機和伺服器的時鐘有一點誤差，使用者輸入也要幾秒，
-//        所以通常除了「現在這個 30 秒」，也接受前一個和後一個（視窗 ±1，共 3 個碼）；而且同一個 counter 的碼只能用一次，否則被旁人看到的碼可以重放。
-//        演練用 4 個情境（每個情境各自一台全新的伺服器，秘密是 RFC 的測試資料；第 59 秒的碼是 287082，第 100 秒的碼是 969429）：
-//        ① 使用者在第 59 秒看到 287082，第 61 秒才送出（跨過了 30 秒的邊界）→ 應該受理
-//        ② 同一個碼 287082 在第 40 秒送出被受理，第 55 秒（還在同一個 30 秒裡）又被送出一次（旁人重放）→ 第 2 次應該拒絕
-//        ③ 第 59 秒的碼 287082，到第 119 秒才送出（已經差了 2 個 time step）→ 應該拒絕
-//        ④ 使用者手機的時鐘快了 30 秒：第 61 秒收到第 100 秒的碼 969429 → 應該受理
+// 情境：伺服器收到使用者輸入的 6 位數驗證碼，要判斷對不對。
+// 手機和伺服器的時鐘有一點誤差，使用者輸入也要幾秒，
+//        所以通常除了「現在這個 30 秒」，也接受前一個和後一個（視窗 ±1，共 3
+// 個碼）；而且同一個 counter 的碼只能用一次，否則被旁人看到的碼可以重放。
+//        演練用 4 個情境（每個情境各自一台全新的伺服器，秘密是 RFC 的測試資料；
+// 第 59 秒的碼是 287082，第 100 秒的碼是 969429）：
+//        ① 使用者在第 59 秒看到 287082，第 61 秒才送出（跨過了 30 秒的邊界）→
+// 應該受理
+//        ② 同一個碼 287082 在第 40 秒送出被受理，第 55 秒（還在同一個 30 秒裡）
+// 又被送出一次（旁人重放）→ 第 2 次應該拒絕
+//        ③ 第 59 秒的碼 287082，到第 119 秒才送出（已經差了 2 個 time step）→
+// 應該拒絕
+//        ④ 使用者手機的時鐘快了 30 秒：第 61 秒收到第 100 秒的碼 969429 →
+// 應該受理
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.makeVerifier）：回傳的函式只比對現在這個 30 秒（counter = now / 30）的碼，沒有視窗，也不記住用過的 counter。
-//   ② 修正版（L02Fixed.makeVerifier）：用 var lastUsed 記住上次成功的 counter；比對 current - 1、current、current + 1 三個 counter，
+//   ① Bug 版（L02Bug.makeVerifier）：回傳的函式只比對現在這個 30 秒（counter =
+// now / 30）的碼，沒有視窗，也不記住用過的 counter。
+//   ② 修正版（L02Fixed.makeVerifier）：用 var lastUsed 記住上次成功的 counter；
+// 比對 current - 1、current、current + 1 三個 counter，
 //      counter 小於等於 lastUsed 的跳過；比對成功就更新 lastUsed 並回傳 true。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange10-account-security/L02_TotpWindow.kt
@@ -21,7 +32,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 一台伺服器的驗證函式：給驗證碼與伺服器現在的 Unix 秒，回傳受理（true）或拒絕（false）。每次建立都是全新的狀態。 */
+/**
+ * 一台伺服器的驗證函式：給驗證碼與伺服器現在的 Unix 秒，回傳受理（true）
+ * 或拒絕（false）。每次建立都是全新的狀態。
+ */
 private typealias Verifier = (code: String, now: Long) -> Boolean
 
 /** 演練流程（兩個版本共用）：4 個情境，每個情境各自一台全新的伺服器 */
@@ -54,7 +68,8 @@ private fun scenario(log: LabLog, makeVerifier: () -> Verifier) {
 // MARK: - Bug 版
 private object L02Bug {
     fun makeVerifier(): Verifier {
-        // TODO ①：回傳 { code, now -> … }：只算 counter = now / 30 的碼（E10.hotp(E10.rfcSecret, …)），和 code 比較
+        // TODO ①：回傳 { code, now -> … }：只算 counter = now / 30 的碼（E10.
+        // hotp(E10.rfcSecret, …)），和 code 比較
         return { _, _ -> false }
     }
 
@@ -64,9 +79,12 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun makeVerifier(): Verifier {
-        // TODO ②：var lastUsed: Long? 記住上次成功的 counter。回傳 { code, now -> … }：
-        //        current = now / 30；對 current - 1、current、current + 1 三個 counter 逐一檢查：
-        //        counter <= lastUsed 的跳過；E10.hotp(E10.rfcSecret, counter) 等於 code 就把 lastUsed 設成 counter，回傳 true；都不對回傳 false
+        // TODO ②：var lastUsed: Long? 記住上次成功的 counter。回傳 { code, now
+        // -> … }：
+        //        current = now / 30；對 current - 1、current、current + 1 三個
+        // counter 逐一檢查：
+        //        counter <= lastUsed 的跳過；E10.hotp(E10.rfcSecret, counter)
+        // 等於 code 就把 lastUsed 設成 counter，回傳 true；都不對回傳 false
         return { _, _ -> false }
     }
 
@@ -74,8 +92,9 @@ private object L02Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("4 個情境") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("4 個情境")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l02 = Lab(
     id = "L02",
@@ -101,14 +120,29 @@ val l02 = Lab(
     checkBug = { lines ->
         val n = wrongCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log) { makeVerifier() } 執行"
-            "情境 2（重放）：第 1 次：第 40 秒送出 287082 → 受理 ✓" !in lines -> "Bug 版也要能驗證：現在這個 30 秒的碼要受理（第 40 秒送出 287082）"
-            "情境 2（重放）：第 2 次：第 55 秒又送出同一個碼 287082 → 受理 ✗（應該拒絕）" !in lines ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log) { makeVerifier() } 執行"
+            }
+
+            "情境 2（重放）：第 1 次：第 40 秒送出 287082 → 受理 ✓" !in lines -> {
+                "Bug 版也要能驗證：現在這個 30 秒的碼要受理（第 40 秒送出 287082）"
+            }
+
+            "情境 2（重放）：第 2 次：第 55 秒又送出同一個碼 287082 → 受理 ✗（應該拒絕）" !in lines -> {
                 "Bug 還沒重現：沒有記住用過的 counter，同一個碼第 2 次也會被受理"
-            "情境 1（跨過邊界）：第 61 秒送出第 59 秒的碼 287082 → 拒絕 ✗（應該受理）" !in lines ->
+            }
+
+            "情境 1（跨過邊界）：第 61 秒送出第 59 秒的碼 287082 → 拒絕 ✗（應該受理）" !in lines -> {
                 "Bug 還沒重現：只比對現在這個 30 秒，跨過邊界的碼會被拒絕"
-            n != 3 -> "Bug 版應該判斷錯 3 個情境（目前 $n 個）"
-            else -> null
+            }
+
+            n != 3 -> {
+                "Bug 版應該判斷錯 3 個情境（目前 $n 個）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

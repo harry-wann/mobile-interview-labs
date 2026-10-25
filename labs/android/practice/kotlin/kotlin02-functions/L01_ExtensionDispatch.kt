@@ -1,12 +1,17 @@
 // L01：市價單的手續費少收了（extension function 沒有多型）
-// 對應複習站：Kotlin02Functions 第 1 題「extension function 是什麼？為什麼它沒有多型？」
+// 對應複習站：Kotlin02Functions 第 1 題「extension function
+// 是什麼？為什麼它沒有多型？」
 //
-// 情境：一般委託的手續費是成交金額的 0.1%，市價單是 0.3%。清單裡放的是 List<Order>，裡面有一般委託，也有市價單。
+// 情境：一般委託的手續費是成交金額的 0.1%，市價單是 0.3%。清單裡放的是
+// List<Order>，裡面有一般委託，也有市價單。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug）：用 extension function 寫手續費：Order.fee() 和 MarketOrder.fee()。
-//      extension 是靜態分派，宣告成 Order 的變數即使實際是 MarketOrder，也只會用 Order.fee()，市價單少收手續費。
-//   ② 修正版（L01Fixed）：fee() 寫成成員函式：Order 裡 open fun fee()，MarketOrder 用 override 覆寫。
+//   ① Bug 版（L01Bug）：用 extension function 寫手續費：Order.fee() 和
+// MarketOrder.fee()。
+//      extension 是靜態分派，宣告成 Order 的變數即使實際是 MarketOrder，
+// 也只會用 Order.fee()，市價單少收手續費。
+//   ② 修正版（L01Fixed）：fee() 寫成成員函式：Order 裡 open fun fee()，
+// MarketOrder 用 override 覆寫。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin02-functions/L01_ExtensionDispatch.kt
 package tw.harry.labs.practice.kotlin02functions
@@ -17,18 +22,26 @@ import tw.harry.labs.kit.Variant
 
 // MARK: - Bug 版
 private object L01Bug {
-    open class Order(val symbol: String, val notional: Long)           // notional：成交金額（日圓）
+    // notional：成交金額（日圓）
+    open class Order(val symbol: String, val notional: Long)
     class MarketOrder(symbol: String, notional: Long) : Order(symbol, notional)
 
-    // TODO ①-1：寫 extension：fun Order.fee(): Long = notional / 1000（一般委託 0.1%）
+    // TODO ①-1：寫 extension：fun Order.fee(): Long = notional /
+    // 1000（一般委託 0.1%）
     fun Order.fee(): Long = 0
 
-    // TODO ①-2：再寫一個 extension：fun MarketOrder.fee(): Long = notional * 3 / 1000（市價單 0.3%，以為這個會被用到）
+    // TODO ①-2：再寫一個 extension：fun MarketOrder.fee(): Long = notional * 3
+    // / 1000（市價單 0.3%，以為這個會被用到）
     fun MarketOrder.fee(): Long = 0
 
     fun run(log: LabLog) {
-        val orders: List<Order> = listOf(Order("BTC_JPY", 1_000_000), MarketOrder("ETH_JPY", 1_000_000))
-        for (o in orders) log("${o.symbol} 手續費 ${o.fee()}")          // o 宣告成 Order：編譯器固定選 Order.fee()
+        val orders: List<Order> =
+            listOf(
+                Order("BTC_JPY", 1_000_000),
+                MarketOrder("ETH_JPY", 1_000_000),
+            )
+        // o 宣告成 Order：編譯器固定選 Order.fee()
+        for (o in orders) log("${o.symbol} 手續費 ${o.fee()}")
         log("手續費合計 ${orders.sumOf { it.fee() }}")
     }
 }
@@ -36,16 +49,23 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     open class Order(val symbol: String, val notional: Long) {
-        // TODO ②-1：寫成員函式 open fun fee(): Long = notional / 1000（一般委託 0.1%）
+        // TODO ②-1：寫成員函式 open fun fee(): Long = notional /
+        // 1000（一般委託 0.1%）
         open fun fee(): Long = 0
     }
 
-    class MarketOrder(symbol: String, notional: Long) : Order(symbol, notional) {
-        // TODO ②-2：用 override fun fee(): Long = notional * 3 / 1000 覆寫（市價單 0.3%）
+    class MarketOrder(symbol: String, notional: Long) :
+        Order(symbol, notional) {
+        // TODO ②-2：用 override fun fee(): Long = notional * 3 / 1000
+        // 覆寫（市價單 0.3%）
     }
 
     fun run(log: LabLog) {
-        val orders: List<Order> = listOf(Order("BTC_JPY", 1_000_000), MarketOrder("ETH_JPY", 1_000_000))
+        val orders: List<Order> =
+            listOf(
+                Order("BTC_JPY", 1_000_000),
+                MarketOrder("ETH_JPY", 1_000_000),
+            )
         for (o in orders) log("${o.symbol} 手續費 ${o.fee()}")
         log("手續費合計 ${orders.sumOf { it.fee() }}")
     }

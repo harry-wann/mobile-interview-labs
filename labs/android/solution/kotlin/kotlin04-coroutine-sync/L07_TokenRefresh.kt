@@ -1,12 +1,20 @@
-// L07：10 個請求同時收到 401，token 被刷新了 10 次，使用者被登出（single-flight）
-// 對應複習站：Kotlin04CoroutineSync 第 4 題「多個請求同時收到 401，怎麼讓 token 只刷新一次？」
+// L07：10 個請求同時收到 401，token 被刷新了 10 次，
+// 使用者被登出（single-flight）
+// 對應複習站：Kotlin04CoroutineSync 第 4 題「多個請求同時收到 401，怎麼讓
+// token 只刷新一次？」
 //
-// 情境：畫面同時送出 10 個請求，access token 剛好過期，10 個都收到 HTTP 401。每個請求都要刷新 token 再重送。
-//        伺服器的 refresh token 是一次性的：用過一次就作廢，換回新的 access token 與新的 refresh token。
-// Bug 版：每個收到 401 的請求都直接拿目前的 refresh token 去刷新。10 個同時送出同一個 refresh token，
-//        只有第一個成功，其餘 9 個被伺服器拒絕（refresh token 已經作廢）。真的 App 會因此把使用者登出。
-// 修正版：用 Mutex 把「比對舊 token、必要時才刷新」放在同一個 withLock 裡（single-flight）。
-//        第一個進去的真的去刷新，其他 9 個等鎖；進來時發現目前的 token 已經不是自己送出時用的舊 token，
+// 情境：畫面同時送出 10 個請求，access token 剛好過期，10 個都收到 HTTP 401。
+// 每個請求都要刷新 token 再重送。
+//        伺服器的 refresh token 是一次性的：用過一次就作廢，換回新的 access
+// token 與新的 refresh token。
+// Bug 版：每個收到 401 的請求都直接拿目前的 refresh token 去刷新。10
+// 個同時送出同一個 refresh token，
+//        只有第一個成功，其餘 9 個被伺服器拒絕（refresh token 已經作廢）。真的
+// App 會因此把使用者登出。
+// 修正版：用 Mutex 把「比對舊 token、必要時才刷新」放在同一個 withLock
+// 裡（single-flight）。
+//        第一個進去的真的去刷新，其他 9 個等鎖；進來時發現目前的 token
+// 已經不是自己送出時用的舊 token，
 //        就直接用新的，不再呼叫刷新 API。
 package tw.harry.labs.solution.kotlin04coroutinesync
 
@@ -37,7 +45,11 @@ private class AuthServer {
         refreshCalls.incrementAndGet()
         delay(100)
         synchronized(lock) {
-            if (refreshToken != validRefresh) throw IOException("refresh token 已經作廢")
+            if (refreshToken !=
+                validRefresh
+            ) {
+                throw IOException("refresh token 已經作廢")
+            }
             version++
             validRefresh = "refresh-$version"
             return TokenPair("access-$version", validRefresh)
@@ -46,9 +58,17 @@ private class AuthServer {
 }
 
 /** 演練流程（兩個版本共用）：10 個請求都用舊的 access-0 送出，都收到 401 */
-private suspend fun scenario(log: LabLog, server: AuthServer, refreshAfter401: suspend (stale: String) -> String) {
+private suspend fun scenario(
+    log: LabLog,
+    server: AuthServer,
+    refreshAfter401: suspend (stale: String) -> String,
+) {
     val results = coroutineScope {
-        List(10) { async(Dispatchers.Default) { runCatching { refreshAfter401("access-0") } } }.awaitAll()
+        List(10) {
+            async(Dispatchers.Default) {
+                runCatching { refreshAfter401("access-0") }
+            }
+        }.awaitAll()
     }
     val failed = results.count { it.isFailure }
     log("刷新 API 被呼叫 ${server.refreshCalls.get()} 次")
@@ -59,10 +79,12 @@ private suspend fun scenario(log: LabLog, server: AuthServer, refreshAfter401: s
 private object L07Bug {
     class TokenStore(private val server: AuthServer) {
         @Volatile private var access = "access-0"
+
         @Volatile private var refresh = "refresh-0"
 
         suspend fun refreshAfter401(stale: String): String {
-            val pair = server.refresh(refresh)              // 每個 401 都直接去刷新
+            // 每個 401 都直接去刷新
+            val pair = server.refresh(refresh)
             access = pair.access
             refresh = pair.refresh
             return pair.access
@@ -80,14 +102,18 @@ private object L07Bug {
 private object L07Fixed {
     class TokenStore(private val server: AuthServer) {
         private val mutex = Mutex()
+
         @Volatile private var access = "access-0"
+
         @Volatile private var refresh = "refresh-0"
 
         suspend fun refreshAfter401(stale: String): String = mutex.withLock {
             if (access != stale) {
-                access                                      // 前一個等鎖的人已經刷新過了，直接用新的
+                // 前一個等鎖的人已經刷新過了，直接用新的
+                access
             } else {
-                val pair = server.refresh(refresh)          // 沒有人刷新過，才真的呼叫刷新 API
+                // 沒有人刷新過，才真的呼叫刷新 API
+                val pair = server.refresh(refresh)
                 access = pair.access
                 refresh = pair.refresh
                 pair.access
@@ -103,8 +129,9 @@ private object L07Fixed {
 }
 
 // MARK: - 演練設定
-private fun refreshCalls(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("刷新 API 被呼叫 ") }?.removePrefix("刷新 API 被呼叫 ")?.removeSuffix(" 次")?.toIntOrNull()
+private fun refreshCalls(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("刷新 API 被呼叫 ")
+}?.removePrefix("刷新 API 被呼叫 ")?.removeSuffix(" 次")?.toIntOrNull()
 
 val l07 = Lab(
     id = "L07",
@@ -127,16 +154,31 @@ val l07 = Lab(
     },
     checkBug = { lines ->
         when {
-            refreshCalls(lines) == null -> "演練沒有跑完：要用 scenario(log, server, …) 執行"
-            refreshCalls(lines) != 10 -> "Bug 版每個請求都要去刷新（共 10 次）：refreshAfter401 直接呼叫 server.refresh(refresh)，不要加鎖"
+            refreshCalls(
+                lines,
+            ) == null -> "演練沒有跑完：要用 scenario(log, server, …) 執行"
+
+            refreshCalls(
+                lines,
+            ) != 10 -> "Bug 版每個請求都要去刷新（共 10 次）：refreshAfter401 直接呼叫 server.refresh(refresh)，不要加鎖"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            refreshCalls(lines) == null -> "演練沒有跑完：要用 scenario(log, server, …) 執行"
-            refreshCalls(lines) != 1 -> "刷新了 ${refreshCalls(lines)} 次，應該只有 1 次：用 mutex.withLock，進去之後先比對 access != stale"
+            refreshCalls(
+                lines,
+            ) == null -> "演練沒有跑完：要用 scenario(log, server, …) 執行"
+
+            refreshCalls(
+                lines,
+            ) != 1 -> "刷新了 ${refreshCalls(
+                lines,
+            )} 次，應該只有 1 次：用 mutex.withLock，進去之後先比對 access != stale"
+
             "拿到新 token 的請求 10 個，被登出的請求 0 個" !in lines -> "10 個請求都要拿到新 token：等鎖的人進來之後，直接回傳目前的 access"
+
             else -> null
         }
     },

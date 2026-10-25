@@ -1,9 +1,15 @@
-// L04：寫了 [weak self]，離開畫面後 ViewModel 還是被抓住（guard let self 放在迴圈外面）
-// 對應複習站：Swift02ARC 第 3 題「closure 是怎麼帶走外面的變數的？」（誤解二：寫了 [weak self] 就一定沒事）
+// L04：寫了 [weak self]，離開畫面後 ViewModel 還是被抓住（guard let self
+// 放在迴圈外面）
+// 對應複習站：Swift02ARC 第 3 題「closure 是怎麼帶走外面的變數的？」（誤解二：
+// 寫了 [weak self] 就一定沒事）
 //
-// 情境：行情畫面的 ViewModel 用 Task 一直收價格推播（共 24 筆，每 50 毫秒一筆），使用者開了畫面 0.2 秒就離開。
-// Bug 版：Task 一開始就 guard let self。從那一行起 self 是 strong，整個 for await 迴圈期間（約 1.2 秒）ViewModel 都被抓住。
-// 修正版：[weak self] 不變，但改成「每一輪迴圈」才 guard let self，這一輪結束就放開；ViewModel 一離開畫面就被釋放，下一筆推播進來時 Task 自己結束。
+// 情境：行情畫面的 ViewModel 用 Task 一直收價格推播（共 24 筆，每 50
+// 毫秒一筆），使用者開了畫面 0.2 秒就離開。
+// Bug 版：Task 一開始就 guard let self。從那一行起 self 是 strong，整個 for
+// await 迴圈期間（約 1.2 秒）ViewModel 都被抓住。
+// 修正版：[weak self] 不變，但改成「每一輪迴圈」才 guard let self，
+// 這一輪結束就放開；ViewModel 一離開畫面就被釋放，下一筆推播進來時 Task
+// 自己結束。
 import LabKit
 
 /// 假的價格推播：24 筆，每 50 毫秒一筆，然後結束（兩個版本共用）
@@ -11,7 +17,8 @@ private func priceStream() -> AsyncStream<Int> {
     AsyncStream { continuation in
         let producer = Task {
             for i in 0..<24 {
-                guard (try? await Task.sleep(for: .milliseconds(50))) != nil else { break }
+                guard (try? await Task.sleep(for: .milliseconds(50))) != nil
+                else { break }
                 continuation.yield(15_000_000 + i * 1_000)
             }
             continuation.finish()
@@ -37,23 +44,29 @@ private enum L04Bug {
 
         func start(_ stream: AsyncStream<Int>) {
             task = Task { [weak self] in
-                guard let self else { return }        // 從這裡開始 self 是 strong
-                for await price in stream {           // 價格流還沒結束，這個迴圈就不會結束
-                    self.lastPrice = price            // self 在整個迴圈期間都被抓住
+                // 從這裡開始 self 是 strong
+                guard let self else { return }
+                // 價格流還沒結束，這個迴圈就不會結束
+                for await price in stream {
+                    // self 在整個迴圈期間都被抓住
+                    self.lastPrice = price
                 }
             }
         }
     }
 
     static func run(_ log: LabLog) async {
-        await Swift02ARC.openThenClose(log, name: live, stayOpen: .milliseconds(200), beforeClose: { (vm: TickerViewModel) in
-            log("離開畫面前，收到的最新價格：\(vm.lastPrice)")
-        }, open: {
-            let viewModel = TickerViewModel()
-            viewModel.start(priceStream())
-            return viewModel
-        })
-        try? await Task.sleep(for: .seconds(1.2))     // 等價格流播完
+        await Swift02ARC.openThenClose(
+            log, name: live, stayOpen: .milliseconds(200),
+            beforeClose: { (vm: TickerViewModel) in
+                log("離開畫面前，收到的最新價格：\(vm.lastPrice)")
+            },
+            open: {
+                let viewModel = TickerViewModel()
+                viewModel.start(priceStream())
+                return viewModel
+            })
+        try? await Task.sleep(for: .seconds(1.2))  // 等價格流播完
         log("價格流結束後，存活中的 \(live)：\(LiveObjects.shared.count(live))")
     }
 }
@@ -76,7 +89,8 @@ private enum L04Fixed {
         func start(_ stream: AsyncStream<Int>) {
             task = Task { [weak self] in
                 for await price in stream {
-                    guard let self else { return }    // 每一輪才取出 self，這一輪結束就放開
+                    // 每一輪才取出 self，這一輪結束就放開
+                    guard let self else { return }
                     self.lastPrice = price
                 }
             }
@@ -84,13 +98,16 @@ private enum L04Fixed {
     }
 
     static func run(_ log: LabLog) async {
-        await Swift02ARC.openThenClose(log, name: live, stayOpen: .milliseconds(200), beforeClose: { (vm: TickerViewModel) in
-            log("離開畫面前，收到的最新價格：\(vm.lastPrice)")
-        }, open: {
-            let viewModel = TickerViewModel()
-            viewModel.start(priceStream())
-            return viewModel
-        })
+        await Swift02ARC.openThenClose(
+            log, name: live, stayOpen: .milliseconds(200),
+            beforeClose: { (vm: TickerViewModel) in
+                log("離開畫面前，收到的最新價格：\(vm.lastPrice)")
+            },
+            open: {
+                let viewModel = TickerViewModel()
+                viewModel.start(priceStream())
+                return viewModel
+            })
         try? await Task.sleep(for: .seconds(1.2))
         log("價格流結束後，存活中的 \(live)：\(LiveObjects.shared.count(live))")
     }
@@ -109,7 +126,8 @@ extension Swift02ARC {
             "想一想：guard let self 放在 for await 外面，self 在迴圈期間是 strong 還是 weak？",
             "選「修正版」執行，關閉畫面後存活數應該立刻是 0。",
         ],
-        expectBug: "關閉畫面後存活中的 TickerViewModel（Bug 版）仍是 1（weak 參考還在），要等價格流播完才變成 0。",
+        expectBug:
+            "關閉畫面後存活中的 TickerViewModel（Bug 版）仍是 1（weak 參考還在），要等價格流播完才變成 0。",
         expectFixed: "關閉畫面後存活數馬上是 0（weak 參考已變成 nil）。",
         run: { variant, log in
             switch variant {
@@ -118,14 +136,31 @@ extension Swift02ARC {
             }
         },
         checkBug: { lines in
-            guard lines.contains(where: { $0.hasPrefix("離開畫面前，收到的最新價格：15") }) else { return "離開畫面前應該已經收到價格：start 裡要用 Task 跑 for await price in stream，把價格寫進 lastPrice" }
-            guard lines.contains(where: { $0.hasSuffix("：1（weak 參考還在）") }) else { return "Bug 還沒重現：關閉畫面後 ViewModel 應該還活著（guard let self 要放在 for await 外面）" }
-            guard lines.last?.hasSuffix("：0") == true else { return "價格流播完之後，ViewModel 應該被釋放" }
+            guard lines.contains(where: { $0.hasPrefix("離開畫面前，收到的最新價格：15") })
+            else {
+                return
+                    "離開畫面前應該已經收到價格：start 裡要用 Task 跑 for await price in stream，把價格寫進 lastPrice"
+            }
+            guard lines.contains(where: { $0.hasSuffix("：1（weak 參考還在）") })
+            else {
+                return
+                    "Bug 還沒重現：關閉畫面後 ViewModel 應該還活著（guard let self 要放在 for await 外面）"
+            }
+            guard lines.last?.hasSuffix("：0") == true else {
+                return "價格流播完之後，ViewModel 應該被釋放"
+            }
             return nil
         },
         checkFixed: { lines in
-            guard lines.contains(where: { $0.hasPrefix("離開畫面前，收到的最新價格：15") }) else { return "離開畫面前應該已經收到價格：start 裡要用 Task 跑 for await price in stream，把價格寫進 lastPrice" }
-            guard lines.contains(where: { $0.hasSuffix("：0（weak 參考已變成 nil）") }) else { return "關閉畫面後 ViewModel 還活著：guard let self 要放進 for await 迴圈裡" }
+            guard lines.contains(where: { $0.hasPrefix("離開畫面前，收到的最新價格：15") })
+            else {
+                return
+                    "離開畫面前應該已經收到價格：start 裡要用 Task 跑 for await price in stream，把價格寫進 lastPrice"
+            }
+            guard lines.contains(where: { $0.hasSuffix("：0（weak 參考已變成 nil）") })
+            else {
+                return "關閉畫面後 ViewModel 還活著：guard let self 要放進 for await 迴圈裡"
+            }
             return nil
         }
     )

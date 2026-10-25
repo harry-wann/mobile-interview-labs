@@ -1,11 +1,17 @@
 // L05：輸入到一半的數量，旋轉螢幕後不見了（remember 與 rememberSaveable）
-// 對應複習站：Kotlin06Recomposition 第 6 題「remember、rememberSaveable 和 key 怎麼用？」
+// 對應複習站：Kotlin06Recomposition 第 6 題「remember、rememberSaveable 和 key
+// 怎麼用？」
 //
-// 情境：下單畫面有一個「下單數量」輸入欄。使用者輸入到一半旋轉螢幕，Activity 會被銷毀再重建。
-//        這個演練的按鈕「模擬旋轉螢幕」會呼叫 Activity.recreate()，和真的旋轉一樣；也可以直接旋轉模擬器（Ctrl+左/右方向鍵）。
-// Bug 版：用 remember { mutableStateOf("") } 保存輸入的文字。remember 只活過重組，Activity 重建後就消失了。
-// 修正版：改用 rememberSaveable { mutableStateOf("") }。它把值存進 saved instance state，旋轉螢幕、
-//        行程被系統殺掉後重開都還在。（只適合小量資料，例如輸入中的文字；大型資料放 ViewModel）
+// 情境：下單畫面有一個「下單數量」輸入欄。使用者輸入到一半旋轉螢幕，Activity
+// 會被銷毀再重建。
+//        這個演練的按鈕「模擬旋轉螢幕」會呼叫 Activity.recreate()，
+// 和真的旋轉一樣；也可以直接旋轉模擬器（Ctrl+左/右方向鍵）。
+// Bug 版：用 remember { mutableStateOf("") } 保存輸入的文字。remember
+// 只活過重組，Activity 重建後就消失了。
+// 修正版：改用 rememberSaveable { mutableStateOf("") }。它把值存進 saved
+// instance state，旋轉螢幕、
+//        行程被系統殺掉後重開都還在。（只適合小量資料，例如輸入中的文字；
+// 大型資料放 ViewModel）
 package tw.harry.labs.solution.kotlin06recomposition
 
 import android.app.Activity
@@ -35,13 +41,18 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-/** 演練畫面（兩個版本共用）：[qty] 是輸入欄的文字，[onQtyChange] 是使用者輸入時要做的事 */
+/**
+ * 演練畫面（兩個版本共用）：[qty] 是輸入欄的文字，[onQtyChange]
+ * 是使用者輸入時要做的事
+ */
 @Composable
 private fun OrderForm(qty: String, onQtyChange: (String) -> Unit, log: LabLog) {
     val activity = LocalContext.current.findActivity()
     LaunchedEffect(Unit) { log("畫面建立：下單數量欄位是「$qty」") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = qty, onValueChange = onQtyChange, label = { Text("下單數量") })
+        OutlinedTextField(value = qty, onValueChange = onQtyChange, label = {
+            Text("下單數量")
+        })
         Button(onClick = {
             log("模擬旋轉螢幕：Activity.recreate()")
             activity?.recreate()
@@ -52,14 +63,15 @@ private fun OrderForm(qty: String, onQtyChange: (String) -> Unit, log: LabLog) {
 // MARK: - Bug 版
 @Composable
 private fun L05BugScreen(log: LabLog) {
-    var qty by remember { mutableStateOf("") }              // 只活過重組
+    var qty by remember { mutableStateOf("") } // 只活過重組
     OrderForm(qty, { qty = it }, log)
 }
 
 // MARK: - 修正版
 @Composable
 private fun L05FixedScreen(log: LabLog) {
-    var qty by rememberSaveable { mutableStateOf("") }      // 存進 saved instance state：旋轉後還在
+    // 存進 saved instance state：旋轉後還在
+    var qty by rememberSaveable { mutableStateOf("") }
     OrderForm(qty, { qty = it }, log)
 }
 

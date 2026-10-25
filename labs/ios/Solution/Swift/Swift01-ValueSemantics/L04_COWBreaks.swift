@@ -1,10 +1,13 @@
 // L04：透過計算屬性 append，每一次都複製整個陣列（COW 失效）
-// 對應複習站：Swift01ValueSemantics 第 4 題「什麼情況下 COW 會失效，讓程式突然變慢？」
+// 對應複習站：Swift01ValueSemantics 第 4 題「什麼情況下 COW 會失效，
+// 讓程式突然變慢？」
 //
 // 情境：ViewModel 存了 5 萬筆成交價，推播每來一筆就 append 一筆，共 5000 筆。
-// Bug 版：外部透過計算屬性 `prices` 的 get／set 去 append。get 拿出來的那份和 _prices 共用 storage，
+// Bug 版：外部透過計算屬性 `prices` 的 get／set 去 append。get 拿出來的那份和
+// _prices 共用 storage，
 //        append 時發現被共用，只好先把 5 萬筆整個複製一次。
-// 修正版：陣列是儲存屬性，外部只能讀；要加資料就呼叫 ViewModel 的方法，直接改原本的陣列。
+// 修正版：陣列是儲存屬性，外部只能讀；要加資料就呼叫 ViewModel 的方法，
+// 直接改原本的陣列。
 import Foundation
 import LabKit
 
@@ -12,7 +15,9 @@ import LabKit
 private func measureMs(_ work: () -> Void) -> Double {
     let start = DispatchTime.now()
     work()
-    return Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
+    return Double(
+        DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+        / 1_000_000
 }
 
 // MARK: - Bug 版
@@ -32,7 +37,8 @@ private enum L04Bug {
             let vm = PriceViewModel()
             let ms = measureMs {
                 for i in 0..<5_000 {
-                    vm.prices.append(Double(i))   // get → append（複製 5 萬筆）→ set
+                    // get → append（複製 5 萬筆）→ set
+                    vm.prices.append(Double(i))
                 }
             }
             return (ms, vm.prices.count)
@@ -95,12 +101,20 @@ extension Swift01ValueSemantics {
             }
         },
         checkBug: { lines in
-            guard lines.contains("陣列現在有 55000 筆") else { return "陣列應該有 55000 筆：append 要寫進 _prices" }
+            guard lines.contains("陣列現在有 55000 筆") else {
+                return "陣列應該有 55000 筆：append 要寫進 _prices"
+            }
             guard let ms = appendMs(lines) else { return "找不到毫秒數" }
-            return ms >= 5 ? nil : String(format: "只花了 %.2f ms：Bug 還沒重現（要透過計算屬性的 get／set 去 append）", ms)
+            return ms >= 5
+                ? nil
+                : String(
+                    format: "只花了 %.2f ms：Bug 還沒重現（要透過計算屬性的 get／set 去 append）",
+                    ms)
         },
         checkFixed: { lines in
-            guard lines.contains("陣列現在有 55000 筆") else { return "陣列應該有 55000 筆：append 要寫進 prices" }
+            guard lines.contains("陣列現在有 55000 筆") else {
+                return "陣列應該有 55000 筆：append 要寫進 prices"
+            }
             guard let ms = appendMs(lines) else { return "找不到毫秒數" }
             return ms < 5 ? nil : String(format: "花了 %.2f ms，還是太慢：不要經過計算屬性", ms)
         }

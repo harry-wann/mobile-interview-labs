@@ -1,12 +1,17 @@
-// L02：剛更新過價格的資料讀不到，容量 2 的快取卻存了 3 筆（LRU 的 put 遇到已經存在的 key）
-// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put 都很快？」
+// L02：剛更新過價格的資料讀不到，容量 2 的快取卻存了 3 筆（LRU 的 put
+// 遇到已經存在的 key）
+// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put
+// 都很快？」
 //
 // 情境：價格快取，容量 2。放進 BTC、ETH，BTC 的價格有更新，再放進 XRP。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.LRUCache.put）：不管 key 存不存在，一律建立新節點，存進 Map、放到串列最前面。跑起來會看到剛更新的 BTC 讀不到。
-//   ② 修正版（L02Fixed.LRUCache.put）：key 已經存在就更新 value、unlink 再 insertAfterHead，然後結束；不存在才建立新節點。
-// 只改有 TODO 的地方（超過容量時淘汰最久沒用的那一段已經寫好）。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
+//   ① Bug 版（L02Bug.LRUCache.put）：不管 key 存不存在，一律建立新節點，存進
+// Map、放到串列最前面。跑起來會看到剛更新的 BTC 讀不到。
+//   ② 修正版（L02Fixed.LRUCache.put）：key 已經存在就更新 value、unlink 再
+// insertAfterHead，然後結束；不存在才建立新節點。
+// 只改有 TODO 的地方（超過容量時淘汰最久沒用的那一段已經寫好）。寫完在 App
+// 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/coding/coding01-data-structures/L02_LRUPut.kt
 package tw.harry.labs.practice.coding01datastructures
 
@@ -50,7 +55,8 @@ private object L02Bug {
         }
 
         override fun put(key: String, value: Int) {
-            // TODO ①：不管 key 存不存在，一律建立新節點：C01Node(key, value)，存進 map[key]，再 list.insertAfterHead(node)
+            // TODO ①：不管 key 存不存在，一律建立新節點：C01Node(key, value)，
+            // 存進 map[key]，再 list.insertAfterHead(node)
             if (map.size > capacity) {
                 list.removeLast()?.let { map.remove(it.key) }
             }
@@ -76,8 +82,10 @@ private object L02Fixed {
         }
 
         override fun put(key: String, value: Int) {
-            // TODO ②-1：map[key] 已經有節點：更新 node.value，先 unlink 再 insertAfterHead（移到最前面），然後 return
-            // TODO ②-2：沒有才建立新節點：存進 map[key]，list.insertAfterHead(node)
+            // TODO ②-1：map[key] 已經有節點：更新 node.value，先 unlink 再
+            // insertAfterHead（移到最前面），然後 return
+            // TODO ②-2：沒有才建立新節點：存進 map[key]，list.
+            // insertAfterHead(node)
             if (map.size > capacity) {
                 list.removeLast()?.let { map.remove(it.key) }
             }
@@ -112,17 +120,27 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("串列上有") } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+            lines.none {
+                it.startsWith("串列上有")
+            } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+
             "串列上有 3 個節點（容量 2）" !in lines -> "Bug 還沒重現：put 要一律建立新節點，舊的 BTC 節點才會留在串列上"
+
             "get(BTC) → 找不到" !in lines -> "Bug 還沒重現：淘汰舊 BTC 節點時，也會把 Map 裡的 BTC 刪掉，剛更新的 BTC 就讀不到"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("串列上有") } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+            lines.none {
+                it.startsWith("串列上有")
+            } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+
             "串列上有 2 個節點（容量 2）" !in lines -> "key 已經存在時不能建立新節點：更新 value、unlink 再 insertAfterHead 就好"
+
             "get(BTC) → 3" !in lines -> "更新過的 BTC 應該讀得到 3：put 已存在的 key 要更新 node.value"
+
             else -> null
         }
     },

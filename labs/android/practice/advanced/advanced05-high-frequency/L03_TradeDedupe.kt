@@ -1,13 +1,21 @@
-// L03：重新連線之後，成交明細多了幾筆重複的，24 小時成交量也算多了（不能丟的資料還要防重複）
-// 對應複習站：Advanced05HighFrequency 第 4 題「哪些資料可以丟、哪些絕對不能丟？」
+// L03：重新連線之後，成交明細多了幾筆重複的，24
+// 小時成交量也算多了（不能丟的資料還要防重複）
+// 對應複習站：Advanced05HighFrequency 第 4 題「哪些資料可以丟、
+// 哪些絕對不能丟？」
 //
-// 情境：成交明細（每一筆成交都是獨立的事件）不能合併、不能丟，但連線斷了再接上，伺服器會把最近幾筆再送一次，同一筆成交就會收到兩次。
-//        收到的順序：成交 #1（0.5 BTC）、#2（0.2）、#3（0.1），斷線重連之後，重送 #2、#3，再來新的 #4（0.3）。
-//        每一筆成交有唯一的 ID（冪等鍵：同一個 ID 不管送幾次，結果都跟送一次一樣）。
+// 情境：成交明細（每一筆成交都是獨立的事件）不能合併、不能丟，
+// 但連線斷了再接上，伺服器會把最近幾筆再送一次，同一筆成交就會收到兩次。
+//        收到的順序：成交 #1（0.5 BTC）、#2（0.2）、#3（0.1），斷線重連之後，
+// 重送 #2、#3，再來新的 #4（0.3）。
+//        每一筆成交有唯一的 ID（冪等鍵：同一個 ID 不管送幾次，
+// 結果都跟送一次一樣）。
 //
 // 你要寫：
-//   ① Bug 版 receive：每收到一筆就把 trade.id 加進 rows，並把 trade.quantity 加進 volume，不管是不是已經收過。
-//   ② 修正版 receive：用 seen（HashSet）記下處理過的成交 ID。seen.add(trade.id) 回傳 false 代表已經收過，就 return（重送的，跳過）；否則加進 rows、加成交量。
+//   ① Bug 版 receive：每收到一筆就把 trade.id 加進 rows，並把 trade.quantity
+// 加進 volume，不管是不是已經收過。
+//   ② 修正版 receive：用 seen（HashSet）記下處理過的成交 ID。seen.add(trade.
+// id) 回傳 false 代表已經收過，就 return（重送的，跳過）；否則加進 rows、
+// 加成交量。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced05-high-frequency/L03_TradeDedupe.kt
 package tw.harry.labs.practice.advanced05highfrequency
@@ -20,16 +28,22 @@ import tw.harry.labs.kit.Variant
 private class Trade(val id: Int, val quantity: BigDecimal)
 
 private val received = listOf(
-    Trade(1, BigDecimal("0.5")), Trade(2, BigDecimal("0.2")), Trade(3, BigDecimal("0.1")),
-    Trade(2, BigDecimal("0.2")), Trade(3, BigDecimal("0.1")),            // 重連之後，伺服器重送最近兩筆
+    Trade(1, BigDecimal("0.5")),
+    Trade(2, BigDecimal("0.2")),
+    Trade(3, BigDecimal("0.1")),
+    // 重連之後，伺服器重送最近兩筆
+    Trade(2, BigDecimal("0.2")),
+    Trade(3, BigDecimal("0.1")),
     Trade(4, BigDecimal("0.3")),
 )
 
 /** 成交明細的共同介面（兩個版本共用） */
 private interface TradeTape {
     fun receive(trade: Trade)
-    val rows: List<Int>              // 畫面上的成交明細，每一列是成交 ID
-    val volume: BigDecimal           // 累計成交量
+
+    // 畫面上的成交明細，每一列是成交 ID
+    val rows: List<Int>
+    val volume: BigDecimal // 累計成交量
 }
 
 private fun scenario(log: LabLog, tape: TradeTape) {
@@ -45,7 +59,8 @@ private object L03Bug {
         override var volume: BigDecimal = BigDecimal.ZERO
 
         override fun receive(trade: Trade) {
-            // TODO ①：rows.add(trade.id)，volume += trade.quantity：收到就加，不管是不是已經收過
+            // TODO ①：rows.add(trade.id)，volume += trade.quantity：收到就加，
+            // 不管是不是已經收過
         }
     }
 
@@ -57,10 +72,13 @@ private object L03Fixed {
     class Tape : TradeTape {
         override val rows = mutableListOf<Int>()
         override var volume: BigDecimal = BigDecimal.ZERO
-        private val seen = HashSet<Int>()                          // 已經處理過的成交 ID
+
+        // 已經處理過的成交 ID
+        private val seen = HashSet<Int>()
 
         override fun receive(trade: Trade) {
-            // TODO ②：if (!seen.add(trade.id)) return（重送的，跳過）；否則 rows.add(trade.id)、volume += trade.quantity
+            // TODO ②：if (!seen.add(trade.id)) return（重送的，跳過）；否則
+            // rows.add(trade.id)、volume += trade.quantity
         }
     }
 

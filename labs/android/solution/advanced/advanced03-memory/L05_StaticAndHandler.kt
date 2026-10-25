@@ -1,15 +1,24 @@
-// L05：關掉畫面之後，Activity 還被 static 欄位和主執行緒的延遲訊息抓著（static 持有 Activity、Handler.postDelayed）
+// L05：關掉畫面之後，Activity 還被 static 欄位和主執行緒的延遲訊息抓著（static
+// 持有 Activity、Handler.postDelayed）
 // 對應複習站：Advanced03Memory 第 4 題「Android 有垃圾回收，為什麼還會洩漏？」
 //
-// 情境：價格提醒功能有兩個很常見的寫法（JVM 單元測試沒有 Activity，所以用假的畫面物件，各背一份 1 MB 資料代表整棵 view 樹）：
-//        A. 下單畫面為了「從任何地方都能跳出提示」，把自己存進全域的 AppState.currentActivity（object 裡的欄位是 static，活得和行程一樣久）。
-//        B. 價格提醒畫面用 Handler(Looper.getMainLooper()).postDelayed(…, 30_000) 排一個 30 秒後「提醒使用者」的工作。
-//           使用者在 30 秒內離開畫面，這個訊息還在主執行緒的 MessageQueue 裡：MessageQueue → Message → Runnable → Activity。
-//        JVM 單元測試裡的 Handler 是空殼（postDelayed 什麼都不做），所以用小型的 FakeHandler：把 Runnable 存進 list，removeCallbacks 真的移除。
-//        真的 Handler 的行為一樣：postDelayed 把 Runnable 包成 Message 放進主執行緒 Looper 的 MessageQueue，
+// 情境：價格提醒功能有兩個很常見的寫法（JVM 單元測試沒有 Activity，
+// 所以用假的畫面物件，各背一份 1 MB 資料代表整棵 view 樹）：
+//        A. 下單畫面為了「從任何地方都能跳出提示」，把自己存進全域的 AppState.
+// currentActivity（object 裡的欄位是 static，活得和行程一樣久）。
+//        B. 價格提醒畫面用 Handler(Looper.getMainLooper()).postDelayed(…,
+// 30_000) 排一個 30 秒後「提醒使用者」的工作。
+//           使用者在 30 秒內離開畫面，這個訊息還在主執行緒的 MessageQueue 裡：
+// MessageQueue → Message → Runnable → Activity。
+//        JVM 單元測試裡的 Handler 是空殼（postDelayed 什麼都不做），
+// 所以用小型的 FakeHandler：把 Runnable 存進 list，removeCallbacks 真的移除。
+//        真的 Handler 的行為一樣：postDelayed 把 Runnable 包成 Message
+// 放進主執行緒 Looper 的 MessageQueue，
 //        removeCallbacks(r) 只移除 callback 是「同一個 r」的 Message。
-// Bug 版：A. onCreate 存進 AppState.currentActivity，onDestroy 沒有清掉。 B. postDelayed 之後，onDestroy 沒有 removeCallbacks。
-// 修正版：A. onDestroy 把 AppState.currentActivity 清成 null（只清自己）。 B. Runnable 存成欄位，onDestroy 用 removeCallbacks 移除同一個。
+// Bug 版：A. onCreate 存進 AppState.currentActivity，onDestroy 沒有清掉。 B.
+// postDelayed 之後，onDestroy 沒有 removeCallbacks。
+// 修正版：A. onDestroy 把 AppState.currentActivity 清成 null（只清自己）。 B.
+// Runnable 存成欄位，onDestroy 用 removeCallbacks 移除同一個。
 package tw.harry.labs.solution.advanced03memory
 
 import java.lang.ref.WeakReference
@@ -31,12 +40,18 @@ private interface L05Screen {
     fun onDestroy()
 }
 
-/** 全域的「目前畫面」：object 裡的欄位是 static，活得比任何一個畫面都久（兩個版本共用）。真的 App 裡常叫 AppState 或 Session */
+/**
+ * 全域的「目前畫面」：object 裡的欄位是 static，
+ * 活得比任何一個畫面都久（兩個版本共用）。真的 App 裡常叫 AppState 或 Session
+ */
 private object L05AppState {
     var currentActivity: L05Screen? = null
 }
 
-/** 主執行緒的訊息佇列：和行程一樣久（真的 Looper.getMainLooper() 的 MessageQueue 也是）（兩個版本共用） */
+/**
+ * 主執行緒的訊息佇列：和行程一樣久（真的 Looper.getMainLooper() 的
+ * MessageQueue 也是）（兩個版本共用）
+ */
 private object L05MainQueue {
     class Message(val callback: Runnable, val delayMs: Long)
 
@@ -50,14 +65,18 @@ private object L05MainQueue {
     }
 }
 
-/** 小型假 Handler（兩個版本共用）：簽名和真的 Handler.postDelayed／removeCallbacks 一樣 */
+/**
+ * 小型假 Handler（兩個版本共用）：簽名和真的 Handler.
+ * postDelayed／removeCallbacks 一樣
+ */
 private class L05FakeHandler {
     fun postDelayed(callback: Runnable, delayMs: Long) {
         L05MainQueue.messages += L05MainQueue.Message(callback, delayMs)
     }
 
     fun removeCallbacks(callback: Runnable) {
-        L05MainQueue.messages.removeAll { it.callback === callback }   // 真的 Handler 也是比對「同一個」Runnable
+        // 真的 Handler 也是比對「同一個」Runnable
+        L05MainQueue.messages.removeAll { it.callback === callback }
     }
 }
 
@@ -77,7 +96,9 @@ private suspend fun scenario(
     fun openAndCloseOrderScreen(): WeakReference<L05Screen> {
         val screen = newOrderScreen()
         screen.onCreate()
-        log("A. 打開下單畫面時，AppState.currentActivity 指向這個畫面：${if (L05AppState.currentActivity === screen) "是" else "否"}")
+        log(
+            "A. 打開下單畫面時，AppState.currentActivity 指向這個畫面：${if (L05AppState.currentActivity === screen) "是" else "否"}",
+        )
         screen.onDestroy()
         return WeakReference(screen)
     }
@@ -95,7 +116,8 @@ private suspend fun scenario(
     }
     val alertRef = openAndCloseAlertScreen()
     log("B. 關閉提醒畫面之後：${if (a03IsLeaked(alertRef)) "還抓得到（洩漏）" else "已回收"}")
-    L05MainQueue.advance(30_000)                                    // 過了 30 秒，佇列裡到時間的訊息會執行
+    // 過了 30 秒，佇列裡到時間的訊息會執行
+    L05MainQueue.advance(30_000)
     log("B. 過了 30 秒：已經關掉的畫面又被提醒了 ${reminded.get()} 次")
     L05MainQueue.messages.clear()
 }
@@ -106,7 +128,8 @@ private object L05Bug {
         val viewTree = L05ViewTree()
 
         override fun onCreate() {
-            L05AppState.currentActivity = this                        // static 欄位抓著 this（Activity）
+            // static 欄位抓著 this（Activity）
+            L05AppState.currentActivity = this
         }
 
         override fun onDestroy() {
@@ -116,23 +139,30 @@ private object L05Bug {
 
     class FakeAlertActivity(private val reminded: AtomicInteger) : L05Screen {
         val viewTree = L05ViewTree()
-        private val handler = L05FakeHandler()                       // 真的是 Handler(Looper.getMainLooper())
+
+        // 真的是 Handler(Looper.getMainLooper())
+        private val handler = L05FakeHandler()
 
         override fun onCreate() {
-            handler.postDelayed({ showReminder() }, 30_000)          // lambda 用到 this：MessageQueue → Message → lambda → Activity
+            // lambda 用到 this：MessageQueue → Message → lambda → Activity
+            handler.postDelayed({ showReminder() }, 30_000)
         }
 
         override fun onDestroy() {
-            // 沒有 removeCallbacks：30 秒內這個訊息一直待在佇列裡，到時間還會對已經關掉的畫面執行
+            // 沒有 removeCallbacks：30 秒內這個訊息一直待在佇列裡，
+            // 到時間還會對已經關掉的畫面執行
         }
 
-        // 真的 App 裡這裡會跳 AlertDialog 或更新 view，對已經銷毀的 Activity 做這些事會丟 WindowManager.BadTokenException 或更新不存在的 view
+        // 真的 App 裡這裡會跳 AlertDialog 或更新 view，對已經銷毀的 Activity
+        // 做這些事會丟 WindowManager.BadTokenException 或更新不存在的 view
         private fun showReminder() {
             reminded.incrementAndGet()
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log, { FakeOrderActivity() }, { reminded -> FakeAlertActivity(reminded) })
+    suspend fun run(log: LabLog) = scenario(log, {
+        FakeOrderActivity()
+    }, { reminded -> FakeAlertActivity(reminded) })
 }
 
 // MARK: - 修正版
@@ -145,22 +175,30 @@ private object L05Fixed {
         }
 
         override fun onDestroy() {
-            // 只清掉自己：下一個畫面的 onCreate 會在這個畫面的 onDestroy 之前執行，不能把人家剛存進去的也清掉
-            if (L05AppState.currentActivity === this) L05AppState.currentActivity = null
+            // 只清掉自己：下一個畫面的 onCreate 會在這個畫面的 onDestroy
+            // 之前執行，不能把人家剛存進去的也清掉
+            if (L05AppState.currentActivity ===
+                this
+            ) {
+                L05AppState.currentActivity = null
+            }
         }
     }
 
     class FakeAlertActivity(private val reminded: AtomicInteger) : L05Screen {
         val viewTree = L05ViewTree()
         private val handler = L05FakeHandler()
-        private val reminder = Runnable { showReminder() }           // 存成欄位：removeCallbacks 才傳得到同一個 Runnable
+
+        // 存成欄位：removeCallbacks 才傳得到同一個 Runnable
+        private val reminder = Runnable { showReminder() }
 
         override fun onCreate() {
             handler.postDelayed(reminder, 30_000)
         }
 
         override fun onDestroy() {
-            handler.removeCallbacks(reminder)                        // 畫面銷毀時，把還沒執行的訊息從佇列拿掉
+            // 畫面銷毀時，把還沒執行的訊息從佇列拿掉
+            handler.removeCallbacks(reminder)
         }
 
         private fun showReminder() {
@@ -168,7 +206,9 @@ private object L05Fixed {
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log, { FakeOrderActivity() }, { reminded -> FakeAlertActivity(reminded) })
+    suspend fun run(log: LabLog) = scenario(log, {
+        FakeOrderActivity()
+    }, { reminded -> FakeAlertActivity(reminded) })
 }
 
 // MARK: - 演練設定

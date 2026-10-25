@@ -1,10 +1,14 @@
-// L07：迴圈裡移除已成交的訂單：電腦上默默漏掉一筆，手機上丟 ConcurrentModificationException（迭代時修改集合）
-// 對應複習站：Kotlin10JavaInterop 第 6 題「HashMap 和 ConcurrentHashMap 差在哪？」
+// L07：迴圈裡移除已成交的訂單：電腦上默默漏掉一筆，手機上丟
+// ConcurrentModificationException（迭代時修改集合）
+// 對應複習站：Kotlin10JavaInterop 第 6 題「HashMap 和 ConcurrentHashMap
+// 差在哪？」
 //
-// 情境：未成交訂單清單有 3 筆：O1（掛單中）、O2（已成交）、O3（已成交）。要把已成交的訂單都從清單移除，應該只剩 O1。
+// 情境：未成交訂單清單有 3 筆：O1（掛單中）、O2（已成交）、O3（已成交）。
+// 要把已成交的訂單都從清單移除，應該只剩 O1。
 //
 // 你要寫：
-//   ① Bug 版（L07Bug）：for (order in orders) { if (order.filled) orders.remove(order) }。
+//   ① Bug 版（L07Bug）：for (order in orders) { if (order.filled) orders.
+// remove(order) }。
 //   ② 修正版（L07Fixed）：orders.removeIf { it.filled }。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin10-java-interop/L07_RemoveWhileIterating.kt
@@ -18,14 +22,21 @@ private class L07Order(val id: String, val filled: Boolean)
 
 /** 演練流程（兩個版本共用）：[cleanUp] 把已成交的訂單從清單移除 */
 private fun scenario(log: LabLog, cleanUp: (MutableList<L07Order>) -> Unit) {
-    val orders = mutableListOf(L07Order("O1", filled = false), L07Order("O2", filled = true), L07Order("O3", filled = true))
+    val orders =
+        mutableListOf(
+            L07Order("O1", filled = false),
+            L07Order("O2", filled = true),
+            L07Order("O3", filled = true),
+        )
     val failure = try {
         cleanUp(orders)
         null
     } catch (e: ConcurrentModificationException) {
         e
     }
-    log("清理時丟出 ConcurrentModificationException：${if (failure != null) "是" else "否"}")
+    log(
+        "清理時丟出 ConcurrentModificationException：${if (failure != null) "是" else "否"}",
+    )
     log("清單剩下：${orders.joinToString("、") { it.id }}")
     log("清單裡還留著已成交的訂單：${orders.count { it.filled }} 筆")
 }
@@ -33,7 +44,8 @@ private fun scenario(log: LabLog, cleanUp: (MutableList<L07Order>) -> Unit) {
 // MARK: - Bug 版
 private object L07Bug {
     fun run(log: LabLog) = scenario(log) { orders ->
-        // TODO ①：for (order in orders) 迴圈裡，已成交的訂單直接 orders.remove(order)（迭代中修改清單）
+        // TODO ①：for (order in orders) 迴圈裡，已成交的訂單直接 orders.
+        // remove(order)（迭代中修改清單）
     }
 }
 
@@ -45,8 +57,9 @@ private object L07Fixed {
 }
 
 // MARK: - 演練設定
-private fun leftover(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("清單裡還留著已成交的訂單：") }?.removePrefix("清單裡還留著已成交的訂單：")?.removeSuffix(" 筆")?.toIntOrNull()
+private fun leftover(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("清單裡還留著已成交的訂單：")
+}?.removePrefix("清單裡還留著已成交的訂單：")?.removeSuffix(" 筆")?.toIntOrNull()
 
 val l07 = Lab(
     id = "L07",
@@ -70,9 +83,13 @@ val l07 = Lab(
     },
     checkBug = { lines ->
         when {
-            "清理時丟出 ConcurrentModificationException：是" in lines -> null     // Android 的 ArrayList 迭代器會丟例外，也是這個 bug
+            // Android 的 ArrayList 迭代器會丟例外，也是這個 bug
+            "清理時丟出 ConcurrentModificationException：是" in lines -> null
+
             "清單剩下：O1、O2、O3" in lines -> "沒有移除任何訂單：要在 for (order in orders) 裡，對已成交的訂單 orders.remove(order)"
+
             (leftover(lines) ?: 0) == 0 -> "已成交的訂單都移除了：Bug 版要在 for 迴圈裡直接 remove"
+
             else -> null
         }
     },

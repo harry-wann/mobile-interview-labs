@@ -31,7 +31,8 @@ class Testing03L02Test {
         val passed = latencies.map { latency ->
             val vm = L02Bug.PriceViewModel(T03LatencyApi(latency))
             vm.load()
-            Thread.sleep(100)                                   // 沒辦法控制時間，只好 sleep 一個「應該夠久」的時間
+            // 沒辦法控制時間，只好 sleep 一個「應該夠久」的時間
+            Thread.sleep(100)
             vm.price.value == 15_000_000
         }
         return Round(passed, (System.nanoTime() - start) / 1_000_000)
@@ -43,11 +44,16 @@ class Testing03L02Test {
             var ok = false
             runTest {
                 val dispatcher = StandardTestDispatcher(testScheduler)
-                Dispatchers.setMain(dispatcher)                 // viewModelScope 用主執行緒的 dispatcher：換成測試用的
+                // viewModelScope 用主執行緒的 dispatcher：換成測試用的
+                Dispatchers.setMain(dispatcher)
                 try {
-                    val vm = L02Fixed.PriceViewModel(T03LatencyApi(latency), dispatcher)
+                    val vm = L02Fixed.PriceViewModel(
+                        T03LatencyApi(latency),
+                        dispatcher,
+                    )
                     vm.load()
-                    advanceUntilIdle()                          // 虛擬時間推進到沒有待執行的工作
+                    // 虛擬時間推進到沒有待執行的工作
+                    advanceUntilIdle()
                     ok = vm.price.value == 15_000_000
                 } finally {
                     Dispatchers.resetMain()
@@ -69,16 +75,36 @@ class Testing03L02Test {
             passCount == latencies.size -> "6 種延遲全部通過：Bug 還沒重現（load() 要寫死 Dispatchers.IO，測試才只能 sleep 等）"
             else -> null
         }
-        t03Report("L02", "Bug 版", bugReason, "6 種延遲 $passCount 種通過（$latencies ms → ${b.passed}），真實花了 ${b.realMs} ms", failures)
+        t03Report(
+            "L02",
+            "Bug 版",
+            bugReason,
+            "6 種延遲 $passCount 種通過（$latencies ms → ${b.passed}），真實花了 ${b.realMs} ms",
+            failures,
+        )
 
         val f = fixedRound()
         val fixedReason = when {
-            f.passed.any { !it } -> "有 ${f.passed.count { !it }} 種延遲失敗（${f.passed}）：load() 要用注入的 io（withContext(io)），不能寫死 Dispatchers.IO"
+            f.passed.any {
+                !it
+            } -> "有 ${f.passed.count {
+                !it
+            }} 種延遲失敗（${f.passed}）：load() 要用注入的 io（withContext(io)），不能寫死 Dispatchers.IO"
+
             f.realMs >= 1_000 -> "修正版還是真的等了 ${f.realMs} ms：load() 要用注入的 io，測試傳入 StandardTestDispatcher"
+
             else -> null
         }
-        t03Report("L02", "修正版", fixedReason, "6 種延遲全部通過，真實花了 ${f.realMs} ms", failures)
+        t03Report(
+            "L02",
+            "修正版",
+            fixedReason,
+            "6 種延遲全部通過，真實花了 ${f.realMs} ms",
+            failures,
+        )
 
-        println("[SELFTEST] Testing03AndroidTesting L02 還差 ${failures.size} 個版本沒通過")
+        println(
+            "[SELFTEST] Testing03AndroidTesting L02 還差 ${failures.size} 個版本沒通過",
+        )
     }
 }

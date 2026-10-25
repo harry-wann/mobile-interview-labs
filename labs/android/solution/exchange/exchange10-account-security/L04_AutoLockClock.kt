@@ -1,29 +1,43 @@
 // L04：把系統時間往回調，就繞過了自動鎖定（自動鎖定要用單調時鐘計時）
-// 對應複習站：Exchange10AccountSecurity 第 4 題「自動鎖定（auto-lock）要做到什麼程度，才不只是『蓋一個畫面』？」
-//        （Exchange04 的演練 6 練過「行情的新鮮度也要用單調時鐘」；這題是安全功能：計時被繞過，就等於沒有鎖。）
+// 對應複習站：Exchange10AccountSecurity 第 4 題「自動鎖定（auto-lock）
+// 要做到什麼程度，才不只是『蓋一個畫面』？」
+//        （Exchange04 的演練 6 練過「行情的新鮮度也要用單調時鐘」；
+// 這題是安全功能：計時被繞過，就等於沒有鎖。）
 //
-// 情境：App 進背景時記下時間，回前景時比較：離開超過 60 秒就要重新驗證（鎖定）。演練用一台假裝置模擬兩種時鐘：
-//        系統時間（System.currentTimeMillis()，使用者可以在設定裡改，網路校時也會讓它跳動）、單調時鐘（只會往前走、不受修改系統時間影響，含睡眠；
-//        Android 用 SystemClock.elapsedRealtime()，iOS 16 以上用 ContinuousClock）。五個情境：
+// 情境：App 進背景時記下時間，回前景時比較：離開超過 60
+// 秒就要重新驗證（鎖定）。演練用一台假裝置模擬兩種時鐘：
+//        系統時間（System.currentTimeMillis()，使用者可以在設定裡改，
+// 網路校時也會讓它跳動）、單調時鐘（只會往前走、不受修改系統時間影響，含睡眠；
+//        Android 用 SystemClock.elapsedRealtime()，iOS 16 以上用
+// ContinuousClock）。五個情境：
 //        A. 離開 30 秒 → 不鎖
 //        B. 離開 5 分鐘 → 鎖
 //        C. 離開 5 分鐘，期間使用者把系統時間往回調 1 小時 → 鎖
 //        D. 離開 10 秒，期間系統時間因網路校時往前跳了 1 天 → 不鎖
-//        E. 沒有進背景的記錄（例如 App 被系統收掉重新啟動）→ 鎖（這個情境已經寫好）
-// Bug 版：用系統時間（wallMs）：進背景時記下 wallMs，回前景時用「現在的 wallMs 減掉記下的值」判斷。
-//        C：系統時間往回調 1 小時，算出來是負的，不會鎖；D：系統時間往前跳 1 天，只離開 10 秒也被鎖。
-// 修正版：用單調時鐘（elapsedMs）：只看「這段時間裝置真的走了多久」，改系統時間也影響不到。
+//        E. 沒有進背景的記錄（例如 App 被系統收掉重新啟動）→
+// 鎖（這個情境已經寫好）
+// Bug 版：用系統時間（wallMs）：進背景時記下 wallMs，回前景時用「現在的 wallMs
+// 減掉記下的值」判斷。
+//        C：系統時間往回調 1 小時，算出來是負的，不會鎖；D：系統時間往前跳 1
+// 天，只離開 10 秒也被鎖。
+// 修正版：用單調時鐘（elapsedMs）：只看「這段時間裝置真的走了多久」，
+// 改系統時間也影響不到。
 package tw.harry.labs.solution.exchange10accountsecurity
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 假裝置：兩種時鐘。系統時間可以被使用者或網路校時改動，單調時鐘只會隨時間往前走。 */
+/**
+ * 假裝置：兩種時鐘。系統時間可以被使用者或網路校時改動，
+ * 單調時鐘只會隨時間往前走。
+ */
 private class L04Device {
-    var wallMs: Long = 1_700_000_000_000L       // 系統時間
+    var wallMs: Long = 1_700_000_000_000L // 系統時間
         private set
-    var elapsedMs: Long = 5_000_000L            // 單調時鐘（含睡眠）
+
+    // 單調時鐘（含睡眠）
+    var elapsedMs: Long = 5_000_000L
         private set
 
     fun pass(ms: Long) {
@@ -48,7 +62,12 @@ private const val MINUTE = 60_000L
 /** 演練流程（兩個版本共用）：五個情境，每個情境各自一台全新的裝置與鎖 */
 private fun scenario(log: LabLog, makeLock: (L04Device) -> L04AutoLock) {
     var wrong = 0
-    fun check(name: String, expected: Boolean, record: Boolean = true, steps: (L04Device) -> Unit) {
+    fun check(
+        name: String,
+        expected: Boolean,
+        record: Boolean = true,
+        steps: (L04Device) -> Unit,
+    ) {
         val device = L04Device()
         val lock = makeLock(device)
         if (record) lock.onBackground()
@@ -83,12 +102,14 @@ private class L04BugAutoLock(private val device: L04Device) : L04AutoLock {
     private var backgroundedAt: Long? = null
 
     override fun onBackground() {
-        backgroundedAt = device.wallMs                      // 用系統時間記錄
+        backgroundedAt = device.wallMs // 用系統時間記錄
     }
 
     override fun shouldLockOnForeground(): Boolean {
-        val start = backgroundedAt ?: return true            // 沒有記錄就當作要鎖
-        return device.wallMs - start >= TIMEOUT_MS            // 系統時間被改過，這個差就不準了
+        // 沒有記錄就當作要鎖
+        val start = backgroundedAt ?: return true
+        // 系統時間被改過，這個差就不準了
+        return device.wallMs - start >= TIMEOUT_MS
     }
 }
 
@@ -101,11 +122,13 @@ private class L04FixedAutoLock(private val device: L04Device) : L04AutoLock {
     private var backgroundedAt: Long? = null
 
     override fun onBackground() {
-        backgroundedAt = device.elapsedMs                   // 用單調時鐘記錄（真實的 App：SystemClock.elapsedRealtime()）
+        // 用單調時鐘記錄（真實的 App：SystemClock.elapsedRealtime()）
+        backgroundedAt = device.elapsedMs
     }
 
     override fun shouldLockOnForeground(): Boolean {
-        val start = backgroundedAt ?: return true            // 沒有記錄就當作要鎖
+        // 沒有記錄就當作要鎖
+        val start = backgroundedAt ?: return true
         return device.elapsedMs - start >= TIMEOUT_MS
     }
 }
@@ -115,8 +138,9 @@ private object L04Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("5 個情境") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("5 個情境")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l04 = Lab(
     id = "L04",
@@ -141,14 +165,29 @@ val l04 = Lab(
     checkBug = { lines ->
         val n = wrongCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log) { device -> … } 執行"
-            "B 離開 5 分鐘：鎖定 ✓" !in lines -> "Bug 版在系統時間沒被改的時候要算對：離開 5 分鐘要鎖定"
-            "C 離開 5 分鐘，系統時間往回調 1 小時：不鎖 ✗（應該鎖定）" !in lines ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log) { device -> … } 執行"
+            }
+
+            "B 離開 5 分鐘：鎖定 ✓" !in lines -> {
+                "Bug 版在系統時間沒被改的時候要算對：離開 5 分鐘要鎖定"
+            }
+
+            "C 離開 5 分鐘，系統時間往回調 1 小時：不鎖 ✗（應該鎖定）" !in lines -> {
                 "Bug 還沒重現：用系統時間算，往回調 1 小時之後「現在減掉進背景的時間」是負的，不會鎖"
-            "D 離開 10 秒，系統時間往前跳 1 天：鎖定 ✗（應該不鎖）" !in lines ->
+            }
+
+            "D 離開 10 秒，系統時間往前跳 1 天：鎖定 ✗（應該不鎖）" !in lines -> {
                 "Bug 還沒重現：用系統時間算，往前跳 1 天之後只離開 10 秒也會被鎖"
-            n != 2 -> "Bug 版應該判斷錯 2 個情境（C 和 D），目前 $n 個"
-            else -> null
+            }
+
+            n != 2 -> {
+                "Bug 版應該判斷錯 2 個情境（C 和 D），目前 $n 個"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

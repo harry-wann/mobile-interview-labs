@@ -1,10 +1,15 @@
 // L03：@Volatile 的計數器還是少算了（volatile 保證可見性，不保證原子性）
-// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）在規範什麼？什麼是可見性？」
+// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）
+// 在規範什麼？什麼是可見性？」
 //
-// 情境：行情 SDK 的 Counter 要統計收到幾筆訊息。4 條執行緒各自呼叫 increment() 100,000 次，預期總共 400,000。
-// Bug 版：@Volatile var count，increment() 裡寫 count++。volatile 讓每次讀寫都看得到最新值，
-//        但 count++ 其實是「讀出、加一、寫回」三步，兩條執行緒可能讀到同一個值，各寫回加一，兩次加一只算了一次。
-// 修正版：改用 AtomicInteger，incrementAndGet()。它用 CAS（compare-and-set）讓「讀、加、寫」成為一個不可分割的操作。
+// 情境：行情 SDK 的 Counter 要統計收到幾筆訊息。4 條執行緒各自呼叫 increment()
+// 100,000 次，預期總共 400,000。
+// Bug 版：@Volatile var count，increment() 裡寫 count++。volatile
+// 讓每次讀寫都看得到最新值，
+//        但 count++ 其實是「讀出、加一、寫回」三步，
+// 兩條執行緒可能讀到同一個值，各寫回加一，兩次加一只算了一次。
+// 修正版：改用 AtomicInteger，incrementAndGet()。它用 CAS（compare-and-set）
+// 讓「讀、加、寫」成為一個不可分割的操作。
 package tw.harry.labs.solution.kotlin10javainterop
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -18,10 +23,19 @@ import tw.harry.labs.kit.Variant
 private const val THREADS = 4
 private const val PER_THREAD = 100_000
 
-/** 演練流程（兩個版本共用）：4 條執行緒各呼叫 increment() 100,000 次，最後讀 [total] */
-private suspend fun scenario(log: LabLog, increment: () -> Unit, total: () -> Int) {
+/**
+ * 演練流程（兩個版本共用）：4 條執行緒各呼叫 increment() 100,000 次，最後讀
+ * [total]
+ */
+private suspend fun scenario(
+    log: LabLog,
+    increment: () -> Unit,
+    total: () -> Int,
+) {
     withContext(Dispatchers.Default) {
-        List(THREADS) { thread { repeat(PER_THREAD) { increment() } } }.forEach { it.join() }
+        List(THREADS) {
+            thread { repeat(PER_THREAD) { increment() } }
+        }.forEach { it.join() }
     }
     log("預期 ${THREADS * PER_THREAD}，實際 ${total()}")
 }
@@ -29,11 +43,13 @@ private suspend fun scenario(log: LabLog, increment: () -> Unit, total: () -> In
 // MARK: - Bug 版
 private object L03Bug {
     class Counter {
+        // volatile：可見，但不是原子的
         @Volatile
-        var count = 0                                       // volatile：可見，但不是原子的
+        var count = 0
 
         fun increment() {
-            count++                                         // 讀出、加一、寫回：三步，中間會被插隊
+            // 讀出、加一、寫回：三步，中間會被插隊
+            count++
         }
     }
 
@@ -49,7 +65,8 @@ private object L03Fixed {
         private val count = AtomicInteger()
 
         fun increment() {
-            count.incrementAndGet()                         // 原子操作：CAS 失敗就重試
+            // 原子操作：CAS 失敗就重試
+            count.incrementAndGet()
         }
 
         fun get(): Int = count.get()
@@ -62,8 +79,9 @@ private object L03Fixed {
 }
 
 // MARK: - 演練設定
-private fun actual(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("預期 ") }?.substringAfter("實際 ")?.toIntOrNull()
+private fun actual(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("預期 ")
+}?.substringAfter("實際 ")?.toIntOrNull()
 
 val l03 = Lab(
     id = "L03",

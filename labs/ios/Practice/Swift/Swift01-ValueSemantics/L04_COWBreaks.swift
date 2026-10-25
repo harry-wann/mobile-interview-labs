@@ -1,12 +1,16 @@
 // L04：透過計算屬性 append，每一次都複製整個陣列（COW 失效）
-// 對應複習站：Swift01ValueSemantics 第 4 題「什麼情況下 COW 會失效，讓程式突然變慢？」
+// 對應複習站：Swift01ValueSemantics 第 4 題「什麼情況下 COW 會失效，
+// 讓程式突然變慢？」
 //
 // 情境：ViewModel 存了 5 萬筆成交價，推播每來一筆就 append 一筆，共 5000 筆。
 //
 // 你要寫：
-//   ① Bug 版：用計算屬性 prices（get 回傳 _prices、set 寫回 _prices）包住陣列，外部透過 vm.prices.append 加資料。
-//   ② 修正版：prices 改成外部只能讀的儲存屬性，另外寫一個 append 方法，直接改原本的陣列。
-// 只改有 TODO 的地方。解答：Solution/Swift/Swift01-ValueSemantics/L04_COWBreaks.swift
+//   ① Bug 版：用計算屬性 prices（get 回傳 _prices、set 寫回 _prices）包住陣列，
+// 外部透過 vm.prices.append 加資料。
+//   ② 修正版：prices 改成外部只能讀的儲存屬性，另外寫一個 append 方法，
+// 直接改原本的陣列。
+// 只改有 TODO 的地方。解答：
+// Solution/Swift/Swift01-ValueSemantics/L04_COWBreaks.swift
 import Foundation
 import LabKit
 
@@ -14,7 +18,9 @@ import LabKit
 private func measureMs(_ work: () -> Void) -> Double {
     let start = DispatchTime.now()
     work()
-    return Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
+    return Double(
+        DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+        / 1_000_000
 }
 
 // MARK: - Bug 版
@@ -22,7 +28,8 @@ private enum L04Bug {
     final class PriceViewModel {
         private var _prices: [Double] = Array(repeating: 100, count: 50_000)
 
-        // TODO ①：把下面這行改成計算屬性：get { _prices }、set { _prices = newValue }
+        // TODO ①：把下面這行改成計算屬性：get { _prices }、set { _prices =
+        // newValue }
         var prices: [Double] = []
     }
 
@@ -32,7 +39,8 @@ private enum L04Bug {
             let vm = PriceViewModel()
             let ms = measureMs {
                 for i in 0..<5_000 {
-                    vm.prices.append(Double(i))   // 透過 prices 加資料
+                    // 透過 prices 加資料
+                    vm.prices.append(Double(i))
                 }
             }
             return (ms, vm.prices.count)
@@ -45,7 +53,8 @@ private enum L04Bug {
 // MARK: - 修正版
 private enum L04Fixed {
     final class PriceViewModel {
-        // TODO ②-1：把 prices 改成「外部只能讀」的儲存屬性（private(set)），初始值是 5 萬筆 100
+        // TODO ②-1：把 prices 改成「外部只能讀」的儲存屬性（private(set)），
+        // 初始值是 5 萬筆 100
         var prices: [Double] = []
 
         func append(_ price: Double) {
@@ -95,12 +104,20 @@ extension Swift01ValueSemantics {
             }
         },
         checkBug: { lines in
-            guard lines.contains("陣列現在有 55000 筆") else { return "陣列應該有 55000 筆：append 要寫進 _prices" }
+            guard lines.contains("陣列現在有 55000 筆") else {
+                return "陣列應該有 55000 筆：append 要寫進 _prices"
+            }
             guard let ms = appendMs(lines) else { return "找不到毫秒數" }
-            return ms >= 5 ? nil : String(format: "只花了 %.2f ms：Bug 還沒重現（要透過計算屬性的 get／set 去 append）", ms)
+            return ms >= 5
+                ? nil
+                : String(
+                    format: "只花了 %.2f ms：Bug 還沒重現（要透過計算屬性的 get／set 去 append）",
+                    ms)
         },
         checkFixed: { lines in
-            guard lines.contains("陣列現在有 55000 筆") else { return "陣列應該有 55000 筆：append 要寫進 prices" }
+            guard lines.contains("陣列現在有 55000 筆") else {
+                return "陣列應該有 55000 筆：append 要寫進 prices"
+            }
             guard let ms = appendMs(lines) else { return "找不到毫秒數" }
             return ms < 5 ? nil : String(format: "花了 %.2f ms，還是太慢：不要經過計算屬性", ms)
         }

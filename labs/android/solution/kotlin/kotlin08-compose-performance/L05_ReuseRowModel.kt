@@ -1,10 +1,16 @@
 // L05：只有 3 檔的價格變了，20 列卻全部重組（沒變的幣種要沿用同一個物件）
-// 對應複習站：Kotlin08ComposePerformance 第 5 題「上百個幣種、每秒更新數十次，整個行情列表怎麼設計才不卡？」
+// 對應複習站：Kotlin08ComposePerformance 第 5 題「上百個幣種、每秒更新數十次，
+// 整個行情列表怎麼設計才不卡？」
 //
-// 情境：行情板有 20 列（TickRow）。資料層輸出 5 份新的清單，每次只有 3 檔的價格真的變了。畫面用的 TickUi 含一個 List（走勢），
-//        所以它是 unstable，strong skipping 用 === 比較。這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的重組。
-// Bug 版：每次輸出都把原始資料重新轉成 TickUi（raws.map { it.toUi() }），20 檔都是新的物件。=== 比較永遠不相等，20 列全部重組。
-// 修正版：記下每個幣種上一次的 TickUi。原始資料沒變的幣種沿用同一個物件，=== 相等，列被跳過；只有 3 列需要重組。
+// 情境：行情板有 20 列（TickRow）。資料層輸出 5 份新的清單，每次只有 3
+// 檔的價格真的變了。畫面用的 TickUi 含一個 List（走勢），
+//        所以它是 unstable，strong skipping 用 === 比較。
+// 這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑
+// Compose 的重組。
+// Bug 版：每次輸出都把原始資料重新轉成 TickUi（raws.map { it.toUi() }），20
+// 檔都是新的物件。=== 比較永遠不相等，20 列全部重組。
+// 修正版：記下每個幣種上一次的 TickUi。原始資料沒變的幣種沿用同一個物件，===
+// 相等，列被跳過；只有 3 列需要重組。
 package tw.harry.labs.solution.kotlin08composeperformance
 
 import androidx.compose.runtime.Composable
@@ -20,18 +26,30 @@ import tw.harry.labs.kit.withHeadlessCompose
 private data class L05Raw(val symbol: String, val price: Long)
 
 /** 畫面用的資料。trend 是 List，所以 TickUi 是 unstable */
-private data class L05TickUi(val symbol: String, val priceText: String, val trend: List<Long>)
+private data class L05TickUi(
+    val symbol: String,
+    val priceText: String,
+    val trend: List<Long>,
+)
 
 private fun L05Raw.toUi() = L05TickUi(symbol, price.toString(), listOf(price))
 
-/** 一列（兩個版本共用）：參數沒變就會被跳過；真的執行時，記下這一列現在顯示什麼 */
+/**
+ * 一列（兩個版本共用）：參數沒變就會被跳過；真的執行時，記下這一列現在顯示什麼
+ */
 @Composable
-private fun L05TickRow(tick: L05TickUi, onCompose: (symbol: String, text: String) -> Unit) {
+private fun L05TickRow(
+    tick: L05TickUi,
+    onCompose: (symbol: String, text: String) -> Unit,
+) {
     SideEffect { onCompose(tick.symbol, tick.priceText) }
 }
 
 @Composable
-private fun L05Board(ticks: List<L05TickUi>, onCompose: (symbol: String, text: String) -> Unit) {
+private fun L05Board(
+    ticks: List<L05TickUi>,
+    onCompose: (symbol: String, text: String) -> Unit,
+) {
     ticks.forEach { tick -> key(tick.symbol) { L05TickRow(tick, onCompose) } }
 }
 
@@ -39,7 +57,10 @@ private fun L05Board(ticks: List<L05TickUi>, onCompose: (symbol: String, text: S
  * 演練流程（兩個版本共用）：20 檔，資料層輸出 5 份新清單；第 r 份有 3 檔的價格加 1（其餘內容一樣，但每次都是新的原始資料物件）。
  * [build] 決定怎麼把原始資料轉成畫面用的清單。
  */
-private suspend fun scenario(log: LabLog, build: (List<L05Raw>) -> List<L05TickUi>) {
+private suspend fun scenario(
+    log: LabLog,
+    build: (List<L05Raw>) -> List<L05TickUi>,
+) {
     var raws = List(20) { L05Raw("COIN${it + 1}_JPY", 100_000L + it) }
     val rowRuns = AtomicInteger()
     val shown = HashMap<String, String>()
@@ -54,7 +75,18 @@ private suspend fun scenario(log: LabLog, build: (List<L05Raw>) -> List<L05TickU
         settle()
         for (round in 0 until 5) {
             val changed = (0 until 3).map { (round * 3 + it) % 20 }.toSet()
-            raws = raws.mapIndexed { i, raw -> raw.copy(price = if (i in changed) raw.price + 1 else raw.price) }
+            raws =
+                raws.mapIndexed { i, raw ->
+                    raw.copy(
+                        price = if (i in
+                            changed
+                        ) {
+                            raw.price + 1
+                        } else {
+                            raw.price
+                        },
+                    )
+                }
             board.value = build(raws)
             settle()
         }
@@ -66,7 +98,8 @@ private suspend fun scenario(log: LabLog, build: (List<L05Raw>) -> List<L05TickU
 
 // MARK: - Bug 版
 private object L05Bug {
-    fun build(raws: List<L05Raw>): List<L05TickUi> = raws.map { it.toUi() }    // 每次 20 檔都是新物件
+    // 每次 20 檔都是新物件
+    fun build(raws: List<L05Raw>): List<L05TickUi> = raws.map { it.toUi() }
 
     suspend fun run(log: LabLog) = scenario(log, ::build)
 }
@@ -74,27 +107,36 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     class BoardBuilder {
-        private val cache = HashMap<String, Pair<L05Raw, L05TickUi>>()      // 每個幣種：上一次的原始資料與 TickUi
+        // 每個幣種：上一次的原始資料與 TickUi
+        private val cache = HashMap<String, Pair<L05Raw, L05TickUi>>()
 
         fun build(raws: List<L05Raw>): List<L05TickUi> = raws.map { raw ->
             val cached = cache[raw.symbol]
             if (cached != null && cached.first == raw) {
-                cached.second                                               // 沒變：沿用同一個物件
+                // 沒變：沿用同一個物件
+                cached.second
             } else {
-                raw.toUi().also { cache[raw.symbol] = raw to it }           // 有變：產生新的 TickUi
+                // 有變：產生新的 TickUi
+                raw.toUi().also { cache[raw.symbol] = raw to it }
             }
         }
     }
 
-    suspend fun run(log: LabLog) = BoardBuilder().let { builder -> scenario(log, builder::build) }
+    suspend fun run(log: LabLog) = BoardBuilder().let { builder ->
+        scenario(log, builder::build)
+    }
 }
 
 // MARK: - 演練設定
 private fun rowRuns(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("20 列、更新 5 次（每次 3 檔價格有變），列的重組共 ") }
-        ?.removePrefix("20 列、更新 5 次（每次 3 檔價格有變），列的重組共 ")?.removeSuffix(" 次")?.toIntOrNull()
+        ?.removePrefix(
+            "20 列、更新 5 次（每次 3 檔價格有變），列的重組共 ",
+        )?.removeSuffix(" 次")?.toIntOrNull()
 
-private fun upToDate(lines: List<String>): Boolean = lines.any { it.endsWith("每一列都是最新價：是") }
+private fun upToDate(lines: List<String>): Boolean = lines.any {
+    it.endsWith("每一列都是最新價：是")
+}
 
 val l05 = Lab(
     id = "L05",

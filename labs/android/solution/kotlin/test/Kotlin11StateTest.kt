@@ -40,7 +40,13 @@ class Kotlin11StateTest {
             val log = LabLog(echo = false)
             runBlocking { l07.run!!(variant, log) }
             val reason = l07.check(variant)!!(log.texts)
-            report("L07", variant.title, reason, log.texts.takeLast(5).joinToString(" / "), failures)
+            report(
+                "L07",
+                variant.title,
+                reason,
+                log.texts.takeLast(5).joinToString(" / "),
+                failures,
+            )
         }
         assertEquals(emptyList<String>(), failures)
     }
@@ -51,20 +57,42 @@ class Kotlin11StateTest {
 
         val bugLog = LabLog(echo = false)
         runBlocking { L08Bug.run(bugLog) }
-        report("L08", "Bug 版", l08.checkBug!!(bugLog.texts), bugLog.texts.last(), failures)
+        report(
+            "L08",
+            "Bug 版",
+            l08.checkBug!!(bugLog.texts),
+            bugLog.texts.last(),
+            failures,
+        )
 
         val fixedLog = LabLog(echo = false)
         runBlocking { L08Fixed.run(fixedLog) }
-        report("L08", "修正版", l08.checkFixed!!(fixedLog.texts), fixedLog.texts.last(), failures)
+        report(
+            "L08",
+            "修正版",
+            l08.checkFixed!!(fixedLog.texts),
+            fixedLog.texts.last(),
+            failures,
+        )
 
         assertEquals(emptyList<String>(), failures)
     }
 
-    private fun report(lab: String, variant: String, reason: String?, detail: String, failures: MutableList<String>) {
+    private fun report(
+        lab: String,
+        variant: String,
+        reason: String?,
+        detail: String,
+        failures: MutableList<String>,
+    ) {
         if (reason == null) {
-            println("[SELFTEST] Kotlin11ComposeState $lab $variant PASS　$detail")
+            println(
+                "[SELFTEST] Kotlin11ComposeState $lab $variant PASS　$detail",
+            )
         } else {
-            println("[SELFTEST] Kotlin11ComposeState $lab $variant FAIL：$reason")
+            println(
+                "[SELFTEST] Kotlin11ComposeState $lab $variant FAIL：$reason",
+            )
             failures += "$lab $variant：$reason"
         }
     }

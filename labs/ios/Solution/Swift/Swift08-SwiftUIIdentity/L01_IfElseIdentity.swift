@@ -1,10 +1,14 @@
 // L01：切換市價／限價，打到一半的數量就消失了（structural identity）
-// 對應複習站：Swift08SwiftUIIdentity 第 1 題「SwiftUI 怎麼判斷『這是不是同一個 view』？為什麼切換畫面後狀態會被重置？」
+// 對應複習站：Swift08SwiftUIIdentity 第 1 題「SwiftUI 怎麼判斷『這是不是同一個
+// view』？為什麼切換畫面後狀態會被重置？」
 //
-// 情境：下單頁有「市價／限價」的切換，兩種模式用同一個下單表單。使用者在數量欄位打了 0.5，一切換，欄位就變回空白。
-// Bug 版：用 if / else 切換，兩個分支各寫一次 OrderForm。兩個分支就算型別一樣，也是兩個不同的 identity，
+// 情境：下單頁有「市價／限價」的切換，兩種模式用同一個下單表單。
+// 使用者在數量欄位打了 0.5，一切換，欄位就變回空白。
+// Bug 版：用 if / else 切換，兩個分支各寫一次 OrderForm。兩個分支就算型別一樣，
+// 也是兩個不同的 identity，
 //        切換時舊的銷毀、新的建立，表單裡的 @StateObject 跟著重新建立。
-// 修正版：只寫一個 OrderForm，用參數表達模式。位置與型別都沒變，是同一個 identity，狀態保留。
+// 修正版：只寫一個 OrderForm，用參數表達模式。位置與型別都沒變，是同一個
+// identity，狀態保留。
 import SwiftUI
 import LabKit
 
@@ -32,10 +36,12 @@ private struct OrderForm: View {
     @StateObject private var model = OrderFormModel()
 
     var body: some View {
-        let _ = SwiftUILabProbe.note("L01 數量欄位", model.quantity.isEmpty ? "（空白）" : model.quantity)
+        let _ = SwiftUILabProbe.note(
+            "L01 數量欄位", model.quantity.isEmpty ? "（空白）" : model.quantity)
         VStack(alignment: .leading) {
             Text("目前模式：\(mode.title)")
-            TextField("數量", text: $model.quantity).textFieldStyle(.roundedBorder)
+            TextField("數量", text: $model.quantity).textFieldStyle(
+                .roundedBorder)
         }
     }
 }
@@ -47,19 +53,24 @@ private final class OrderModeSwitch: ObservableObject {
 
 /// 演練流程（兩個版本共用）：使用者輸入 0.5 → 切換到限價 → 再切換回市價
 @MainActor
-private func scenario(_ log: LabLog, screen: (OrderModeSwitch) -> some View) async {
+private func scenario(
+    _ log: LabLog, screen: (OrderModeSwitch) -> some View
+) async {
     SwiftUILabProbe.reset(); SwiftUILabTally.shared.reset()
     let mode = OrderModeSwitch()
     let stage = SwiftUILabStage(screen(mode))
     await stage.settle()
-    OrderFormModel.latest?.quantity = "0.5"          // 使用者在數量欄位輸入 0.5
+    // 使用者在數量欄位輸入 0.5
+    OrderFormModel.latest?.quantity = "0.5"
     await stage.settle()
     log("使用者輸入後，數量欄位的內容：\(SwiftUILabProbe.value("L01 數量欄位"))")
-    mode.isMarket = false                            // 切換到限價
+    mode.isMarket = false  // 切換到限價
     await stage.settle()
-    mode.isMarket = true                             // 再切換回市價
+    mode.isMarket = true  // 再切換回市價
     await stage.settle()
-    log("切換 2 次後，OrderFormModel 建立了 \(SwiftUILabTally.shared.count("L01 OrderFormModel")) 次")
+    log(
+        "切換 2 次後，OrderFormModel 建立了 \(SwiftUILabTally.shared.count("L01 OrderFormModel")) 次"
+    )
     log("切換 2 次後，數量欄位的內容：\(SwiftUILabProbe.value("L01 數量欄位"))")
     stage.remove()
 }
@@ -92,9 +103,10 @@ private enum L01Bug {
 
         var body: some View {
             if mode.isMarket {
-                OrderForm(mode: .market)             // 分支一
+                OrderForm(mode: .market)  // 分支一
             } else {
-                OrderForm(mode: .limit)              // 分支二：同一個型別，但是另一個 identity
+                // 分支二：同一個型別，但是另一個 identity
+                OrderForm(mode: .limit)
             }
         }
     }
@@ -106,7 +118,8 @@ private enum L01Fixed {
         @ObservedObject var mode: OrderModeSwitch
 
         var body: some View {
-            OrderForm(mode: mode.isMarket ? .market : .limit)   // 只有一個 OrderForm：位置、型別都沒變，狀態保留
+            // 只有一個 OrderForm：位置、型別都沒變，狀態保留
+            OrderForm(mode: mode.isMarket ? .market : .limit)
         }
     }
 }
@@ -134,15 +147,27 @@ extension Swift08SwiftUIIdentity {
         },
         demo: { variant, _ in AnyView(L01Demo(variant: variant)) },
         checkBug: { lines in
-            if !lines.contains("使用者輸入後，數量欄位的內容：0.5") { return "下單表單沒有跑起來：使用者輸入 0.5 後，欄位要顯示 0.5" }
-            if !lines.contains("切換 2 次後，OrderFormModel 建立了 3 次") { return "Bug 還沒重現：兩個分支各寫一個 OrderForm，每次切換都要重新建立（共 3 次）" }
-            if !lines.contains("切換 2 次後，數量欄位的內容：（空白）") { return "Bug 還沒重現：切換後數量欄位要被清空" }
+            if !lines.contains("使用者輸入後，數量欄位的內容：0.5") {
+                return "下單表單沒有跑起來：使用者輸入 0.5 後，欄位要顯示 0.5"
+            }
+            if !lines.contains("切換 2 次後，OrderFormModel 建立了 3 次") {
+                return "Bug 還沒重現：兩個分支各寫一個 OrderForm，每次切換都要重新建立（共 3 次）"
+            }
+            if !lines.contains("切換 2 次後，數量欄位的內容：（空白）") {
+                return "Bug 還沒重現：切換後數量欄位要被清空"
+            }
             return nil
         },
         checkFixed: { lines in
-            if !lines.contains("使用者輸入後，數量欄位的內容：0.5") { return "下單表單沒有跑起來：使用者輸入 0.5 後，欄位要顯示 0.5" }
-            if !lines.contains("切換 2 次後，OrderFormModel 建立了 1 次") { return "OrderFormModel 應該只建立 1 次：不要用兩個分支，改成只寫一個 OrderForm" }
-            if !lines.contains("切換 2 次後，數量欄位的內容：0.5") { return "切換後數量欄位的內容應該還是 0.5" }
+            if !lines.contains("使用者輸入後，數量欄位的內容：0.5") {
+                return "下單表單沒有跑起來：使用者輸入 0.5 後，欄位要顯示 0.5"
+            }
+            if !lines.contains("切換 2 次後，OrderFormModel 建立了 1 次") {
+                return "OrderFormModel 應該只建立 1 次：不要用兩個分支，改成只寫一個 OrderForm"
+            }
+            if !lines.contains("切換 2 次後，數量欄位的內容：0.5") {
+                return "切換後數量欄位的內容應該還是 0.5"
+            }
             return nil
         }
     )

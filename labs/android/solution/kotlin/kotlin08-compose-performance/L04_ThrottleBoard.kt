@@ -1,10 +1,16 @@
-// L04：WebSocket 每來一筆就更新一次畫面，不到一秒更新上百次（資料層降低更新頻率）
-// 對應複習站：Kotlin08ComposePerformance 第 5 題「上百個幣種、每秒更新數十次，整個行情列表怎麼設計才不卡？」
+// L04：WebSocket 每來一筆就更新一次畫面，
+// 不到一秒更新上百次（資料層降低更新頻率）
+// 對應複習站：Kotlin08ComposePerformance 第 5 題「上百個幣種、每秒更新數十次，
+// 整個行情列表怎麼設計才不卡？」
 //
-// 情境：WebSocket 每 5 ms 推一筆行情，共 120 筆，輪流更新 20 個幣種（約 0.7 秒）。畫面每收到一份清單就更新一次，
-//        演練計算「畫面總共更新了幾次」，以及最後一份清單是不是每個幣種都是最新價。
-// Bug 版：每收到一筆訊息，就把整份清單 emit 給畫面。120 筆訊息，畫面更新 120 次。
-// 修正版：在背景依幣種合併，只保留每個幣種最新的一筆；再由固定週期（每 200 ms）輸出一份清單，內容沒變就不往下送。
+// 情境：WebSocket 每 5 ms 推一筆行情，共 120 筆，輪流更新 20 個幣種（約 0.7
+// 秒）。畫面每收到一份清單就更新一次，
+//        演練計算「畫面總共更新了幾次」，
+// 以及最後一份清單是不是每個幣種都是最新價。
+// Bug 版：每收到一筆訊息，就把整份清單 emit 給畫面。120 筆訊息，畫面更新 120
+// 次。
+// 修正版：在背景依幣種合併，只保留每個幣種最新的一筆；再由固定週期（每 200 ms）
+// 輸出一份清單，內容沒變就不往下送。
 //        畫面最多每 200 ms 更新一次，而且每個幣種都是最新價，沒有漏掉。
 package tw.harry.labs.solution.kotlin08composeperformance
 
@@ -38,7 +44,13 @@ private val symbols = List(20) { "COIN${it + 1}_JPY" }
  * 演練流程（兩個版本共用）：WebSocket 每 5 ms 推一筆，共 120 筆，第 i 筆更新第 i % 20 個幣種，價格是 100000 + i。
  * [makeBoard] 決定怎麼把 WebSocket 的訊息變成給畫面的清單。
  */
-private suspend fun scenario(log: LabLog, makeBoard: (socket: Flow<L04Tick>, scope: CoroutineScope) -> Flow<List<L04TickUi>>) {
+private suspend fun scenario(
+    log: LabLog,
+    makeBoard: (
+        socket: Flow<L04Tick>,
+        scope: CoroutineScope,
+    ) -> Flow<List<L04TickUi>>,
+) {
     val socketDone = CompletableDeferred<Unit>()
     val socket = flow {
         repeat(120) { i ->
@@ -50,18 +62,26 @@ private suspend fun scenario(log: LabLog, makeBoard: (socket: Flow<L04Tick>, sco
     var last = emptyList<L04TickUi>()
     coroutineScope {
         val ui = launch {
-            makeBoard(socket, this@coroutineScope).collect {      // 畫面：每收到一份清單就更新一次
+            // 畫面：每收到一份清單就更新一次
+            makeBoard(socket, this@coroutineScope).collect {
                 updates++
                 last = it
             }
         }
-        withTimeoutOrNull(3_000) { socketDone.await() }           // 等 WebSocket 送完（最多等 3 秒）
-        delay(500)                                                // 再多等 500 ms（兩個多輸出週期），讓最後一批送出去
+        // 等 WebSocket 送完（最多等 3 秒）
+        withTimeoutOrNull(3_000) { socketDone.await() }
+        // 再多等 500 ms（兩個多輸出週期），讓最後一批送出去
+        delay(500)
         ui.cancel()
         coroutineContext.cancelChildren()
     }
     // 第 k 個幣種最後一次更新是第 100 + k 筆，價格 100000 + 100 + k
-    val allLatest = last.size == 20 && last.all { it.priceText == (100_100L + symbols.indexOf(it.symbol)).toString() }
+    val allLatest =
+        last.size == 20 &&
+            last.all {
+                it.priceText ==
+                    (100_100L + symbols.indexOf(it.symbol)).toString()
+            }
     log("WebSocket 推了 120 筆，畫面共更新了 $updates 次")
     log("最後一份清單有 ${last.size} 檔，每一檔都是最新價：${if (allLatest) "是" else "否"}")
 }
@@ -73,42 +93,53 @@ private object L04Bug {
             val latest = LinkedHashMap<String, L04TickUi>()
             socket.collect { tick ->
                 latest[tick.symbol] = tick.toUi()
-                emit(latest.values.toList())                // 每收到一筆訊息，就送一份完整的清單給畫面
+                // 每收到一筆訊息，就送一份完整的清單給畫面
+                emit(latest.values.toList())
             }
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { socket, _ -> MarketRepository(socket).board }
+    suspend fun run(log: LabLog) = scenario(log) { socket, _ ->
+        MarketRepository(socket).board
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
     class MarketRepository(socket: Flow<L04Tick>, scope: CoroutineScope) {
-        private val latest = MutableStateFlow<Map<String, L04TickUi>>(emptyMap())
+        private val latest =
+            MutableStateFlow<Map<String, L04TickUi>>(emptyMap())
 
         init {
             scope.launch {
                 socket.collect { tick ->
-                    latest.update { it + (tick.symbol to tick.toUi()) }    // 只保留每個幣種最新的一筆，不通知畫面
+                    // 只保留每個幣種最新的一筆，不通知畫面
+                    latest.update { it + (tick.symbol to tick.toUi()) }
                 }
             }
         }
 
         val board: Flow<List<L04TickUi>> = flow {
             while (true) {
-                emit(latest.value.values.toList())          // 固定週期輸出一份清單
+                // 固定週期輸出一份清單
+                emit(latest.value.values.toList())
                 delay(200)
             }
-        }.distinctUntilChanged()                            // 內容完全沒變就不往下送
+            // 內容完全沒變就不往下送
+        }.distinctUntilChanged()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { socket, scope -> MarketRepository(socket, scope).board }
+    suspend fun run(log: LabLog) = scenario(log) { socket, scope ->
+        MarketRepository(socket, scope).board
+    }
 }
 
 // MARK: - 演練設定
 private fun updates(lines: List<String>): Int? =
     lines.firstOrNull { it.startsWith("WebSocket 推了 120 筆，畫面共更新了 ") }
-        ?.removePrefix("WebSocket 推了 120 筆，畫面共更新了 ")?.removeSuffix(" 次")?.toIntOrNull()
+        ?.removePrefix(
+            "WebSocket 推了 120 筆，畫面共更新了 ",
+        )?.removeSuffix(" 次")?.toIntOrNull()
 
 private fun allLatest(lines: List<String>): Boolean =
     lines.any { it.endsWith("每一檔都是最新價：是") }
@@ -144,8 +175,13 @@ val l04 = Lab(
         val n = updates(lines) ?: 0
         when {
             n == 0 -> "畫面沒有收到任何清單：board 要每 200 ms emit 一次 latest.value.values.toList()"
+
             n > 30 -> "畫面更新了 $n 次，太頻繁：改成固定週期（delay(200)）輸出，不要每筆訊息都送"
-            !allLatest(lines) -> "最後一份清單不是每一檔都是最新價：socket 的每一筆都要合併進 latest（update { it + (symbol to ui) }）"
+
+            !allLatest(
+                lines,
+            ) -> "最後一份清單不是每一檔都是最新價：socket 的每一筆都要合併進 latest（update { it + (symbol to ui) }）"
+
             else -> null
         }
     },

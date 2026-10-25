@@ -1,18 +1,27 @@
-// L05：從交易紀錄複製到長得一模一樣的假地址，系統卻當成已儲存的地址放行（地址要完整比對，新地址要冷卻）
-// 對應複習站：Advanced08Security 第 7 題「『出金到新地址』的安全流程怎麼設計？」（address poisoning）
+// L05：從交易紀錄複製到長得一模一樣的假地址，
+// 系統卻當成已儲存的地址放行（地址要完整比對，新地址要冷卻）
+// 對應複習站：Advanced08Security 第 7 題「『出金到新地址』
+// 的安全流程怎麼設計？」（address poisoning）
 //
-// 情境：address poisoning（地址投毒）：攻擊者先對你的錢包送一筆很小的金額，讓一個「開頭和結尾幾碼都和你常用地址一樣」的假地址出現在交易紀錄裡，
-//       等你下次從紀錄複製。已儲存（白名單）的地址可以立刻出金；新地址要先冷卻 24 小時才能出金，讓使用者有時間發現、取消。
-//       這是防禦演練：地址都是編出來的假資料，演練裡只有「判斷這個地址是不是已儲存」的邏輯。
-// Bug 版：判斷「是不是已儲存的地址」時，只比對開頭 6 碼和結尾 4 碼（就像使用者用眼睛核對的方式）。
+// 情境：address poisoning（地址投毒）：攻擊者先對你的錢包送一筆很小的金額，
+// 讓一個「開頭和結尾幾碼都和你常用地址一樣」的假地址出現在交易紀錄裡，
+//       等你下次從紀錄複製。已儲存（白名單）的地址可以立刻出金；新地址要先冷卻
+// 24 小時才能出金，讓使用者有時間發現、取消。
+//       這是防禦演練：地址都是編出來的假資料，
+// 演練裡只有「判斷這個地址是不是已儲存」的邏輯。
+// Bug 版：判斷「是不是已儲存的地址」時，只比對開頭 6 碼和結尾 4
+// 碼（就像使用者用眼睛核對的方式）。
 //        假地址通過比對，被當成已儲存的地址，沒有冷卻就放行，資金送給攻擊者。
-// 修正版：完整比對整個地址（忽略英文字母大小寫，因為大小寫只是校驗用的格式）。假地址是新地址，要冷卻 24 小時。
+// 修正版：完整比對整個地址（忽略英文字母大小寫，因為大小寫只是校驗用的格式）。
+// 假地址是新地址，要冷卻 24 小時。
 import Foundation
 import LabKit
 
 private let savedAddress = "0x7a3F9c2E81d4B6a05C3e9F1b2D8a4E6c7B9d1A2F"
 /// 開頭 6 碼和結尾 4 碼都和 savedAddress 一樣，中間不同
-private let lookAlike = String(savedAddress.prefix(6)) + String(repeating: "0", count: 32) + String(savedAddress.suffix(4))
+private let lookAlike =
+    String(savedAddress.prefix(6)) + String(repeating: "0", count: 32)
+    + String(savedAddress.suffix(4))
 private let cooldown: TimeInterval = 24 * 3600
 
 /// 演練流程（兩個版本共用）：isSaved(地址) 判斷是不是已儲存的地址
@@ -21,7 +30,8 @@ private func scenario(_ log: LabLog, isSaved: (String) -> Bool) {
     func decision(_ address: String, addedHoursAgo: Double?) -> String {
         if isSaved(address) { return "放行（已儲存的地址）" }
         guard let hours = addedHoursAgo else { return "拒絕（新地址，先加入並冷卻 24 小時）" }
-        return hours * 3600 >= cooldown ? "放行（新地址，冷卻已滿）" : "拒絕（新地址冷卻中，還要等 \(Int(24 - hours)) 小時）"
+        return hours * 3600 >= cooldown
+            ? "放行（新地址，冷卻已滿）" : "拒絕（新地址冷卻中，還要等 \(Int(24 - hours)) 小時）"
     }
 
     log("出金到已儲存的地址：\(decision(savedAddress, addedHoursAgo: nil))")
@@ -33,7 +43,9 @@ private func scenario(_ log: LabLog, isSaved: (String) -> Bool) {
 // MARK: - Bug 版
 private enum L05Bug {
     static func isSaved(_ address: String) -> Bool {
-        address.prefix(6) == savedAddress.prefix(6) && address.suffix(4) == savedAddress.suffix(4)   // 只核對頭尾
+        // 只核對頭尾
+        address.prefix(6) == savedAddress.prefix(6)
+            && address.suffix(4) == savedAddress.suffix(4)
     }
 
     static func run(_ log: LabLog) async {
@@ -44,7 +56,8 @@ private enum L05Bug {
 // MARK: - 修正版
 private enum L05Fixed {
     static func isSaved(_ address: String) -> Bool {
-        address.lowercased() == savedAddress.lowercased()       // 完整比對整個地址
+        // 完整比對整個地址
+        address.lowercased() == savedAddress.lowercased()
     }
 
     static func run(_ log: LabLog) async {
@@ -66,7 +79,8 @@ extension Advanced08Security {
             "進階：完整的流程還要有分段顯示地址讓使用者核對、生物辨識加 2FA、通知與稽核紀錄（第 7 題）。",
         ],
         expectBug: "「出金到從交易紀錄複製的假地址（頭尾相同）：放行（已儲存的地址）」，沒有冷卻。",
-        expectFixed: "假地址：「拒絕（新地址，先加入並冷卻 24 小時）」；加入 1 小時後「拒絕（新地址冷卻中，還要等 23 小時）」；滿 25 小時才「放行（新地址，冷卻已滿）」。",
+        expectFixed:
+            "假地址：「拒絕（新地址，先加入並冷卻 24 小時）」；加入 1 小時後「拒絕（新地址冷卻中，還要等 23 小時）」；滿 25 小時才「放行（新地址，冷卻已滿）」。",
         run: { variant, log in
             switch variant {
             case .bug: await L05Bug.run(log)
@@ -74,14 +88,24 @@ extension Advanced08Security {
             }
         },
         checkBug: { lines in
-            guard lines.contains("出金到已儲存的地址：放行（已儲存的地址）") else { return "已儲存的地址應該被放行：isSaved 要認得 savedAddress 本身" }
-            if !lines.contains("出金到從交易紀錄複製的假地址（頭尾相同）：放行（已儲存的地址）") { return "Bug 還沒重現：只比對開頭 6 碼和結尾 4 碼，假地址也會通過" }
+            guard lines.contains("出金到已儲存的地址：放行（已儲存的地址）") else {
+                return "已儲存的地址應該被放行：isSaved 要認得 savedAddress 本身"
+            }
+            if !lines.contains("出金到從交易紀錄複製的假地址（頭尾相同）：放行（已儲存的地址）") {
+                return "Bug 還沒重現：只比對開頭 6 碼和結尾 4 碼，假地址也會通過"
+            }
             return nil
         },
         checkFixed: { lines in
-            guard lines.contains("出金到已儲存的地址：放行（已儲存的地址）") else { return "已儲存的地址應該被放行：isSaved 要認得 savedAddress 本身" }
-            if !lines.contains("出金到從交易紀錄複製的假地址（頭尾相同）：拒絕（新地址，先加入並冷卻 24 小時）") { return "假地址應該被當成新地址：isSaved 要完整比對整個地址" }
-            if !lines.contains("加入滿 25 小時，再出金：放行（新地址，冷卻已滿）") { return "新地址冷卻滿 24 小時後應該放行" }
+            guard lines.contains("出金到已儲存的地址：放行（已儲存的地址）") else {
+                return "已儲存的地址應該被放行：isSaved 要認得 savedAddress 本身"
+            }
+            if !lines.contains("出金到從交易紀錄複製的假地址（頭尾相同）：拒絕（新地址，先加入並冷卻 24 小時）") {
+                return "假地址應該被當成新地址：isSaved 要完整比對整個地址"
+            }
+            if !lines.contains("加入滿 25 小時，再出金：放行（新地址，冷卻已滿）") {
+                return "新地址冷卻滿 24 小時後應該放行"
+            }
             return nil
         }
     )

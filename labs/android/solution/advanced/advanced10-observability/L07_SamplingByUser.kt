@@ -1,13 +1,22 @@
-// L07：抽樣之後，漏斗的轉換率從 60% 變成 10%，error 事件也只剩一成（抽樣要以使用者為單位，error 一律送）
-// 對應複習站：Advanced10Observability 第 5 題「analytics 事件怎麼設計，才能算出漏斗又不洩漏資料？」（遠端 log 要有取樣與預算，見第 1 題）
+// L07：抽樣之後，漏斗的轉換率從 60% 變成 10%，error
+// 事件也只剩一成（抽樣要以使用者為單位，error 一律送）
+// 對應複習站：Advanced10Observability 第 5 題「analytics 事件怎麼設計，
+// 才能算出漏斗又不洩漏資料？」（遠端 log 要有取樣與預算，見第 1 題）
 //
-// 情境：為了省流量與費用，App 對事件抽樣，只送 10%。演練有 2000 位使用者，每位都有 order_form_viewed；其中 60% 有 order_submitted、
-//       50% 有 order_acked、40% 有 order_filled；另有 40 位使用者遇到 1 次 error 事件。分析端要算：
-//       「有 order_form_viewed 紀錄的使用者，有多少比例也有 order_submitted 紀錄」，真實值是 60%。
-// Bug 版：每個事件各自擲一次骰子（隨機數小於 10% 才送）。一位使用者的各個事件被分開抽，大部分使用者只剩下其中一兩個事件，
-//        分析端算出來的轉換率只剩約 10%；error 事件也只收到約一成，真正的問題被漏掉。
-// 修正版：以使用者為單位抽樣：用 userId 算出固定的分桶（0 到 99），桶號小於 10 的使用者，所有事件都送；其他使用者都不送。
-//        error 事件不抽樣，一律送。轉換率接近真實的 60%（使用者變少了，但每位使用者的漏斗是完整的）。
+// 情境：為了省流量與費用，App 對事件抽樣，只送 10%。演練有 2000 位使用者，
+// 每位都有 order_form_viewed；其中 60% 有 order_submitted、
+//       50% 有 order_acked、40% 有 order_filled；另有 40 位使用者遇到 1 次
+// error 事件。分析端要算：
+//       「有 order_form_viewed 紀錄的使用者，有多少比例也有 order_submitted
+// 紀錄」，真實值是 60%。
+// Bug 版：每個事件各自擲一次骰子（隨機數小於 10% 才送）。
+// 一位使用者的各個事件被分開抽，大部分使用者只剩下其中一兩個事件，
+//        分析端算出來的轉換率只剩約 10%；error 事件也只收到約一成，
+// 真正的問題被漏掉。
+// 修正版：以使用者為單位抽樣：用 userId 算出固定的分桶（0 到 99），桶號小於 10
+// 的使用者，所有事件都送；其他使用者都不送。
+//        error 事件不抽樣，一律送。轉換率接近真實的 60%（使用者變少了，
+// 但每位使用者的漏斗是完整的）。
 package tw.harry.labs.solution.advanced10observability
 
 import java.util.Random
@@ -36,22 +45,39 @@ private val allEvents: List<L07Event> = buildList {
 /** 演練流程（兩個版本共用）：makeSampler 回傳「這個事件要不要送」 */
 private fun scenario(log: LabLog, makeSampler: () -> (L07Event) -> Boolean) {
     val shouldSend = makeSampler()
-    val received = allEvents.filter(shouldSend)                 // 分析端收到的事件
+    // 分析端收到的事件
+    val received = allEvents.filter(shouldSend)
 
-    val viewedUsers = received.filter { it.name == "order_form_viewed" }.map { it.userId }.toSet()
-    val submittedUsers = received.filter { it.name == "order_submitted" }.map { it.userId }.toSet()
+    val viewedUsers = received.filter {
+        it.name == "order_form_viewed"
+    }.map { it.userId }.toSet()
+    val submittedUsers = received.filter {
+        it.name == "order_submitted"
+    }.map { it.userId }.toSet()
     val both = viewedUsers.intersect(submittedUsers).size
-    val percent = if (viewedUsers.isEmpty()) 0 else both * 100 / viewedUsers.size
+    val percent = if (viewedUsers.isEmpty()) {
+        0
+    } else {
+        both * 100 /
+            viewedUsers.size
+    }
     log("收到 ${received.size} 筆事件（全部 ${allEvents.size} 筆）")
-    log("有 order_form_viewed 紀錄的使用者 ${viewedUsers.size} 位，其中也有 order_submitted 紀錄的 $both 位：轉換率 $percent%（真實是 60%）")
-    log("error 事件：收到 ${received.count { it.isError }} 筆（實際 ${allEvents.count { it.isError }} 筆）")
+    log(
+        "有 order_form_viewed 紀錄的使用者 ${viewedUsers.size} 位，其中也有 order_submitted 紀錄的 $both 位：轉換率 $percent%（真實是 60%）",
+    )
+    log(
+        "error 事件：收到 ${received.count {
+            it.isError
+        }} 筆（實際 ${allEvents.count { it.isError }} 筆）",
+    )
 }
 
 // MARK: - Bug 版
 private object L07Bug {
     fun makeSampler(): (L07Event) -> Boolean {
         val random = Random(2026)
-        return { random.nextInt(100) < SAMPLE_PERCENT }         // 每個事件各擲一次骰子
+        // 每個事件各擲一次骰子
+        return { random.nextInt(100) < SAMPLE_PERCENT }
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::makeSampler)
@@ -63,23 +89,28 @@ private object L07Fixed {
     fun bucket(userId: String): Int {
         var hash = 2_166_136_261L
         for (byte in "sample:$userId".toByteArray()) {
-            hash = ((hash xor (byte.toLong() and 0xFF)) * 16_777_619L) and 0xFFFFFFFFL
+            hash =
+                ((hash xor (byte.toLong() and 0xFF)) * 16_777_619L) and
+                0xFFFFFFFFL
         }
         return (hash % 100).toInt()
     }
 
-    fun makeSampler(): (L07Event) -> Boolean =
-        { event -> event.isError || bucket(event.userId) < SAMPLE_PERCENT }   // error 一律送；其他以使用者為單位
+    fun makeSampler(): (L07Event) -> Boolean = // error 一律送；其他以使用者為單位
+        { event -> event.isError || bucket(event.userId) < SAMPLE_PERCENT }
 
     suspend fun run(log: LabLog) = scenario(log, ::makeSampler)
 }
 
 // MARK: - 演練設定
-private fun receivedCount(lines: List<String>): Int =
-    lines.firstOrNull { it.startsWith("收到 ") }?.split(" ")?.getOrNull(1)?.toIntOrNull() ?: 0
+private fun receivedCount(lines: List<String>): Int = lines.firstOrNull {
+    it.startsWith("收到 ")
+}?.split(" ")?.getOrNull(1)?.toIntOrNull()
+    ?: 0
 
-private fun conversionPercent(lines: List<String>): Int? =
-    lines.firstOrNull { "轉換率" in it }?.substringAfter("轉換率 ")?.substringBefore("%")?.toIntOrNull()
+private fun conversionPercent(lines: List<String>): Int? = lines.firstOrNull {
+    "轉換率" in it
+}?.substringAfter("轉換率 ")?.substringBefore("%")?.toIntOrNull()
 
 val l07 = Lab(
     id = "L07",
@@ -105,8 +136,13 @@ val l07 = Lab(
         val percent = conversionPercent(lines)
         when {
             percent == null -> "演練沒有跑完：要用 scenario 執行"
-            receivedCount(lines) !in 300..800 -> "Bug 版應該送出約 10% 的事件（約 500 筆）：每個事件各擲一次骰子，隨機數小於 SAMPLE_PERCENT 才送"
+
+            receivedCount(
+                lines,
+            ) !in 300..800 -> "Bug 版應該送出約 10% 的事件（約 500 筆）：每個事件各擲一次骰子，隨機數小於 SAMPLE_PERCENT 才送"
+
             percent > 25 -> "Bug 還沒重現：每個事件各擲一次骰子（10% 才送），轉換率應該只剩約 10%，目前 $percent%"
+
             else -> null
         }
     },
@@ -114,8 +150,13 @@ val l07 = Lab(
         val percent = conversionPercent(lines)
         when {
             percent == null -> "演練沒有跑完：要用 scenario 執行"
+
             percent !in 45..75 -> "轉換率應該接近 60%（以使用者為單位抽樣），目前 $percent%"
-            lines.none { it.startsWith("error 事件：收到 40 筆") } -> "error 事件應該一律送出，要收到全部 40 筆"
+
+            lines.none {
+                it.startsWith("error 事件：收到 40 筆")
+            } -> "error 事件應該一律送出，要收到全部 40 筆"
+
             else -> null
         }
     },

@@ -30,7 +30,9 @@ private func scenario(_ log: LabLog, screen: some View) async {
     let start = DispatchTime.now()
     let stage = SwiftUILabStage(screen)
     await stage.settle()
-    let ms = Int((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+    let ms = Int(
+        (DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+            / 1_000_000)
     log("成交紀錄一共 500 筆，畫面打開後建立了 \(BodyCount.shared.value("L05 成交紀錄列")) 列")
     log("從打開到畫面穩定花了約 \(ms) ms（含 settle 的等待，只供參考）")
     stage.remove()
@@ -59,7 +61,8 @@ private enum L05Bug {
     struct Screen: View {
         var body: some View {
             ScrollView {
-                // TODO ①：現在用的是 Lazy 容器，不會有 bug。Bug 版要改成「一次把所有子 view 都建立出來」的普通垂直容器
+                // TODO ①：現在用的是 Lazy 容器，不會有 bug。Bug
+                // 版要改成「一次把所有子 view 都建立出來」的普通垂直容器
                 LazyVStack {
                     ForEach(0..<500, id: \.self) { TradeRow(id: $0) }
                 }
@@ -73,7 +76,8 @@ private enum L05Fixed {
     struct Screen: View {
         var body: some View {
             ScrollView {
-                // TODO ②：現在是普通的垂直容器（Bug 的寫法）。改成只建立「現在需要顯示的」那幾列的 Lazy 容器
+                // TODO ②：現在是普通的垂直容器（Bug 的寫法）。
+                // 改成只建立「現在需要顯示的」那幾列的 Lazy 容器
                 VStack {
                     ForEach(0..<500, id: \.self) { TradeRow(id: $0) }
                 }
@@ -106,11 +110,18 @@ extension Swift08SwiftUIIdentity {
         },
         demo: { variant, _ in AnyView(L05Demo(variant: variant)) },
         checkBug: { lines in
-            lines.contains("成交紀錄一共 500 筆，畫面打開後建立了 500 列") ? nil : "Bug 還沒重現：用普通的 VStack，500 列都要一次建立"
+            lines.contains("成交紀錄一共 500 筆，畫面打開後建立了 500 列")
+                ? nil : "Bug 還沒重現：用普通的 VStack，500 列都要一次建立"
         },
         checkFixed: { lines in
-            guard let line = lines.first(where: { $0.hasPrefix("成交紀錄一共 500 筆，畫面打開後建立了 ") }),
-                  let n = Int(line.dropFirst("成交紀錄一共 500 筆，畫面打開後建立了 ".count).prefix(while: \.isNumber)) else { return "還沒有建立列數" }
+            guard
+                let line = lines.first(where: {
+                    $0.hasPrefix("成交紀錄一共 500 筆，畫面打開後建立了 ")
+                }),
+                let n = Int(
+                    line.dropFirst("成交紀錄一共 500 筆，畫面打開後建立了 ".count).prefix(
+                        while: \.isNumber))
+            else { return "還沒有建立列數" }
             if n == 0 { return "畫面沒有畫出任何一列：ScrollView 裡要放 ForEach 的 500 列" }
             if n > 100 { return "建立了 \(n) 列，太多了：換成只建立畫面附近的容器（Lazy）" }
             return nil

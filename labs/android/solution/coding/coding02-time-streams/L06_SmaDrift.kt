@@ -1,10 +1,16 @@
-// L06：一筆壞資料進來又離開視窗之後，移動平均永遠差了好幾円（累加的總和留下浮點誤差）
-// 對應複習站：Coding02TimeStreams 第 5 題「移動平均怎麼做到每加一筆都很快？」（延伸：浮點數誤差）
+// L06：一筆壞資料進來又離開視窗之後，
+// 移動平均永遠差了好幾円（累加的總和留下浮點誤差）
+// 對應複習站：Coding02TimeStreams 第 5 題「移動平均怎麼做到每加一筆都很快？」
+// （延伸：浮點數誤差）
 //
-// 情境：5 期移動平均，價格約 1500 萬円。第 11 筆資料來源送來一筆壞資料（價格 1e18），第 16 筆之後它已經離開視窗。
-//       Double 只有約 16 位有效數字：總和裡有 1e18 時，一千五百萬那部分的小數位被吃掉，之後減掉 1e18 也補不回來。
-// Bug 版：一直加加減減同一個總和（上一題修正版的寫法）。壞資料離開視窗之後，總和裡留著當時被吃掉的誤差，平均永遠偏掉好幾円。
-// 修正版：每加滿一輪（period 筆）就把緩衝區重新加總一次，丟掉累積的誤差。壞資料離開視窗後的下一次重新加總，平均就恢復正確。
+// 情境：5 期移動平均，價格約 1500 萬円。第 11 筆資料來源送來一筆壞資料（價格
+// 1e18），第 16 筆之後它已經離開視窗。
+//       Double 只有約 16 位有效數字：總和裡有 1e18 時，
+// 一千五百萬那部分的小數位被吃掉，之後減掉 1e18 也補不回來。
+// Bug 版：一直加加減減同一個總和（上一題修正版的寫法）。壞資料離開視窗之後，
+// 總和裡留著當時被吃掉的誤差，平均永遠偏掉好幾円。
+// 修正版：每加滿一輪（period 筆）就把緩衝區重新加總一次，丟掉累積的誤差。
+// 壞資料離開視窗後的下一次重新加總，平均就恢復正確。
 package tw.harry.labs.solution.coding02timestreams
 
 import java.util.Locale
@@ -16,8 +22,10 @@ import tw.harry.labs.kit.Variant
 private const val PERIOD = 5
 
 private fun makePrices(): List<Double> {
-    val prices = (0 until 40).map { 15_000_000 + (it % 7) * 10 + 0.25 }.toMutableList()
-    prices[10] = 1e18                                            // 壞資料
+    val prices = (0 until 40).map {
+        15_000_000 + (it % 7) * 10 + 0.25
+    }.toMutableList()
+    prices[10] = 1e18 // 壞資料
     return prices
 }
 
@@ -26,9 +34,13 @@ private interface L06Sma {
     fun add(price: Double): Double?
 }
 
-private fun format(value: Double?): String = value?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "nil"
+private fun format(value: Double?): String =
+    value?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "nil"
 
-/** 演練流程（兩個版本共用）：40 筆價格（第 11 筆是壞資料）一筆一筆加，最後和直接加總的正確值比較 */
+/**
+ * 演練流程（兩個版本共用）：40 筆價格（第 11 筆是壞資料）一筆一筆加，
+ * 最後和直接加總的正確值比較
+ */
 private fun scenario(log: LabLog, make: (Int) -> L06Sma) {
     val prices = makePrices()
     val sma = make(PERIOD)
@@ -56,7 +68,8 @@ private object L06Bug {
                 count++
             }
             buffer[index] = price
-            sum += price                                         // 一直在同一個總和上加加減減，誤差只會留著
+            // 一直在同一個總和上加加減減，誤差只會留著
+            sum += price
             index = (index + 1) % period
             return if (count == period) sum / period else null
         }
@@ -85,7 +98,8 @@ private object L06Fixed {
             index = (index + 1) % period
             added++
             if (added % period == 0) {
-                sum = buffer.take(count).sum()                   // 每滿一輪，從緩衝區重新加總，丟掉累積的誤差
+                // 每滿一輪，從緩衝區重新加總，丟掉累積的誤差
+                sum = buffer.take(count).sum()
             }
             return if (count == period) sum / period else null
         }
@@ -116,20 +130,40 @@ val l06 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("誤差") } -> "演練沒有跑完：要用 scenario(log, make) 執行"
-            lines.any { it.startsWith("最後一筆的移動平均 nil") } -> "add 還沒寫：緩衝區滿了要回傳最近 5 筆的平均"
-            lines.none { it.startsWith("誤差") && it.endsWith("超過 1 円：是") } ->
+            lines.none { it.startsWith("誤差") } -> {
+                "演練沒有跑完：要用 scenario(log, make) 執行"
+            }
+
+            lines.any { it.startsWith("最後一筆的移動平均 nil") } -> {
+                "add 還沒寫：緩衝區滿了要回傳最近 5 筆的平均"
+            }
+
+            lines.none { it.startsWith("誤差") && it.endsWith("超過 1 円：是") } -> {
                 "Bug 還沒重現：要在同一個總和上一直加、減，不能重新加總，壞資料留下的誤差才會一直在"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("誤差") } -> "演練沒有跑完：要用 scenario(log, make) 執行"
-            lines.any { it.startsWith("最後一筆的移動平均 nil") } -> "add 還沒寫：緩衝區滿了要回傳最近 5 筆的平均"
-            lines.none { it.startsWith("誤差") && it.endsWith("超過 1 円：否") } ->
+            lines.none { it.startsWith("誤差") } -> {
+                "演練沒有跑完：要用 scenario(log, make) 執行"
+            }
+
+            lines.any { it.startsWith("最後一筆的移動平均 nil") } -> {
+                "add 還沒寫：緩衝區滿了要回傳最近 5 筆的平均"
+            }
+
+            lines.none { it.startsWith("誤差") && it.endsWith("超過 1 円：否") } -> {
                 "誤差還在：每加滿 period 筆，要用 buffer.take(count).sum() 重新加總 sum"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

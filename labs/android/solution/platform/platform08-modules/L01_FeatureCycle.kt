@@ -1,13 +1,21 @@
 // L01：測下單頁，卻被迫準備資產頁（Feature 之間不能互相依賴）
-// 對應複習站：Platform08Modules 第 1 題「為什麼要模組化？模組之間的依賴方向要怎麼規劃？」
+// 對應複習站：Platform08Modules 第 1
+// 題「為什麼要模組化？模組之間的依賴方向要怎麼規劃？」
 //
-// 情境：交易所 App 有「下單」和「資產」兩個功能模組。下單成功後要跳到資產頁；資產頁的「入金後去下單」又要跳回下單頁。
-//        演練單獨測試下單頁（onOrderPlaced），看資產頁被牽連多少：資產頁的 API 被呼叫幾次、資產頁的物件被建立幾個。
-// Bug 版：OrderViewModel 直接建立 WalletViewModel（另一個功能的具體類別），WalletViewModel 又直接持有 OrderViewModel。
-//        兩個功能互相依賴：測試下單頁必須準備資產頁需要的 API，onOrderPlaced 真的建立了資產頁、去打了資產 API，
-//        在 Gradle 裡就是 :feature:order 與 :feature:wallet 互相 project 依賴，形成循環，誰也無法單獨建置。
-// 修正版：Feature 只依賴 Core 定義的介面（WalletNavigator、OrderNavigator），不知道對方存在。真正的跳轉由 App 層
-//        （Composition Root）實作並注入。測試下單頁只要給一個假的 WalletNavigator。
+// 情境：交易所 App 有「下單」和「資產」兩個功能模組。下單成功後要跳到資產頁；
+// 資產頁的「入金後去下單」又要跳回下單頁。
+//        演練單獨測試下單頁（onOrderPlaced），看資產頁被牽連多少：資產頁的 API
+// 被呼叫幾次、資產頁的物件被建立幾個。
+// Bug 版：OrderViewModel 直接建立 WalletViewModel（另一個功能的具體類別），
+// WalletViewModel 又直接持有 OrderViewModel。
+//        兩個功能互相依賴：測試下單頁必須準備資產頁需要的 API，onOrderPlaced
+// 真的建立了資產頁、去打了資產 API，
+//        在 Gradle 裡就是 feature:order 與 feature:wallet 互相 project 依賴，
+// 形成循環，誰也無法單獨建置。
+// 修正版：Feature 只依賴 Core 定義的介面（WalletNavigator、OrderNavigator），
+// 不知道對方存在。真正的跳轉由 App 層
+//        （Composition Root）實作並注入。測試下單頁只要給一個假的
+// WalletNavigator。
 package tw.harry.labs.solution.platform08modules
 
 import tw.harry.labs.kit.Lab
@@ -25,19 +33,28 @@ private class WalletApi {
 private object L01Bug {
     /** 下單功能：直接建立、直接持有資產功能的具體類別 */
     class OrderViewModel(private val walletApi: WalletApi) {
-        private val wallet by lazy { WalletViewModel(this, walletApi) }   // 直接建立另一個功能的具體類別，還把自己傳進去
-        fun onOrderPlaced() = wallet.open()                               // 下單成功：打開資產頁
+        // 直接建立另一個功能的具體類別，還把自己傳進去
+        private val wallet by lazy { WalletViewModel(this, walletApi) }
+
+        // 下單成功：打開資產頁
+        fun onOrderPlaced() = wallet.open()
     }
 
     /** 資產功能：入金後要回到下單頁，所以直接持有 OrderViewModel */
-    class WalletViewModel(val order: OrderViewModel, private val api: WalletApi) {
+    class WalletViewModel(
+        val order: OrderViewModel,
+        private val api: WalletApi,
+    ) {
         init { api.created++ }
-        fun open() = api.fetchBalance()                                   // 打開資產頁：載入餘額
+
+        // 打開資產頁：載入餘額
+        fun open() = api.fetchBalance()
     }
 
     suspend fun run(log: LabLog) {
         val api = WalletApi()
-        val order = OrderViewModel(api)                      // 單獨測試下單頁，卻要準備資產頁的 API
+        // 單獨測試下單頁，卻要準備資產頁的 API
+        val order = OrderViewModel(api)
         order.onOrderPlaced()
         log("單獨測試下單：資產頁的 API 被呼叫 ${api.calls} 次，導覽請求 0 次")
         log("單獨測試下單時，被建立出來的資產頁物件：${api.created} 個")
@@ -51,10 +68,14 @@ private object L01Fixed {
     interface OrderNavigator { fun openOrder() }
 
     class OrderViewModel(private val walletNavigator: WalletNavigator) {
-        fun onOrderPlaced() = walletNavigator.openWallet()   // 只請 App 層帶使用者去資產頁，不知道資產頁長什麼樣
+        // 只請 App 層帶使用者去資產頁，不知道資產頁長什麼樣
+        fun onOrderPlaced() = walletNavigator.openWallet()
     }
 
-    class WalletViewModel(private val orderNavigator: OrderNavigator, private val api: WalletApi) {
+    class WalletViewModel(
+        private val orderNavigator: OrderNavigator,
+        private val api: WalletApi,
+    ) {
         init { api.created++ }
         fun open() = api.fetchBalance()
         fun onDepositDone() = orderNavigator.openOrder()
@@ -69,7 +90,8 @@ private object L01Fixed {
     suspend fun run(log: LabLog) {
         val api = WalletApi()
         val navigator = FakeWalletNavigator()
-        val order = OrderViewModel(navigator)                // 單獨測試下單頁：只要一個假的導覽
+        // 單獨測試下單頁：只要一個假的導覽
+        val order = OrderViewModel(navigator)
         order.onOrderPlaced()
         log("單獨測試下單：資產頁的 API 被呼叫 ${api.calls} 次，導覽請求 ${navigator.opens} 次")
         log("單獨測試下單時，被建立出來的資產頁物件：${api.created} 個")
@@ -99,20 +121,40 @@ val l01 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("單獨測試下單時") } -> "演練沒有跑完"
-            "單獨測試下單：資產頁的 API 被呼叫 1 次，導覽請求 0 次" !in lines ->
+            lines.none { it.startsWith("單獨測試下單時") } -> {
+                "演練沒有跑完"
+            }
+
+            "單獨測試下單：資產頁的 API 被呼叫 1 次，導覽請求 0 次" !in lines -> {
                 "Bug 版：OrderViewModel 用 by lazy 直接建立 WalletViewModel(this, walletApi)，onOrderPlaced 呼叫 wallet.open()，資產頁的 API 會被呼叫 1 次"
-            "單獨測試下單時，被建立出來的資產頁物件：1 個" !in lines -> "Bug 還沒重現：下單頁要真的建立 WalletViewModel"
-            else -> null
+            }
+
+            "單獨測試下單時，被建立出來的資產頁物件：1 個" !in lines -> {
+                "Bug 還沒重現：下單頁要真的建立 WalletViewModel"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("單獨測試下單時") } -> "演練沒有跑完"
-            "單獨測試下單：資產頁的 API 被呼叫 0 次，導覽請求 1 次" !in lines ->
+            lines.none { it.startsWith("單獨測試下單時") } -> {
+                "演練沒有跑完"
+            }
+
+            "單獨測試下單：資產頁的 API 被呼叫 0 次，導覽請求 1 次" !in lines -> {
                 "測試下單頁只用假的 WalletNavigator：onOrderPlaced 呼叫 walletNavigator.openWallet()，資產頁的 API 不該被呼叫，導覽請求 1 次"
-            "單獨測試下單時，被建立出來的資產頁物件：0 個" !in lines -> "下單頁不該建立資產頁的物件"
-            else -> null
+            }
+
+            "單獨測試下單時，被建立出來的資產頁物件：0 個" !in lines -> {
+                "下單頁不該建立資產頁的物件"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

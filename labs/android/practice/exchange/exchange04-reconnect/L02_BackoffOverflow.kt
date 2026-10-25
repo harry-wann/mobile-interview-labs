@@ -1,13 +1,20 @@
-// L02：伺服器維護了 10 分鐘，之後重連的等待時間變成負數或 0，手機狂打伺服器（退避的位移溢位）
-// 對應複習站：Exchange04Reconnect 第 2 題「斷線後要等多久再重連？指數退避和 jitter 是什麼？」
+// L02：伺服器維護了 10 分鐘，之後重連的等待時間變成負數或 0，
+// 手機狂打伺服器（退避的位移溢位）
+// 對應複習站：Exchange04Reconnect 第 2 題「斷線後要等多久再重連？指數退避和
+// jitter 是什麼？」
 //
-// 情境：等待時間 = 隨機(0, min(上限, 起始 × 2 的 attempt 次方))，起始 500 毫秒、上限 8 秒。attempt 是目前連續失敗的次數。
-//        伺服器維護 10 分鐘，每次最多等 8 秒，重試了六十幾次還是失敗，attempt 一路加到很大。
-//        演練把亂數固定成 0.5，所以 attempt 4 以後，等待時間都應該是 4000 毫秒（上限 8000 的一半）。
-//        （jitter 本身為什麼要加，Platform05 的演練 6 練過；這題看的是 attempt 變大之後的溢位。）
+// 情境：等待時間 = 隨機(0, min(上限, 起始 × 2 的 attempt 次方))，起始 500
+// 毫秒、上限 8 秒。attempt 是目前連續失敗的次數。
+//        伺服器維護 10 分鐘，每次最多等 8 秒，重試了六十幾次還是失敗，attempt
+// 一路加到很大。
+//        演練把亂數固定成 0.5，所以 attempt 4 以後，等待時間都應該是 4000
+// 毫秒（上限 8000 的一半）。
+//        （jitter 本身為什麼要加，Platform05 的演練 6 練過；這題看的是 attempt
+// 變大之後的溢位。）
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.delayMs）：上限 = minOf(capMs, baseMs shl attempt)，再乘以亂數。
+//   ① Bug 版（L02Bug.delayMs）：上限 = minOf(capMs, baseMs shl attempt)，
+// 再乘以亂數。
 //   ② 修正版（L02Fixed.delayMs）：用迴圈一次翻一倍，到 capMs 就停，再乘以亂數。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange04-reconnect/L02_BackoffOverflow.kt
@@ -35,31 +42,53 @@ private fun scenario(log: LabLog, delayMs: (Int, Double) -> Long) {
 
 // MARK: - Bug 版
 private object L02Bug {
-    fun delayMs(attempt: Int, random: Double, baseMs: Long = 500, capMs: Long = 8000): Long {
-        // TODO ①：上限 ceiling = minOf(capMs, baseMs shl attempt)（直接用位移算）；回傳 (ceiling * random).toLong()
+    fun delayMs(
+        attempt: Int,
+        random: Double,
+        baseMs: Long = 500,
+        capMs: Long = 8000,
+    ): Long {
+        // TODO ①：上限 ceiling = minOf(capMs, baseMs shl attempt)
+        // （直接用位移算）；回傳 (ceiling * random).toLong()
         return 0
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { attempt, random -> delayMs(attempt, random) }
+    suspend fun run(log: LabLog) = scenario(log) { attempt, random ->
+        delayMs(attempt, random)
+    }
 }
 
 // MARK: - 修正版
 private object L02Fixed {
-    fun delayMs(attempt: Int, random: Double, baseMs: Long = 500, capMs: Long = 8000): Long {
-        // TODO ②：ceiling 從 baseMs 開始，用 while 迴圈一次翻一倍（ceiling * 2，用 minOf 擋在 capMs 以內），
-        //        最多翻 attempt 次，ceiling 到 capMs 就停；回傳 (ceiling * random).toLong()
+    fun delayMs(
+        attempt: Int,
+        random: Double,
+        baseMs: Long = 500,
+        capMs: Long = 8000,
+    ): Long {
+        // TODO ②：ceiling 從 baseMs 開始，用 while 迴圈一次翻一倍（ceiling *
+        // 2，用 minOf 擋在 capMs 以內），
+        //        最多翻 attempt 次，ceiling 到 capMs 就停；回傳 (ceiling *
+        // random).toLong()
         return 0
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { attempt, random -> delayMs(attempt, random) }
+    suspend fun run(log: LabLog) = scenario(log) { attempt, random ->
+        delayMs(attempt, random)
+    }
 }
 
 // MARK: - 演練設定
-private fun problemCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 9 種 attempt") }?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun problemCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 9 種 attempt")
+}?.let { Regex("(\\d+) 種$").find(it)?.groupValues?.get(1)?.toInt() }
 
 private fun delay(lines: List<String>, attempt: Int): Long? =
-    lines.firstOrNull { it.startsWith("連續失敗 $attempt 次後") }?.let { Regex("下一次等待 (-?\\d+) ms").find(it)?.groupValues?.get(1)?.toLong() }
+    lines.firstOrNull {
+        it.startsWith("連續失敗 $attempt 次後")
+    }?.let {
+        Regex("下一次等待 (-?\\d+) ms").find(it)?.groupValues?.get(1)?.toLong()
+    }
 
 val l02 = Lab(
     id = "L02",
@@ -86,10 +115,19 @@ val l02 = Lab(
         val d55 = delay(lines, 55)
         val d62 = delay(lines, 62)
         when {
-            problemCount(lines) == null -> "演練沒有跑完：要用 scenario(log) { attempt, random -> … } 執行"
-            delay(lines, 4) != 4000L -> "Bug 版在 attempt 還小的時候要算對：上限 = min(8000, 500 shl attempt)，attempt 4 應該是 4000"
+            problemCount(
+                lines,
+            ) == null -> "演練沒有跑完：要用 scenario(log) { attempt, random -> … } 執行"
+
+            delay(
+                lines,
+                4,
+            ) != 4000L -> "Bug 版在 attempt 還小的時候要算對：上限 = min(8000, 500 shl attempt)，attempt 4 應該是 4000"
+
             d55 == null || d55 >= 0 -> "Bug 還沒重現：用 baseMs shl attempt 算，attempt 55 時會溢位成負數（目前 $d55）"
+
             d62 != 0L -> "Bug 還沒重現：attempt 62 時 500 shl 62 會變成 0（目前 $d62）"
+
             else -> null
         }
     },

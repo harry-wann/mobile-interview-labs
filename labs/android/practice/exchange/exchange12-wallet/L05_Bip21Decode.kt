@@ -1,17 +1,29 @@
-// L05：付款連結的備註 a+b 變成「a b」，不完整的百分比編碼也解出亂碼（BIP21 的百分比解碼）
-// 對應複習站：Exchange12Wallet 第 4 題「掃描 QR 得到的付款連結（BIP21）要怎麼解析？」
+// L05：付款連結的備註 a+b 變成「a b」，不完整的百分比編碼也解出亂碼（BIP21
+// 的百分比解碼）
+// 對應複習站：Exchange12Wallet 第 4 題「掃描 QR 得到的付款連結（BIP21）
+// 要怎麼解析？」
 //
-// 情境：BIP21 的參數值用百分比編碼（RFC 3986）：`%XX` 是一個位元組，中文等字元是 UTF-8 的位元組。**`+` 在這裡是字面的加號，不是空白**
-//        （網頁表單的規則才是 + 當空白，Java 的 URLDecoder 就是用表單的規則）。解碼後必須是合法的 UTF-8，不完整的 `%` 序列要視為無效。
-//        連結的切分（scheme、地址、query）已經寫好在 Exchange12Support.kt，這題只寫「單一個參數值怎麼解碼」。
-//        演練檢查 7 個值：Luke-Jr、Donation%20for%20project%20xyz、a+b、%E5%92%96%E5%95%A1（咖啡）、
-//        %E5%92（UTF-8 只有一半）、100%（% 後面沒有兩個十六進位字元）、%zz（不是十六進位）。
+// 情境：BIP21 的參數值用百分比編碼（RFC 3986）：`%XX` 是一個位元組，
+// 中文等字元是 UTF-8 的位元組。**`+` 在這裡是字面的加號，不是空白**
+//        （網頁表單的規則才是 + 當空白，Java 的 URLDecoder 就是用表單的規則）。
+// 解碼後必須是合法的 UTF-8，不完整的 `%` 序列要視為無效。
+//        連結的切分（scheme、地址、query）已經寫好在 Exchange12Support.kt，
+// 這題只寫「單一個參數值怎麼解碼」。
+//        演練檢查 7 個值：Luke-Jr、Donation%20for%20project%20xyz、a+b、
+// %E5%92%96%E5%95%A1（咖啡）、
+//        %E5%92（UTF-8 只有一半）、100%（% 後面沒有兩個十六進位字元）、
+// %zz（不是十六進位）。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug.decode）：runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()（例外當成無效）。
-//   ② 修正版（L05Fixed.decode）：逐個 UTF-8 位元組掃描 raw：遇到 '%'（0x25）就讀接下來兩個十六進位字元還原成一個位元組（不足兩個或不是十六進位就回傳 null），
-//      其他位元組（包含 +）原樣保留；最後用 Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-//      .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)) 轉回字串，丟 CharacterCodingException 就是 null。
+//   ① Bug 版（L05Bug.decode）：runCatching { URLDecoder.decode(raw, "UTF-8") }.
+// getOrNull()（例外當成無效）。
+//   ② 修正版（L05Fixed.decode）：逐個 UTF-8 位元組掃描 raw：遇到 '%'（0x25）
+// 就讀接下來兩個十六進位字元還原成一個位元組（不足兩個或不是十六進位就回傳
+// null），
+//      其他位元組（包含 +）原樣保留；最後用 Charsets.UTF_8.newDecoder().
+// onMalformedInput(CodingErrorAction.REPORT)
+//      onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.
+// wrap(bytes)) 轉回字串，丟 CharacterCodingException 就是 null。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange12-wallet/L05_Bip21Decode.kt
 package tw.harry.labs.practice.exchange12wallet
@@ -55,7 +67,8 @@ private fun scenario(log: LabLog, decode: (String) -> String?) {
 // MARK: - Bug 版
 private object L05Bug {
     fun decode(raw: String): String? {
-        // TODO ①：回傳 runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()
+        // TODO ①：回傳 runCatching { URLDecoder.decode(raw, "UTF-8") }.
+        // getOrNull()
         return null
     }
 
@@ -65,9 +78,13 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     fun decode(raw: String): String? {
-        // TODO ②：把 raw.toByteArray(Charsets.UTF_8) 逐個位元組掃描（先 and 0xFF 轉成 0..255）：遇到 0x25（%）就讀接下來兩個十六進位字元（0-9、a-f、A-F）還原成一個位元組，
-        //        不足兩個或不是十六進位就回傳 null；其他位元組（包含 +）原樣放進結果；
-        //        最後用 REPORT 模式的 UTF-8 解碼器（見上面「你要寫」）轉回字串，丟 CharacterCodingException 就是 null
+        // TODO ②：把 raw.toByteArray(Charsets.UTF_8) 逐個位元組掃描（先 and
+        // 0xFF 轉成 0..255）：遇到 0x25（%）就讀接下來兩個十六進位字元（0-9、
+        // a-f、A-F）還原成一個位元組，
+        //        不足兩個或不是十六進位就回傳 null；其他位元組（包含 +）
+        // 原樣放進結果；
+        //        最後用 REPORT 模式的 UTF-8 解碼器（見上面「你要寫」）
+        // 轉回字串，丟 CharacterCodingException 就是 null
         return null
     }
 
@@ -75,8 +92,9 @@ private object L05Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 7 個值") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 7 個值")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l05 = Lab(
     id = "L05",

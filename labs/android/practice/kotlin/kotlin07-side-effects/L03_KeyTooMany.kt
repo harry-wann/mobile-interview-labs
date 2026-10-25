@@ -1,11 +1,15 @@
 // L03：價格一直在跳，「閒置逾時」永遠不會響（LaunchedEffect 的 key 寫太多）
-// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key 是什麼意思？」
+// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key
+// 是什麼意思？」
 //
-// 情境：行情畫面進來 400 ms 後，要響一次逾時提醒（正式版是 5 秒，這裡縮短）。畫面同時顯示價格，價格每 60 ms 更新一次，共 12 次（約 720 ms）。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
+// 情境：行情畫面進來 400 ms 後，要響一次逾時提醒（正式版是 5 秒，這裡縮短）。
+// 畫面同時顯示價格，價格每 60 ms 更新一次，共 12 次（約 720 ms）。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug）：LaunchedEffect(price) { alarm.start(); delay(400); alarm.ring() }。price 一變 key 就變，計時被取消重來。
+//   ① Bug 版（L03Bug）：LaunchedEffect(price) { alarm.start(); delay(400);
+// alarm.ring() }。price 一變 key 就變，計時被取消重來。
 //   ② 修正版（L03Fixed）：key 改成 Unit，計時和價格無關。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin07-side-effects/L03_KeyTooMany.kt
@@ -37,8 +41,14 @@ private class L03Alarm {
     }
 }
 
-/** 演練流程（兩個版本共用）：價格每 60 ms 更新一次，共 12 次（約 720 ms），看這段時間逾時提醒響了幾次 */
-private suspend fun scenario(log: LabLog, screen: @Composable (price: Long, alarm: L03Alarm) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：價格每 60 ms 更新一次，共 12 次（約 720 ms），
+ * 看這段時間逾時提醒響了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (price: Long, alarm: L03Alarm) -> Unit,
+) {
     val alarm = L03Alarm()
     withHeadlessCompose {
         val price = mutableLongStateOf(100_000L)
@@ -56,11 +66,14 @@ private suspend fun scenario(log: LabLog, screen: @Composable (price: Long, alar
 private object L03Bug {
     @Composable
     fun PriceScreen(price: Long, alarm: L03Alarm) {
-        // TODO ①：用 LaunchedEffect(price) { … }：先呼叫 alarm.start()，delay(400)，再呼叫 alarm.ring()（price 當 key：價格一變計時就重來）
+        // TODO ①：用 LaunchedEffect(price) { … }：先呼叫 alarm.start()，
+        // delay(400)，再呼叫 alarm.ring()（price 當 key：價格一變計時就重來）
         HeadlessText("價格 $price")
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { price, alarm -> PriceScreen(price, alarm) }
+    suspend fun run(log: LabLog) = scenario(log) { price, alarm ->
+        PriceScreen(price, alarm)
+    }
 }
 
 // MARK: - 修正版
@@ -71,12 +84,16 @@ private object L03Fixed {
         HeadlessText("價格 $price")
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { price, alarm -> PriceScreen(price, alarm) }
+    suspend fun run(log: LabLog) = scenario(log) { price, alarm ->
+        PriceScreen(price, alarm)
+    }
 }
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
 
 private const val STARTS = "價格更新 12 次期間，計時開始了 "
 private const val RINGS = "價格更新 12 次期間，逾時提醒響了 "

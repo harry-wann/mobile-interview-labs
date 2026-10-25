@@ -1,11 +1,17 @@
 // L06：ConcurrentHashMap 的 getOrPut，同一個 Session 被建立了好幾次
-// 對應複習站：Kotlin10JavaInterop 第 6 題「HashMap 和 ConcurrentHashMap 差在哪？」
+// 對應複習站：Kotlin10JavaInterop 第 6 題「HashMap 和 ConcurrentHashMap
+// 差在哪？」
 //
-// 情境：SessionRegistry 用 ConcurrentHashMap 保存每個帳號的 Session，沒有就建立（建立 Session 要開一條連線，所以只能建立一次）。
-//        每一輪有 8 條執行緒同時取得同一個帳號的 Session，共 20 輪，應該只建立 20 個 Session。
-// Bug 版：用 Kotlin 的 getOrPut { Session(id) }。ConcurrentMap.getOrPut 不是原子的：先 get，沒有才執行預設值函式再 putIfAbsent，
-//        8 條執行緒可能都沒有 get 到，各自執行預設值函式，Session 被建立了好幾次（最後存進 map 的只有一個，其他的白白開了連線）。
-// 修正版：用 computeIfAbsent(id) { Session(id) }。它對單一 key 是原子的，預設值函式只會執行一次。
+// 情境：SessionRegistry 用 ConcurrentHashMap 保存每個帳號的 Session，
+// 沒有就建立（建立 Session 要開一條連線，所以只能建立一次）。
+//        每一輪有 8 條執行緒同時取得同一個帳號的 Session，共 20 輪，應該只建立
+// 20 個 Session。
+// Bug 版：用 Kotlin 的 getOrPut { Session(id) }。ConcurrentMap.getOrPut
+// 不是原子的：先 get，沒有才執行預設值函式再 putIfAbsent，
+//        8 條執行緒可能都沒有 get 到，各自執行預設值函式，Session
+// 被建立了好幾次（最後存進 map 的只有一個，其他的白白開了連線）。
+// 修正版：用 computeIfAbsent(id) { Session(id) }。它對單一 key 是原子的，
+// 預設值函式只會執行一次。
 package tw.harry.labs.solution.kotlin10javainterop
 
 import java.util.concurrent.ConcurrentHashMap
@@ -34,37 +40,51 @@ private class L06Session(val id: String, created: AtomicInteger) {
  * 演練流程（兩個版本共用）：共 [ROUNDS] 輪，每輪 [THREADS] 條執行緒同時取得同一個帳號的 Session。
  * [getSession] 是「取得（沒有就建立）Session」的函式。
  */
-private suspend fun scenario(log: LabLog, getSession: (sessions: ConcurrentHashMap<String, L06Session>, created: AtomicInteger) -> L06Session) {
+private suspend fun scenario(
+    log: LabLog,
+    getSession: (
+        sessions: ConcurrentHashMap<String, L06Session>,
+        created: AtomicInteger,
+    ) -> L06Session,
+) {
     val created = AtomicInteger()
     withContext(Dispatchers.Default) {
         repeat(ROUNDS) {
             val sessions = ConcurrentHashMap<String, L06Session>()
             val start = CountDownLatch(1)
-            val threads = List(THREADS) { thread { start.await(); getSession(sessions, created) } }
+            val threads =
+                List(THREADS) {
+                    thread { start.await(); getSession(sessions, created) }
+                }
             start.countDown()
             threads.forEach { it.join() }
         }
     }
-    log("$ROUNDS 輪、每輪 $THREADS 條執行緒同時取得同一個帳號的 Session：共建立了 ${created.get()} 個（應該是 $ROUNDS 個）")
+    log(
+        "$ROUNDS 輪、每輪 $THREADS 條執行緒同時取得同一個帳號的 Session：共建立了 ${created.get()} 個（應該是 $ROUNDS 個）",
+    )
 }
 
 // MARK: - Bug 版
 private object L06Bug {
     suspend fun run(log: LabLog) = scenario(log) { sessions, created ->
-        sessions.getOrPut("harry") { L06Session("harry", created) }          // 不是原子的：預設值函式可能執行很多次
+        // 不是原子的：預設值函式可能執行很多次
+        sessions.getOrPut("harry") { L06Session("harry", created) }
     }
 }
 
 // MARK: - 修正版
 private object L06Fixed {
     suspend fun run(log: LabLog) = scenario(log) { sessions, created ->
-        sessions.computeIfAbsent("harry") { L06Session("harry", created) }   // 對單一 key 是原子的：只執行一次
+        // 對單一 key 是原子的：只執行一次
+        sessions.computeIfAbsent("harry") { L06Session("harry", created) }
     }
 }
 
 // MARK: - 演練設定
-private fun createdCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.contains("共建立了 ") }?.substringAfter("共建立了 ")?.substringBefore(" 個")?.toIntOrNull()
+private fun createdCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.contains("共建立了 ")
+}?.substringAfter("共建立了 ")?.substringBefore(" 個")?.toIntOrNull()
 
 val l06 = Lab(
     id = "L06",

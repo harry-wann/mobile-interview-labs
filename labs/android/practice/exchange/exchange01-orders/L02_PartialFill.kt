@@ -1,12 +1,18 @@
-// L02：只成交了一部分，畫面卻顯示「已成交」，取消時還多算了已經用掉的錢（部分約定）
-// 對應複習站：Exchange01Orders 第 2 題「訂單簿是什麼？「約定」「部分約定」「maker／taker」是什麼意思？」
+// L02：只成交了一部分，畫面卻顯示「已成交」，
+// 取消時還多算了已經用掉的錢（部分約定）
+// 對應複習站：Exchange01Orders 第 2 題「訂單簿是什麼？「約定」「部分約定」
+// 「maker／taker」是什麼意思？」
 //
-// 情境：使用者送出指値買單：買 0.5 BTC，價格 10,005,000 円。賣板最低的 0.2 BTC 賣 10,000,000 円，次低的 0.3 BTC 賣 10,010,000 円（比委託價貴）。
-//        所以立刻成交 0.2 BTC，剩下的 0.3 BTC 以 10,005,000 円掛在買板上等人來賣。使用者看了一下，按「取消」。
+// 情境：使用者送出指値買單：買 0.5 BTC，價格 10,005,000 円。賣板最低的 0.2 BTC
+// 賣 10,000,000 円，次低的 0.3 BTC 賣 10,010,000 円（比委託價貴）。
+//        所以立刻成交 0.2 BTC，剩下的 0.3 BTC 以 10,005,000
+// 円掛在買板上等人來賣。使用者看了一下，按「取消」。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug）：只要成交過一點點（filled > 0）狀態就是 FILLED；取消釋放的金額用整張單的 qty × price 算。
-//   ② 修正版（L02Fixed）：成交量滿了才是 FILLED，有成交但還沒滿是 PARTIALLY_FILLED；釋放的金額只算剩餘數量 × 委託價。
+//   ① Bug 版（L02Bug）：只要成交過一點點（filled > 0）狀態就是 FILLED；
+// 取消釋放的金額用整張單的 qty × price 算。
+//   ② 修正版（L02Fixed）：成交量滿了才是 FILLED，有成交但還沒滿是
+// PARTIALLY_FILLED；釋放的金額只算剩餘數量 × 委託價。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange01-orders/L02_PartialFill.kt
 package tw.harry.labs.practice.exchange01orders
@@ -23,27 +29,48 @@ private enum class Status(val text: String) {
 }
 
 private class Order(
-    val qty: BigDecimal,                    // 委託數量
-    val price: BigDecimal,                  // 委託價
-    var filled: BigDecimal = BigDecimal.ZERO,   // 已成交數量
+    val qty: BigDecimal, // 委託數量
+    val price: BigDecimal, // 委託價
+    var filled: BigDecimal = BigDecimal.ZERO, // 已成交數量
 )
 
 /** 演練流程（兩個版本共用）：送單、立刻成交一部分、顯示狀態、按取消 */
-private fun scenario(log: LabLog, status: (Order) -> Status, releaseOnCancel: (Order) -> BigDecimal) {
-    val book = E01Book(listOf(E01Level(e01("10000000"), e01("0.2")), E01Level(e01("10010000"), e01("0.3"))))
+private fun scenario(
+    log: LabLog,
+    status: (Order) -> Status,
+    releaseOnCancel: (Order) -> BigDecimal,
+) {
+    val book =
+        E01Book(
+            listOf(
+                E01Level(e01("10000000"), e01("0.2")),
+                E01Level(e01("10010000"), e01("0.3")),
+            ),
+        )
     val order = Order(e01("0.5"), e01("10005000"))
     log("送出指値買單：${e01Text(order.qty)} BTC，委託價 ${e01Text(order.price)}")
     val fills = book.takeAsks(order.qty, limit = order.price)
     order.filled = fills.fold(BigDecimal.ZERO) { sum, fill -> sum + fill.qty }
-    log("立刻成交 ${e01Text(order.filled)} BTC，成交價是板上的價格 ${fills.joinToString("、") { e01Text(it.price) }}")
-    log("狀態：${status(order).text}，已成交 ${e01Text(order.filled)}／剩餘 ${e01Text(order.qty - order.filled)}")
+    log(
+        "立刻成交 ${e01Text(order.filled)} BTC，成交價是板上的價格 ${fills.joinToString("、") {
+            e01Text(it.price)
+        }}",
+    )
+    log(
+        "狀態：${status(
+            order,
+        ).text}，已成交 ${e01Text(
+            order.filled,
+        )}／剩餘 ${e01Text(order.qty - order.filled)}",
+    )
     log("按下取消，取消後釋放 ${e01Text(releaseOnCancel(order))} 円")
 }
 
 // MARK: - Bug 版
 private object L02Bug {
     fun status(order: Order): Status {
-        // TODO ①-1：只要成交過（order.filled.signum() > 0）就回傳 FILLED，沒成交回傳 NEW
+        // TODO ①-1：只要成交過（order.filled.signum() > 0）就回傳 FILLED，
+        // 沒成交回傳 NEW
         return Status.NEW
     }
 
@@ -58,12 +85,14 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun status(order: Order): Status {
-        // TODO ②-1：沒成交是 NEW；成交量還小於委託量是 PARTIALLY_FILLED；成交量等於委託量才是 FILLED
+        // TODO ②-1：沒成交是 NEW；成交量還小於委託量是 PARTIALLY_FILLED；
+        // 成交量等於委託量才是 FILLED
         return Status.NEW
     }
 
     fun release(order: Order): BigDecimal {
-        // TODO ②-2：取消的只有還沒成交的剩餘數量，釋放的金額是「剩餘數量 × 委託價」
+        // TODO ②-2：取消的只有還沒成交的剩餘數量，釋放的金額是「剩餘數量 ×
+        // 委託價」
         return BigDecimal.ZERO
     }
 
@@ -94,17 +123,27 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("立刻成交 0.2 BTC") } -> "演練沒有跑完：要用 scenario(log, ::status, ::release) 執行"
+            lines.none {
+                it.startsWith("立刻成交 0.2 BTC")
+            } -> "演練沒有跑完：要用 scenario(log, ::status, ::release) 執行"
+
             "狀態：Filled，已成交 0.2／剩餘 0.3" !in lines -> "Bug 還沒重現：只要有成交（filled > 0），狀態就回傳 FILLED"
+
             "按下取消，取消後釋放 5002500 円" !in lines -> "Bug 還沒重現：釋放金額用整張單的 qty × price 算（5002500）"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("立刻成交 0.2 BTC") } -> "演練沒有跑完：要用 scenario(log, ::status, ::release) 執行"
+            lines.none {
+                it.startsWith("立刻成交 0.2 BTC")
+            } -> "演練沒有跑完：要用 scenario(log, ::status, ::release) 執行"
+
             "狀態：PartiallyFilled，已成交 0.2／剩餘 0.3" !in lines -> "狀態應該是 PartiallyFilled：有成交但 filled 還小於 qty"
+
             "按下取消，取消後釋放 3001500 円" !in lines -> "釋放金額只算剩餘數量：(qty - filled) × price = 3001500"
+
             else -> null
         }
     },

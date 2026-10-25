@@ -2,11 +2,16 @@
 // 對應複習站：Exchange04Reconnect 第 3 題「什麼時候才可以把失敗次數歸零？」
 //
 // 情境：交易高峰期，伺服器限制新連線：App 連得上，但連上 0.3 秒就被踢掉。
-//        重連的等待時間用正確的指數退避（起始 500 毫秒、上限 8 秒，亂數固定 0.5，結果每次一樣）。
-//        演練用虛擬的時間跑 60 秒，看 App 這段時間連了幾次線（時間用毫秒數傳進來，不用真的等）。
-//        前 5 次連上，都在 0.3 秒後被踢；第 6 次連上後，伺服器恢復正常，連線穩定維持了 20 秒才斷；之後又開始每次連上 0.3 秒就被踢。
-// Bug 版：一連上（opened）就把失敗次數歸零。連上、被踢、次數回到 0，下一次只等 500 毫秒左右，馬上又連、又被踢……變成緊密迴圈（flapping，連線抖動）。
-// 修正版：連上時只記下時間；斷線時，如果這條連線已經穩定超過 10 秒才歸零，否則失敗次數繼續累加，等待時間越來越長。
+//        重連的等待時間用正確的指數退避（起始 500 毫秒、上限 8 秒，亂數固定 0.
+// 5，結果每次一樣）。
+//        演練用虛擬的時間跑 60 秒，看 App
+// 這段時間連了幾次線（時間用毫秒數傳進來，不用真的等）。
+//        前 5 次連上，都在 0.3 秒後被踢；第 6 次連上後，伺服器恢復正常，
+// 連線穩定維持了 20 秒才斷；之後又開始每次連上 0.3 秒就被踢。
+// Bug 版：一連上（opened）就把失敗次數歸零。連上、被踢、次數回到 0，下一次只等
+// 500 毫秒左右，馬上又連、又被踢……變成緊密迴圈（flapping，連線抖動）。
+// 修正版：連上時只記下時間；斷線時，如果這條連線已經穩定超過 10 秒才歸零，
+// 否則失敗次數繼續累加，等待時間越來越長。
 package tw.harry.labs.solution.exchange04reconnect
 
 import tw.harry.labs.kit.Lab
@@ -20,7 +25,10 @@ private interface ReconnectManager {
     fun closed(nowMs: Long): Long
 }
 
-/** 演練流程（兩個版本共用）：虛擬時間 60 秒；第 6 次連線穩定了 20 秒，其他每次連上 300 毫秒就被伺服器踢掉 */
+/**
+ * 演練流程（兩個版本共用）：虛擬時間 60 秒；第 6 次連線穩定了 20 秒，
+ * 其他每次連上 300 毫秒就被伺服器踢掉
+ */
 private fun scenario(log: LabLog, manager: ReconnectManager) {
     var now = 0L
     var connects = 0
@@ -28,9 +36,16 @@ private fun scenario(log: LabLog, manager: ReconnectManager) {
     while (now < 60_000) {
         connects++
         manager.opened(now)
-        now += if (connects == 6) 20_000 else 300               // 第 6 次連線穩定 20 秒，其他的 300 毫秒後被踢掉
+        // 第 6 次連線穩定 20 秒，其他的 300 毫秒後被踢掉
+        now += if (connects == 6) 20_000 else 300
         val wait = manager.closed(now)
-        if (connects == 6) log("第 6 次連線穩定了 20 秒才斷線，下一次等待 $wait ms") else waits += wait
+        if (connects ==
+            6
+        ) {
+            log("第 6 次連線穩定了 20 秒才斷線，下一次等待 $wait ms")
+        } else {
+            waits += wait
+        }
         now += wait
     }
     log("其他連線被踢之後，前 5 次的等待時間（毫秒）：${waits.take(5).joinToString("、")}")
@@ -43,7 +58,7 @@ private object L03Bug {
         private var attempt = 0
 
         override fun opened(nowMs: Long) {
-            attempt = 0                                         // 一連上就歸零
+            attempt = 0 // 一連上就歸零
         }
 
         override fun closed(nowMs: Long): Long {
@@ -62,11 +77,13 @@ private object L03Fixed {
         private var openedAtMs = 0L
 
         override fun opened(nowMs: Long) {
-            openedAtMs = nowMs                                  // 只記下連上的時間，不歸零
+            // 只記下連上的時間，不歸零
+            openedAtMs = nowMs
         }
 
         override fun closed(nowMs: Long): Long {
-            if (nowMs - openedAtMs >= 10_000) attempt = 0       // 這條連線穩定超過 10 秒，才歸零
+            // 這條連線穩定超過 10 秒，才歸零
+            if (nowMs - openedAtMs >= 10_000) attempt = 0
             attempt++
             return E04Backoff.delayMs(attempt = attempt, random = 0.5)
         }
@@ -76,8 +93,9 @@ private object L03Fixed {
 }
 
 // MARK: - 演練設定
-private fun connectCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("60 秒內連線了") }?.let { Regex("(\\d+) 次$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun connectCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("60 秒內連線了")
+}?.let { Regex("(\\d+) 次$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l03 = Lab(
     id = "L03",

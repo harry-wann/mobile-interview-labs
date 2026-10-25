@@ -1,13 +1,21 @@
-// L01：下單之後，首頁、資產頁、下單頁顯示三個不同的可用餘額（每個畫面各存一份資料）
-// 對應複習站：Design03OrderAssets 第 3 題「整體架構怎麼安排，才能讓每個畫面的數字一致？」
+// L01：下單之後，首頁、資產頁、
+// 下單頁顯示三個不同的可用餘額（每個畫面各存一份資料）
+// 對應複習站：Design03OrderAssets 第 3 題「整體架構怎麼安排，
+// 才能讓每個畫面的數字一致？」
 //
-// 情境：App 有三個分頁：首頁、資產頁、下單頁，打開 App 時都已經建立好，之後一直留在記憶體裡，每一頁都會顯示「可用餘額」。
-//       伺服器上日圓可用 1,000,000、凍結 0。使用者在下單頁送出一張 300,000 円的限價買單：
-//       先是下單的 REST 回覆回來（只有下單頁這一頁知道），接著私有 WebSocket 推送資產變動（可用 700,000、凍結 300,000）。
+// 情境：App 有三個分頁：首頁、資產頁、下單頁，打開 App 時都已經建立好，
+// 之後一直留在記憶體裡，每一頁都會顯示「可用餘額」。
+//       伺服器上日圓可用 1,000,000、凍結 0。使用者在下單頁送出一張 300,000
+// 円的限價買單：
+//       先是下單的 REST 回覆回來（只有下單頁這一頁知道），接著私有 WebSocket
+// 推送資產變動（可用 700,000、凍結 300,000）。
 //       看三個分頁各自顯示的可用餘額。
-// Bug 版：每個畫面建立時各打一次 `GET /balance`，自己存一份。下單頁收到 REST 回覆後再打一次，更新自己那一份；
-//        WebSocket 的推送沒有人處理。首頁和資產頁停在 1,000,000，下單頁是 700,000，三個畫面兩種數字。
-// 修正版：資產只有一個 BalanceStore，資料只來自伺服器（第一次的查詢和之後的 WebSocket 推送）；三個畫面都只讀 Store。
+// Bug 版：每個畫面建立時各打一次 `GET /balance`，自己存一份。下單頁收到 REST
+// 回覆後再打一次，更新自己那一份；
+//        WebSocket 的推送沒有人處理。首頁和資產頁停在 1,000,000，下單頁是 700,
+// 000，三個畫面兩種數字。
+// 修正版：資產只有一個 BalanceStore，資料只來自伺服器（第一次的查詢和之後的
+// WebSocket 推送）；三個畫面都只讀 Store。
 //        推送一來，Store 換成新的，三個畫面一起變。
 package tw.harry.labs.solution.design03orderassets
 
@@ -33,7 +41,9 @@ private interface L01BalanceApp {
     /** 畫面建立（打開 App 時三個分頁都建立好了） */
     fun openScreen(name: String)
 
-    /** 下單的 REST 回覆回來了（只有下單頁知道；回覆裡只有訂單編號，沒有餘額） */
+    /**
+     * 下單的 REST 回覆回來了（只有下單頁知道；回覆裡只有訂單編號，沒有餘額）
+     */
     fun orderAccepted()
 
     /** 私有 WebSocket 推送資產變動 */
@@ -49,34 +59,48 @@ private val l01Screens = listOf("首頁", "資產頁", "下單頁")
 private fun scenario(log: LabLog, makeApp: (L01FakeServer) -> L01BalanceApp) {
     val server = L01FakeServer()
     val app = makeApp(server)
-    fun summary() = l01Screens.joinToString("／") { "$it ${d03Yen(app.shownAvailable(it))}" }
+    fun summary() = l01Screens.joinToString("／") {
+        "$it ${d03Yen(app.shownAvailable(it))}"
+    }
 
     l01Screens.forEach(app::openScreen)
     log("三個分頁都建立了，可用餘額：${summary()}")
     server.placeLimitBuy(300_000)
-    log("使用者在下單頁送出限價買單 300,000 円：伺服器凍結了 300,000，可用 ${d03Yen(server.balance.available)}、凍結 ${d03Yen(server.balance.frozen)}")
+    log(
+        "使用者在下單頁送出限價買單 300,000 円：伺服器凍結了 300,000，可用 ${d03Yen(
+            server.balance.available,
+        )}、凍結 ${d03Yen(server.balance.frozen)}",
+    )
     app.orderAccepted()
     log("下單的 REST 回覆回來（只有下單頁知道）：${summary()}")
     app.balancePushed(server.balance)
     log("私有 WebSocket 推送資產變動：${summary()}")
     val distinct = l01Screens.map(app::shownAvailable).toSet().size
-    log("最後：${summary()}（伺服器 ${d03Yen(server.balance.available)}），$distinct 種不同的數字")
+    log(
+        "最後：${summary()}（伺服器 ${d03Yen(
+            server.balance.available,
+        )}），$distinct 種不同的數字",
+    )
 }
 
 // MARK: - Bug 版
 private object L01Bug {
     class App(private val server: L01FakeServer) : L01BalanceApp {
-        private val copies = mutableMapOf<String, Int>()                // 每個畫面自己存一份可用餘額
+        // 每個畫面自己存一份可用餘額
+        private val copies = mutableMapOf<String, Int>()
 
         override fun openScreen(name: String) {
-            copies[name] = server.fetchBalance().available               // 畫面建立時各打一次 API，自己存
+            // 畫面建立時各打一次 API，自己存
+            copies[name] = server.fetchBalance().available
         }
 
         override fun orderAccepted() {
-            copies["下單頁"] = server.fetchBalance().available           // 只有下單頁知道下單了，只更新自己那一份
+            // 只有下單頁知道下單了，只更新自己那一份
+            copies["下單頁"] = server.fetchBalance().available
         }
 
-        override fun balancePushed(balance: L01Balance) {}              // 推送沒有人處理
+        // 推送沒有人處理
+        override fun balancePushed(balance: L01Balance) {}
 
         override fun shownAvailable(screen: String): Int = copies[screen] ?: 0
     }
@@ -87,19 +111,24 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     class App(private val server: L01FakeServer) : L01BalanceApp {
-        private var store: L01Balance? = null                           // 資產只有一份：BalanceStore
+        // 資產只有一份：BalanceStore
+        private var store: L01Balance? = null
 
         override fun openScreen(name: String) {
-            if (store == null) store = server.fetchBalance()             // Store 還沒有資料才向伺服器要
+            // Store 還沒有資料才向伺服器要
+            if (store == null) store = server.fetchBalance()
         }
 
-        override fun orderAccepted() {}                                 // 回覆裡沒有餘額：不自己算，等伺服器推送
+        // 回覆裡沒有餘額：不自己算，等伺服器推送
+        override fun orderAccepted() {}
 
         override fun balancePushed(balance: L01Balance) {
-            store = balance                                             // 以伺服器推送的為準，換掉 Store
+            // 以伺服器推送的為準，換掉 Store
+            store = balance
         }
 
-        override fun shownAvailable(screen: String): Int = store?.available ?: 0   // 三個畫面都讀同一個 Store
+        // 三個畫面都讀同一個 Store
+        override fun shownAvailable(screen: String): Int = store?.available ?: 0
     }
 
     suspend fun run(log: LabLog) = scenario(log) { App(it) }
@@ -129,21 +158,43 @@ val l01 = Lab(
     checkBug = { lines ->
         val last = lines.lastOrNull { it.startsWith("最後") }
         when {
-            last == null -> "演練沒有跑完：要用 scenario(log, makeApp) 執行"
-            last.startsWith("最後：首頁 0／資產頁 0／下單頁 0") -> "openScreen 還沒寫：每個畫面建立時，自己向伺服器要一份餘額（server.fetchBalance().available）存進 copies"
-            last != "最後：首頁 1,000,000／資產頁 1,000,000／下單頁 700,000（伺服器 700,000），2 種不同的數字" ->
+            last == null -> {
+                "演練沒有跑完：要用 scenario(log, makeApp) 執行"
+            }
+
+            last.startsWith("最後：首頁 0／資產頁 0／下單頁 0") -> {
+                "openScreen 還沒寫：每個畫面建立時，自己向伺服器要一份餘額（server.fetchBalance().available）存進 copies"
+            }
+
+            last !=
+                "最後：首頁 1,000,000／資產頁 1,000,000／下單頁 700,000（伺服器 700,000），2 種不同的數字" -> {
                 "Bug 還沒重現：每個畫面各存一份；orderAccepted 只重新抓下單頁那一份；balancePushed 不處理，首頁與資產頁就會停在舊數字"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         val last = lines.lastOrNull { it.startsWith("最後") }
         when {
-            last == null -> "演練沒有跑完：要用 scenario(log, makeApp) 執行"
-            last.startsWith("最後：首頁 0／資產頁 0／下單頁 0") -> "Store 還沒有資料：openScreen 在 store 是 null 時向伺服器要一份存起來"
-            last != "最後：首頁 700,000／資產頁 700,000／下單頁 700,000（伺服器 700,000），1 種不同的數字" ->
+            last == null -> {
+                "演練沒有跑完：要用 scenario(log, makeApp) 執行"
+            }
+
+            last.startsWith("最後：首頁 0／資產頁 0／下單頁 0") -> {
+                "Store 還沒有資料：openScreen 在 store 是 null 時向伺服器要一份存起來"
+            }
+
+            last !=
+                "最後：首頁 700,000／資產頁 700,000／下單頁 700,000（伺服器 700,000），1 種不同的數字" -> {
                 "只留一份 store：openScreen 第一次向伺服器要，balancePushed 換成推送來的資料，三個畫面都讀 store.available"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

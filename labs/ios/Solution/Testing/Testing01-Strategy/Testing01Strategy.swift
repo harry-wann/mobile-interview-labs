@@ -6,6 +6,7 @@ enum Testing01Strategy {
         id: "testing-strategy",
         code: "Testing01Strategy",
         title: "測試策略",
-        labs: [l01, l02, l03]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03]
     )
 }

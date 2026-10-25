@@ -1,9 +1,15 @@
-// L05：跨年那一天的交易紀錄顯示成明年，晚上 11 點顯示成 11:59（日期格式的 YYYY 與 hh）
-// 對應複習站：Exchange13Localization 第 4 題「日期與時區怎麼處理？JST 是什麼？」
-//        （語言、曆法、時區不固定造成的問題，在 Exchange09 的演練 4 練過；這題格式的 Locale、時區都已經固定，只看日期格式字串本身。）
+// L05：跨年那一天的交易紀錄顯示成明年，晚上 11 點顯示成 11:59（日期格式的 YYYY
+// 與 hh）
+// 對應複習站：Exchange13Localization 第 4 題「日期與時區怎麼處理？JST
+// 是什麼？」
+//        （語言、曆法、時區不固定造成的問題，在 Exchange09 的演練 4 練過；
+// 這題格式的 Locale、時區都已經固定，只看日期格式字串本身。）
 //
-// 情境：交易紀錄的時間標籤要用固定、沒有歧義的格式：「2026-10-23 14:05:09 JST」（24 小時制，加上 JST 後綴）。formatter 的語言固定 Locale.ROOT、時區 Asia/Tokyo，
-//        只剩日期格式字串要寫。演練有三筆 JST 的時間：2024-12-31 23:59:59、2025-01-01 00:00:05、2026-10-24 13:05:09。
+// 情境：交易紀錄的時間標籤要用固定、沒有歧義的格式：「2026-10-23 14:05:09 JST」
+// （24 小時制，加上 JST 後綴）。formatter 的語言固定 Locale.ROOT、時區
+// Asia/Tokyo，
+//        只剩日期格式字串要寫。演練有三筆 JST 的時間：2024-12-31 23:59:59、
+// 2025-01-01 00:00:05、2026-10-24 13:05:09。
 //
 // 你要寫：
 //   ① Bug 版（L05Bug.pattern）：回傳 "YYYY-MM-dd hh:mm:ss"。
@@ -25,14 +31,25 @@ private class L05Case(val name: String, val iso: String, val expected: String)
 
 private val cases = listOf(
     L05Case("跨年前一秒", "2024-12-31T23:59:59+09:00", "2024-12-31 23:59:59 JST"),
-    L05Case("新年第一天 0 點", "2025-01-01T00:00:05+09:00", "2025-01-01 00:00:05 JST"),
+    L05Case(
+        "新年第一天 0 點",
+        "2025-01-01T00:00:05+09:00",
+        "2025-01-01 00:00:05 JST",
+    ),
     L05Case("一般的下午", "2026-10-24T13:05:09+09:00", "2026-10-24 13:05:09 JST"),
 )
 
-/** 語言、時區都固定好的 formatter（兩個版本共用），只有日期格式字串由 pattern 決定 */
+/**
+ * 語言、時區都固定好的 formatter（兩個版本共用），只有日期格式字串由 pattern
+ * 決定
+ */
 private fun label(iso: String, pattern: String): String {
-    val formatter = DateTimeFormatter.ofPattern(pattern, Locale.ROOT).withZone(ZoneId.of("Asia/Tokyo"))
-    return formatter.format(OffsetDateTime.parse(iso).toInstant()) + " JST"     // 時區縮寫不依賴系統給的，自己加上後綴
+    val formatter = DateTimeFormatter.ofPattern(
+        pattern,
+        Locale.ROOT,
+    ).withZone(ZoneId.of("Asia/Tokyo"))
+    // 時區縮寫不依賴系統給的，自己加上後綴
+    return formatter.format(OffsetDateTime.parse(iso).toInstant()) + " JST"
 }
 
 /** 演練流程（兩個版本共用）：三筆時間逐一產生標籤，和正確答案比對 */
@@ -73,8 +90,9 @@ private object L05Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 3 筆") }?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 3 筆")
+}?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l05 = Lab(
     id = "L05",
@@ -100,11 +118,22 @@ val l05 = Lab(
     checkBug = { lines ->
         val n = wrongCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log, pattern) 執行"
-            "跨年前一秒 → 2025-12-31 11:59:59 JST ✗（應該是 2024-12-31 23:59:59 JST）" !in lines ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log, pattern) 執行"
+            }
+
+            "跨年前一秒 → 2025-12-31 11:59:59 JST ✗（應該是 2024-12-31 23:59:59 JST）" !in
+                lines -> {
                 "Bug 還沒重現：格式字串用 \"YYYY-MM-dd hh:mm:ss\"，2024-12-31 會顯示成 2025-12-31，23 點顯示成 11"
-            n != 3 -> "Bug 版三筆都應該顯示錯（目前錯 $n 筆）"
-            else -> null
+            }
+
+            n != 3 -> {
+                "Bug 版三筆都應該顯示錯（目前錯 $n 筆）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

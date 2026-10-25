@@ -39,7 +39,12 @@ class Kotlin11StateTest {
             val log = LabLog(echo = false)
             runBlocking { l07.run!!(variant, log) }
             val reason = l07.check(variant)!!(log.texts)
-            report("L07", variant.title, reason, log.texts.takeLast(5).joinToString(" / "))
+            report(
+                "L07",
+                variant.title,
+                reason,
+                log.texts.takeLast(5).joinToString(" / "),
+            )
         }
     }
 
@@ -47,18 +52,37 @@ class Kotlin11StateTest {
     fun l08() {
         val bugLog = LabLog(echo = false)
         runBlocking { L08Bug.run(bugLog) }
-        report("L08", "Bug 版", l08.checkBug!!(bugLog.texts), bugLog.texts.last())
+        report(
+            "L08",
+            "Bug 版",
+            l08.checkBug!!(bugLog.texts),
+            bugLog.texts.last(),
+        )
 
         val fixedLog = LabLog(echo = false)
         runBlocking { L08Fixed.run(fixedLog) }
-        report("L08", "修正版", l08.checkFixed!!(fixedLog.texts), fixedLog.texts.last())
+        report(
+            "L08",
+            "修正版",
+            l08.checkFixed!!(fixedLog.texts),
+            fixedLog.texts.last(),
+        )
     }
 
-    private fun report(lab: String, variant: String, reason: String?, detail: String) {
+    private fun report(
+        lab: String,
+        variant: String,
+        reason: String?,
+        detail: String,
+    ) {
         if (reason == null) {
-            println("[SELFTEST] Kotlin11ComposeState $lab $variant PASS　$detail")
+            println(
+                "[SELFTEST] Kotlin11ComposeState $lab $variant PASS　$detail",
+            )
         } else {
-            println("[SELFTEST] Kotlin11ComposeState $lab $variant FAIL：$reason")
+            println(
+                "[SELFTEST] Kotlin11ComposeState $lab $variant FAIL：$reason",
+            )
         }
     }
 }

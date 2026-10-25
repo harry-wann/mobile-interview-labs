@@ -1,15 +1,23 @@
-// L01：驗證碼有時候少一位、有時候是負數（TOTP 的動態截斷沒清最高位元、沒有補零）
-// 對應複習站：Exchange10AccountSecurity 第 1 題「兩步驟驗證的 6 位數驗證碼（TOTP）是怎麼算出來的？」
+// L01：驗證碼有時候少一位、有時候是負數（TOTP 的動態截斷沒清最高位元、
+// 沒有補零）
+// 對應複習站：Exchange10AccountSecurity 第 1 題「兩步驟驗證的 6
+// 位數驗證碼（TOTP）是怎麼算出來的？」
 //
-// 情境：TOTP（RFC 6238）把「現在是第幾個 30 秒」當 counter，用秘密算 HMAC-SHA-1（20 個位元組），再做動態截斷：
-//        取最後一個位元組的低 4 位元當 offset，從 offset 取 4 個位元組，最高位元清成 0（and 0x7f），對 1,000,000 取餘數，不足 6 位時左邊補零。
-//        演練拿 RFC 6238 附錄 B 的 6 組測試資料（秘密 12345678901234567890）：時間 59、1111111109、1111111111、1234567890、2000000000、20000000000 秒，
-//        答案分別是 287082、081804、050471、005924、279037、353130。HMAC 已經算好（在 Exchange10Support.kt），這題只寫「20 個位元組 → 6 位數碼」。
+// 情境：TOTP（RFC 6238）把「現在是第幾個 30 秒」當 counter，用秘密算
+// HMAC-SHA-1（20 個位元組），再做動態截斷：
+//        取最後一個位元組的低 4 位元當 offset，從 offset 取 4 個位元組，
+// 最高位元清成 0（and 0x7f），對 1,000,000 取餘數，不足 6 位時左邊補零。
+//        演練拿 RFC 6238 附錄 B 的 6 組測試資料（秘密 12345678901234567890）：
+// 時間 59、1111111109、1111111111、1234567890、2000000000、20000000000 秒，
+//        答案分別是 287082、081804、050471、005924、279037、353130。HMAC
+// 已經算好（在 Exchange10Support.kt），這題只寫「20 個位元組 → 6 位數碼」。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.code）：offset = 最後一個位元組的低 4 位元；從 offset 取 4 個位元組組成 Int（後 3 個位元組先 and 0xff），第一個位元組不要清最高位元；
+//   ① Bug 版（L01Bug.code）：offset = 最後一個位元組的低 4 位元；從 offset 取
+// 4 個位元組組成 Int（後 3 個位元組先 and 0xff），第一個位元組不要清最高位元；
 //      對 1_000_000 取餘數，直接 toString()，不補零。
-//   ② 修正版（L01Fixed.code）：同樣的步驟，但第一個位元組要 and 0x7f，結果用 padStart(6, '0') 補零到 6 位。
+//   ② 修正版（L01Fixed.code）：同樣的步驟，但第一個位元組要 and 0x7f，結果用
+// padStart(6, '0') 補零到 6 位。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange10-account-security/L01_TotpDigits.kt
 package tw.harry.labs.practice.exchange10accountsecurity
@@ -32,7 +40,8 @@ private val vectors = listOf(
 private fun scenario(log: LabLog, code: (ByteArray) -> String) {
     var wrong = 0
     for ((time, expected) in vectors) {
-        val mac = E10.mac(E10.rfcSecret, time / 30)              // counter = 第幾個 30 秒
+        // counter = 第幾個 30 秒
+        val mac = E10.mac(E10.rfcSecret, time / 30)
         val result = code(mac)
         if (result == expected) {
             log("時間 $time 秒 → 驗證碼 $result ✓")
@@ -47,7 +56,8 @@ private fun scenario(log: LabLog, code: (ByteArray) -> String) {
 // MARK: - Bug 版
 private object L01Bug {
     fun code(mac: ByteArray): String {
-        // TODO ①-1：offset = mac 最後一個位元組的低 4 位元（and 0x0f）；從 offset 取 4 個位元組，組成 Int（第一個位元組不要清最高位元）
+        // TODO ①-1：offset = mac 最後一個位元組的低 4 位元（and 0x0f）；從
+        // offset 取 4 個位元組，組成 Int（第一個位元組不要清最高位元）
         // TODO ①-2：對 1_000_000 取餘數，直接 toString()，不補零
         return ""
     }
@@ -58,8 +68,10 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     fun code(mac: ByteArray): String {
-        // TODO ②-1：同樣取 offset 與 4 個位元組，但第一個位元組要先 and 0x7f 再組成 Int
-        // TODO ②-2：對 1_000_000 取餘數，toString().padStart(6, '0') 補零到 6 位
+        // TODO ②-1：同樣取 offset 與 4 個位元組，但第一個位元組要先 and 0x7f
+        // 再組成 Int
+        // TODO ②-2：對 1_000_000 取餘數，toString().padStart(6, '0') 補零到 6
+        // 位
         return ""
     }
 
@@ -67,8 +79,9 @@ private object L01Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 6 組") }?.let { Regex("(\\d+) 組$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 6 組")
+}?.let { Regex("(\\d+) 組$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",
@@ -94,13 +107,27 @@ val l01 = Lab(
     checkBug = { lines ->
         val n = wrongCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log) { mac -> … } 執行"
-            lines.none { it.startsWith("時間 2000000000 秒") && it.endsWith("✓") } ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log) { mac -> … } 執行"
+            }
+
+            lines.none {
+                it.startsWith("時間 2000000000 秒") && it.endsWith("✓")
+            } -> {
                 "Bug 版也要算出大部分的碼：時間 2000000000 秒的結果應該是 279037（這一組不需要補零，最高位元也是 0）"
-            "時間 1111111109 秒 → 驗證碼 81804 ✗（RFC 的答案是 081804）" !in lines ->
+            }
+
+            "時間 1111111109 秒 → 驗證碼 81804 ✗（RFC 的答案是 081804）" !in lines -> {
                 "Bug 還沒重現：取餘數之後直接轉成文字、不補零，081804 會變成 81804"
-            n < 3 -> "Bug 還沒重現：至少有 3 組開頭是 0 的碼會算錯（目前錯 $n 組）"
-            else -> null
+            }
+
+            n < 3 -> {
+                "Bug 還沒重現：至少有 3 組開頭是 0 的碼會算錯（目前錯 $n 組）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

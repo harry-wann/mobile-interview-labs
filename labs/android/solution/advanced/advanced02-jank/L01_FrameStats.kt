@@ -1,11 +1,17 @@
 // L01：平均 FPS 看起來很好，使用者卻覺得畫面凍住過（卡頓不能只看平均 FPS）
-// 對應複習站：Advanced02Jank 第 1 題「卡頓（jank、hitch）是什麼？一格畫面有多少時間可以用？」
+// 對應複習站：Advanced02Jank 第 1 題「卡頓（jank、hitch）
+// 是什麼？一格畫面有多少時間可以用？」
 //
-// 情境：行情列表捲動 10 秒的畫面記錄：60Hz 螢幕（一格 16.7 ms），共 600 格，其中兩格花了 40 ms，另外有一格花了 800 ms（畫面凍住將近一秒）。
-//        其餘 597 格都剛好 16.7 ms。這份記錄是 JankStats 或 Macrobenchmark 的 FrameTimingMetric 會給你的那種資料。
-//        規則（Android vitals 的分法）：間隔超過一格預算 1.5 倍的算 slow frame；超過 700 ms 的算 frozen frame。
-// Bug 版：只看平均 FPS（格數 ÷ 總秒數），≥ 55 就判定「良好」。平均 55.3 FPS，一格 800 ms 的凍結被 597 格正常的稀釋掉了。
-// 修正版：數 slow frame 與 frozen frame。有任何一格 frozen 就判定「嚴重」；沒有的話 slow frame 超過 5% 判定「警告」。
+// 情境：行情列表捲動 10 秒的畫面記錄：60Hz 螢幕（一格 16.7 ms），共 600 格，
+// 其中兩格花了 40 ms，另外有一格花了 800 ms（畫面凍住將近一秒）。
+//        其餘 597 格都剛好 16.7 ms。這份記錄是 JankStats 或 Macrobenchmark 的
+// FrameTimingMetric 會給你的那種資料。
+//        規則（Android vitals 的分法）：間隔超過一格預算 1.5 倍的算 slow
+// frame；超過 700 ms 的算 frozen frame。
+// Bug 版：只看平均 FPS（格數 ÷ 總秒數），≥ 55 就判定「良好」。平均 55.3 FPS，
+// 一格 800 ms 的凍結被 597 格正常的稀釋掉了。
+// 修正版：數 slow frame 與 frozen frame。有任何一格 frozen 就判定「嚴重」；
+// 沒有的話 slow frame 超過 5% 判定「警告」。
 package tw.harry.labs.solution.advanced02jank
 
 import tw.harry.labs.kit.Lab
@@ -14,8 +20,13 @@ import tw.harry.labs.kit.Variant
 
 private const val FRAME_BUDGET_MS = 16.7
 
-/** 600 格的間隔（毫秒）：第 101、301 格是 40 ms，第 451 格是 800 ms，其餘 16.7 ms（兩個版本共用） */
-private val frameIntervalsMs: List<Double> = MutableList(600) { FRAME_BUDGET_MS }.also {
+/**
+ * 600 格的間隔（毫秒）：第 101、301 格是 40 ms，第 451 格是 800 ms，其餘 16.7
+ * ms（兩個版本共用）
+ */
+private val frameIntervalsMs: List<Double> = MutableList(600) {
+    FRAME_BUDGET_MS
+}.also {
     it[100] = 40.0
     it[300] = 40.0
     it[450] = 800.0
@@ -28,7 +39,11 @@ private class Verdict(val rating: String, val detail: String)
 private fun scenario(log: LabLog, judge: (List<Double>) -> Verdict) {
     val totalMs = frameIntervalsMs.sum()
     val avgFps = frameIntervalsMs.size / (totalMs / 1000)
-    log("共 ${frameIntervalsMs.size} 格，平均 ${"%.1f".format(avgFps)} FPS，最長一格 ${frameIntervalsMs.max().toInt()} ms")
+    log(
+        "共 ${frameIntervalsMs.size} 格，平均 ${"%.1f".format(
+            avgFps,
+        )} FPS，最長一格 ${frameIntervalsMs.max().toInt()} ms",
+    )
     val verdict = judge(frameIntervalsMs)
     log("判定：${verdict.rating}（${verdict.detail}）")
 }
@@ -36,8 +51,18 @@ private fun scenario(log: LabLog, judge: (List<Double>) -> Verdict) {
 // MARK: - Bug 版
 private object L01Bug {
     fun judge(frames: List<Double>): Verdict {
-        val avgFps = frames.size / (frames.sum() / 1000)               // 只看平均 FPS
-        return Verdict(if (avgFps >= 55) "良好" else "嚴重", "平均 ${"%.1f".format(avgFps)} FPS")
+        // 只看平均 FPS
+        val avgFps = frames.size / (frames.sum() / 1000)
+        return Verdict(
+            if (avgFps >=
+                55
+            ) {
+                "良好"
+            } else {
+                "嚴重"
+            },
+            "平均 ${"%.1f".format(avgFps)} FPS",
+        )
     }
 
     fun run(log: LabLog) = scenario(log) { judge(it) }
@@ -46,15 +71,22 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     fun judge(frames: List<Double>): Verdict {
-        val slow = frames.count { it > FRAME_BUDGET_MS * 1.5 }         // slow frame：超過一格預算的 1.5 倍
-        val frozen = frames.count { it > 700 }                          // frozen frame：超過 700 ms
+        // slow frame：超過一格預算的 1.5 倍
+        val slow = frames.count { it > FRAME_BUDGET_MS * 1.5 }
+        // frozen frame：超過 700 ms
+        val frozen = frames.count { it > 700 }
         val slowPercent = slow * 100.0 / frames.size
         val rating = when {
             frozen > 0 -> "嚴重"
             slowPercent > 5 -> "警告"
             else -> "良好"
         }
-        return Verdict(rating, "slow frame $slow 格（${"%.1f".format(slowPercent)}%）、frozen frame $frozen 格")
+        return Verdict(
+            rating,
+            "slow frame $slow 格（${"%.1f".format(
+                slowPercent,
+            )}%）、frozen frame $frozen 格",
+        )
     }
 
     fun run(log: LabLog) = scenario(log) { judge(it) }
@@ -86,19 +118,36 @@ val l01 = Lab(
         val verdict = lines.firstOrNull { it.startsWith("判定：") }
         when {
             avg == null -> "演練沒有跑完"
+
             verdict == null || verdict == "判定：（）" -> "還沒有判定：judge 要回傳 Verdict(等級, 依據)"
-            !verdict.startsWith("判定：良好（平均 ") -> "Bug 版只看平均 FPS（格數 ÷ 總秒數）：平均 ${avg} FPS ≥ 55 就要判定「良好」"
+
+            !verdict.startsWith(
+                "判定：良好（平均 ",
+            ) -> "Bug 版只看平均 FPS（格數 ÷ 總秒數）：平均 $avg FPS ≥ 55 就要判定「良好」"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         val verdict = lines.firstOrNull { it.startsWith("判定：") }
         when {
-            verdict == null -> "演練沒有跑完"
-            "slow frame 3 格" !in verdict || "frozen frame 1 格" !in verdict ->
-                "應該數出 3 格 slow frame（間隔超過 ${"%.1f".format(FRAME_BUDGET_MS * 1.5)} ms）、1 格 frozen frame（超過 700 ms）：$verdict"
-            !verdict.startsWith("判定：嚴重") -> "有 frozen frame，應該判定「嚴重」：$verdict"
-            else -> null
+            verdict == null -> {
+                "演練沒有跑完"
+            }
+
+            "slow frame 3 格" !in verdict || "frozen frame 1 格" !in verdict -> {
+                "應該數出 3 格 slow frame（間隔超過 ${"%.1f".format(
+                    FRAME_BUDGET_MS * 1.5,
+                )} ms）、1 格 frozen frame（超過 700 ms）：$verdict"
+            }
+
+            !verdict.startsWith("判定：嚴重") -> {
+                "有 frozen frame，應該判定「嚴重」：$verdict"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

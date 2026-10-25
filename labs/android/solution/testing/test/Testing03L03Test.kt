@@ -21,9 +21,14 @@ class Testing03L03Test {
         "價格算錯的實作" to T03PriceStream.wrongPrice(),
     )
 
-    /** 同一個測試對三個實作各跑一次：通過（true）或失敗（false，測試丟出 AssertionError 之類的例外） */
+    /**
+     * 同一個測試對三個實作各跑一次：通過（true）或失敗（false，測試丟出
+     * AssertionError 之類的例外）
+     */
     private fun matrix(test: (Flow<T03UiState>) -> Unit): List<Boolean> =
-        implementations.map { (_, stream) -> runCatching { test(stream) }.isSuccess }
+        implementations.map { (_, stream) ->
+            runCatching { test(stream) }.isSuccess
+        }
 
     @Test
     fun l03() {
@@ -36,7 +41,13 @@ class Testing03L03Test {
             !bug[1] -> "Bug 還沒重現：漏發 Data 時 collect 裡的斷言根本不會執行，測試應該要通過（假的綠燈）"
             else -> null
         }
-        t03Report("L03", "Bug 版", bugReason, "正確的實作通過；價格算錯的實作失敗（抓到）；漏發 Data 的實作也通過（沒抓到）", failures)
+        t03Report(
+            "L03",
+            "Bug 版",
+            bugReason,
+            "正確的實作通過；價格算錯的實作失敗（抓到）；漏發 Data 的實作也通過（沒抓到）",
+            failures,
+        )
 
         val fixed = matrix(L03Fixed::test)
         val fixedReason = when {
@@ -45,7 +56,13 @@ class Testing03L03Test {
             fixed[2] -> "價格算錯的實作也通過了：要用 assertEquals 檢查 awaitItem() 的內容"
             else -> null
         }
-        t03Report("L03", "修正版", fixedReason, "正確的實作通過；漏發 Data 與價格算錯的實作都失敗（抓到）", failures)
+        t03Report(
+            "L03",
+            "修正版",
+            fixedReason,
+            "正確的實作通過；漏發 Data 與價格算錯的實作都失敗（抓到）",
+            failures,
+        )
 
         assertEquals(emptyList<String>(), failures)
     }
@@ -56,7 +73,13 @@ internal object L03Bug {
     fun test(stream: Flow<T03UiState>) = runTest {
         val job = launch {
             stream.collect { state ->
-                if (state is T03UiState.Data) assertEquals(15_000_000, state.price)   // 資料流沒發 Data，這行永遠不會執行
+                // 資料流沒發 Data，這行永遠不會執行
+                if (state is T03UiState.Data) {
+                    assertEquals(
+                        15_000_000,
+                        state.price,
+                    )
+                }
             }
         }
         job.join()
@@ -68,7 +91,8 @@ internal object L03Fixed {
     fun test(stream: Flow<T03UiState>) = runTest {
         stream.test {
             assertEquals(T03UiState.Loading, awaitItem())
-            assertEquals(T03UiState.Data(15_000_000), awaitItem())   // 漏發時，這裡遇到的是「資料流結束」，測試失敗
+            // 漏發時，這裡遇到的是「資料流結束」，測試失敗
+            assertEquals(T03UiState.Data(15_000_000), awaitItem())
             awaitComplete()
         }
     }

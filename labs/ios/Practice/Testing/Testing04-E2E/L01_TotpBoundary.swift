@@ -1,30 +1,47 @@
-// L01：登入的 E2E 測試偶爾失敗，而且只發生在 30 秒的最後幾秒（驗證碼先算好，送出時已經換新的了）
+// L01：登入的 E2E 測試偶爾失敗，而且只發生在 30 秒的最後幾秒（驗證碼先算好，
+// 送出時已經換新的了）
 // 對應複習站：Testing04E2E 第 2 題「交易所 App 的測試環境要注意什麼？」
 //
-// 情境：測試帳號用固定的 TOTP 密鑰，測試程式自己用同樣的算法（T04Totp.code，RFC 6238）算出驗證碼。
-//       登入流程：輸入帳號密碼（2.5 秒）→ 等兩步驟驗證畫面出現（1.5 秒）→ 送出驗證碼（0.5 秒送到伺服器）。
-//       伺服器很嚴格，只接受「現在這個 30 秒」的驗證碼。時間用假的時鐘推進，不會真的等。
-//       演練把同一個登入測試跑 4 次，分別從某個 30 秒區間的第 3、12、22、27.5 秒開始。
+// 情境：測試帳號用固定的 TOTP 密鑰，測試程式自己用同樣的算法（T04Totp.code，
+// RFC 6238）算出驗證碼。
+//       登入流程：輸入帳號密碼（2.5 秒）→ 等兩步驟驗證畫面出現（1.5 秒）→
+// 送出驗證碼（0.5 秒送到伺服器）。
+//       伺服器很嚴格，只接受「現在這個 30 秒」的驗證碼。時間用假的時鐘推進，
+// 不會真的等。
+//       演練把同一個登入測試跑 4 次，分別從某個 30 秒區間的第 3、12、22、27.5
+// 秒開始。
 //
 // 你要寫：
-//   ① Bug 版：login 一開始就用 T04Totp.code(at: clock.now) 算好驗證碼，再依序 typeCredentials()、waitForTwoFactorScreen()、submitCode(code)。
-//   ② 修正版：login 先 typeCredentials()、waitForTwoFactorScreen()；再用 T04Totp.secondsLeft(at: clock.now) 看這個 30 秒還剩幾秒，
-//      少於 5 秒就 clock.advance(剩下的秒數 + 0.1) 等到下一個區間（真實測試裡是 sleep）；最後才算驗證碼並 submitCode。
-// 只改有 TODO 的地方。解答：Solution/Testing/Testing04-E2E/L01_TotpBoundary.swift
+//   ① Bug 版：login 一開始就用 T04Totp.code(at: clock.now) 算好驗證碼，再依序
+// typeCredentials()、waitForTwoFactorScreen()、submitCode(code)。
+//   ② 修正版：login 先 typeCredentials()、waitForTwoFactorScreen()；再用
+// T04Totp.secondsLeft(at: clock.now) 看這個 30 秒還剩幾秒，
+//      少於 5 秒就 clock.advance(剩下的秒數 + 0.1)
+// 等到下一個區間（真實測試裡是 sleep）；最後才算驗證碼並 submitCode。
+// 只改有 TODO 的地方。解答：Solution/Testing/Testing04-E2E/L01_TotpBoundary.
+// swift
 import Foundation
 import LabKit
 
 /// 演練流程（兩個版本共用）：同一個登入測試從不同的時間點開始跑 4 次
-private func scenario(_ log: LabLog, login: @escaping (T04FakeLoginUI, T04Clock) async -> Void) async {
+private func scenario(
+    _ log: LabLog, login: @escaping (T04FakeLoginUI, T04Clock) async -> Void
+) async {
     log("TOTP 算法對照 RFC 6238 的測試向量：\(T04Totp.selfCheck() ? "正確" : "不正確")")
-    let windowStart: TimeInterval = 1_700_000_010                    // 某個 30 秒區間的起點（30 的倍數）
+    // 某個 30 秒區間的起點（30 的倍數）
+    let windowStart: TimeInterval = 1_700_000_010
     let suite = T04Suite()
-    for (label, offset) in [("第 3 秒", 3.0), ("第 12 秒", 12.0), ("第 22 秒", 22.0), ("第 27.5 秒", 27.5)] {
+    for (label, offset) in [
+        ("第 3 秒", 3.0), ("第 12 秒", 12.0), ("第 22 秒", 22.0), ("第 27.5 秒", 27.5),
+    ] {
         suite.test("從 30 秒區間的\(label)開始登入") { t in
             let clock = T04Clock(start: windowStart + offset)
-            let ui = T04FakeLoginUI(clock: clock, server: T04FakeAuthServer(clock: clock))
+            let ui = T04FakeLoginUI(
+                clock: clock, server: T04FakeAuthServer(clock: clock))
             await login(ui, clock)
-            t.isTrue(ui.loggedIn, "登入失敗：\(ui.errorMessage.isEmpty ? "沒有送出驗證碼" : ui.errorMessage)")
+            t.isTrue(
+                ui.loggedIn,
+                "登入失敗：\(ui.errorMessage.isEmpty ? "沒有送出驗證碼" : ui.errorMessage)")
         }
     }
     await suite.run(label: "登入測試", log: log)
@@ -33,7 +50,8 @@ private func scenario(_ log: LabLog, login: @escaping (T04FakeLoginUI, T04Clock)
 // MARK: - Bug 版
 private enum L01Bug {
     static func login(_ ui: T04FakeLoginUI, _ clock: T04Clock) async {
-        // TODO ①：一開始就用 T04Totp.code(at: clock.now) 算好驗證碼，再依序 typeCredentials()、waitForTwoFactorScreen()、submitCode(code)
+        // TODO ①：一開始就用 T04Totp.code(at: clock.now) 算好驗證碼，再依序
+        // typeCredentials()、waitForTwoFactorScreen()、submitCode(code)
         _ = (ui, clock)
     }
 
@@ -46,7 +64,9 @@ private enum L01Bug {
 private enum L01Fixed {
     static func login(_ ui: T04FakeLoginUI, _ clock: T04Clock) async {
         // TODO ②-1：先 typeCredentials()、waitForTwoFactorScreen()
-        // TODO ②-2：用 T04Totp.secondsLeft(at: clock.now) 看這個 30 秒還剩幾秒；少於 5 秒就 clock.advance(剩下的秒數 + 0.1) 等到下一個區間
+        // TODO ②-2：用 T04Totp.secondsLeft(at: clock.now) 看這個 30
+        // 秒還剩幾秒；少於 5 秒就 clock.advance(剩下的秒數 + 0.1)
+        // 等到下一個區間
         // TODO ②-3：最後才用 T04Totp.code(at: clock.now) 算驗證碼，submitCode
         _ = (ui, clock)
     }
@@ -77,16 +97,29 @@ extension Testing04E2E {
             }
         },
         checkBug: { lines in
-            guard lines.contains("TOTP 算法對照 RFC 6238 的測試向量：正確") else { return "TOTP 算法和 RFC 6238 的測試向量不一致" }
-            guard let s = T04Summary.parse(lines, label: "登入測試") else { return "找不到摘要：要用 scenario 跑" }
+            guard lines.contains("TOTP 算法對照 RFC 6238 的測試向量：正確") else {
+                return "TOTP 算法和 RFC 6238 的測試向量不一致"
+            }
+            guard let s = T04Summary.parse(lines, label: "登入測試") else {
+                return "找不到摘要：要用 scenario 跑"
+            }
             if s.cases != 4 { return "只跑了 \(s.cases) 個測試" }
-            if s.passed == 0 { return "4 次全部失敗：登入要做完整：typeCredentials、waitForTwoFactorScreen、submitCode(code)" }
-            return s.failed > 0 ? nil : "4 次都通過：Bug 還沒重現（要一開始就用 T04Totp.code(at: clock.now) 算好驗證碼，再做後面的步驟）"
+            if s.passed == 0 {
+                return
+                    "4 次全部失敗：登入要做完整：typeCredentials、waitForTwoFactorScreen、submitCode(code)"
+            }
+            return s.failed > 0
+                ? nil
+                : "4 次都通過：Bug 還沒重現（要一開始就用 T04Totp.code(at: clock.now) 算好驗證碼，再做後面的步驟）"
         },
         checkFixed: { lines in
-            guard let s = T04Summary.parse(lines, label: "登入測試") else { return "找不到摘要：要用 scenario 跑" }
+            guard let s = T04Summary.parse(lines, label: "登入測試") else {
+                return "找不到摘要：要用 scenario 跑"
+            }
             if s.cases != 4 { return "只跑了 \(s.cases) 個測試" }
-            return s.failed == 0 ? nil : "還有 \(s.failed) 次失敗：要等 waitForTwoFactorScreen 之後才算驗證碼；secondsLeft 小於 5 時，先 clock.advance 到下一個區間"
+            return s.failed == 0
+                ? nil
+                : "還有 \(s.failed) 次失敗：要等 waitForTwoFactorScreen 之後才算驗證碼；secondsLeft 小於 5 時，先 clock.advance 到下一個區間"
         }
     )
 }

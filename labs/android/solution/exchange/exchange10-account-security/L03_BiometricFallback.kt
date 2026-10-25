@@ -1,14 +1,25 @@
-// L03：沒有設定指紋的手機、驗證失敗太多次的人，鎖定畫面直接放行（生物辨識失敗後的降級流程）
-// 對應複習站：Exchange10AccountSecurity 第 3 題「生物辨識只看『成功』為什麼不夠安全？」
-//        （生物辨識綁在金鑰上、不能只看布林值，Platform04 的演練 6 已經練過；這題練的是「失敗、不能用、金鑰失效」之後怎麼辦。）
+// L03：沒有設定指紋的手機、驗證失敗太多次的人，
+// 鎖定畫面直接放行（生物辨識失敗後的降級流程）
+// 對應複習站：Exchange10AccountSecurity 第 3 題「生物辨識只看『成功』
+// 為什麼不夠安全？」
+//        （生物辨識綁在金鑰上、不能只看布林值，Platform04 的演練 6 已經練過；
+// 這題練的是「失敗、不能用、金鑰失效」之後怎麼辦。）
 //
-// 情境：鎖定畫面要求生物辨識才能解鎖。系統會回報 7 種結果：成功、失敗（第 N 次）、使用者按了取消、被系統鎖定（嘗試太多次）、
-//        金鑰失效（使用者新增了別人的指紋或臉部，KeyPermanentlyInvalidatedException）、這支手機不能用生物辨識（沒設定或被關閉）。
-//        每一種結果都要決定下一步：放行、再試一次、維持鎖定、改用密碼加兩步驟驗證（2FA）、或要求密碼加 2FA 之後重新註冊金鑰。
-//        規則：只有「成功」可以放行；失敗累積 3 次、被鎖定、不能用，都改用密碼加 2FA；金鑰失效要重新註冊，而且重新註冊本身也要密碼加 2FA。
-// Bug 版：成功放行、失敗就再試、取消維持鎖定，其他的「錯誤」一律放行（想著「不要卡住使用者」）。
-//        結果：沒設定生物辨識的手機、被系統鎖定的人、金鑰失效的人，鎖定畫面形同虛設；失敗也可以無限再試。
-// 修正版：每一種結果都明確對應一個決定，沒有 else 分支（when 搭配 sealed interface，新增結果時編譯器會提醒）。
+// 情境：鎖定畫面要求生物辨識才能解鎖。系統會回報 7 種結果：成功、失敗（第 N
+// 次）、使用者按了取消、被系統鎖定（嘗試太多次）、
+//        金鑰失效（使用者新增了別人的指紋或臉部，
+// KeyPermanentlyInvalidatedException）、
+// 這支手機不能用生物辨識（沒設定或被關閉）。
+//        每一種結果都要決定下一步：放行、再試一次、維持鎖定、
+// 改用密碼加兩步驟驗證（2FA）、或要求密碼加 2FA 之後重新註冊金鑰。
+//        規則：只有「成功」可以放行；失敗累積 3 次、被鎖定、不能用，
+// 都改用密碼加 2FA；金鑰失效要重新註冊，而且重新註冊本身也要密碼加 2FA。
+// Bug 版：成功放行、失敗就再試、取消維持鎖定，其他的「錯誤」
+// 一律放行（想著「不要卡住使用者」）。
+//        結果：沒設定生物辨識的手機、被系統鎖定的人、金鑰失效的人，
+// 鎖定畫面形同虛設；失敗也可以無限再試。
+// 修正版：每一種結果都明確對應一個決定，沒有 else 分支（when 搭配 sealed
+// interface，新增結果時編譯器會提醒）。
 package tw.harry.labs.solution.exchange10accountsecurity
 
 import tw.harry.labs.kit.Lab
@@ -17,11 +28,17 @@ import tw.harry.labs.kit.Variant
 
 private sealed interface L03Bio {
     data object Success : L03Bio
-    data class Failed(val attempt: Int) : L03Bio     // 這是第幾次失敗
+    data class Failed(val attempt: Int) : L03Bio // 這是第幾次失敗
     data object UserCancelled : L03Bio
-    data object LockedOut : L03Bio                   // 嘗試太多次，系統鎖定生物辨識
-    data object KeyInvalidated : L03Bio              // 使用者新增了指紋或臉部，綁定的金鑰失效
-    data object Unavailable : L03Bio                 // 沒設定生物辨識，或被關閉
+
+    // 嘗試太多次，系統鎖定生物辨識
+    data object LockedOut : L03Bio
+
+    // 使用者新增了指紋或臉部，綁定的金鑰失效
+    data object KeyInvalidated : L03Bio
+
+    // 沒設定生物辨識，或被關閉
+    data object Unavailable : L03Bio
 }
 
 private enum class L03Decision(val text: String) {
@@ -62,13 +79,16 @@ private fun scenario(log: LabLog, decide: (L03Bio) -> L03Decision) {
 
 // MARK: - Bug 版
 private object L03Bug {
-    fun decide(result: L03Bio): L03Decision {
-        return when (result) {
-            L03Bio.Success -> L03Decision.Unlock
-            is L03Bio.Failed -> L03Decision.Retry                // 失敗就再試，沒有次數上限
-            L03Bio.UserCancelled -> L03Decision.StayLocked
-            else -> L03Decision.Unlock                           // 「其他錯誤不要卡住使用者」：鎖定、金鑰失效、沒設定，全部放行
-        }
+    fun decide(result: L03Bio): L03Decision = when (result) {
+        L03Bio.Success -> L03Decision.Unlock
+
+        // 失敗就再試，沒有次數上限
+        is L03Bio.Failed -> L03Decision.Retry
+
+        L03Bio.UserCancelled -> L03Decision.StayLocked
+
+        // 「其他錯誤不要卡住使用者」：鎖定、金鑰失效、沒設定，全部放行
+        else -> L03Decision.Unlock
     }
 
     suspend fun run(log: LabLog) = scenario(log) { decide(it) }
@@ -76,14 +96,25 @@ private object L03Bug {
 
 // MARK: - 修正版
 private object L03Fixed {
-    fun decide(result: L03Bio): L03Decision {
-        return when (result) {
-            L03Bio.Success -> L03Decision.Unlock
-            is L03Bio.Failed -> if (result.attempt >= 3) L03Decision.PasswordAnd2FA else L03Decision.Retry   // 累積 3 次失敗就不要再讓他猜了
-            L03Bio.UserCancelled -> L03Decision.StayLocked
-            L03Bio.LockedOut, L03Bio.Unavailable -> L03Decision.PasswordAnd2FA   // 不能用生物辨識：只能走密碼加 2FA，不能放行
-            L03Bio.KeyInvalidated -> L03Decision.Reenroll                          // 金鑰失效：重新註冊本身也要密碼加 2FA
+    fun decide(result: L03Bio): L03Decision = when (result) {
+        L03Bio.Success -> L03Decision.Unlock
+
+        // 累積 3 次失敗就不要再讓他猜了
+        is L03Bio.Failed -> if (result.attempt >=
+            3
+        ) {
+            L03Decision.PasswordAnd2FA
+        } else {
+            L03Decision.Retry
         }
+
+        L03Bio.UserCancelled -> L03Decision.StayLocked
+
+        // 不能用生物辨識：只能走密碼加 2FA，不能放行
+        L03Bio.LockedOut, L03Bio.Unavailable -> L03Decision.PasswordAnd2FA
+
+        // 金鑰失效：重新註冊本身也要密碼加 2FA
+        L03Bio.KeyInvalidated -> L03Decision.Reenroll
     }
 
     suspend fun run(log: LabLog) = scenario(log) { decide(it) }

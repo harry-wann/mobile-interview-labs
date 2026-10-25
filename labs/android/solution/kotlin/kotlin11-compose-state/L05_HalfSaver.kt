@@ -1,11 +1,15 @@
 // L05：旋轉螢幕後，下單數量歸零了（Saver 只存了一半的欄位）
-// 對應複習站：Kotlin11ComposeState 第 5 題「remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？」
+// 對應複習站：Kotlin11ComposeState 第 5 題「remember 和 rememberSaveable
+// 怎麼選？Saver 怎麼寫？」
 //
-// 情境：下單草稿 OrderDraft 本來只有交易對和買賣方向，Saver 是那時候寫的。後來為了「數量」加了一個新欄位 qty（有預設值 0.0），
+// 情境：下單草稿 OrderDraft 本來只有交易對和買賣方向，Saver 是那時候寫的。
+// 後來為了「數量」加了一個新欄位 qty（有預設值 0.0），
 //        Saver 沒跟著改。使用者把草稿填成 ETH_JPY、賣出、0.25，然後旋轉螢幕。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose，
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose，
 //        再用 SimulatedRotation.kt 模擬旋轉螢幕（存起來、畫面重建、還原）。
-// Bug 版：mapSaver 只存 symbol 和 side，restore 時 OrderDraft(symbol, side)，qty 用預設值 0.0。
+// Bug 版：mapSaver 只存 symbol 和 side，restore 時 OrderDraft(symbol, side)，
+// qty 用預設值 0.0。
 //        沒有錯誤、也沒有當掉，只是旋轉之後數量靜悄悄地歸零。
 // 修正版：save 和 restore 都加上 qty。欄位多了一個，Saver 就要跟著改。
 package tw.harry.labs.solution.kotlin11composestate
@@ -22,16 +26,29 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 下單草稿：後來加了 qty，有預設值，所以呼叫端不用改 */
-private class L05Draft(val symbol: String, val side: String, val qty: Double = 0.0) {
+private class L05Draft(
+    val symbol: String,
+    val side: String,
+    val qty: Double = 0.0,
+) {
     override fun toString() = "$symbol $side $qty"
 }
 
-/** 演練流程（兩個版本共用）：打開畫面 → 使用者把草稿改成 ETH_JPY 賣出 0.25 → 旋轉螢幕 → 看旋轉後畫面顯示什麼 */
+/**
+ * 演練流程（兩個版本共用）：打開畫面 → 使用者把草稿改成 ETH_JPY 賣出 0.25 →
+ * 旋轉螢幕 → 看旋轉後畫面顯示什麼
+ */
 private suspend fun scenario(
     log: LabLog,
-    screen: @Composable (onState: (MutableState<L05Draft>) -> Unit, onShow: (String) -> Unit) -> Unit,
+    screen: @Composable (
+        onState: (MutableState<L05Draft>) -> Unit,
+        onShow: (String) -> Unit,
+    ) -> Unit,
 ) {
-    val (before, after) = rotateScreen(screen) { it.value = L05Draft("ETH_JPY", "SELL", 0.25) }
+    val (before, after) = rotateScreen(screen) {
+        it.value =
+            L05Draft("ETH_JPY", "SELL", 0.25)
+    }
     log("旋轉前，畫面顯示：$before")
     log("旋轉後，畫面顯示：$after")
 }
@@ -41,35 +58,60 @@ private object L05Bug {
     /** 加了 qty 之後沒改：只存 symbol 和 side */
     val draftSaver = mapSaver(
         save = { mapOf("symbol" to it.symbol, "side" to it.side) },
-        restore = { L05Draft(it["symbol"] as String, it["side"] as String) },    // qty 用預設值，編譯器不會提醒
+        // qty 用預設值，編譯器不會提醒
+        restore = { L05Draft(it["symbol"] as String, it["side"] as String) },
     )
 
     @Composable
-    fun OrderScreen(onState: (MutableState<L05Draft>) -> Unit, onShow: (String) -> Unit) {
-        val draft = rememberSaveable(stateSaver = draftSaver) { mutableStateOf(L05Draft("BTC_JPY", "BUY")) }
+    fun OrderScreen(
+        onState: (MutableState<L05Draft>) -> Unit,
+        onShow: (String) -> Unit,
+    ) {
+        val draft =
+            rememberSaveable(stateSaver = draftSaver) {
+                mutableStateOf(L05Draft("BTC_JPY", "BUY"))
+            }
         SideEffect { onState(draft) }
         HeadlessText(draft.value.toString(), onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { onState, onShow -> OrderScreen(onState, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { onState, onShow ->
+        OrderScreen(onState, onShow)
+    }
 }
 
 // MARK: - 修正版
 private object L05Fixed {
     /** 每個欄位都要存、都要還原 */
     val draftSaver = mapSaver(
-        save = { mapOf("symbol" to it.symbol, "side" to it.side, "qty" to it.qty) },
-        restore = { L05Draft(it["symbol"] as String, it["side"] as String, it["qty"] as Double) },
+        save = {
+            mapOf("symbol" to it.symbol, "side" to it.side, "qty" to it.qty)
+        },
+        restore = {
+            L05Draft(
+                it["symbol"] as String,
+                it["side"] as String,
+                it["qty"] as Double,
+            )
+        },
     )
 
     @Composable
-    fun OrderScreen(onState: (MutableState<L05Draft>) -> Unit, onShow: (String) -> Unit) {
-        val draft = rememberSaveable(stateSaver = draftSaver) { mutableStateOf(L05Draft("BTC_JPY", "BUY")) }
+    fun OrderScreen(
+        onState: (MutableState<L05Draft>) -> Unit,
+        onShow: (String) -> Unit,
+    ) {
+        val draft =
+            rememberSaveable(stateSaver = draftSaver) {
+                mutableStateOf(L05Draft("BTC_JPY", "BUY"))
+            }
         SideEffect { onState(draft) }
         HeadlessText(draft.value.toString(), onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { onState, onShow -> OrderScreen(onState, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { onState, onShow ->
+        OrderScreen(onState, onShow)
+    }
 }
 
 // MARK: - 演練設定

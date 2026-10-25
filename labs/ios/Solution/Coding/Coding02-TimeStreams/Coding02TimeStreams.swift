@@ -6,6 +6,7 @@ enum Coding02TimeStreams {
         id: "livecoding-streams",
         code: "Coding02TimeStreams",
         title: "時間與串流題",
-        labs: [l01, l02, l03, l04, l05, l06]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05, l06]
     )
 }

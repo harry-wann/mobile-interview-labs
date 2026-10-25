@@ -6,6 +6,7 @@ enum Platform03BackgroundPush {
         id: "platform-background-push",
         code: "Platform03BackgroundPush",
         title: "背景執行與推播",
-        labs: [l02, l04, l05, l06, l07]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l02, l04, l05, l06, l07]
     )
 }

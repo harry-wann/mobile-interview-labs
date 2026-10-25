@@ -1,12 +1,17 @@
-// L08：App 更新之後，使用者本機的訂單全部消失了（資料庫 migration，不要用「刪掉重建」）
-// 對應複習站：Platform04SecureStorage 第 7 題「資料庫結構改版時，migration 要怎麼做？」
+// L08：App 更新之後，使用者本機的訂單全部消失了（資料庫 migration，
+// 不要用「刪掉重建」）
+// 對應複習站：Platform04SecureStorage 第 7 題「資料庫結構改版時，migration
+// 要怎麼做？」
 //
-// 情境：1.0 版的 Order 實體只有 symbol、status 兩個欄位，使用者手機裡已經存了 2 張訂單。1.1 版新增了 memo 欄位。
-//        使用者更新 App 之後，手機裡還是 1.0 版結構的資料庫檔案。演練先用 1.0 版的 model 寫入 2 張訂單，再用 1.1 版的 model 開啟同一個檔案。
+// 情境：1.0 版的 Order 實體只有 symbol、status 兩個欄位，使用者手機裡已經存了
+// 2 張訂單。1.1 版新增了 memo 欄位。
+//        使用者更新 App 之後，手機裡還是 1.0 版結構的資料庫檔案。演練先用 1.0
+// 版的 model 寫入 2 張訂單，再用 1.1 版的 model 開啟同一個檔案。
 //
 // 你要寫：
 //   ① Bug 版：開啟時不給 migration 選項；打不開就刪掉資料庫檔案重建。
-//   ② 修正版：開啟時加上 NSMigratePersistentStoresAutomaticallyOption 與 NSInferMappingModelAutomaticallyOption（lightweight migration）。
+//   ② 修正版：開啟時加上 NSMigratePersistentStoresAutomaticallyOption 與
+// NSInferMappingModelAutomaticallyOption（lightweight migration）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Platform/Platform04-SecureStorage/L08_Migration.swift
 import CoreData
@@ -26,7 +31,10 @@ private func makeModel(version: Int) -> NSManagedObjectModel {
         a.isOptional = true
         return a
     }
-    entity.properties = version >= 2 ? [attribute("symbol"), attribute("status"), attribute("memo")] : [attribute("symbol"), attribute("status")]
+    entity.properties =
+        version >= 2
+        ? [attribute("symbol"), attribute("status"), attribute("memo")]
+        : [attribute("symbol"), attribute("status")]
     model.entities = [entity]
     return model
 }
@@ -37,20 +45,29 @@ private func removeStore(at url: URL) {
     }
 }
 
-/// 演練流程（兩個版本共用）：用 1.0 版寫入 2 張訂單，再用 [open] 以 1.1 版開啟，數一數還剩幾張
-private func scenario(_ log: LabLog, open: (_ url: URL, _ model: NSManagedObjectModel) -> NSPersistentStoreCoordinator?) {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("orders-\(UUID().uuidString).sqlite")
+/// 演練流程（兩個版本共用）：用 1.0 版寫入 2 張訂單，再用 [open] 以 1.1
+/// 版開啟，數一數還剩幾張
+private func scenario(
+    _ log: LabLog,
+    open: (_ url: URL, _ model: NSManagedObjectModel) ->
+        NSPersistentStoreCoordinator?
+) {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "orders-\(UUID().uuidString).sqlite")
     defer { removeStore(at: url) }
 
     // 使用者手機裡的 1.0 版資料庫
     do {
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: makeModel(version: 1))
-        _ = try coordinator.addPersistentStore(type: .sqlite, configuration: nil, at: url, options: nil)
+        let coordinator = NSPersistentStoreCoordinator(
+            managedObjectModel: makeModel(version: 1))
+        _ = try coordinator.addPersistentStore(
+            type: .sqlite, configuration: nil, at: url, options: nil)
         let context = NSManagedObjectContext(.privateQueue)
         context.persistentStoreCoordinator = coordinator
         context.performAndWait {
             for symbol in ["btcjpy", "ethjpy"] {
-                let order = NSEntityDescription.insertNewObject(forEntityName: "Order", into: context)
+                let order = NSEntityDescription.insertNewObject(
+                    forEntityName: "Order", into: context)
                 order.setValue(symbol, forKey: "symbol")
                 order.setValue("Filled", forKey: "status")
             }
@@ -63,27 +80,42 @@ private func scenario(_ log: LabLog, open: (_ url: URL, _ model: NSManagedObject
     }
 
     // 使用者更新 App：用 1.1 版的 model 開啟同一個檔案
-    guard let coordinator = open(url, makeModel(version: 2)), !coordinator.persistentStores.isEmpty else {
+    guard let coordinator = open(url, makeModel(version: 2)),
+        !coordinator.persistentStores.isEmpty
+    else {
         log("更新後（1.1 版）：資料庫打不開，App 無法使用")
         return
     }
     let context = NSManagedObjectContext(.privateQueue)
     context.persistentStoreCoordinator = coordinator
     context.performAndWait {
-        let count = (try? context.fetch(NSFetchRequest<NSManagedObject>(entityName: "Order")).count) ?? 0
+        let count =
+            (try? context.fetch(
+                NSFetchRequest<NSManagedObject>(entityName: "Order")
+            ).count) ?? 0
         log("更新後（1.1 版）：本機剩 \(count) 張訂單")
-        let order = NSEntityDescription.insertNewObject(forEntityName: "Order", into: context)     // 新版的功能：存一張有備註的訂單
+        // 新版的功能：存一張有備註的訂單
+        let order = NSEntityDescription.insertNewObject(
+            forEntityName: "Order", into: context)
         order.setValue("備註", forKey: "memo")
-        log("更新後（1.1 版）：新增一張有備註的訂單\((try? context.save()) != nil ? "成功" : "失敗")")
+        log(
+            "更新後（1.1 版）：新增一張有備註的訂單\((try? context.save()) != nil ? "成功" : "失敗")"
+        )
     }
 }
 
 // MARK: - Bug 版
 private enum L08Bug {
-    static func open(url: URL, model: NSManagedObjectModel) -> NSPersistentStoreCoordinator? {
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
-        // TODO ①：用 coordinator.addPersistentStore(type: .sqlite, configuration: nil, at: url, options: nil) 開啟（沒有 migration 選項）；
-        //        如果丟出錯誤，就 removeStore(at: url) 刪掉資料庫檔案，再用同樣的方式重新建立
+    static func open(
+        url: URL, model: NSManagedObjectModel
+    ) -> NSPersistentStoreCoordinator? {
+        let coordinator = NSPersistentStoreCoordinator(
+            managedObjectModel: model)
+        // TODO ①：用 coordinator.addPersistentStore(type: sqlite,
+        // configuration: nil, at: url, options: nil) 開啟（沒有 migration
+        // 選項）；
+        //        如果丟出錯誤，就 removeStore(at: url) 刪掉資料庫檔案，
+        // 再用同樣的方式重新建立
         return coordinator
     }
 
@@ -94,10 +126,16 @@ private enum L08Bug {
 
 // MARK: - 修正版
 private enum L08Fixed {
-    static func open(url: URL, model: NSManagedObjectModel) -> NSPersistentStoreCoordinator? {
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
-        // TODO ②：開啟時 options 要有兩個選項：NSMigratePersistentStoresAutomaticallyOption（自動 migration）與
-        //        NSInferMappingModelAutomaticallyOption（讓系統推斷新舊模型怎麼對應），都設成 true；丟出錯誤時回傳 nil（不要刪資料）
+    static func open(
+        url: URL, model: NSManagedObjectModel
+    ) -> NSPersistentStoreCoordinator? {
+        let coordinator = NSPersistentStoreCoordinator(
+            managedObjectModel: model)
+        // TODO ②：開啟時 options 要有兩個選項：
+        // NSMigratePersistentStoresAutomaticallyOption（自動 migration）與
+        //
+        // NSInferMappingModelAutomaticallyOption（讓系統推斷新舊模型怎麼對應），
+        // 都設成 true；丟出錯誤時回傳 nil（不要刪資料）
         return coordinator
     }
 
@@ -109,7 +147,11 @@ private enum L08Fixed {
 // MARK: - 演練設定
 private func remaining(_ lines: [String]) -> Int? {
     lines.first { $0.hasPrefix("更新後（1.1 版）：本機剩 ") }
-        .flatMap { Int($0.replacingOccurrences(of: "更新後（1.1 版）：本機剩 ", with: "").replacingOccurrences(of: " 張訂單", with: "")) }
+        .flatMap {
+            Int(
+                $0.replacingOccurrences(of: "更新後（1.1 版）：本機剩 ", with: "")
+                    .replacingOccurrences(of: " 張訂單", with: ""))
+        }
 }
 
 extension Platform04SecureStorage {
@@ -117,7 +159,8 @@ extension Platform04SecureStorage {
         id: "L08",
         title: "App 更新後，本機訂單全部消失",
         question: "第 7 題：資料庫結構改版時，migration 要怎麼做？",
-        goal: "資料庫結構改版時要有明確的 migration 路徑。新增欄位這種簡單變更，用 lightweight migration 讓系統自動搬資料，不要刪掉重建。先寫出刪掉重建的 Bug 版，再寫修正版。",
+        goal:
+            "資料庫結構改版時要有明確的 migration 路徑。新增欄位這種簡單變更，用 lightweight migration 讓系統自動搬資料，不要刪掉重建。先寫出刪掉重建的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Platform/Platform04-SecureStorage/L08_Migration.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」按執行，看「更新後（1.1 版）：本機剩幾張訂單」。主控台會印出 Core Data 的 134100 錯誤，那就是 Bug 版遇到的錯誤。",
@@ -133,15 +176,31 @@ extension Platform04SecureStorage {
             }
         },
         checkBug: { lines in
-            guard let n = remaining(lines) else { return "更新後資料庫打不開：open 要用 addPersistentStore 加上 store，並回傳 coordinator" }
-            if !lines.contains("更新後（1.1 版）：新增一張有備註的訂單成功") { return "資料庫要能使用：打不開時刪掉檔案後，要再用 addPersistentStore 重新建立" }
-            if n != 0 { return "Bug 還沒重現（剩 \(n) 張）：Bug 版開啟時不給 migration 選項，打不開就 removeStore 刪掉重建" }
+            guard let n = remaining(lines) else {
+                return
+                    "更新後資料庫打不開：open 要用 addPersistentStore 加上 store，並回傳 coordinator"
+            }
+            if !lines.contains("更新後（1.1 版）：新增一張有備註的訂單成功") {
+                return "資料庫要能使用：打不開時刪掉檔案後，要再用 addPersistentStore 重新建立"
+            }
+            if n != 0 {
+                return
+                    "Bug 還沒重現（剩 \(n) 張）：Bug 版開啟時不給 migration 選項，打不開就 removeStore 刪掉重建"
+            }
             return nil
         },
         checkFixed: { lines in
-            guard let n = remaining(lines) else { return "更新後資料庫打不開：開啟時要加上 NSMigratePersistentStoresAutomaticallyOption 與 NSInferMappingModelAutomaticallyOption" }
-            if !lines.contains("更新後（1.1 版）：新增一張有備註的訂單成功") { return "更新後新增訂單失敗：open 要用 addPersistentStore 加上 store，並回傳 coordinator" }
-            return n == 2 ? nil : "更新後只剩 \(n) 張訂單：開啟時加上 NSMigratePersistentStoresAutomaticallyOption 與 NSInferMappingModelAutomaticallyOption，不要刪資料庫"
+            guard let n = remaining(lines) else {
+                return
+                    "更新後資料庫打不開：開啟時要加上 NSMigratePersistentStoresAutomaticallyOption 與 NSInferMappingModelAutomaticallyOption"
+            }
+            if !lines.contains("更新後（1.1 版）：新增一張有備註的訂單成功") {
+                return
+                    "更新後新增訂單失敗：open 要用 addPersistentStore 加上 store，並回傳 coordinator"
+            }
+            return n == 2
+                ? nil
+                : "更新後只剩 \(n) 張訂單：開啟時加上 NSMigratePersistentStoresAutomaticallyOption 與 NSInferMappingModelAutomaticallyOption，不要刪資料庫"
         }
     )
 }

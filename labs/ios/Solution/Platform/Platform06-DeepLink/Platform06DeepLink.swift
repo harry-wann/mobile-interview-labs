@@ -6,6 +6,7 @@ enum Platform06DeepLink {
         id: "platform-deeplink",
         code: "Platform06DeepLink",
         title: "Deep Link",
-        labs: [l01, l02, l03, l04, l05]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05]
     )
 }

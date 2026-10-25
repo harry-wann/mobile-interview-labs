@@ -1,20 +1,29 @@
-// L06：使用者核准的是「出金 0.1 BTC 到自己的地址」，簽名卻能拿去出金到別的地址（step-up 的簽名沒有綁定這一筆操作）
-// 對應複習站：Exchange10AccountSecurity 第 6 題「出金這類高風險操作，為什麼要再驗證一次？」
-//        （Platform06 的演練 5 練過簽名的「重放」：同一份簽名原封不動重送。這題是另一件事：簽名內容沒有綁定金額與地址，被竄改後仍然有效。）
+// L06：使用者核准的是「出金 0.1 BTC 到自己的地址」，
+// 簽名卻能拿去出金到別的地址（step-up 的簽名沒有綁定這一筆操作）
+// 對應複習站：Exchange10AccountSecurity 第 6 題「出金這類高風險操作，
+// 為什麼要再驗證一次？」
+//        （Platform06 的演練 5 練過簽名的「重放」：同一份簽名原封不動重送。
+// 這題是另一件事：簽名內容沒有綁定金額與地址，被竄改後仍然有效。）
 //
-// 情境：出金前要 step-up：伺服器送一個一次性的 challenge（nonce），使用者用生物辨識核准，裝置用金鑰對「簽名內容」簽名，
-//        App 把出金請求（nonce、金額、地址、簽名）送給伺服器，伺服器重新組出簽名內容、驗證簽名、檢查 nonce 沒用過。
-//        這裡的「簽名內容」怎麼組，是客戶端和伺服器共同的約定，演練用 signedMessage 表示。
-//        （金鑰用 HMAC 代替；真實的 App 是 Keystore 裡的私鑰簽章，伺服器用公鑰驗證。）
+// 情境：出金前要 step-up：伺服器送一個一次性的 challenge（nonce），
+// 使用者用生物辨識核准，裝置用金鑰對「簽名內容」簽名，
+//        App 把出金請求（nonce、金額、地址、簽名）送給伺服器，
+// 伺服器重新組出簽名內容、驗證簽名、檢查 nonce 沒用過。
+//        這裡的「簽名內容」怎麼組，是客戶端和伺服器共同的約定，演練用
+// signedMessage 表示。
+//        （金鑰用 HMAC 代替；真實的 App 是 Keystore 裡的私鑰簽章，
+// 伺服器用公鑰驗證。）
 //        四個情境，伺服器是同一台（記得用過的 nonce）：
 //        ① 使用者核准 0.1 BTC → 地址 A，請求原樣送出 → 應該受理
-//        ② 手機被植入惡意程式：使用者核准的是 0.1 BTC → 地址 A，惡意程式把地址換成攻擊者的地址 B 再送出 → 應該拒絕
+//        ② 手機被植入惡意程式：使用者核准的是 0.1 BTC → 地址 A，
+// 惡意程式把地址換成攻擊者的地址 B 再送出 → 應該拒絕
 //        ③ 同樣情況，惡意程式把金額 0.1 改成 5 → 應該拒絕
 //        ④ 情境 ① 的請求被原封不動再送一次（重放）→ 應該拒絕（nonce 已經用過）
 //
 // 你要寫：
 //   ① Bug 版（L06Bug.signedMessage）：只回傳 nonce。
-//   ② 修正版（L06Fixed.signedMessage）：回傳 nonce、金額、地址，用換行（\n）接在一起。
+//   ② 修正版（L06Fixed.signedMessage）：回傳 nonce、金額、地址，用換行（\n）
+// 接在一起。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange10-account-security/L06_StepUpBinding.kt
 package tw.harry.labs.practice.exchange10accountsecurity
@@ -23,20 +32,39 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private const val DEVICE_KEY = "device-key-test-0001"                              // 演練用的假金鑰
-private const val ADDRESS_A = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"       // BIP173 的測試地址：使用者自己的地址
-private const val ADDRESS_B = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"       // 另一個公開的測試地址：代表攻擊者的地址
+// 演練用的假金鑰
+private const val DEVICE_KEY = "device-key-test-0001"
 
-private class L06Request(val nonce: String, val amount: String, val address: String, val signature: String)
+// BIP173 的測試地址：使用者自己的地址
+private const val ADDRESS_A = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+
+// 另一個公開的測試地址：代表攻擊者的地址
+private const val ADDRESS_B = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+
+private class L06Request(
+    val nonce: String,
+    val amount: String,
+    val address: String,
+    val signature: String,
+)
 
 /** 假伺服器：記得用過的 nonce；用 signedMessage 組出簽名內容，驗證簽名 */
-private class L06Server(private val signedMessage: (nonce: String, amount: String, address: String) -> String) {
+private class L06Server(
+    private val signedMessage: (
+        nonce: String,
+        amount: String,
+        address: String,
+    ) -> String,
+) {
     private val used = mutableSetOf<String>()
 
     /** 回傳 null 代表受理，否則是拒絕的原因 */
     fun withdraw(r: L06Request): String? {
         if (r.nonce in used) return "nonce 已經用過"
-        val expected = E10.hmacHex(DEVICE_KEY, signedMessage(r.nonce, r.amount, r.address))
+        val expected = E10.hmacHex(
+            DEVICE_KEY,
+            signedMessage(r.nonce, r.amount, r.address),
+        )
         if (expected != r.signature) return "簽名不符"
         used += r.nonce
         return null
@@ -44,17 +72,26 @@ private class L06Server(private val signedMessage: (nonce: String, amount: Strin
 }
 
 /** 演練流程（兩個版本共用）：四個情境 */
-private fun scenario(log: LabLog, signedMessage: (nonce: String, amount: String, address: String) -> String) {
+private fun scenario(
+    log: LabLog,
+    signedMessage: (nonce: String, amount: String, address: String) -> String,
+) {
     val server = L06Server(signedMessage)
     var wrong = 0
     var wrongAccepted = 0
 
     /** 使用者核准（amount → address）之後，惡意程式可能把送出的欄位換掉 */
     fun attempt(
-        name: String, nonce: String,
-        approved: Pair<String, String>, sent: Pair<String, String>, expectAccepted: Boolean,
+        name: String,
+        nonce: String,
+        approved: Pair<String, String>,
+        sent: Pair<String, String>,
+        expectAccepted: Boolean,
     ): L06Request {
-        val signature = E10.hmacHex(DEVICE_KEY, signedMessage(nonce, approved.first, approved.second))
+        val signature = E10.hmacHex(
+            DEVICE_KEY,
+            signedMessage(nonce, approved.first, approved.second),
+        )
         val request = L06Request(nonce, sent.first, sent.second, signature)
         val reason = server.withdraw(request)
         val accepted = reason == null
@@ -69,10 +106,34 @@ private fun scenario(log: LabLog, signedMessage: (nonce: String, amount: String,
         return request
     }
 
-    log("簽名內容（核准當下，情境 ①）：${signedMessage("ch-0001", "0.1", ADDRESS_A).replace("\n", " / ")}")
-    val first = attempt("情境 ① 原樣送出", "ch-0001", "0.1" to ADDRESS_A, "0.1" to ADDRESS_A, expectAccepted = true)
-    attempt("情境 ② 地址被換成 B", "ch-0002", "0.1" to ADDRESS_A, "0.1" to ADDRESS_B, expectAccepted = false)
-    attempt("情境 ③ 金額被改成 5", "ch-0003", "0.1" to ADDRESS_A, "5" to ADDRESS_A, expectAccepted = false)
+    log(
+        "簽名內容（核准當下，情境 ①）：${signedMessage(
+            "ch-0001",
+            "0.1",
+            ADDRESS_A,
+        ).replace("\n", " / ")}",
+    )
+    val first = attempt(
+        "情境 ① 原樣送出",
+        "ch-0001",
+        "0.1" to ADDRESS_A,
+        "0.1" to ADDRESS_A,
+        expectAccepted = true,
+    )
+    attempt(
+        "情境 ② 地址被換成 B",
+        "ch-0002",
+        "0.1" to ADDRESS_A,
+        "0.1" to ADDRESS_B,
+        expectAccepted = false,
+    )
+    attempt(
+        "情境 ③ 金額被改成 5",
+        "ch-0003",
+        "0.1" to ADDRESS_A,
+        "5" to ADDRESS_A,
+        expectAccepted = false,
+    )
     val replayReason = server.withdraw(first)
     if (replayReason != null) {
         log("情境 ④ 重放情境 ① 的請求：拒絕（$replayReason） ✓")
@@ -91,7 +152,9 @@ private object L06Bug {
         return ""
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { nonce, amount, address -> signedMessage(nonce, amount, address) }
+    suspend fun run(log: LabLog) = scenario(log) { nonce, amount, address ->
+        signedMessage(nonce, amount, address)
+    }
 }
 
 // MARK: - 修正版
@@ -101,7 +164,9 @@ private object L06Fixed {
         return ""
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { nonce, amount, address -> signedMessage(nonce, amount, address) }
+    suspend fun run(log: LabLog) = scenario(log) { nonce, amount, address ->
+        signedMessage(nonce, amount, address)
+    }
 }
 
 // MARK: - 演練設定
@@ -145,11 +210,22 @@ val l06 = Lab(
     checkFixed = { lines ->
         val c = counts(lines)
         when {
-            c == null -> "演練沒有跑完：要用 scenario(log) { nonce, amount, address -> … } 執行"
-            "簽名內容（核准當下，情境 ①）：ch-0001 / 0.1 / bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4" !in lines ->
+            c == null -> {
+                "演練沒有跑完：要用 scenario(log) { nonce, amount, address -> … } 執行"
+            }
+
+            "簽名內容（核准當下，情境 ①）：ch-0001 / 0.1 / bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4" !in
+                lines -> {
                 "簽名內容要包含 nonce、金額、地址（用換行接在一起）"
-            c.first != 0 -> "還有 ${c.first} 個情境判斷錯（其中 ${c.second} 個不該受理卻受理）：伺服器用實際收到的金額與地址組簽名內容，被改過就對不上"
-            else -> null
+            }
+
+            c.first != 0 -> {
+                "還有 ${c.first} 個情境判斷錯（其中 ${c.second} 個不該受理卻受理）：伺服器用實際收到的金額與地址組簽名內容，被改過就對不上"
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

@@ -1,13 +1,18 @@
-// L04：行情畫面開了 6 個小時，App 越來越慢，最後被系統殺掉（沒有上限的累積，用 soak test 看記憶體曲線）
-// 對應複習站：Advanced03Memory 第 6 題「行情畫面開了幾個小時，App 變慢然後被殺，會是什麼原因？」（第 5 題的找法也用在這裡）
+// L04：行情畫面開了 6 個小時，App 越來越慢，最後被系統殺掉（沒有上限的累積，用
+// soak test 看記憶體曲線）
+// 對應複習站：Advanced03Memory 第 6 題「行情畫面開了幾個小時，App
+// 變慢然後被殺，會是什麼原因？」（第 5 題的找法也用在這裡）
 //
-// 情境：行情畫面每秒收到一筆成交（Tick），開著 6 個小時就是 21,600 筆。每一筆都連同伺服器傳來的原始訊息（約 1 KB，除錯用）一起留著。
-//        演練把 6 個小時壓縮成一個迴圈，每「過一小時」記一次保留的筆數與 Java heap 用量（GC 之後量）：這就是 soak test
+// 情境：行情畫面每秒收到一筆成交（Tick），開著 6 個小時就是 21,600 筆。
+// 每一筆都連同伺服器傳來的原始訊息（約 1 KB，除錯用）一起留著。
+//        演練把 6 個小時壓縮成一個迴圈，每「過一小時」記一次保留的筆數與 Java
+// heap 用量（GC 之後量）：這就是 soak test
 //        （長時間跑同一個操作，看記憶體會不會一直增加）。
 //
 // 你要寫：
 //   ① Bug 版 UnboundedHistory.append：每一筆都加進 ticks，永遠不丟。
-//   ② 修正版 BoundedHistory.append：加進 ticks 之後，超過 capacity（500）就 removeFirst，丟掉最舊的。
+//   ② 修正版 BoundedHistory.append：加進 ticks 之後，超過 capacity（500）就
+// removeFirst，丟掉最舊的。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced03-memory/L04_SoakTest.kt
 package tw.harry.labs.practice.advanced03memory
@@ -31,19 +36,35 @@ private interface TickHistory {
     val count: Int
 }
 
-/** 演練流程（兩個版本共用）：模擬 6 小時，每小時記一次保留幾筆、記憶體多了多少 */
-private suspend fun scenario(log: LabLog, history: TickHistory) = withContext(Dispatchers.Default) {
-    val start = a03UsedHeapMB()
-    var n = 0
-    for (hour in 1..HOURS) {
-        repeat(TICKS_PER_HOUR) {
-            n++
-            history.append(Tick("BTC/JPY", 15_000_000 + n % 1_000, ByteArray(1_024) { (n % 251).toByte() }))
+/**
+ * 演練流程（兩個版本共用）：模擬 6 小時，每小時記一次保留幾筆、記憶體多了多少
+ */
+private suspend fun scenario(log: LabLog, history: TickHistory) =
+    withContext(Dispatchers.Default) {
+        val start = a03UsedHeapMB()
+        var n = 0
+        for (hour in 1..HOURS) {
+            repeat(TICKS_PER_HOUR) {
+                n++
+                history.append(
+                    Tick(
+                        "BTC/JPY",
+                        15_000_000 + n % 1_000,
+                        ByteArray(1_024) {
+                            (
+                                n %
+                                    251
+                            ).toByte()
+                        },
+                    ),
+                )
+            }
+            log(
+                "第 $hour 小時結束：保留 ${history.count} 筆，記憶體比開始時多 ${(a03UsedHeapMB() - start).toInt()} MB",
+            )
         }
-        log("第 $hour 小時結束：保留 ${history.count} 筆，記憶體比開始時多 ${(a03UsedHeapMB() - start).toInt()} MB")
+        log("6 小時共收到 $n 筆，最後保留 ${history.count} 筆")
     }
-    log("6 小時共收到 $n 筆，最後保留 ${history.count} 筆")
-}
 
 // MARK: - Bug 版
 private object L04Bug {
@@ -67,7 +88,8 @@ private object L04Fixed {
         private val ticks = ArrayDeque<Tick>()
 
         override fun append(tick: Tick) {
-            // TODO ②：ticks.addLast(tick)；超過 capacity 就 ticks.removeFirst()，丟掉最舊的（用 while，直到不超過）
+            // TODO ②：ticks.addLast(tick)；超過 capacity 就 ticks.
+            // removeFirst()，丟掉最舊的（用 while，直到不超過）
         }
 
         override val count get() = ticks.size
@@ -77,10 +99,13 @@ private object L04Fixed {
 }
 
 // MARK: - 演練設定
+
 /** 第 6 小時結束時，記憶體比開始時多幾 MB */
 private fun lastHourMB(lines: List<String>): Double? {
     val line = lines.firstOrNull { it.startsWith("第 6 小時結束：") } ?: return null
-    return line.substringAfter("多 ", "").takeWhile { it.isDigit() || it == '-' }.toDoubleOrNull()
+    return line.substringAfter("多 ", "").takeWhile {
+        it.isDigit() || it == '-'
+    }.toDoubleOrNull()
 }
 
 val l04 = Lab(

@@ -1,25 +1,41 @@
 // L02：大小寫混用的 bc1 地址被當成合法（Bech32 地址不能大小寫混用）
-// 對應複習站：Exchange12Wallet 第 2 題「加密資產的地址怎麼驗證？Base58Check、Bech32、EIP-55 是什麼？」
+// 對應複習站：Exchange12Wallet 第 2 題「加密資產的地址怎麼驗證？Base58Check、
+// Bech32、EIP-55 是什麼？」
 //
-// 情境：Bech32（SegWit）與 Bech32m（Taproot）地址以 bc1 開頭，有多項式校驗碼。規則：全小寫或全大寫都合法（QR code 常用全大寫），
-//        **大小寫混用則無效**。校驗碼的計算（E12.bech32Kind，要傳入全小寫的字串，同時支援 Bech32 與 Bech32m）已經寫好在 Exchange12Support.kt，
-//        這題只看「大小寫」。演練檢查 6 個地址（都是 BIP 173／350 文件的公開測試地址）：全小寫的合法地址、全大寫的同一個地址、
-//        Taproot 的 Bech32m 地址、第一個字母改成大寫的混用地址、中間一個字母改成大寫的混用地址、校驗碼被改掉的地址。
-// Bug 版：先 lowercase() 再驗證校驗碼：看起來很周到（「大小寫都接受」），卻把大小寫混用的地址也當成合法了
+// 情境：Bech32（SegWit）與 Bech32m（Taproot）地址以 bc1 開頭，有多項式校驗碼。
+// 規則：全小寫或全大寫都合法（QR code 常用全大寫），
+//        **大小寫混用則無效**。校驗碼的計算（E12.bech32Kind，
+// 要傳入全小寫的字串，同時支援 Bech32 與 Bech32m）已經寫好在 Exchange12Support.
+// kt，
+//        這題只看「大小寫」。演練檢查 6 個地址（都是 BIP 173／350
+// 文件的公開測試地址）：全小寫的合法地址、全大寫的同一個地址、
+//        Taproot 的 Bech32m 地址、第一個字母改成大寫的混用地址、
+// 中間一個字母改成大寫的混用地址、校驗碼被改掉的地址。
+// Bug 版：先 lowercase() 再驗證校驗碼：看起來很周到（「大小寫都接受」），
+// 卻把大小寫混用的地址也當成合法了
 //        （轉成小寫之後，校驗碼是對的）。
-// 修正版：先檢查「全小寫」或「全大寫」，混用就直接無效；通過了再轉小寫驗證校驗碼。
+// 修正版：先檢查「全小寫」或「全大寫」，混用就直接無效；
+// 通過了再轉小寫驗證校驗碼。
 package tw.harry.labs.solution.exchange12wallet
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private class L02Case(val name: String, val address: String, val expected: Boolean)
+private class L02Case(
+    val name: String,
+    val address: String,
+    val expected: Boolean,
+)
 
 private val cases = listOf(
     L02Case("全小寫的合法地址", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", true),
     L02Case("同一個地址，全大寫", "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4", true),
-    L02Case("Taproot 的 Bech32m 地址", "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", true),
+    L02Case(
+        "Taproot 的 Bech32m 地址",
+        "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+        true,
+    ),
     L02Case("第一個字母改成大寫", "Bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", false),
     L02Case("中間一個字母改成大寫", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8F3t4", false),
     L02Case("校驗碼被改掉", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5", false),
@@ -44,7 +60,8 @@ private fun scenario(log: LabLog, isValid: (String) -> Boolean) {
 // MARK: - Bug 版
 private object L02Bug {
     fun isValid(address: String): Boolean {
-        return E12.bech32Kind(address.lowercase()) != null          // 轉小寫就驗證：大小寫混用的也過了
+        // 轉小寫就驗證：大小寫混用的也過了
+        return E12.bech32Kind(address.lowercase()) != null
     }
 
     suspend fun run(log: LabLog) = scenario(log) { isValid(it) }
@@ -53,7 +70,12 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun isValid(address: String): Boolean {
-        if (address != address.lowercase() && address != address.uppercase()) return false   // 大小寫混用：無效
+        // 大小寫混用：無效
+        if (address != address.lowercase() &&
+            address != address.uppercase()
+        ) {
+            return false
+        }
         return E12.bech32Kind(address.lowercase()) != null
     }
 
@@ -61,8 +83,9 @@ private object L02Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("6 個地址") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("6 個地址")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l02 = Lab(
     id = "L02",

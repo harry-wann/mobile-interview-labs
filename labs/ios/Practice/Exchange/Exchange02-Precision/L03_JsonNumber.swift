@@ -1,9 +1,13 @@
-// L03：伺服器回 1.234567890123456789 ETH，App 讀進來卻是 1.2345678901234567（JSON 的數字被當成 Double）
-// 對應複習站：Exchange02Precision 第 3 題「API 回來的數字要怎麼讀，才不會一開始就不準？」
+// L03：伺服器回 1.234567890123456789 ETH，App 讀進來卻是 1.
+// 2345678901234567（JSON 的數字被當成 Double）
+// 對應複習站：Exchange02Precision 第 3 題「API 回來的數字要怎麼讀，
+// 才不會一開始就不準？」
 //
-// 情境：資產 API 回傳 JSON，balance 是一個有 18 位小數的數字（ETH 最小單位 wei 是小數第 18 位）：
+// 情境：資產 API 回傳 JSON，balance 是一個有 18 位小數的數字（ETH 最小單位 wei
+// 是小數第 18 位）：
 //       {"symbol":"ethjpy","balance":1.234567890123456789}
-//       App 用 JSONDecoder 解析。Double 只有 15 到 17 位有效數字，超過的位數在讀進來的那一刻就丟了。
+//       App 用 JSONDecoder 解析。Double 只有 15 到 17 位有效數字，
+// 超過的位數在讀進來的那一刻就丟了。
 //
 // 你要寫：
 //   ① Bug 版（L03Bug）：Account 的 balance 宣告成 Double，用 JSONDecoder 解析。
@@ -32,7 +36,8 @@ private enum L03Bug {
     }
 
     static func parse(_ data: Data) -> String {
-        // TODO ①-2：用 JSONDecoder().decode 把 data 解析成 Account；失敗回傳 "解析失敗"，成功回傳 "\(account.balance)"
+        // TODO ①-2：用 JSONDecoder().decode 把 data 解析成 Account；失敗回傳
+        // "解析失敗"，成功回傳 "\(account.balance)"
         return "解析失敗"
     }
 
@@ -49,7 +54,8 @@ private enum L03Fixed {
     }
 
     static func parse(_ data: Data) -> String {
-        // TODO ②-2：一樣用 JSONDecoder().decode 解析成 Account；失敗回傳 "解析失敗"，成功回傳 "\(account.balance)"
+        // TODO ②-2：一樣用 JSONDecoder().decode 解析成 Account；失敗回傳
+        // "解析失敗"，成功回傳 "\(account.balance)"
         return "解析失敗"
     }
 
@@ -64,7 +70,8 @@ extension Exchange02Precision {
         id: "L03",
         title: "伺服器回的位數，讀進來少了幾位",
         question: "第 3 題：API 回來的數字要怎麼讀，才不會一開始就不準？",
-        goal: "API 回傳的金額有很多位小數時，解析後的數值要和伺服器的原文一模一樣。資料模型的欄位要用什麼型別？先寫出位數被吃掉的 Bug 版，再寫修正版。",
+        goal:
+            "API 回傳的金額有很多位小數時，解析後的數值要和伺服器的原文一模一樣。資料模型的欄位要用什麼型別？先寫出位數被吃掉的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Exchange/Exchange02-Precision/L03_JsonNumber.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，比較「App 讀到的 balance」和伺服器原文差在哪。",
@@ -72,7 +79,8 @@ extension Exchange02Precision {
             "寫 TODO ②（修正版），選「修正版」執行，位數要完整保留。",
             "進階：解答實測在 iOS 26.3 模擬器上，JSONDecoder 能把 JSON 數字直接讀成精確的 Decimal；較舊的系統版本不一定，要支援舊版本時，最保險的做法是讓伺服器把金額用字串傳。Android 用 Gson 把欄位宣告成 BigDecimal 也會直接讀成精確的值。",
         ],
-        expectBug: "「App 讀到 balance = 1.2345678901234567」，「和伺服器的原文 1.234567890123456789 不一致，位數被吃掉了」。",
+        expectBug:
+            "「App 讀到 balance = 1.2345678901234567」，「和伺服器的原文 1.234567890123456789 不一致，位數被吃掉了」。",
         expectFixed: "「App 讀到 balance = 1.234567890123456789」，「和伺服器的原文一致」。",
         run: { variant, log in
             switch variant {
@@ -81,13 +89,22 @@ extension Exchange02Precision {
             }
         },
         checkBug: { lines in
-            guard lines.contains(where: { $0.hasPrefix("App 讀到") }) else { return "演練沒有跑完：要用 scenario(log, parse:) 執行" }
-            if lines.contains("App 讀到 balance = 解析失敗") { return "還沒讀到 balance：Account 要宣告 balance 欄位（Double），再用 JSONDecoder().decode 解析" }
-            return lines.contains("App 讀到 balance = 1.2345678901234567") ? nil : "Bug 還沒重現：balance 宣告成 Double，讀進來會變成 1.2345678901234567"
+            guard lines.contains(where: { $0.hasPrefix("App 讀到") }) else {
+                return "演練沒有跑完：要用 scenario(log, parse:) 執行"
+            }
+            if lines.contains("App 讀到 balance = 解析失敗") {
+                return
+                    "還沒讀到 balance：Account 要宣告 balance 欄位（Double），再用 JSONDecoder().decode 解析"
+            }
+            return lines.contains("App 讀到 balance = 1.2345678901234567")
+                ? nil : "Bug 還沒重現：balance 宣告成 Double，讀進來會變成 1.2345678901234567"
         },
         checkFixed: { lines in
-            guard lines.contains(where: { $0.hasPrefix("App 讀到") }) else { return "演練沒有跑完：要用 scenario(log, parse:) 執行" }
-            return lines.contains("和伺服器的原文一致") ? nil : "位數還是被吃掉了：Account.balance 要宣告成 Decimal，不要經過 Double"
+            guard lines.contains(where: { $0.hasPrefix("App 讀到") }) else {
+                return "演練沒有跑完：要用 scenario(log, parse:) 執行"
+            }
+            return lines.contains("和伺服器的原文一致")
+                ? nil : "位數還是被吃掉了：Account.balance 要宣告成 Decimal，不要經過 Double"
         }
     )
 }

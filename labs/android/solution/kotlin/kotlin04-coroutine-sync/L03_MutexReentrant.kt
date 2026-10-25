@@ -1,11 +1,16 @@
 // L03：出金時卡住不動了（Mutex 不可重入造成死結）
-// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，怎麼選工具？」
+// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，
+// 怎麼選工具？」
 //
-// 情境：Account 用 Mutex 保護餘額。withdraw() 扣款後，要順便取一份餘額快照（snapshot()）寫進稽核紀錄。
+// 情境：Account 用 Mutex 保護餘額。withdraw() 扣款後，
+// 要順便取一份餘額快照（snapshot()）寫進稽核紀錄。
 //        snapshot() 平常也會被別的地方呼叫，所以它自己也會拿鎖。
-// Bug 版：withdraw() 已經拿著鎖，又呼叫 snapshot() 想再拿同一把鎖。Kotlin 的 Mutex 不可重入，
-//        同一個 coroutine 持鎖時再 lock() 會永遠等下去（deadlock，死結）。這裡用 withTimeoutOrNull 當保險，300 ms 後放棄。
-// 修正版：把「已經持鎖」的版本拆成內部函式 snapshotLocked()，withdraw() 在鎖裡直接呼叫它；
+// Bug 版：withdraw() 已經拿著鎖，又呼叫 snapshot() 想再拿同一把鎖。Kotlin 的
+// Mutex 不可重入，
+//        同一個 coroutine 持鎖時再 lock() 會永遠等下去（deadlock，死結）。
+// 這裡用 withTimeoutOrNull 當保險，300 ms 後放棄。
+// 修正版：把「已經持鎖」的版本拆成內部函式 snapshotLocked()，withdraw()
+// 在鎖裡直接呼叫它；
 //        對外的 snapshot() 才自己拿鎖，再呼叫 snapshotLocked()。
 package tw.harry.labs.solution.kotlin04coroutinesync
 
@@ -23,7 +28,8 @@ private object L03Bug {
 
         suspend fun withdraw(amount: Long): Long = mutex.withLock {
             balance -= amount
-            snapshot()                                      // 已經持鎖，又想拿同一把鎖 → 永遠等下去
+            // 已經持鎖，又想拿同一把鎖 → 永遠等下去
+            snapshot()
         }
 
         suspend fun snapshot(): Long = mutex.withLock { balance }
@@ -43,12 +49,14 @@ private object L03Fixed {
 
         suspend fun withdraw(amount: Long): Long = mutex.withLock {
             balance -= amount
-            snapshotLocked()                                // 已經持鎖：呼叫不拿鎖的內部版本
+            // 已經持鎖：呼叫不拿鎖的內部版本
+            snapshotLocked()
         }
 
         suspend fun snapshot(): Long = mutex.withLock { snapshotLocked() }
 
-        private fun snapshotLocked(): Long = balance        // 呼叫它之前，一定要已經拿著鎖
+        // 呼叫它之前，一定要已經拿著鎖
+        private fun snapshotLocked(): Long = balance
     }
 
     suspend fun run(log: LabLog) {

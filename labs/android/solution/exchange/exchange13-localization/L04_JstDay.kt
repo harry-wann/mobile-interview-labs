@@ -1,11 +1,20 @@
-// L04：日報表的筆數和後台對不上，半夜的交易被算到前一天（日報表的「日」用了裝置時區，而不是 JST）
-// 對應複習站：Exchange13Localization 第 4 題「日期與時區怎麼處理？JST 是什麼？」
+// L04：日報表的筆數和後台對不上，半夜的交易被算到前一天（日報表的「日」
+// 用了裝置時區，而不是 JST）
+// 對應複習站：Exchange13Localization 第 4 題「日期與時區怎麼處理？JST
+// 是什麼？」
 //
-// 情境：日本的交易所，日報表的「一天」以日本標準時間（JST，UTC＋9，沒有夏令時間）的 0 點為界。使用者出差到台北（UTC＋8），手機的時區是 Asia/Taipei。
-//        伺服器回傳的交易時間是一個時間點（Unix 時間戳記）。演練有四筆 JST 的交易：2026-10-23 23:50、2026-10-24 00:10、2026-10-24 08:55、2026-10-24 23:59，
-//        dayKey 要回傳這筆交易屬於哪一天（yyyy-MM-dd）；然後統計每一天有幾筆。後台（JST）的答案是：10-23 有 1 筆，10-24 有 3 筆。
-//        （資料內部存時間點，只有「顯示、分組」時才換算成某個時區；到底用 JST 還是裝置時區是產品決定，標籤要寫明確。）
-// Bug 版：用裝置的時區（台北）切日。台北比 JST 慢 1 小時：JST 的 00:10 在台北還是前一天的 23:10，被算進 10-23；
+// 情境：日本的交易所，日報表的「一天」以日本標準時間（JST，UTC＋9，
+// 沒有夏令時間）的 0 點為界。使用者出差到台北（UTC＋8），手機的時區是
+// Asia/Taipei。
+//        伺服器回傳的交易時間是一個時間點（Unix 時間戳記）。演練有四筆 JST
+// 的交易：2026-10-23 23:50、2026-10-24 00:10、2026-10-24 08:55、2026-10-24 23:
+// 59，
+//        dayKey 要回傳這筆交易屬於哪一天（yyyy-MM-dd）；然後統計每一天有幾筆。
+// 後台（JST）的答案是：10-23 有 1 筆，10-24 有 3 筆。
+//        （資料內部存時間點，只有「顯示、分組」時才換算成某個時區；到底用 JST
+// 還是裝置時區是產品決定，標籤要寫明確。）
+// Bug 版：用裝置的時區（台北）切日。台北比 JST 慢 1 小時：JST 的 00:10
+// 在台北還是前一天的 23:10，被算進 10-23；
 //        日報表 10-23 變成 2 筆、10-24 變成 2 筆，和後台對不上。
 // 修正版：日報表的「日」固定用 JST（Asia/Tokyo）切日，不管手機在哪個時區。
 package tw.harry.labs.solution.exchange13localization
@@ -17,17 +26,24 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private val deviceZone: ZoneId = ZoneId.of("Asia/Taipei")          // 使用者出差到台北，手機是 UTC+8
+// 使用者出差到台北，手機是 UTC+8
+private val deviceZone: ZoneId = ZoneId.of("Asia/Taipei")
 
 /** 四筆交易的時間點（用帶 +09:00 的 ISO 8601 字串建立，等於 JST 的當地時間） */
 private val trades: List<Instant> = listOf(
-    "2026-10-23T23:50:00+09:00", "2026-10-24T00:10:00+09:00", "2026-10-24T08:55:00+09:00", "2026-10-24T23:59:00+09:00",
+    "2026-10-23T23:50:00+09:00",
+    "2026-10-24T00:10:00+09:00",
+    "2026-10-24T08:55:00+09:00",
+    "2026-10-24T23:59:00+09:00",
 ).map { OffsetDateTime.parse(it).toInstant() }
 
 /** 後台（JST）的答案 */
 private val expected = mapOf("2026-10-23" to 1, "2026-10-24" to 3)
 
-/** 演練流程（兩個版本共用）：每筆交易算出屬於哪一天，統計每一天的筆數，和後台比對 */
+/**
+ * 演練流程（兩個版本共用）：每筆交易算出屬於哪一天，統計每一天的筆數，
+ * 和後台比對
+ */
 private fun scenario(log: LabLog, dayKey: (Instant, ZoneId) -> String) {
     val counts = mutableMapOf<String, Int>()
     for (trade in trades) counts.merge(dayKey(trade, deviceZone), 1, Int::plus)
@@ -53,24 +69,31 @@ private fun scenario(log: LabLog, dayKey: (Instant, ZoneId) -> String) {
 // MARK: - Bug 版
 private object L04Bug {
     fun dayKey(instant: Instant, deviceZone: ZoneId): String {
-        return instant.atZone(deviceZone).toLocalDate().toString()       // 用裝置的時區切日：台北比 JST 晚 1 小時
+        // 用裝置的時區切日：台北比 JST 晚 1 小時
+        return instant.atZone(deviceZone).toLocalDate().toString()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { instant, zone -> dayKey(instant, zone) }
+    suspend fun run(log: LabLog) = scenario(log) { instant, zone ->
+        dayKey(instant, zone)
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
     fun dayKey(instant: Instant, deviceZone: ZoneId): String {
-        return instant.atZone(ZoneId.of("Asia/Tokyo")).toLocalDate().toString()    // 日報表的「日」固定用 JST
+        // 日報表的「日」固定用 JST
+        return instant.atZone(ZoneId.of("Asia/Tokyo")).toLocalDate().toString()
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { instant, zone -> dayKey(instant, zone) }
+    suspend fun run(log: LabLog) = scenario(log) { instant, zone ->
+        dayKey(instant, zone)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("日報表有") }?.let { Regex("(\\d+) 天").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("日報表有")
+}?.let { Regex("(\\d+) 天").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l04 = Lab(
     id = "L04",

@@ -1,10 +1,15 @@
-// L08：行情每秒幾百筆，每一筆都丟回主執行緒，畫面被淹沒（背景合併，固定頻率更新畫面）
-// 對應複習站：Platform02Threading 第 6 題「行情每秒推幾百筆，執行緒要怎麼設計？」
+// L08：行情每秒幾百筆，每一筆都丟回主執行緒，畫面被淹沒（背景合併，
+// 固定頻率更新畫面）
+// 對應複習站：Platform02Threading 第 6 題「行情每秒推幾百筆，
+// 執行緒要怎麼設計？」
 //
-// 情境：行情頁收到 WebSocket 推來的報價。演練送出 300 筆報價（6 檔幣種輪流，約每 2 ms 一筆），看畫面被更新了幾次，以及最後畫面上的價格對不對。
+// 情境：行情頁收到 WebSocket 推來的報價。演練送出 300 筆報價（6 檔幣種輪流，
+// 約每 2 ms 一筆），看畫面被更新了幾次，以及最後畫面上的價格對不對。
 //        要在手機上執行（畫面更新要用 Android 的主執行緒 Dispatchers.Main）。
-// Bug 版：每收到一筆就 withContext／launch 到 Dispatchers.Main 更新一次畫面。300 筆就更新 300 次，主執行緒的佇列被塞滿，觸控排在後面。
-// 修正版：收到的報價先存進 ConcurrentHashMap（每檔只留最新一筆），再用固定頻率（每 200 ms）取一次整份快照，在主執行緒更新畫面一次。
+// Bug 版：每收到一筆就 withContext／launch 到 Dispatchers.Main 更新一次畫面。
+// 300 筆就更新 300 次，主執行緒的佇列被塞滿，觸控排在後面。
+// 修正版：收到的報價先存進 ConcurrentHashMap（每檔只留最新一筆），
+// 再用固定頻率（每 200 ms）取一次整份快照，在主執行緒更新畫面一次。
 package tw.harry.labs.solution.platform02threading
 
 import java.util.concurrent.ConcurrentHashMap
@@ -24,7 +29,9 @@ import tw.harry.labs.kit.Variant
 
 private class L08Tick(val symbol: String, val price: Int)
 
-/** 畫面（兩個版本共用）：記下畫面更新了幾次、現在顯示什麼。只能在主執行緒呼叫 */
+/**
+ * 畫面（兩個版本共用）：記下畫面更新了幾次、現在顯示什麼。只能在主執行緒呼叫
+ */
 private class L08Screen {
     var updates = 0
     val shown = mutableMapOf<String, Int>()
@@ -37,14 +44,20 @@ private class L08Screen {
 
 /** 收到報價之後要做的事（兩個版本各自實作） */
 private interface L08Pipeline {
-    fun receive(tick: L08Tick)             // 在背景執行緒被呼叫（WebSocket 收到一筆）
-    suspend fun finish()                   // 演練結束前，等還沒處理完的更新都處理完
+    // 在背景執行緒被呼叫（WebSocket 收到一筆）
+    fun receive(tick: L08Tick)
+
+    // 演練結束前，等還沒處理完的更新都處理完
+    suspend fun finish()
 }
 
 private val symbols = listOf("BTC", "ETH", "XRP", "LTC", "ADA", "DOT")
 
 /** 演練流程（兩個版本共用）：背景約每 2 ms 送一筆報價，共 300 筆 */
-private suspend fun scenario(log: LabLog, makePipeline: (L08Screen) -> L08Pipeline) {
+private suspend fun scenario(
+    log: LabLog,
+    makePipeline: (L08Screen) -> L08Pipeline,
+) {
     val screen = L08Screen()
     val pipeline = makePipeline(screen)
     withContext(Dispatchers.Default) {
@@ -53,10 +66,15 @@ private suspend fun scenario(log: LabLog, makePipeline: (L08Screen) -> L08Pipeli
             delay(2)
         }
     }
-    val lastPrice = (0 until 300).associate { symbols[it % symbols.size] to 1_000 + it }
+    val lastPrice = (0 until 300).associate {
+        symbols[it % symbols.size] to
+            1_000 + it
+    }
     pipeline.finish()
     log("收到 300 筆報價，畫面更新了 ${screen.updates} 次")
-    log("最後畫面上的價格${if (screen.shown == lastPrice) "和每檔最後一筆一致" else "和每檔最後一筆不一致"}")
+    log(
+        "最後畫面上的價格${if (screen.shown == lastPrice) "和每檔最後一筆一致" else "和每檔最後一筆不一致"}",
+    )
 }
 
 // MARK: - Bug 版
@@ -65,7 +83,8 @@ private object L08Bug {
         private val uiScope = CoroutineScope(Dispatchers.Main)
 
         override fun receive(tick: L08Tick) {
-            uiScope.launch { screen.render(mapOf(tick.symbol to tick.price)) }     // 每一筆都排進主執行緒，更新一次畫面
+            // 每一筆都排進主執行緒，更新一次畫面
+            uiScope.launch { screen.render(mapOf(tick.symbol to tick.price)) }
         }
 
         override suspend fun finish() {
@@ -80,24 +99,30 @@ private object L08Bug {
 // MARK: - 修正版
 private object L08Fixed {
     class ConflatingPipeline(screen: L08Screen) : L08Pipeline {
-        private val latest = ConcurrentHashMap<String, Int>()          // 每檔只保留最新一筆
+        // 每檔只保留最新一筆
+        private val latest = ConcurrentHashMap<String, Int>()
         private val uiScope = CoroutineScope(Dispatchers.Main)
         private val refresher: Job = uiScope.launch {
             flow<Map<String, Int>> {
                 while (true) {
-                    delay(200)                                         // 固定頻率
-                    emit(latest.toMap())                               // 整份快照
+                    // 固定頻率
+                    delay(200)
+                    // 整份快照
+                    emit(latest.toMap())
                 }
             }.flowOn(Dispatchers.Default)
-                .collect { screen.render(it) }                         // 主執行緒：更新畫面一次
+                // 主執行緒：更新畫面一次
+                .collect { screen.render(it) }
         }
 
         override fun receive(tick: L08Tick) {
-            latest[tick.symbol] = tick.price                           // 背景合併：只更新字典，不碰主執行緒
+            // 背景合併：只更新字典，不碰主執行緒
+            latest[tick.symbol] = tick.price
         }
 
         override suspend fun finish() {
-            delay(250)                                                 // 讓最後一次更新跑完
+            // 讓最後一次更新跑完
+            delay(250)
             refresher.cancel()
             uiScope.cancel()
         }
@@ -143,9 +168,15 @@ val l08 = Lab(
         val n = updateCount(lines)
         when {
             n == null -> "演練沒有跑完"
+
             n == 0 -> "畫面一次都沒有更新：每 200 ms 要取一次快照，呼叫 screen.render"
+
             n > 12 -> "畫面更新了 $n 次，太多了：receive 只存進字典，每 200 ms 才取一次快照更新畫面"
-            !lines.contains("最後畫面上的價格和每檔最後一筆一致") -> "最後畫面上的價格不對：每一檔都要保留最新的一筆，快照要包含全部 6 檔"
+
+            !lines.contains(
+                "最後畫面上的價格和每檔最後一筆一致",
+            ) -> "最後畫面上的價格不對：每一檔都要保留最新的一筆，快照要包含全部 6 檔"
+
             else -> null
         }
     },

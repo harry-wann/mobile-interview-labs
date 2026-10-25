@@ -4,7 +4,10 @@ package tw.harry.labs.solution.advanced04races
 /** 從 log 找出以 prefix 開頭的第一行，取出後面接的數字 */
 internal fun a04Number(lines: List<String>, prefix: String): Double? {
     val line = lines.firstOrNull { it.startsWith(prefix) } ?: return null
-    return line.removePrefix(prefix).takeWhile { it.isDigit() || it == '.' || it == '-' }.toDoubleOrNull()
+    return line.removePrefix(prefix).takeWhile {
+        it.isDigit() || it == '.' ||
+            it == '-'
+    }.toDoubleOrNull()
 }
 
 /** 單調時鐘（毫秒） */

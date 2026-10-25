@@ -1,10 +1,13 @@
 // L02：5 筆成交回報，只處理了最後 1 筆（StateFlow 只保留最新值）
 // 對應複習站：Kotlin05Flow 第 2 題「StateFlow、SharedFlow、Channel 怎麼選？」
 //
-// 情境：交易所推送成交回報，每一筆都要寫進成交紀錄，漏掉一筆就是帳對不起來。5 筆成交在同一瞬間到達。
-// Bug 版：用 MutableStateFlow 傳成交回報。StateFlow 只保留最新值，collector 還沒來得及處理，
+// 情境：交易所推送成交回報，每一筆都要寫進成交紀錄，漏掉一筆就是帳對不起來。5
+// 筆成交在同一瞬間到達。
+// Bug 版：用 MutableStateFlow 傳成交回報。StateFlow 只保留最新值，collector
+// 還沒來得及處理，
 //        中間 4 筆就被後面的蓋掉了，成交紀錄只寫進最後 1 筆。
-// 修正版：每一筆都要處理的工作用 Channel（點對點、有緩衝），收集端用 receiveAsFlow()，5 筆全部依序處理。
+// 修正版：每一筆都要處理的工作用 Channel（點對點、有緩衝），收集端用
+// receiveAsFlow()，5 筆全部依序處理。
 package tw.harry.labs.solution.kotlin05flow
 
 import kotlinx.coroutines.CoroutineStart
@@ -23,12 +26,20 @@ private class Fill(val id: Int)
 // MARK: - Bug 版
 private object L02Bug {
     suspend fun run(log: LabLog) {
-        val fills = MutableStateFlow<Fill?>(null)                  // StateFlow：只保留最新值
+        // StateFlow：只保留最新值
+        val fills = MutableStateFlow<Fill?>(null)
         coroutineScope {
             val collector = launch(start = CoroutineStart.UNDISPATCHED) {
-                fills.collect { fill -> if (fill != null) log("寫入成交紀錄 #${fill.id}") }
+                fills.collect { fill ->
+                    if (fill !=
+                        null
+                    ) {
+                        log("寫入成交紀錄 #${fill.id}")
+                    }
+                }
             }
-            repeat(5) { fills.value = Fill(it + 1) }               // 5 筆同時到達：中間的被蓋掉
+            // 5 筆同時到達：中間的被蓋掉
+            repeat(5) { fills.value = Fill(it + 1) }
             delay(100)
             collector.cancel()
         }
@@ -38,10 +49,13 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     suspend fun run(log: LabLog) {
-        val fills = Channel<Fill>(Channel.BUFFERED)                // Channel：每一筆都保留到有人處理
+        // Channel：每一筆都保留到有人處理
+        val fills = Channel<Fill>(Channel.BUFFERED)
         coroutineScope {
             val collector = launch(start = CoroutineStart.UNDISPATCHED) {
-                fills.receiveAsFlow().collect { fill -> log("寫入成交紀錄 #${fill.id}") }
+                fills.receiveAsFlow().collect { fill ->
+                    log("寫入成交紀錄 #${fill.id}")
+                }
             }
             repeat(5) { fills.send(Fill(it + 1)) }
             delay(100)
@@ -81,7 +95,10 @@ val l02 = Lab(
     checkFixed = { lines ->
         val written = lines.filter { it.startsWith("寫入成交紀錄 #") }
         when {
-            written != List(5) { "寫入成交紀錄 #${it + 1}" } -> "5 筆要依序全部寫入，現在是 $written：改用 Channel(Channel.BUFFERED) 與 receiveAsFlow()"
+            written != List(5) {
+                "寫入成交紀錄 #${it + 1}"
+            } -> "5 筆要依序全部寫入，現在是 $written：改用 Channel(Channel.BUFFERED) 與 receiveAsFlow()"
+
             else -> null
         }
     },

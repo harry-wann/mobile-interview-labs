@@ -1,10 +1,16 @@
-// L02：連上之後每一則訊息都解析失敗（WebSocket 的訊息是 gzip 壓縮的 binary frame）
-// 對應複習站：Exchange03WebSocket 第 2 題「為什麼每則訊息都要先解壓縮？iOS 和 Android 怎麼解 gzip？」
+// L02：連上之後每一則訊息都解析失敗（WebSocket 的訊息是 gzip 壓縮的 binary
+// frame）
+// 對應複習站：Exchange03WebSocket 第 2 題「為什麼每則訊息都要先解壓縮？iOS 和
+// Android 怎麼解 gzip？」
 //
-// 情境：這套交易所公開 WebSocket 的每一則訊息都是 gzip 壓縮過的 binary frame，不是文字。假伺服器送來三則：
-//        一則 ping、一則最佳買賣價（BBO）的推送、一則訂閱確認。App 要先把 frame 解成文字，才能解析 JSON。
-// Bug 版：把 frame 當成 UTF-8 文字：String(frame, Charsets.UTF_8)。每一則都是亂碼，JSON 解析全部失敗。
-// 修正版：用 GZIPInputStream 解壓（Android／Java 認得 gzip 的標頭與結尾，不用自己處理），再讀成 UTF-8 文字。
+// 情境：這套交易所公開 WebSocket 的每一則訊息都是 gzip 壓縮過的 binary frame，
+// 不是文字。假伺服器送來三則：
+//        一則 ping、一則最佳買賣價（BBO）的推送、一則訂閱確認。App 要先把
+// frame 解成文字，才能解析 JSON。
+// Bug 版：把 frame 當成 UTF-8 文字：String(frame, Charsets.UTF_8)。
+// 每一則都是亂碼，JSON 解析全部失敗。
+// 修正版：用 GZIPInputStream 解壓（Android／Java 認得 gzip 的標頭與結尾，
+// 不用自己處理），再讀成 UTF-8 文字。
 package tw.harry.labs.solution.exchange03websocket
 
 import java.io.ByteArrayInputStream
@@ -19,7 +25,9 @@ private val messages = listOf(
     """{"id":"id1","status":"ok","subbed":"market.btcjpy.bbo","ts":1489474081631}""",
 )
 
-/** 演練流程（兩個版本共用）：假伺服器依序送三個 frame，App 解成文字再解析 JSON */
+/**
+ * 演練流程（兩個版本共用）：假伺服器依序送三個 frame，App 解成文字再解析 JSON
+ */
 private fun scenario(log: LabLog, decode: (ByteArray) -> String) {
     var parsed = 0
     for ((index, message) in messages.withIndex()) {
@@ -29,7 +37,9 @@ private fun scenario(log: LabLog, decode: (ByteArray) -> String) {
             parsed++
             log("第 ${index + 1} 則（${frame.size} 位元組）：解析成功 ${text.take(40)}…")
         } else {
-            log("第 ${index + 1} 則（${frame.size} 位元組）：解析失敗（轉成的文字長度 ${text.length}）")
+            log(
+                "第 ${index + 1} 則（${frame.size} 位元組）：解析失敗（轉成的文字長度 ${text.length}）",
+            )
         }
     }
     log("共 ${messages.size} 則，成功解析 $parsed 則")
@@ -37,27 +47,33 @@ private fun scenario(log: LabLog, decode: (ByteArray) -> String) {
 
 // MARK: - Bug 版
 private object L02Bug {
-    fun decode(frame: ByteArray): String =
-        String(frame, Charsets.UTF_8)                           // 把 binary frame 當成文字
+    fun decode(frame: ByteArray): String = // 把 binary frame 當成文字
+        String(frame, Charsets.UTF_8)
 
     suspend fun run(log: LabLog) = scenario(log, ::decode)
 }
 
 // MARK: - 修正版
 private object L02Fixed {
-    fun decode(frame: ByteArray): String =
-        try {
-            GZIPInputStream(ByteArrayInputStream(frame)).bufferedReader(Charsets.UTF_8).use { it.readText() }   // 先解壓，再讀成文字
-        } catch (e: Exception) {
-            ""                                                  // 不是 gzip：丟掉這一則，不讓連線崩潰
+    fun decode(frame: ByteArray): String = try {
+        // 先解壓，再讀成文字
+        GZIPInputStream(
+            ByteArrayInputStream(frame),
+        ).bufferedReader(Charsets.UTF_8).use {
+            it.readText()
         }
+    } catch (e: Exception) {
+        // 不是 gzip：丟掉這一則，不讓連線崩潰
+        ""
+    }
 
     suspend fun run(log: LabLog) = scenario(log, ::decode)
 }
 
 // MARK: - 演練設定
-private fun parsedCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 3 則") }?.let { Regex("(\\d+) 則$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun parsedCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 3 則")
+}?.let { Regex("(\\d+) 則$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l02 = Lab(
     id = "L02",
@@ -82,11 +98,21 @@ val l02 = Lab(
     checkBug = { lines ->
         val n = parsedCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log, ::decode) 執行"
-            lines.none { "解析失敗（轉成的文字長度" in it && !it.endsWith("長度 0）") } ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log, ::decode) 執行"
+            }
+
+            lines.none { "解析失敗（轉成的文字長度" in it && !it.endsWith("長度 0）") } -> {
                 "Bug 還沒重現：decode 要把 frame 直接當成 UTF-8 文字（String(frame, Charsets.UTF_8)），轉出來是亂碼，不是空字串"
-            n != 0 -> "Bug 還沒重現：沒解壓就當文字，JSON 應該全部解析失敗（目前成功 $n 則）"
-            else -> null
+            }
+
+            n != 0 -> {
+                "Bug 還沒重現：沒解壓就當文字，JSON 應該全部解析失敗（目前成功 $n 則）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

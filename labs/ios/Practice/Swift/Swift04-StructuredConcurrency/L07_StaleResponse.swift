@@ -1,17 +1,21 @@
 // L07：切換到 ETH，畫面卻顯示 BTC 的深度（舊請求的回應蓋掉新資料）
 // 對應複習站：Swift04StructuredConcurrency 第 4 題「Task 的取消是怎麼運作的？」
 //
-// 情境：下單頁可以切換交易對，切換時重新抓訂單簿深度。BTC 的回應要 300 毫秒，ETH 只要 100 毫秒。
+// 情境：下單頁可以切換交易對，切換時重新抓訂單簿深度。BTC 的回應要 300 毫秒，
+// ETH 只要 100 毫秒。
 //       使用者先選 BTC，50 毫秒後改選 ETH。
 //
 // 你要寫：
 //   ① Bug 版：select 每次開一個新 Task 抓深度，抓到就寫進 shown。
-//   ② 修正版：select 先取消舊的 Task、記下 selected，再開新 Task 抓深度；抓到之後確認 symbol 還是 selected，才寫進 shown。
-// 只改有 TODO 的地方。解答：Solution/Swift/Swift04-StructuredConcurrency/L07_StaleResponse.swift
+//   ② 修正版：select 先取消舊的 Task、記下 selected，再開新 Task 抓深度；
+// 抓到之後確認 symbol 還是 selected，才寫進 shown。
+// 只改有 TODO 的地方。解答：
+// Solution/Swift/Swift04-StructuredConcurrency/L07_StaleResponse.swift
 import Foundation
 import LabKit
 
-/// 假的深度 API（兩個版本共用）：BTC 慢、ETH 快；被取消時 Task.sleep 會丟出 CancellationError
+/// 假的深度 API（兩個版本共用）：BTC 慢、ETH 快；被取消時 Task.sleep 會丟出
+/// CancellationError
 private func fetchDepth(_ symbol: String) async throws -> String {
     try await Task.sleep(for: .milliseconds(symbol == "BTC/JPY" ? 300 : 100))
     return "\(symbol) 的深度"
@@ -24,7 +28,8 @@ private enum L07Bug {
         private(set) var shown = "（還沒有資料）"
 
         func select(_ symbol: String) {
-            // TODO ①：開一個 Task：if let depth = try? await fetchDepth(symbol)，抓到就寫進 shown
+            // TODO ①：開一個 Task：if let depth = try? await
+            // fetchDepth(symbol)，抓到就寫進 shown
         }
     }
 
@@ -32,8 +37,10 @@ private enum L07Bug {
         let screen = await DepthScreen()
         await screen.select("BTC/JPY")
         try? await Task.sleep(for: .milliseconds(50))
-        await screen.select("ETH/JPY")                          // 使用者改選 ETH
-        try? await Task.sleep(for: .milliseconds(500))          // 等兩個回應都回來
+        // 使用者改選 ETH
+        await screen.select("ETH/JPY")
+        // 等兩個回應都回來
+        try? await Task.sleep(for: .milliseconds(500))
         log("選擇的交易對：ETH/JPY，畫面顯示：\(await screen.shown)")
     }
 }
@@ -48,7 +55,8 @@ private enum L07Fixed {
 
         func select(_ symbol: String) {
             // TODO ②：1. 取消舊的 loading  2. 記下 selected = symbol
-            //        3. loading = Task { … }：抓深度（被取消就結束），抓到之後確認 symbol == selected，才寫進 shown
+            //        3. loading = Task { … }：抓深度（被取消就結束），
+            // 抓到之後確認 symbol == selected，才寫進 shown
         }
     }
 

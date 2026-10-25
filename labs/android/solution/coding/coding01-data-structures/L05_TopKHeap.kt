@@ -1,10 +1,15 @@
 // L05：只要前 10 名，卻把 2 萬筆全部排序（比較次數差 10 倍以上）
-// 對應複習站：Coding01DataStructures 第 4 題「排行榜取前 k 名，要排序還是用 heap？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
+// 對應複習站：Coding01DataStructures 第 4 題「排行榜取前 k 名，要排序還是用
+// heap？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
 //
-// 情境：逐筆成交的統計表有 2 萬個項目，要取成交量最高的前 10 名。成交量一樣時，依代號字母排序。
-//       演練用計數器數「比較了幾次」，看兩種做法的成本。（幣種只有幾百個的排行榜，排序完全夠用，這裡是 n 很大、k 很小的情況。）
-// Bug 版：全部排序再取前 10 個。O(n log n)，2 萬筆要比較 20 多萬次，其中大部分是在排「根本不會顯示」的名次。
-// 修正版：用大小為 k 的 min-heap（Java 的 PriorityQueue 也是同樣的做法），只保留目前最大的 10 筆。
+// 情境：逐筆成交的統計表有 2 萬個項目，要取成交量最高的前 10 名。成交量一樣時，
+// 依代號字母排序。
+//       演練用計數器數「比較了幾次」，看兩種做法的成本。
+// （幣種只有幾百個的排行榜，排序完全夠用，這裡是 n 很大、k 很小的情況。）
+// Bug 版：全部排序再取前 10 個。O(n log n)，2 萬筆要比較 20 多萬次，
+// 其中大部分是在排「根本不會顯示」的名次。
+// 修正版：用大小為 k 的 min-heap（Java 的 PriorityQueue 也是同樣的做法），
+// 只保留目前最大的 10 筆。
 //        新的一筆只要和 heap 最小的比一次，比它大才換進去。O(n log k)。
 package tw.harry.labs.solution.coding01datastructures
 
@@ -25,33 +30,69 @@ private fun makeEntries(): List<C01Entry> {
 }
 
 /** 比較兩個項目誰「比較前面」：成交量大的在前；一樣大，代號字母順序在前 */
-private fun isBetter(lhs: C01Entry, rhs: C01Entry): Boolean =
-    if (lhs.volume != rhs.volume) lhs.volume > rhs.volume else lhs.symbol < rhs.symbol
+private fun isBetter(lhs: C01Entry, rhs: C01Entry): Boolean = if (lhs.volume !=
+    rhs.volume
+) {
+    lhs.volume > rhs.volume
+} else {
+    lhs.symbol < rhs.symbol
+}
 
 /** 從「…比較了 N 次」那一行取出 N（自動檢查用） */
 private fun comparisons(lines: List<String>): Int? =
     lines.firstOrNull { it.contains("比較了") && it.endsWith(" 次") }
         ?.substringAfter("比較了 ")?.removeSuffix(" 次")?.toIntOrNull()
 
-/** 演練流程（兩個版本共用）：產生資料 → 取前 10 名 → 數比較次數，並和標準答案比對 */
-private fun scenario(log: LabLog, topK: (List<C01Entry>, Int, C01Counter) -> List<C01Entry>) {
+/**
+ * 演練流程（兩個版本共用）：產生資料 → 取前 10 名 → 數比較次數，
+ * 並和標準答案比對
+ */
+private fun scenario(
+    log: LabLog,
+    topK: (List<C01Entry>, Int, C01Counter) -> List<C01Entry>,
+) {
     val entries = makeEntries()
     val counter = C01Counter()
     val result = topK(entries, K, counter)
-    val expected = entries.sortedWith { a, b -> if (isBetter(a, b)) -1 else if (isBetter(b, a)) 1 else 0 }.take(K)
+    val expected = entries.sortedWith {
+        a,
+        b,
+        ->
+        if (isBetter(a, b)) {
+            -1
+        } else if (isBetter(b, a)) {
+            1
+        } else {
+            0
+        }
+    }.take(K)
     log("$COUNT 筆資料取前 $K 名：比較了 ${counter.count} 次")
     log("前 $K 名和標準答案一致：${if (result == expected) "是" else "否"}")
-    log("最高的是 ${result.firstOrNull()?.symbol ?: "-"}，成交量 ${result.firstOrNull()?.volume ?: 0}")
+    log(
+        "最高的是 ${result.firstOrNull()?.symbol ?: "-"}，成交量 ${result.firstOrNull()?.volume ?: 0}",
+    )
 }
 
 // MARK: - Bug 版
 private object L05Bug {
-    fun topK(entries: List<C01Entry>, k: Int, counter: C01Counter): List<C01Entry> {
+    fun topK(
+        entries: List<C01Entry>,
+        k: Int,
+        counter: C01Counter,
+    ): List<C01Entry> {
         val sorted = entries.sortedWith { a, b ->
-            counter.count++                                       // 每比較一次記一筆
-            if (isBetter(a, b)) -1 else if (isBetter(b, a)) 1 else 0
+            // 每比較一次記一筆
+            counter.count++
+            if (isBetter(a, b)) {
+                -1
+            } else if (isBetter(b, a)) {
+                1
+            } else {
+                0
+            }
         }
-        return sorted.take(k)                                     // 全部排好，只取前 k 個
+        // 全部排好，只取前 k 個
+        return sorted.take(k)
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::topK)
@@ -59,23 +100,31 @@ private object L05Bug {
 
 // MARK: - 修正版
 private object L05Fixed {
-    fun topK(entries: List<C01Entry>, k: Int, counter: C01Counter): List<C01Entry> {
+    fun topK(
+        entries: List<C01Entry>,
+        k: Int,
+        counter: C01Counter,
+    ): List<C01Entry> {
         if (k <= 0) return emptyList()
         // heap 最上面是「目前保留的 k 筆裡最差的」：isLess(a, b) 代表 a 比 b 差
         val heap = C01MinHeap<C01Entry> { lhs, rhs ->
-            counter.count++                                       // 每比較一次記一筆
+            // 每比較一次記一筆
+            counter.count++
             isBetter(rhs, lhs)
         }
         for (entry in entries) {
             if (heap.count < k) {
-                heap.push(entry)                                  // 還沒滿 k 筆：直接放進去
+                // 還沒滿 k 筆：直接放進去
+                heap.push(entry)
             } else {
                 val worst = heap.top ?: continue
                 counter.count++
-                if (isBetter(entry, worst)) heap.replaceTop(entry)    // 比最差的好，才換進去
+                // 比最差的好，才換進去
+                if (isBetter(entry, worst)) heap.replaceTop(entry)
             }
         }
-        return heap.drainAscending().reversed()                   // 由差到好，反過來就是由好到差
+        // 由差到好，反過來就是由好到差
+        return heap.drainAscending().reversed()
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::topK)

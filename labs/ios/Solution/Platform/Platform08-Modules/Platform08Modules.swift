@@ -6,6 +6,7 @@ enum Platform08Modules {
         id: "platform-modularization",
         code: "Platform08Modules",
         title: "模組化",
-        labs: [l01, l02]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02]
     )
 }

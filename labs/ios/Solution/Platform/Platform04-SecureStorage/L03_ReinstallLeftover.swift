@@ -1,11 +1,17 @@
 // L03：重新安裝 App 之後，不用登入就直接進去了（Keychain 在 App 被刪除後還在）
-// 對應複習站：Platform04SecureStorage 第 2 題「iOS 的 Keychain 怎麼用？accessibility 怎麼選？」
+// 對應複習站：Platform04SecureStorage 第 2 題「iOS 的 Keychain
+// 怎麼用？accessibility 怎麼選？」
 //
-// 情境：使用者登入後刪除 App，隔天又重新安裝。UserDefaults 會跟著 App 一起被刪除，但 Keychain 的內容通常還在（裝置上的另一個資料庫）。
-//        演練用一個專屬的 UserDefaults 代表「這一次安裝的資料」，Keychain 裡先放一份「上一次安裝留下的 token」，
+// 情境：使用者登入後刪除 App，隔天又重新安裝。UserDefaults 會跟著 App
+// 一起被刪除，但 Keychain 的內容通常還在（裝置上的另一個資料庫）。
+//        演練用一個專屬的 UserDefaults 代表「這一次安裝的資料」，Keychain
+// 裡先放一份「上一次安裝留下的 token」，
 //        再依序模擬：重新安裝後第一次啟動 → 使用者登入 → 第二次啟動。
-// Bug 版：啟動時直接看 Keychain 有沒有 token，有就當作已登入。重新安裝之後，用的是上一次安裝留下的 token。
-// 修正版：啟動時先檢查 UserDefaults 的 hasLaunchedBefore。沒有就是第一次啟動（重新安裝），把 Keychain 裡的殘留 token 清掉，再設定這個旗標。
+// Bug 版：啟動時直接看 Keychain 有沒有 token，有就當作已登入。重新安裝之後，
+// 用的是上一次安裝留下的 token。
+// 修正版：啟動時先檢查 UserDefaults 的 hasLaunchedBefore。
+// 沒有就是第一次啟動（重新安裝），把 Keychain 裡的殘留 token 清掉，
+// 再設定這個旗標。
 import Foundation
 import Security
 import LabKit
@@ -24,7 +30,8 @@ private enum TokenKeychain {
         delete()
         var add = base
         add[kSecValueData as String] = Data(token.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        add[kSecAttrAccessible as String] =
+            kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
     }
 
@@ -32,7 +39,10 @@ private enum TokenKeychain {
         var query = base
         query[kSecReturnData as String] = true
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        guard
+            SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+            let data = item as? Data
+        else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
@@ -41,13 +51,15 @@ private enum TokenKeychain {
 
 /// 演練流程（兩個版本共用）：[launch] 是 App 啟動時做的事，回傳「已登入嗎」
 private func scenario(_ log: LabLog, launch: (UserDefaults) -> Bool) {
-    // 上一次安裝：登入過，token 留在 Keychain；UserDefaults 隨著 App 被刪除，所以是空的
+    // 上一次安裝：登入過，token 留在 Keychain；UserDefaults 隨著 App 被刪除，
+    // 所以是空的
     UserDefaults.standard.removePersistentDomain(forName: suite)
     TokenKeychain.save("old-token-from-previous-install")
     let defaults = UserDefaults(suiteName: suite)!
 
     log("重新安裝後第一次啟動：\(launch(defaults) ? "直接登入了（用的是上一次安裝留下的 token）" : "要重新登入")")
-    TokenKeychain.save("new-token-after-login")                 // 使用者重新登入
+    // 使用者重新登入
+    TokenKeychain.save("new-token-after-login")
     log("使用者登入之後，第二次啟動：\(launch(defaults) ? "維持登入" : "被登出了")")
 
     TokenKeychain.delete()
@@ -69,8 +81,10 @@ private enum L03Bug {
 // MARK: - 修正版
 private enum L03Fixed {
     static func launch(_ defaults: UserDefaults) -> Bool {
-        if !defaults.bool(forKey: "hasLaunchedBefore") {        // UserDefaults 隨 App 刪除：沒有旗標就是重新安裝後第一次啟動
-            TokenKeychain.delete()                              // 清掉上一次安裝殘留的 token
+        // UserDefaults 隨 App 刪除：沒有旗標就是重新安裝後第一次啟動
+        if !defaults.bool(forKey: "hasLaunchedBefore") {
+            // 清掉上一次安裝殘留的 token
+            TokenKeychain.delete()
             defaults.set(true, forKey: "hasLaunchedBefore")
         }
         return TokenKeychain.load() != nil
@@ -87,7 +101,8 @@ extension Platform04SecureStorage {
         id: "L03",
         title: "重新安裝後，不用登入就進去了",
         question: "第 2 題：iOS 的 Keychain 怎麼用？accessibility 怎麼選？",
-        goal: "Keychain 在 App 被刪除後還在，所以首次啟動要清掉上一次安裝殘留的 token；之後的啟動不能清掉使用者剛登入的 token。",
+        goal:
+            "Keychain 在 App 被刪除後還在，所以首次啟動要清掉上一次安裝殘留的 token；之後的啟動不能清掉使用者剛登入的 token。",
         steps: [
             "選「Bug 版」按執行，看「重新安裝後第一次啟動」是不是直接登入。",
             "選「修正版」執行：第一次啟動要重新登入；登入之後第二次啟動維持登入。",
@@ -102,12 +117,20 @@ extension Platform04SecureStorage {
             }
         },
         checkBug: { lines in
-            if !lines.contains("重新安裝後第一次啟動：直接登入了（用的是上一次安裝留下的 token）") { return "Bug 還沒重現：Bug 版啟動時只看 Keychain 有沒有 token，有就當作已登入" }
-            return lines.contains("使用者登入之後，第二次啟動：維持登入") ? nil : "登入之後第二次啟動應該維持登入：有 token 就回傳 true"
+            if !lines.contains("重新安裝後第一次啟動：直接登入了（用的是上一次安裝留下的 token）") {
+                return "Bug 還沒重現：Bug 版啟動時只看 Keychain 有沒有 token，有就當作已登入"
+            }
+            return lines.contains("使用者登入之後，第二次啟動：維持登入")
+                ? nil : "登入之後第二次啟動應該維持登入：有 token 就回傳 true"
         },
         checkFixed: { lines in
-            if !lines.contains("重新安裝後第一次啟動：要重新登入") { return "重新安裝後第一次啟動不該直接登入：沒有 hasLaunchedBefore 旗標時，要先刪掉 Keychain 裡的殘留 token（TokenKeychain.delete()），再設旗標" }
-            if !lines.contains("使用者登入之後，第二次啟動：維持登入") { return "登入之後第二次啟動被登出了：旗標設好之後，不要再清 Keychain" }
+            if !lines.contains("重新安裝後第一次啟動：要重新登入") {
+                return
+                    "重新安裝後第一次啟動不該直接登入：沒有 hasLaunchedBefore 旗標時，要先刪掉 Keychain 裡的殘留 token（TokenKeychain.delete()），再設旗標"
+            }
+            if !lines.contains("使用者登入之後，第二次啟動：維持登入") {
+                return "登入之後第二次啟動被登出了：旗標設好之後，不要再清 Keychain"
+            }
             return nil
         }
     )

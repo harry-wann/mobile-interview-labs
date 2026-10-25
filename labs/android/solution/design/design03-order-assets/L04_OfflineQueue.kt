@@ -1,13 +1,19 @@
-// L04：在電梯裡按了買入，畫面沒反應，一分鐘後走出電梯，單卻自己下出去了（沒有網路時把下單排隊，等連線恢復再補送）
-// 對應複習站：Design03OrderAssets 第 7 題「有哪些例外情況？怎麼測試和監控？」（斷線時按下單）
+// L04：在電梯裡按了買入，畫面沒反應，一分鐘後走出電梯，
+// 單卻自己下出去了（沒有網路時把下單排隊，等連線恢復再補送）
+// 對應複習站：Design03OrderAssets 第 7 題「有哪些例外情況？怎麼測試和監控？」
+// （斷線時按下單）
 //
-// 情境：使用者在電梯裡（沒有網路）按下「買入 0.01 BTC，限價 10,000,000 円」。下單頁等了 10 秒沒有結果，使用者以為沒下成功，放棄、關掉畫面。
+// 情境：使用者在電梯裡（沒有網路）按下「買入 0.01 BTC，限價 10,000,000 円」。
+// 下單頁等了 10 秒沒有結果，使用者以為沒下成功，放棄、關掉畫面。
 //       一分鐘後走出電梯，網路恢復，這時市價已經跌到 9,800,000 円。
 //       看畫面上顯示什麼，以及網路恢復之後，伺服器收到了幾張單。
-// Bug 版：網路層設成「等到有網路再送」（Android 用 WorkManager 加上網路條件，iOS 的 URLSession 則是設 waitsForConnectivity = true）。
-//        沒有網路時，下單請求排在佇列裡，畫面顯示「已送出，等待連線」；網路一恢復就自動補送。限價 10,000,000 比市價 9,800,000 高，立刻成交，
+// Bug 版：網路層設成「等到有網路再送」（Android 用 WorkManager 加上網路條件，
+// iOS 的 URLSession 則是設 waitsForConnectivity = true）。
+//        沒有網路時，下單請求排在佇列裡，畫面顯示「已送出，等待連線」；
+// 網路一恢復就自動補送。限價 10,000,000 比市價 9,800,000 高，立刻成交，
 //        使用者買到一筆他以為沒下成功的單。
-// 修正版：下單前先看連線狀態：沒有網路就不排隊，直接告訴使用者「現在無法下單，請確認網路連線」。網路恢復後不會補送任何東西。
+// 修正版：下單前先看連線狀態：沒有網路就不排隊，直接告訴使用者「現在無法下單，
+// 請確認網路連線」。網路恢復後不會補送任何東西。
 package tw.harry.labs.solution.design03orderassets
 
 import tw.harry.labs.kit.Lab
@@ -38,7 +44,10 @@ private interface L04OrderGateway {
 private const val L04_ORDER = "買 0.01 BTC，限價 10,000,000 円"
 
 /** 演練流程（兩個版本共用） */
-private fun scenario(log: LabLog, makeGateway: (L04FakeNetwork, L04FakeServer) -> L04OrderGateway) {
+private fun scenario(
+    log: LabLog,
+    makeGateway: (L04FakeNetwork, L04FakeServer) -> L04OrderGateway,
+) {
     val network = L04FakeNetwork()
     val server = L04FakeServer()
     val gateway = makeGateway(network, server)
@@ -55,7 +64,10 @@ private fun scenario(log: LabLog, makeGateway: (L04FakeNetwork, L04FakeServer) -
 
 // MARK: - Bug 版
 private object L04Bug {
-    class Gateway(private val network: L04FakeNetwork, private val server: L04FakeServer) : L04OrderGateway {
+    class Gateway(
+        private val network: L04FakeNetwork,
+        private val server: L04FakeServer,
+    ) : L04OrderGateway {
         private val queue = mutableListOf<String>()
 
         override fun submit(order: String): String {
@@ -63,34 +75,45 @@ private object L04Bug {
                 server.place(order)
                 return "已送出"
             }
-            queue += order                                              // 沒有網路：先排隊，等網路恢復再送
+            // 沒有網路：先排隊，等網路恢復再送
+            queue += order
             return "已送出，等待連線"
         }
 
         override fun connectionRestored() {
-            queue.forEach(server::place)                                // 網路一恢復，把排隊的單補送出去
+            // 網路一恢復，把排隊的單補送出去
+            queue.forEach(server::place)
             queue.clear()
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { network, server -> Gateway(network, server) }
+    suspend fun run(log: LabLog) = scenario(log) { network, server ->
+        Gateway(network, server)
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
-    class Gateway(private val network: L04FakeNetwork, private val server: L04FakeServer) : L04OrderGateway {
+    class Gateway(
+        private val network: L04FakeNetwork,
+        private val server: L04FakeServer,
+    ) : L04OrderGateway {
         override fun submit(order: String): String {
             if (!network.isOnline) {
-                return "現在無法下單，請確認網路連線"                      // 沒有網路：不排隊，馬上告訴使用者
+                // 沒有網路：不排隊，馬上告訴使用者
+                return "現在無法下單，請確認網路連線"
             }
             server.place(order)
             return "已送出"
         }
 
-        override fun connectionRestored() {}                            // 沒有排隊的單，沒有東西要補送
+        // 沒有排隊的單，沒有東西要補送
+        override fun connectionRestored() {}
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { network, server -> Gateway(network, server) }
+    suspend fun run(log: LabLog) = scenario(log) { network, server ->
+        Gateway(network, server)
+    }
 }
 
 // MARK: - 演練設定
@@ -116,18 +139,32 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, makeGateway) 執行"
-            "最後：畫面顯示「已送出，等待連線」；網路恢復後伺服器收到 1 張單" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, makeGateway) 執行"
+            }
+
+            "最後：畫面顯示「已送出，等待連線」；網路恢復後伺服器收到 1 張單" !in lines -> {
                 "Bug 還沒重現：沒有網路時 submit 把單存進 queue、回傳「已送出，等待連線」；connectionRestored 把 queue 裡的單補送給伺服器"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, makeGateway) 執行"
-            "最後：畫面顯示「現在無法下單，請確認網路連線」；網路恢復後伺服器收到 0 張單" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, makeGateway) 執行"
+            }
+
+            "最後：畫面顯示「現在無法下單，請確認網路連線」；網路恢復後伺服器收到 0 張單" !in lines -> {
                 "沒有網路（network.isOnline 是 false）時，submit 直接回傳「現在無法下單，請確認網路連線」，不要排隊"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

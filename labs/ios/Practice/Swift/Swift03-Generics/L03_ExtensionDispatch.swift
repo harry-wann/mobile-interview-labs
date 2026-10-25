@@ -1,19 +1,26 @@
-// L03：VIP 的手續費說明，顯示的卻是一般會員的文字（protocol extension 裡的方法沒有被覆寫）
-// 對應複習站：Swift03Generics 第 3 題「protocol extension 裡的方法，到底會呼叫到哪一個版本？」
+// L03：VIP 的手續費說明，顯示的卻是一般會員的文字（protocol extension
+// 裡的方法沒有被覆寫）
+// 對應複習站：Swift03Generics 第 3 題「protocol extension 裡的方法，
+// 到底會呼叫到哪一個版本？」
 //
-// 情境：手續費計算器遵守 FeeCalculator 協定，extension 提供預設的 summary 說明文字。VIP 計算器自己寫了一個同名的 summary，顯示「VIP 免手續費」。
+// 情境：手續費計算器遵守 FeeCalculator 協定，extension 提供預設的 summary
+// 說明文字。VIP 計算器自己寫了一個同名的 summary，顯示「VIP 免手續費」。
 //       畫面上用 [any FeeCalculator] 放不同的計算器，一個一個顯示說明。
 //
 // 你要寫：
-//   ① Bug 版：在 extension 裡寫預設的 summary（回傳「手續費 N 円」），不要把 summary 宣告進協定。
-//   ② 修正版：把 summary(for:) 也宣告進 FeeCalculator 協定，讓它變成 requirement。
-// 只改有 TODO 的地方。解答：Solution/Swift/Swift03-Generics/L03_ExtensionDispatch.swift
+//   ① Bug 版：在 extension 裡寫預設的 summary（回傳「手續費 N 円」），不要把
+// summary 宣告進協定。
+//   ② 修正版：把 summary(for:) 也宣告進 FeeCalculator 協定，讓它變成
+// requirement。
+// 只改有 TODO 的地方。解答：
+// Solution/Swift/Swift03-Generics/L03_ExtensionDispatch.swift
 import LabKit
 
 // MARK: - Bug 版
 private enum L03Bug {
     protocol FeeCalculator {
-        func fee(for amount: Int) -> Int                // requirement：只有宣告在這裡的才是動態派發
+        // requirement：只有宣告在這裡的才是動態派發
+        func fee(for amount: Int) -> Int
     }
 
     struct MakerFee: FeeCalculator {
@@ -22,7 +29,8 @@ private enum L03Bug {
 
     struct VIPFee: FeeCalculator {
         func fee(for amount: Int) -> Int { 0 }
-        func summary(for amount: Int) -> String { "VIP 免手續費" }     // 想覆寫 extension 的預設版本
+        // 想覆寫 extension 的預設版本
+        func summary(for amount: Int) -> String { "VIP 免手續費" }
     }
 
     static func run(_ log: LabLog) async {
@@ -31,14 +39,17 @@ private enum L03Bug {
 
         let calculators: [any FeeCalculator] = [MakerFee(), VIPFee()]
         for calculator in calculators {
-            log("用 any FeeCalculator 呼叫 \(type(of: calculator))：\(calculator.summary(for: 1_000_000))")
+            log(
+                "用 any FeeCalculator 呼叫 \(type(of: calculator))：\(calculator.summary(for: 1_000_000))"
+            )
         }
     }
 }
 
 /// 預設的說明文字：summary 不在協定宣告裡，只存在於這個 extension
 extension L03Bug.FeeCalculator {
-    // TODO ①：寫預設的 summary(for:)，回傳「手續費 N 円」（N 是 fee(for: amount)）。注意：不要宣告進協定
+    // TODO ①：寫預設的 summary(for:)，回傳「手續費 N 円」（N 是 fee(for:
+    // amount)）。注意：不要宣告進協定
     func summary(for amount: Int) -> String { "" }
 }
 
@@ -64,7 +75,9 @@ private enum L03Fixed {
 
         let calculators: [any FeeCalculator] = [MakerFee(), VIPFee()]
         for calculator in calculators {
-            log("用 any FeeCalculator 呼叫 \(type(of: calculator))：\(calculator.summary(for: 1_000_000))")
+            log(
+                "用 any FeeCalculator 呼叫 \(type(of: calculator))：\(calculator.summary(for: 1_000_000))"
+            )
         }
     }
 }
@@ -80,13 +93,15 @@ extension Swift03Generics {
         id: "L03",
         title: "VIP 的說明文字被預設文字蓋掉",
         question: "第 3 題：protocol extension 裡的方法，到底會呼叫到哪一個版本？",
-        goal: "VIP 計算器自己的 summary 要在 [any FeeCalculator] 裡也被呼叫到。找出為什麼會跑到 extension 的預設版本，並修好。",
+        goal:
+            "VIP 計算器自己的 summary 要在 [any FeeCalculator] 裡也被呼叫到。找出為什麼會跑到 extension 的預設版本，並修好。",
         steps: [
             "寫 TODO ①，選「練習」「Bug 版」執行，比較兩種呼叫：直接用 VIPFee 呼叫是「VIP 免手續費」，用 any FeeCalculator 呼叫卻是「手續費 0 円」，出現 ✓。",
             "想一想：summary 有寫在協定宣告裡嗎？編譯器看到的是 VIPFee，還是 any FeeCalculator？",
             "寫 TODO ②，選「修正版」執行，兩種呼叫都應該是「VIP 免手續費」。",
         ],
-        expectBug: "直接呼叫是「VIP 免手續費」，透過 any FeeCalculator 呼叫 VIPFee 卻是「手續費 0 円」。",
+        expectBug:
+            "直接呼叫是「VIP 免手續費」，透過 any FeeCalculator 呼叫 VIPFee 卻是「手續費 0 円」。",
         expectFixed: "兩種呼叫 VIPFee 都是「VIP 免手續費」，MakerFee 是「手續費 1000 円」。",
         run: { variant, log in
             switch variant {
@@ -95,15 +110,21 @@ extension Swift03Generics {
             }
         },
         checkBug: { lines in
-            guard lines.contains("直接用 VIPFee 呼叫：VIP 免手續費") else { return "VIPFee 要有自己的 summary，直接呼叫時顯示「VIP 免手續費」" }
-            guard lines.contains("用 any FeeCalculator 呼叫 MakerFee：手續費 1000 円") else { return "extension 要提供預設的 summary：「手續費 N 円」" }
+            guard lines.contains("直接用 VIPFee 呼叫：VIP 免手續費") else {
+                return "VIPFee 要有自己的 summary，直接呼叫時顯示「VIP 免手續費」"
+            }
+            guard lines.contains("用 any FeeCalculator 呼叫 MakerFee：手續費 1000 円")
+            else { return "extension 要提供預設的 summary：「手續費 N 円」" }
             return lines.contains("用 any FeeCalculator 呼叫 VIPFee：手續費 0 円")
-                ? nil : "Bug 還沒重現：透過 any FeeCalculator 呼叫 VIPFee 時，應該跑到 extension 的預設版本（summary 不要宣告進協定）"
+                ? nil
+                : "Bug 還沒重現：透過 any FeeCalculator 呼叫 VIPFee 時，應該跑到 extension 的預設版本（summary 不要宣告進協定）"
         },
         checkFixed: { lines in
-            guard lines.contains("用 any FeeCalculator 呼叫 MakerFee：手續費 1000 円") else { return "沒有自己版本的 MakerFee 要用預設的 summary：「手續費 N 円」" }
+            guard lines.contains("用 any FeeCalculator 呼叫 MakerFee：手續費 1000 円")
+            else { return "沒有自己版本的 MakerFee 要用預設的 summary：「手續費 N 円」" }
             return lines.contains("用 any FeeCalculator 呼叫 VIPFee：VIP 免手續費")
-                ? nil : "透過 any FeeCalculator 呼叫 VIPFee 時，應該跑到 VIP 自己的版本：summary 要宣告進協定"
+                ? nil
+                : "透過 any FeeCalculator 呼叫 VIPFee 時，應該跑到 VIP 自己的版本：summary 要宣告進協定"
         }
     )
 }

@@ -1,13 +1,18 @@
 // L03：在主執行緒讀檔，開發時完全沒有人發現（StrictMode）
 // 對應複習站：Platform02Threading 第 3 題「ANR 是什麼？iOS 的卡頓怎麼偵測？」
 //
-// 情境：有一個函式要讀取設定檔。它被直接寫在主執行緒呼叫：檔案小，開發時感覺不到卡。但檔案變大、手機變慢（磁碟忙碌）時，
-//        主執行緒就會被卡住，嚴重的話超過 5 秒沒處理輸入事件就是 ANR。StrictMode 是開發時抓這種違規的工具：
-//        主執行緒一碰磁碟或網路，就通知你（正式的 App 通常是 penaltyLog，讓 Logcat 留下警告；這裡用 penaltyListener 好讓演練把它記下來）。
-//        要在手機上執行（StrictMode、Android 9 以上；讀檔的是系統檔 /system/etc/hosts）。
+// 情境：有一個函式要讀取設定檔。它被直接寫在主執行緒呼叫：檔案小，
+// 開發時感覺不到卡。但檔案變大、手機變慢（磁碟忙碌）時，
+//        主執行緒就會被卡住，嚴重的話超過 5 秒沒處理輸入事件就是 ANR。
+// StrictMode 是開發時抓這種違規的工具：
+//        主執行緒一碰磁碟或網路，就通知你（正式的 App 通常是 penaltyLog，讓
+// Logcat 留下警告；這裡用 penaltyListener 好讓演練把它記下來）。
+//        要在手機上執行（StrictMode、Android 9 以上；讀檔的是系統檔
+// /system/etc/hosts）。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug）：在主執行緒直接讀檔（呼叫 readConfig()），StrictMode 抓到違規。
+//   ① Bug 版（L03Bug）：在主執行緒直接讀檔（呼叫 readConfig()），StrictMode
+// 抓到違規。
 //   ② 修正版（L03Fixed）：用 withContext(Dispatchers.IO) 把讀檔放到背景。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/platform/platform02-threading/L03_StrictMode.kt
@@ -30,7 +35,10 @@ import tw.harry.labs.kit.Variant
 private fun readConfig(): String =
     runCatching { File("/system/etc/hosts").readText() }.getOrDefault("")
 
-/** 演練流程（兩個版本共用）：開著 StrictMode 的磁碟讀取偵測，執行 [load]，數它抓到幾次 */
+/**
+ * 演練流程（兩個版本共用）：開著 StrictMode 的磁碟讀取偵測，執行 [load]，
+ * 數它抓到幾次
+ */
 private suspend fun scenario(log: LabLog, load: suspend () -> String) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
         log("StrictMode 的 penaltyListener 需要 Android 9（API 28）以上")
@@ -41,7 +49,8 @@ private suspend fun scenario(log: LabLog, load: suspend () -> String) {
     StrictMode.setThreadPolicy(
         StrictMode.ThreadPolicy.Builder()
             .detectDiskReads()
-            .penaltyListener(Executor { it.run() }) { violation ->      // 違規時在這裡通知（也可以用 penaltyLog 寫進 Logcat）
+            // 違規時在這裡通知（也可以用 penaltyLog 寫進 Logcat）
+            .penaltyListener(Executor { it.run() }) { violation ->
                 if (violation is DiskReadViolation) violations.incrementAndGet()
             }
             .build(),
@@ -49,7 +58,8 @@ private suspend fun scenario(log: LabLog, load: suspend () -> String) {
     try {
         val config = load()
         log("讀到設定檔，共 ${config.length} 個字元")
-        // 主執行緒上的違規不會馬上通知：系統等這個訊息處理完，下一輪 looper 才呼叫 listener。
+        // 主執行緒上的違規不會馬上通知：系統等這個訊息處理完，下一輪 looper
+        // 才呼叫 listener。
         // 所以先讓出主執行緒等一下，policy 也要等通知完才還原。
         delay(500)
     } finally {
@@ -69,17 +79,20 @@ private object L03Bug {
 // MARK: - 修正版
 private object L03Fixed {
     suspend fun run(log: LabLog) = scenario(log) {
-        // TODO ②：用 withContext(Dispatchers.IO) 包住 readConfig()，把讀檔放到 IO 執行緒，結果回傳
+        // TODO ②：用 withContext(Dispatchers.IO) 包住 readConfig()，把讀檔放到
+        // IO 執行緒，結果回傳
         ""
     }
 }
 
 // MARK: - 演練設定
-private fun configChars(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("讀到設定檔，共 ") }?.removePrefix("讀到設定檔，共 ")?.substringBefore(" ")?.toIntOrNull()
+private fun configChars(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("讀到設定檔，共 ")
+}?.removePrefix("讀到設定檔，共 ")?.substringBefore(" ")?.toIntOrNull()
 
-private fun violations(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("StrictMode 抓到 ") }?.removePrefix("StrictMode 抓到 ")?.substringBefore(" ")?.toIntOrNull()
+private fun violations(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("StrictMode 抓到 ")
+}?.removePrefix("StrictMode 抓到 ")?.substringBefore(" ")?.toIntOrNull()
 
 val l03 = Lab(
     id = "L03",
@@ -106,8 +119,15 @@ val l03 = Lab(
         val n = violations(lines)
         when {
             n == null -> "演練沒有跑完"
-            (configChars(lines) ?: 0) == 0 -> "沒有讀到設定檔：要在 scenario 的 load 裡呼叫 readConfig()"
+
+            (
+                configChars(
+                    lines,
+                ) ?: 0
+            ) == 0 -> "沒有讀到設定檔：要在 scenario 的 load 裡呼叫 readConfig()"
+
             n == 0 -> "Bug 還沒重現：要在主執行緒直接呼叫 readConfig()"
+
             else -> null
         }
     },
@@ -115,8 +135,15 @@ val l03 = Lab(
         val n = violations(lines)
         when {
             n == null -> "演練沒有跑完"
-            (configChars(lines) ?: 0) == 0 -> "沒有讀到設定檔：要在 scenario 的 load 裡呼叫 readConfig()"
+
+            (
+                configChars(
+                    lines,
+                ) ?: 0
+            ) == 0 -> "沒有讀到設定檔：要在 scenario 的 load 裡呼叫 readConfig()"
+
             n != 0 -> "StrictMode 還是抓到 $n 次：用 withContext(Dispatchers.IO) 包住 readConfig()"
+
             else -> null
         }
     },

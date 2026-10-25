@@ -1,11 +1,18 @@
-// L02：為了讓編譯通過硬轉型，手續費混進整數清單，排序時才 ClassCastException（variance）
-// 對應複習站：Kotlin01Types 第 2 題「泛型的 out、in、* 是什麼意思？為什麼 MutableList<Int> 不能當 MutableList<Number> 用？」
+// L02：為了讓編譯通過硬轉型，手續費混進整數清單，排序時才
+// ClassCastException（variance）
+// 對應複習站：Kotlin01Types 第 2 題「泛型的 out、in、* 是什麼意思？為什麼
+// MutableList<Int> 不能當 MutableList<Number> 用？」
 //
-// 情境：下單畫面的數量是 MutableList<Int>（單位：張）。要把手續費 0.5 加進清單，算「含手續費」的總量。
-// Bug 版：函式參數寫成 MutableList<Number>，編譯器不讓 MutableList<Int> 傳進去，於是用 as 強制轉型繞過。
-//        MutableList 又讀又寫，不能放寬；轉型成功了，但 0.5（Double）被塞進原本只該放 Int 的清單。
-//        加總 lots.sum() 默默少算（0.5 變成 0），lots.sorted() 才 ClassCastException，離塞入的地方很遠。
-// 修正版：函式只讀，參數改成 List<Number>（List<out E>，只讀所以可以放寬），不用轉型；回傳新的清單，原本的 lots 不被動到。
+// 情境：下單畫面的數量是 MutableList<Int>（單位：張）。要把手續費 0.5
+// 加進清單，算「含手續費」的總量。
+// Bug 版：函式參數寫成 MutableList<Number>，編譯器不讓 MutableList<Int>
+// 傳進去，於是用 as 強制轉型繞過。
+//        MutableList 又讀又寫，不能放寬；轉型成功了，但 0.5（Double）
+// 被塞進原本只該放 Int 的清單。
+//        加總 lots.sum() 默默少算（0.5 變成 0），lots.sorted() 才
+// ClassCastException，離塞入的地方很遠。
+// 修正版：函式只讀，參數改成 List<Number>（List<out E>，只讀所以可以放寬），
+// 不用轉型；回傳新的清單，原本的 lots 不被動到。
 package tw.harry.labs.solution.kotlin01types
 
 import tw.harry.labs.kit.Lab
@@ -16,15 +23,17 @@ import tw.harry.labs.kit.Variant
 private object L02Bug {
     /** 把手續費加進數量清單 */
     fun withFee(amounts: MutableList<Number>, fee: Double) {
-        amounts.add(fee)                                    // 0.5 被塞進清單
+        amounts.add(fee) // 0.5 被塞進清單
     }
 
     @Suppress("UNCHECKED_CAST")
     fun run(log: LabLog) {
         val lots: MutableList<Int> = mutableListOf(3, 1, 2)
-        withFee(lots as MutableList<Number>, 0.5)           // 編譯器不讓直接傳，用 as 繞過：lots 裡混進了 Double
+        // 編譯器不讓直接傳，用 as 繞過：lots 裡混進了 Double
+        withFee(lots as MutableList<Number>, 0.5)
         log("含手續費後的 lots：$lots")
-        log("加總：${lots.sum()}")                          // 把 0.5 當成 0 加進去，默默少算，沒有任何錯誤
+        // 把 0.5 當成 0 加進去，默默少算，沒有任何錯誤
+        log("加總：${lots.sum()}")
         try {
             log("由小到大排序：${lots.sorted()}")
         } catch (e: ClassCastException) {
@@ -35,12 +44,17 @@ private object L02Bug {
 
 // MARK: - 修正版
 private object L02Fixed {
-    /** 只讀：List<out E> 可以放寬，List<Int> 直接當 List<Number> 傳進來；回傳新的清單 */
-    fun withFee(amounts: List<Number>, fee: Double): List<Number> = amounts + fee
+    /**
+     * 只讀：List<out E> 可以放寬，List<Int> 直接當 List<Number> 傳進來；
+     * 回傳新的清單
+     */
+    fun withFee(amounts: List<Number>, fee: Double): List<Number> =
+        amounts + fee
 
     fun run(log: LabLog) {
         val lots: MutableList<Int> = mutableListOf(3, 1, 2)
-        val withFee = withFee(lots, 0.5)                    // 不用轉型；lots 本身沒有被動到
+        // 不用轉型；lots 本身沒有被動到
+        val withFee = withFee(lots, 0.5)
         log("含手續費後的 lots：$withFee")
         log("加總：${lots.sum()}")
         try {

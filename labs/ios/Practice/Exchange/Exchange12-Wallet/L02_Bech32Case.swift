@@ -1,14 +1,22 @@
 // L02：大小寫混用的 bc1 地址被當成合法（Bech32 地址不能大小寫混用）
-// 對應複習站：Exchange12Wallet 第 2 題「加密資產的地址怎麼驗證？Base58Check、Bech32、EIP-55 是什麼？」
+// 對應複習站：Exchange12Wallet 第 2 題「加密資產的地址怎麼驗證？Base58Check、
+// Bech32、EIP-55 是什麼？」
 //
-// 情境：Bech32（SegWit）與 Bech32m（Taproot）地址以 bc1 開頭，有多項式校驗碼。規則：全小寫或全大寫都合法（QR code 常用全大寫），
-//       **大小寫混用則無效**。校驗碼的計算（E12.bech32Kind，要傳入全小寫的字串，同時支援 Bech32 與 Bech32m）已經寫好在 Exchange12Support.swift，
-//       這題只看「大小寫」。演練檢查 6 個地址（都是 BIP 173／350 文件的公開測試地址）：全小寫的合法地址、全大寫的同一個地址、
-//       Taproot 的 Bech32m 地址、第一個字母改成大寫的混用地址、中間一個字母改成大寫的混用地址、校驗碼被改掉的地址。
+// 情境：Bech32（SegWit）與 Bech32m（Taproot）地址以 bc1 開頭，有多項式校驗碼。
+// 規則：全小寫或全大寫都合法（QR code 常用全大寫），
+//       **大小寫混用則無效**。校驗碼的計算（E12.bech32Kind，
+// 要傳入全小寫的字串，同時支援 Bech32 與 Bech32m）已經寫好在 Exchange12Support.
+// swift，
+//       這題只看「大小寫」。演練檢查 6 個地址（都是 BIP 173／350
+// 文件的公開測試地址）：全小寫的合法地址、全大寫的同一個地址、
+//       Taproot 的 Bech32m 地址、第一個字母改成大寫的混用地址、
+// 中間一個字母改成大寫的混用地址、校驗碼被改掉的地址。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.isValid）：直接把 address 轉成小寫（lowercased()），傳給 E12.bech32Kind(lowercased:)，結果不是 nil 就合法。
-//   ② 修正版（L02Fixed.isValid）：address 必須等於 address.lowercased() 或等於 address.uppercased()，否則回傳 false；
+//   ① Bug 版（L02Bug.isValid）：直接把 address 轉成小寫（lowercased()），傳給
+// E12.bech32Kind(lowercased:)，結果不是 nil 就合法。
+//   ② 修正版（L02Fixed.isValid）：address 必須等於 address.lowercased() 或等於
+// address.uppercased()，否則回傳 false；
 //      通過後同樣轉小寫傳給 E12.bech32Kind(lowercased:)。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange12-Wallet/L02_Bech32Case.swift
@@ -19,7 +27,10 @@ import LabKit
 private let cases: [(String, String, Bool)] = [
     ("全小寫的合法地址", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", true),
     ("同一個地址，全大寫", "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4", true),
-    ("Taproot 的 Bech32m 地址", "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", true),
+    (
+        "Taproot 的 Bech32m 地址",
+        "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", true
+    ),
     ("第一個字母改成大寫", "Bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", false),
     ("中間一個字母改成大寫", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8F3t4", false),
     ("校驗碼被改掉", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5", false),
@@ -44,7 +55,8 @@ private func scenario(_ log: LabLog, isValid: (String) -> Bool) {
 // MARK: - Bug 版
 private enum L02Bug {
     static func isValid(_ address: String) -> Bool {
-        // TODO ①：把 address 轉成小寫（lowercased()），傳給 E12.bech32Kind(lowercased:)；結果不是 nil 就回傳 true
+        // TODO ①：把 address 轉成小寫（lowercased()），傳給 E12.
+        // bech32Kind(lowercased:)；結果不是 nil 就回傳 true
         return false
     }
 
@@ -56,8 +68,10 @@ private enum L02Bug {
 // MARK: - 修正版
 private enum L02Fixed {
     static func isValid(_ address: String) -> Bool {
-        // TODO ②：address 必須等於 address.lowercased() 或等於 address.uppercased()，否則回傳 false；
-        //        通過後轉小寫傳給 E12.bech32Kind(lowercased:)，結果不是 nil 才回傳 true
+        // TODO ②：address 必須等於 address.lowercased() 或等於 address.
+        // uppercased()，否則回傳 false；
+        //        通過後轉小寫傳給 E12.bech32Kind(lowercased:)，結果不是 nil
+        // 才回傳 true
         return false
     }
 
@@ -68,8 +82,11 @@ private enum L02Fixed {
 
 // MARK: - 演練設定
 private func wrongCount(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasPrefix("6 個地址") }) else { return nil }
-    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.last
+    guard let line = lines.first(where: { $0.hasPrefix("6 個地址") }) else {
+        return nil
+    }
+    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        .last
 }
 
 extension Exchange12Wallet {
@@ -85,7 +102,8 @@ extension Exchange12Wallet {
             "寫 TODO ②（修正版），選「修正版」執行，6 個地址都要判斷對（全大寫和 Taproot 的 Bech32m 都要合法）。",
             "進階：EIP-55 的 Ethereum 地址剛好相反，大小寫混合是校驗碼；全小寫代表沒有校驗碼。兩種地址不能用同一套「大小寫」邏輯。",
         ],
-        expectBug: "「第一個字母改成大寫：合法 ✗」「中間一個字母改成大寫：合法 ✗」，其他四個判斷對（全大寫、Taproot 都合法，校驗碼被改掉的無效）：「6 個地址，驗證結果錯的有 2 個」。",
+        expectBug:
+            "「第一個字母改成大寫：合法 ✗」「中間一個字母改成大寫：合法 ✗」，其他四個判斷對（全大寫、Taproot 都合法，校驗碼被改掉的無效）：「6 個地址，驗證結果錯的有 2 個」。",
         expectFixed: "6 個地址都判斷對：「6 個地址，驗證結果錯的有 0 個」。",
         run: { variant, log in
             switch variant {
@@ -94,12 +112,19 @@ extension Exchange12Wallet {
             }
         },
         checkBug: { lines in
-            guard let n = wrongCount(lines) else { return "演練沒有跑完：要用 scenario(log, isValid:) 執行" }
-            if !lines.contains("同一個地址，全大寫：合法 ✓") { return "Bug 版要把地址轉成小寫再驗證，所以全大寫的合法地址要判成合法" }
-            return n == 2 ? nil : "Bug 還沒重現：轉小寫就驗證，兩個大小寫混用的地址都會被當成合法（目前錯 \(n) 個）"
+            guard let n = wrongCount(lines) else {
+                return "演練沒有跑完：要用 scenario(log, isValid:) 執行"
+            }
+            if !lines.contains("同一個地址，全大寫：合法 ✓") {
+                return "Bug 版要把地址轉成小寫再驗證，所以全大寫的合法地址要判成合法"
+            }
+            return n == 2
+                ? nil : "Bug 還沒重現：轉小寫就驗證，兩個大小寫混用的地址都會被當成合法（目前錯 \(n) 個）"
         },
         checkFixed: { lines in
-            guard let n = wrongCount(lines) else { return "演練沒有跑完：要用 scenario(log, isValid:) 執行" }
+            guard let n = wrongCount(lines) else {
+                return "演練沒有跑完：要用 scenario(log, isValid:) 執行"
+            }
             return n == 0 ? nil : "還有 \(n) 個地址判斷錯：混用大小寫先判無效；全小寫或全大寫才轉小寫驗證校驗碼"
         }
     )

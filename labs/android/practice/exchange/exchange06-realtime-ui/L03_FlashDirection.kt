@@ -1,14 +1,19 @@
-// L03：數字明明是漲的，閃爍卻是下跌的顏色（閃爍方向和「上一則推播」比，不是和「畫面上的價格」比）
+// L03：數字明明是漲的，閃爍卻是下跌的顏色（閃爍方向和「上一則推播」比，
+// 不是和「畫面上的價格」比）
 // 對應複習站：Exchange06RealtimeUI 第 5 題「價格變動的閃爍提示怎麼做？」
 //
-// 情境：行情推播會先合併，畫面每隔一段時間才更新一次，中間的價格使用者根本沒看過。
+// 情境：行情推播會先合併，畫面每隔一段時間才更新一次，
+// 中間的價格使用者根本沒看過。
 //        推播依序是：100 → 畫面更新 → 105、103 → 畫面更新 → 103 → 畫面更新。
-//        使用者看到的是 100、103、103：第二次畫面更新，數字從 100 變成 103，是上漲。
+//        使用者看到的是 100、103、103：第二次畫面更新，數字從 100 變成 103，
+// 是上漲。
 //        （第一次顯示沒有「上次畫在畫面上的價格」，不閃爍。）
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.Model.refresh）：用 direction(previousPush, current)：和「上一則推播」比。
-//   ② 修正版（L03Fixed.Model.refresh）：用 direction(lastShown, current)：和「上次畫在畫面上的價格」比，比完把 lastShown 換成 current。
+//   ① Bug 版（L03Bug.Model.refresh）：用 direction(previousPush, current)：
+// 和「上一則推播」比。
+//   ② 修正版（L03Fixed.Model.refresh）：用 direction(lastShown, current)：
+// 和「上次畫在畫面上的價格」比，比完把 lastShown 換成 current。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange06-realtime-ui/L03_FlashDirection.kt
 package tw.harry.labs.practice.exchange06realtimeui
@@ -57,14 +62,20 @@ private fun scenario(log: LabLog, model: L03FlashModel) {
     model.onPush(e06("100")); refresh()
     model.onPush(e06("105")); model.onPush(e06("103")); refresh()
     model.onPush(e06("103")); refresh()
-    log("最後：三次畫面更新的閃爍方向：${directions.joinToString("、")}（使用者看到的價格：${shownPrices.joinToString(" → ")}）")
+    log(
+        "最後：三次畫面更新的閃爍方向：${directions.joinToString(
+            "、",
+        )}（使用者看到的價格：${shownPrices.joinToString(" → ")}）",
+    )
 }
 
 // MARK: - Bug 版
 private object L03Bug {
     class Model : L03FlashModel {
         private var latest: BigDecimal? = null
-        private var previousPush: BigDecimal? = null            // 上一則推播的價格
+
+        // 上一則推播的價格
+        private var previousPush: BigDecimal? = null
 
         override fun onPush(price: BigDecimal) {
             previousPush = latest
@@ -73,7 +84,8 @@ private object L03Bug {
 
         override fun refresh(): L03Refresh? {
             val current = latest ?: return null
-            // TODO ①：回傳 L03Refresh(current, direction(previousPush, current))：拿「上一則推播」（previousPush）和 current 比。
+            // TODO ①：回傳 L03Refresh(current, direction(previousPush,
+            // current))：拿「上一則推播」（previousPush）和 current 比。
             //        目前回傳 FLAT 只是佔位，要改掉
             return L03Refresh(current, L03Direction.FLAT)
         }
@@ -86,7 +98,9 @@ private object L03Bug {
 private object L03Fixed {
     class Model : L03FlashModel {
         private var latest: BigDecimal? = null
-        private var lastShown: BigDecimal? = null               // 上次畫在畫面上的價格
+
+        // 上次畫在畫面上的價格
+        private var lastShown: BigDecimal? = null
 
         override fun onPush(price: BigDecimal) {
             latest = price
@@ -94,8 +108,10 @@ private object L03Fixed {
 
         override fun refresh(): L03Refresh? {
             val current = latest ?: return null
-            // TODO ②：拿「上次畫在畫面上的價格」（lastShown）和 current 比：direction(lastShown, current)；
-            //        比完把 lastShown 換成 current，回傳 L03Refresh(current, 方向)。目前回傳 FLAT 只是佔位，要改掉
+            // TODO ②：拿「上次畫在畫面上的價格」（lastShown）和 current 比：
+            // direction(lastShown, current)；
+            //        比完把 lastShown 換成 current，回傳 L03Refresh(current,
+            // 方向)。目前回傳 FLAT 只是佔位，要改掉
             return L03Refresh(current, L03Direction.FLAT)
         }
     }
@@ -127,18 +143,32 @@ val l03 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, model) 執行"
-            lines.none { it.startsWith("最後：三次畫面更新的閃爍方向：－ 持平、▼ 下跌、－ 持平") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, model) 執行"
+            }
+
+            lines.none { it.startsWith("最後：三次畫面更新的閃爍方向：－ 持平、▼ 下跌、－ 持平") } -> {
                 "Bug 還沒重現：refresh 用 previousPush（上一則推播）和 latest 比，第二次會變成 103 比 105，得到下跌"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, model) 執行"
-            lines.none { it.startsWith("最後：三次畫面更新的閃爍方向：－ 持平、▲ 上漲、－ 持平") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, model) 執行"
+            }
+
+            lines.none { it.startsWith("最後：三次畫面更新的閃爍方向：－ 持平、▲ 上漲、－ 持平") } -> {
                 "refresh 要拿 lastShown（上次畫在畫面上的價格）和 latest 比，比完把 lastShown 換成 latest：第一次沒有舊值是持平，第二次 103 比 100 是上漲"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

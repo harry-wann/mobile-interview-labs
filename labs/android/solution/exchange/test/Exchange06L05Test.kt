@@ -30,13 +30,20 @@ import tw.harry.labs.solution.exchange06realtimeui.E06_PRICE_SAMPLE
 class Exchange06L05Test {
     private val scales = listOf(1f, 1.3f, 2f)
 
-    /** 每個字體縮放比例各排版一次，回傳價格 Text 的排版結果（沒有畫出來就是 null） */
-    private fun layouts(row: @Composable ((TextLayoutResult) -> Unit) -> Unit): List<TextLayoutResult?> = scales.map { scale ->
+    /**
+     * 每個字體縮放比例各排版一次，回傳價格 Text 的排版結果（沒有畫出來就是
+     * null）
+     */
+    private fun layouts(
+        row: @Composable ((TextLayoutResult) -> Unit) -> Unit,
+    ): List<TextLayoutResult?> = scales.map { scale ->
         var result: TextLayoutResult? = null
         runComposeUiTest {
             setContent {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density.density, scale),
+                ) {
                     row { result = it }
                 }
             }
@@ -48,30 +55,66 @@ class Exchange06L05Test {
     private fun describe(results: List<TextLayoutResult?>): String =
         scales.indices.joinToString("；") { i ->
             val r = results[i]
-            "字體縮放 ${scales[i]}：" + (if (r == null) "沒有畫出來" else (if (r.hasVisualOverflow) "被截斷" else "完整顯示") + "（價格欄寬 ${r.size.width} px）")
+            "字體縮放 ${scales[i]}：" +
+                (
+                    if (r ==
+                        null
+                    ) {
+                        "沒有畫出來"
+                    } else {
+                        (if (r.hasVisualOverflow) "被截斷" else "完整顯示") +
+                            "（價格欄寬 ${r.size.width} px）"
+                    }
+                )
         }
 
     @Test
     fun l05() {
         val failures = mutableListOf<String>()
 
-        val bug = layouts { onLayout -> E06PriceRowBug("BTC_JPY", E06_PRICE_SAMPLE, onLayout) }
+        val bug =
+            layouts { onLayout ->
+                E06PriceRowBug("BTC_JPY", E06_PRICE_SAMPLE, onLayout)
+            }
         val bugReason = when {
-            bug.any { it == null } -> "價格沒有畫出來：價格的 Text 要加 onTextLayout = onPriceLayout"
-            bug[0]!!.hasVisualOverflow -> "字體縮放 1.0 就被截斷了：預設字體要放得下，寬度用 96.dp"
-            !bug[1]!!.hasVisualOverflow || !bug[2]!!.hasVisualOverflow ->
+            bug.any { it == null } -> {
+                "價格沒有畫出來：價格的 Text 要加 onTextLayout = onPriceLayout"
+            }
+
+            bug[0]!!.hasVisualOverflow -> {
+                "字體縮放 1.0 就被截斷了：預設字體要放得下，寬度用 96.dp"
+            }
+
+            !bug[1]!!.hasVisualOverflow || !bug[2]!!.hasVisualOverflow -> {
                 "Bug 還沒重現：字體縮放 1.3 與 2.0 的價格要被截斷：價格 Text 要 Modifier.width(96.dp)、maxLines = 1、overflow = TextOverflow.Ellipsis"
-            bug[0]!!.size.width != bug[2]!!.size.width -> "價格欄的寬度要寫死：Modifier.width(96.dp)，字體縮放變大它也不會變寬"
-            else -> null
+            }
+
+            bug[0]!!.size.width != bug[2]!!.size.width -> {
+                "價格欄的寬度要寫死：Modifier.width(96.dp)，字體縮放變大它也不會變寬"
+            }
+
+            else -> {
+                null
+            }
         }
         e06Report("L05", "Bug 版", bugReason, describe(bug), failures)
 
-        val fixed = layouts { onLayout -> E06PriceRowFixed("BTC_JPY", E06_PRICE_SAMPLE, onLayout) }
+        val fixed =
+            layouts { onLayout ->
+                E06PriceRowFixed("BTC_JPY", E06_PRICE_SAMPLE, onLayout)
+            }
         val fixedReason = when {
-            fixed.any { it == null } -> "價格沒有畫出來：價格的 Text 要加 onTextLayout = onPriceLayout"
-            fixed.any { it!!.hasVisualOverflow } ->
+            fixed.any { it == null } -> {
+                "價格沒有畫出來：價格的 Text 要加 onTextLayout = onPriceLayout"
+            }
+
+            fixed.any { it!!.hasVisualOverflow } -> {
                 "價格還是被截斷：不要寫死寬度、不要 maxLines = 1 加 overflow = Ellipsis，改用 Modifier.widthIn(min = 96.dp)"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
         e06Report("L05", "修正版", fixedReason, describe(fixed), failures)
 

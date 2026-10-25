@@ -1,12 +1,18 @@
-// L05：行情列表每次更新，各列的順序一直亂跳；資料量一大還很慢（「同一個交易對只留最新一筆」的合併函式）
-// 對應複習站：Advanced05HighFrequency 第 6 題「「同一個交易對只保留最新一筆」的合併函式怎麼寫？」（面試現場寫程式常考）
+// L05：行情列表每次更新，各列的順序一直亂跳；
+// 資料量一大還很慢（「同一個交易對只留最新一筆」的合併函式）
+// 對應複習站：Advanced05HighFrequency 第 6 題「「同一個交易對只保留最新一筆」
+// 的合併函式怎麼寫？」（面試現場寫程式常考）
 //
-// 情境：輸入一串更新，同一個交易對只留最後一筆，輸出順序依該交易對「第一次出現」的順序。例如 [A1, B1, A2] 要變成 [A2, B1]。
-//        演練用 4 組不同順序的資料檢查結果與順序，再用 1 萬筆更新、500 個交易對，數「比較兩個交易對相不相等（equals）」做了幾次，量演算法的成本。
+// 情境：輸入一串更新，同一個交易對只留最後一筆，
+// 輸出順序依該交易對「第一次出現」的順序。例如 [A1, B1, A2] 要變成 [A2, B1]。
+//        演練用 4 組不同順序的資料檢查結果與順序，再用 1 萬筆更新、500
+// 個交易對，數「比較兩個交易對相不相等（equals）」做了幾次，量演算法的成本。
 //
 // 你要寫：
-//   ① Bug 版 coalesce：用 HashMap<S, A05Tick<S>> 存每個交易對的最新值，回傳 latest.values.toList()。值是對的，順序是依雜湊值排的，不是依第一次出現。
-//   ② 修正版 coalesce：改用 LinkedHashMap（記住 key 第一次插入的順序，覆蓋舊值時順序不變），回傳 latest.values.toList()。只掃一次，不能用巢狀迴圈。
+//   ① Bug 版 coalesce：用 HashMap<S, A05Tick<S>> 存每個交易對的最新值，回傳
+// latest.values.toList()。值是對的，順序是依雜湊值排的，不是依第一次出現。
+//   ② 修正版 coalesce：改用 LinkedHashMap（記住 key 第一次插入的順序，
+// 覆蓋舊值時順序不變），回傳 latest.values.toList()。只掃一次，不能用巢狀迴圈。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced05-high-frequency/L05_CoalesceFunction.kt
 package tw.harry.labs.practice.advanced05highfrequency
@@ -15,7 +21,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 會數「equals 被呼叫幾次」的交易對型別：用來量演算法做了多少次比較（兩個版本共用） */
+/**
+ * 會數「equals 被呼叫幾次」的交易對型別：
+ * 用來量演算法做了多少次比較（兩個版本共用）
+ */
 private class CountedSymbol(val name: String) {
     override fun equals(other: Any?): Boolean {
         comparisons++
@@ -29,7 +38,10 @@ private class CountedSymbol(val name: String) {
     }
 }
 
-/** 合併函式：Bug 版與修正版各自實作（泛型：交易對可以是 String，也可以是會數比較次數的型別） */
+/**
+ * 合併函式：Bug 版與修正版各自實作（泛型：交易對可以是 String，
+ * 也可以是會數比較次數的型別）
+ */
 private interface Coalescer {
     fun <S> coalesce(updates: List<A05Tick<S>>): List<A05Tick<S>>
 }
@@ -40,11 +52,18 @@ private fun scenario(log: LabLog, coalescer: Coalescer) {
     var latestOk = 0
     var orderOk = 0
     for (k in 0 until 4) {
-        val order = symbols.drop(k) + symbols.take(k)                          // 第 k 組：換一個第一次出現的順序
+        // 第 k 組：換一個第一次出現的順序
+        val order = symbols.drop(k) + symbols.take(k)
         // 每個交易對先出現一次（價格 1），再用相反的順序各更新一次（價格 2）
-        val updates = order.map { A05Tick(it, 1) } + order.reversed().map { A05Tick(it, 2) }
+        val updates =
+            order.map { A05Tick(it, 1) } +
+                order.reversed().map { A05Tick(it, 2) }
         val result = coalescer.coalesce(updates)
-        if (result.size == order.size && result.all { it.price == 2 }) latestOk++
+        if (result.size == order.size &&
+            result.all { it.price == 2 }
+        ) {
+            latestOk++
+        }
         if (result.map { it.symbol } == order) orderOk++
     }
     log("合併後每個交易對都是最新價的組數：$latestOk／4")
@@ -53,14 +72,17 @@ private fun scenario(log: LabLog, coalescer: Coalescer) {
     val big = List(10_000) { A05Tick(CountedSymbol("S${it % 500}"), it) }
     CountedSymbol.comparisons = 0
     val merged = coalescer.coalesce(big)
-    log("1 萬筆更新、500 個交易對：合併成 ${merged.size} 筆，比較交易對 ${CountedSymbol.comparisons} 次")
+    log(
+        "1 萬筆更新、500 個交易對：合併成 ${merged.size} 筆，比較交易對 ${CountedSymbol.comparisons} 次",
+    )
 }
 
 // MARK: - Bug 版
 private object L05Bug {
     class MapOnly : Coalescer {
         override fun <S> coalesce(updates: List<A05Tick<S>>): List<A05Tick<S>> {
-            // TODO ①：val latest = HashMap<S, A05Tick<S>>()；每一筆 latest[update.symbol] = update；回傳 latest.values.toList()
+            // TODO ①：val latest = HashMap<S, A05Tick<S>>()；每一筆
+            // latest[update.symbol] = update；回傳 latest.values.toList()
             return emptyList()
         }
     }
@@ -72,8 +94,10 @@ private object L05Bug {
 private object L05Fixed {
     class InsertionOrdered : Coalescer {
         override fun <S> coalesce(updates: List<A05Tick<S>>): List<A05Tick<S>> {
-            // TODO ②：val latest = LinkedHashMap<S, A05Tick<S>>()（覆蓋既有的 key，不會改變它第一次插入的位置）；
-            //        每一筆 latest[update.symbol] = update；回傳 latest.values.toList()
+            // TODO ②：val latest = LinkedHashMap<S, A05Tick<S>>()（覆蓋既有的
+            // key，不會改變它第一次插入的位置）；
+            //        每一筆 latest[update.symbol] = update；回傳 latest.values.
+            // toList()
             return emptyList()
         }
     }

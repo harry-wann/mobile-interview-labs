@@ -5,14 +5,20 @@ enum LabRoute: Hashable {
     case lab(String, String)
 }
 
-/// App 首頁：依區列出每個單元。清單以 Solution 為準，Practice 用同樣的 id 對應。
+/// App 首頁：依區列出每個單元。清單以 Solution 為準，Practice 用同樣的 id
+/// 對應。
 ///
 /// 啟動參數（截圖與自動檢查用）：
-/// - `-open Swift01`、`-open Swift01 L03`：直接打開某個單元或演練；加 `-source solution` 預設顯示解答
-/// - `-selftest [Swift01]`：跑解答的自動檢查（Bug 版要重現問題、修正版要正確），印出結果後結束
-/// - `-selftest-practice [Swift01]`：跑練習的骨架，確認不會當掉（還沒寫的會顯示 FAIL）
-/// - `-run Swift01 L05 solution bug`：只跑一個版本，用來確認「Bug 版真的會當掉」
-/// 首頁的排法：「四大主題」是記憶體、效能、架構、UI/UX 四項各自對應的演練（labs/topics.yaml），「依區」是技術分區
+/// - `-open Swift01`、`-open Swift01 L03`：直接打開某個單元或演練；加 `-source
+/// solution` 預設顯示解答
+/// - `-selftest [Swift01]`：跑解答的自動檢查（Bug 版要重現問題、
+/// 修正版要正確），印出結果後結束
+/// - `-selftest-practice [Swift01]`：跑練習的骨架，
+/// 確認不會當掉（還沒寫的會顯示 FAIL）
+/// - `-run Swift01 L05 solution bug`：只跑一個版本，用來確認「Bug
+/// 版真的會當掉」
+/// 首頁的排法：「四大主題」是記憶體、效能、架構、UI/UX
+/// 四項各自對應的演練（labs/topics.yaml），「依區」是技術分區
 enum HomeMode: String, CaseIterable, Identifiable {
     case focus, section
     var id: String { rawValue }
@@ -35,9 +41,11 @@ public struct LabRootView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    Text("每個演練都有「練習」和「解答」兩份程式碼。先打開 Practice 資料夾裡的檔案，照 TODO 寫出 Bug 版和修正版，回到這裡執行；自動檢查會告訴你寫對了沒有。卡住時切到「解答」執行，或打開 Solution 資料夾裡同名的檔案對照。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "每個演練都有「練習」和「解答」兩份程式碼。先打開 Practice 資料夾裡的檔案，照 TODO 寫出 Bug 版和修正版，回到這裡執行；自動檢查會告訴你寫對了沒有。卡住時切到「解答」執行，或打開 Solution 資料夾裡同名的檔案對照。"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
                 Section {
                     Picker("排法", selection: $mode) {
@@ -51,12 +59,18 @@ public struct LabRootView: View {
                     ForEach(solution) { section in
                         Section(section.title) {
                             ForEach(section.units) { unit in
-                                NavigationLink(value: LabRoute.unit(unit.code)) {
+                                NavigationLink(value: LabRoute.unit(unit.code))
+                                {
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text("\(unit.code)　\(unit.title)").font(.headline)
-                                        Text(unit.labs.isEmpty ? "還沒有演練" : "\(unit.labs.count) 個演練")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        Text("\(unit.code)　\(unit.title)").font(
+                                            .headline)
+                                        Text(
+                                            unit.labs.isEmpty
+                                                ? "還沒有演練"
+                                                : "\(unit.labs.count) 個演練"
+                                        )
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                     }
                                 }
                                 .disabled(unit.labs.isEmpty)
@@ -73,10 +87,13 @@ public struct LabRootView: View {
                         UnitView(unit: unit)
                     }
                 case .lab(let code, let labID):
-                    if let unit = findUnit(code, in: solution), let lab = unit.labs.first(where: { $0.id == labID }) {
+                    if let unit = findUnit(code, in: solution),
+                        let lab = unit.labs.first(where: { $0.id == labID })
+                    {
                         LabDetailView(
                             unitCode: code,
-                            practice: findUnit(code, in: practice)?.labs.first(where: { $0.id == labID }),
+                            practice: findUnit(code, in: practice)?.labs.first(
+                                where: { $0.id == labID }),
                             solution: lab,
                             initialSource: LabLaunch.initialSource
                         )
@@ -85,28 +102,39 @@ public struct LabRootView: View {
             }
         }
         .task {
-            await LabSelfTest.runIfRequested(practice: practice, solution: solution)
+            await LabSelfTest.runIfRequested(
+                practice: practice, solution: solution)
         }
     }
 }
 
 extension LabRootView {
-    /// 「四大主題」：每一項一個 Section，裡面依小標題列出要寫的演練（順序就是建議的練習順序）
+    /// 「四大主題」：每一項一個 Section，
+    /// 裡面依小標題列出要寫的演練（順序就是建議的練習順序）
     @ViewBuilder
     fileprivate var focusSections: some View {
-        ForEach(Array(JdFocus.topics.enumerated()), id: \.element.id) { index, topic in
+        ForEach(Array(JdFocus.topics.enumerated()), id: \.element.id) {
+            index, topic in
             Section {
-                ForEach(Array(topic.groups.enumerated()), id: \.offset) { _, group in
+                ForEach(Array(topic.groups.enumerated()), id: \.offset) {
+                    _, group in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(group.title).font(.subheadline.weight(.semibold))
                         if let note = group.note {
-                            Text(note).font(.caption).foregroundStyle(.secondary)
+                            Text(note).font(.caption).foregroundStyle(
+                                .secondary)
                         }
                     }
                     .padding(.vertical, 2)
                     ForEach(group.labs, id: \.self) { ref in
-                        if let unit = findUnit(ref.code, in: solution), let lab = unit.labs.first(where: { $0.id == ref.labID }) {
-                            NavigationLink(value: LabRoute.lab(ref.code, ref.labID)) {
+                        if let unit = findUnit(ref.code, in: solution),
+                            let lab = unit.labs.first(where: {
+                                $0.id == ref.labID
+                            })
+                        {
+                            NavigationLink(
+                                value: LabRoute.lab(ref.code, ref.labID)
+                            ) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(lab.title).font(.body)
                                     Text("\(ref.code) \(ref.labID)")
@@ -128,7 +156,9 @@ extension LabRootView {
 
 func findUnit(_ code: String, in sections: [LabSection]) -> LabUnit? {
     for section in sections {
-        if let unit = section.units.first(where: { $0.code == code }) { return unit }
+        if let unit = section.units.first(where: { $0.code == code }) {
+            return unit
+        }
     }
     return nil
 }
@@ -141,7 +171,8 @@ struct UnitView: View {
             NavigationLink(value: LabRoute.lab(unit.code, lab.id)) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(lab.id)　\(lab.title)").font(.headline)
-                    Text(lab.question).font(.caption).foregroundStyle(.secondary)
+                    Text(lab.question).font(.caption).foregroundStyle(
+                        .secondary)
                 }
                 .padding(.vertical, 2)
             }
@@ -151,7 +182,8 @@ struct UnitView: View {
     }
 }
 
-/// 單一演練：切換「練習／解答」與「Bug 版／修正版」→ 執行 → 看 log、畫面與自動檢查結果
+/// 單一演練：切換「練習／解答」與「Bug 版／修正版」→ 執行 → 看 log、
+/// 畫面與自動檢查結果
 struct LabDetailView: View {
     let unitCode: String
     let practice: Lab?
@@ -159,20 +191,26 @@ struct LabDetailView: View {
 
     @State private var source: LabSource
     @State private var variant: LabVariant = .bug
-    // 用 @State 持有、不觀察：寫 log 時只有 LogConsole 重畫，demo 不會跟著被重建
+    // 用 @State 持有、不觀察：寫 log 時只有 LogConsole 重畫，demo
+    // 不會跟著被重建
     @State private var log = LabLog()
     @State private var running = false
     @State private var runTask: Task<Void, Never>?
     @State private var showGuide = true
     @State private var showHint = false
-    /// 每個「來源 × 版本」最近一次的檢查結果：nil = 還沒跑，"" = 符合預期，其他 = 還差什麼
+    /// 每個「來源 × 版本」最近一次的檢查結果：nil = 還沒跑，"" = 符合預期，
+    /// 其他 = 還差什麼
     @State private var results: [String: String] = [:]
 
-    init(unitCode: String, practice: Lab?, solution: Lab, initialSource: LabSource) {
+    init(
+        unitCode: String, practice: Lab?, solution: Lab,
+        initialSource: LabSource
+    ) {
         self.unitCode = unitCode
         self.practice = practice
         self.solution = solution
-        _source = State(initialValue: practice == nil ? .solution : initialSource)
+        _source = State(
+            initialValue: practice == nil ? .solution : initialSource)
     }
 
     private var lab: Lab? { source == .practice ? practice : solution }
@@ -199,9 +237,12 @@ struct LabDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if let lab {
                         if lab.bugCrashes && variant == .bug {
-                            Label("這個 Bug 版寫對了會讓 App 當掉。Xcode 會停在出錯的那一行，看完按 ■ 停止再重新執行。", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
+                            Label(
+                                "這個 Bug 版寫對了會讓 App 當掉。Xcode 會停在出錯的那一行，看完按 ■ 停止再重新執行。",
+                                systemImage: "exclamationmark.triangle.fill"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                         }
                         // 需要操作畫面的演練，操作區放最上面
                         if let demo = lab.demo {
@@ -209,7 +250,9 @@ struct LabDetailView: View {
                                 .id("\(source.rawValue)-\(variant.rawValue)")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
-                                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                                .background(
+                                    .quaternary.opacity(0.5),
+                                    in: RoundedRectangle(cornerRadius: 10))
                         }
                         guide(lab)
                     } else {
@@ -226,7 +269,9 @@ struct LabDetailView: View {
                     Button {
                         start(lab, run)
                     } label: {
-                        Label("執行\(source.title)的\(variant.title)", systemImage: "play.fill")
+                        Label(
+                            "執行\(source.title)的\(variant.title)",
+                            systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(running)
@@ -255,7 +300,9 @@ struct LabDetailView: View {
             ForEach(LabVariant.allCases) { v in
                 let key = "\(source.rawValue)-\(v.rawValue)"
                 let text: String = {
-                    if lab.run == nil && lab.demo == nil { return "\(v.title)：在電腦上跑單元測試" }
+                    if lab.run == nil && lab.demo == nil {
+                        return "\(v.title)：在電腦上跑單元測試"
+                    }
                     guard lab.check(v) != nil else { return "\(v.title)：看畫面判斷" }
                     switch results[key] {
                     case nil: return "\(v.title)：還沒執行"
@@ -266,7 +313,12 @@ struct LabDetailView: View {
                 Text(text)
                     .font(.caption)
                     .lineLimit(2)
-                    .foregroundStyle(results[key] == "" ? Color.green : (results[key] == nil ? Color.secondary : Color.orange))
+                    .foregroundStyle(
+                        results[key] == ""
+                            ? Color.green
+                            : (results[key] == nil
+                                ? Color.secondary : Color.orange)
+                    )
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -280,7 +332,8 @@ struct LabDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(lab.question).font(.caption).foregroundStyle(.secondary)
                 Text(lab.goal)
-                ForEach(Array(lab.steps.enumerated()), id: \.offset) { i, step in
+                ForEach(Array(lab.steps.enumerated()), id: \.offset) {
+                    i, step in
                     Text("\(i + 1). \(step)").font(.callout)
                 }
                 Text("檔案：\(lab.relativePath)")
@@ -300,7 +353,9 @@ struct LabDetailView: View {
         }
     }
 
-    private func start(_ lab: Lab, _ run: @escaping (LabVariant, LabLog) async -> Void) {
+    private func start(
+        _ lab: Lab, _ run: @escaping (LabVariant, LabLog) async -> Void
+    ) {
         let v = variant
         let s = source
         let check = lab.check(v)
@@ -362,14 +417,18 @@ enum LabLaunch {
     static var args: [String] { CommandLine.arguments }
 
     static func value(after flag: String, offset: Int = 1) -> String? {
-        guard let i = args.firstIndex(of: flag), i + offset < args.count else { return nil }
+        guard let i = args.firstIndex(of: flag), i + offset < args.count else {
+            return nil
+        }
         let v = args[i + offset]
         return v.hasPrefix("-") ? nil : v
     }
 
     static func initialPath(_ sections: [LabSection]) -> [LabRoute] {
         guard let code = value(after: "-open") else { return [] }
-        if let labID = value(after: "-open", offset: 2) { return [.unit(code), .lab(code, labID)] }
+        if let labID = value(after: "-open", offset: 2) {
+            return [.unit(code), .lab(code, labID)]
+        }
         return [.unit(code)]
     }
 

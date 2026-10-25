@@ -1,12 +1,15 @@
 // L05：畫面上的手續費合計和伺服器的帳單差了 2 円（formatter 預設是銀行家捨入）
 // 對應複習站：Exchange02Precision 第 5 題「數字要怎麼顯示？」（捨入模式）
 //
-// 情境：日圓沒有小數，手續費要四捨五入到整數。四筆成交，金額 12,500、37,500、62,500、87,500 円，手續費率 0.1%（演練假設），
-//        手續費剛好是 12.5、37.5、62.5、87.5 円。伺服器的帳單規則（演練假設）是四捨五入，剛好 0.5 進位：13、38、63、88，合計 202 円。
+// 情境：日圓沒有小數，手續費要四捨五入到整數。四筆成交，金額 12,500、37,500、
+// 62,500、87,500 円，手續費率 0.1%（演練假設），
+//        手續費剛好是 12.5、37.5、62.5、87.5 円。伺服器的帳單規則（演練假設）
+// 是四捨五入，剛好 0.5 進位：13、38、63、88，合計 202 円。
 //        App 用 DecimalFormat 把手續費顯示成整數。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug.format）：建立 DecimalFormat 顯示成整數，不設 roundingMode（預設是 HALF_EVEN）。
+//   ① Bug 版（L05Bug.format）：建立 DecimalFormat 顯示成整數，不設
+// roundingMode（預設是 HALF_EVEN）。
 //   ② 修正版（L05Fixed.format）：明確設定 roundingMode = RoundingMode.HALF_UP。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange02-precision/L05_HalfEven.kt
@@ -22,8 +25,10 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 private val amounts = listOf("12500", "37500", "62500", "87500")
-private val serverFees = listOf(13, 38, 63, 88)         // 伺服器帳單（四捨五入）
-private val feeRate = e02("0.001")                      // 演練假設：0.1%
+
+// 伺服器帳單（四捨五入）
+private val serverFees = listOf(13, 38, 63, 88)
+private val feeRate = e02("0.001") // 演練假設：0.1%
 
 /** 演練流程（兩個版本共用）：逐筆算手續費、用 formatter 顯示，和帳單比對 */
 private fun scenario(log: LabLog, format: (BigDecimal) -> String) {
@@ -32,16 +37,23 @@ private fun scenario(log: LabLog, format: (BigDecimal) -> String) {
         val fee = e02(amount) * feeRate
         val shown = format(fee)
         shownTotal += shown.toIntOrNull() ?: 0
-        log("成交 $amount 円，手續費 ${e02Text(fee)} 円 → 畫面顯示 $shown（伺服器帳單 $serverFee）")
+        log(
+            "成交 $amount 円，手續費 ${e02Text(
+                fee,
+            )} 円 → 畫面顯示 $shown（伺服器帳單 $serverFee）",
+        )
     }
     val serverTotal = serverFees.sum()
-    log("畫面手續費合計 $shownTotal 円，伺服器帳單合計 $serverTotal 円，差 ${serverTotal - shownTotal} 円")
+    log(
+        "畫面手續費合計 $shownTotal 円，伺服器帳單合計 $serverTotal 円，差 ${serverTotal - shownTotal} 円",
+    )
 }
 
 // MARK: - Bug 版
 private object L05Bug {
     fun format(value: BigDecimal): String {
-        // TODO ①：建立 DecimalFormat("0", DecimalFormatSymbols(Locale.US))（日圓沒有小數），不要設 roundingMode（預設是 HALF_EVEN），
+        // TODO ①：建立 DecimalFormat("0", DecimalFormatSymbols(Locale.US))
+        // （日圓沒有小數），不要設 roundingMode（預設是 HALF_EVEN），
         //        用 formatter.format(value) 轉成文字回傳
         return ""
     }
@@ -53,7 +65,8 @@ private object L05Bug {
 private object L05Fixed {
     fun format(value: BigDecimal): String {
         val formatter = DecimalFormat("0", DecimalFormatSymbols(Locale.US))
-        // TODO ②：明確設定 formatter.roundingMode 為 RoundingMode.HALF_UP（剛好 0.5 時進位）
+        // TODO ②：明確設定 formatter.roundingMode 為 RoundingMode.
+        // HALF_UP（剛好 0.5 時進位）
         return formatter.format(value)
     }
 
@@ -84,15 +97,23 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("畫面手續費合計") } -> "演練沒有跑完：要用 scenario(log, ::format) 執行"
+            lines.none {
+                it.startsWith("畫面手續費合計")
+            } -> "演練沒有跑完：要用 scenario(log, ::format) 執行"
+
             "畫面手續費合計 200 円，伺服器帳單合計 202 円，差 2 円" !in lines -> "Bug 還沒重現：DecimalFormat 不要設 roundingMode（預設 HALF_EVEN），12.5 會顯示 12、62.5 會顯示 62"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("畫面手續費合計") } -> "演練沒有跑完：要用 scenario(log, ::format) 執行"
+            lines.none {
+                it.startsWith("畫面手續費合計")
+            } -> "演練沒有跑完：要用 scenario(log, ::format) 執行"
+
             "畫面手續費合計 202 円，伺服器帳單合計 202 円，差 0 円" !in lines -> "formatter 要設 roundingMode = RoundingMode.HALF_UP，剛好 0.5 才會進位"
+
             else -> null
         }
     },

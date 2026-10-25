@@ -1,11 +1,13 @@
 // L07：1 satoshi 的價格顯示成 1E-8（BigDecimal.toString() 用科學記號）
 // 對應複習站：Exchange02Precision 第 5 題「數字要怎麼顯示？」
 //
-// 情境：行情畫面要顯示三個數字：0.00000001（1 satoshi，BTC 的最小單位）、0.00000015、100.00000000（尾端有多餘的 0，先 stripTrailingZeros 去掉）。
+// 情境：行情畫面要顯示三個數字：0.00000001（1 satoshi，BTC 的最小單位）、0.
+// 00000015、100.00000000（尾端有多餘的 0，先 stripTrailingZeros 去掉）。
 //        畫面上要看到一般的小數，不能出現科學記號。
 //
 // 你要寫：
-//   ① Bug 版（L07Bug.display）：BigDecimal 去掉尾端的 0 之後，用 toString() 轉成字串。
+//   ① Bug 版（L07Bug.display）：BigDecimal 去掉尾端的 0 之後，用 toString()
+// 轉成字串。
 //   ② 修正版（L07Fixed.display）：改用 toPlainString()。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange02-precision/L07_ScientificNotation.kt
@@ -33,7 +35,8 @@ private fun scenario(log: LabLog, display: (String) -> String) {
 // MARK: - Bug 版
 private object L07Bug {
     fun display(text: String): String {
-        // TODO ①：BigDecimal(text) 呼叫 stripTrailingZeros() 之後，用 toString() 轉成字串回傳
+        // TODO ①：BigDecimal(text) 呼叫 stripTrailingZeros() 之後，用
+        // toString() 轉成字串回傳
         return ""
     }
 
@@ -43,7 +46,8 @@ private object L07Bug {
 // MARK: - 修正版
 private object L07Fixed {
     fun display(text: String): String {
-        // TODO ②：一樣 BigDecimal(text).stripTrailingZeros()，這次用 toPlainString() 轉成字串回傳
+        // TODO ②：一樣 BigDecimal(text).stripTrailingZeros()，這次用
+        // toPlainString() 轉成字串回傳
         return ""
     }
 
@@ -51,8 +55,9 @@ private object L07Fixed {
 }
 
 // MARK: - 演練設定
-private fun scientificCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("3 個數字裡") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun scientificCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("3 個數字裡")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l07 = Lab(
     id = "L07",

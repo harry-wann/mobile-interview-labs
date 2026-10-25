@@ -1,16 +1,26 @@
-// L01：香港和簡體區的使用者看到的是英文介面（語系標籤寫死 zh-CN、zh-TW，沒有降級鏈）
-// 對應複習站：Exchange13Localization 第 1 題「四種語言（日文、簡體中文、繁體中文、英文）要怎麼標記與降級？」
+// L01：香港和簡體區的使用者看到的是英文介面（語系標籤寫死 zh-CN、zh-TW，
+// 沒有降級鏈）
+// 對應複習站：Exchange13Localization 第 1 題「四種語言（日文、簡體中文、
+// 繁體中文、英文）要怎麼標記與降級？」
 //
-// 情境：App 提供四種語言：ja、en、zh-Hans（簡體）、zh-Hant（繁體）。使用者的系統語言標籤五花八門：zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、
-//        舊式的 zh-TW／zh-CN／zh-HK、ja-JP、en-US，甚至沒有支援的 fr-FR。簡體和繁體是「文字（script）」的差異，不是地區的差異。
-//        resolve 要回傳 App 該用的語言；找不到時，依「完整標籤、去掉最後一段、繁簡推斷、預設語言 en」的順序降級。九個標籤：
-//        ja-JP、en-US、zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、zh-TW、zh-CN、zh-HK、fr-FR。
+// 情境：App 提供四種語言：ja、en、zh-Hans（簡體）、zh-Hant（繁體）。
+// 使用者的系統語言標籤五花八門：zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、
+//        舊式的 zh-TW／zh-CN／zh-HK、ja-JP、en-US，甚至沒有支援的 fr-FR。
+// 簡體和繁體是「文字（script）」的差異，不是地區的差異。
+//        resolve 要回傳 App 該用的語言；找不到時，依「完整標籤、去掉最後一段、
+// 繁簡推斷、預設語言 en」的順序降級。九個標籤：
+//        ja-JP、en-US、zh-Hant-TW、zh-Hant-HK、zh-Hans-CN、zh-TW、zh-CN、
+// zh-HK、fr-FR。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.resolve）：requested 等於 "zh-CN" 回傳 "zh-Hans"，等於 "zh-TW" 回傳 "zh-Hant"；否則取第一個 "-" 前面的語言碼，
+//   ① Bug 版（L01Bug.resolve）：requested 等於 "zh-CN" 回傳 "zh-Hans"，等於
+// "zh-TW" 回傳 "zh-Hant"；否則取第一個 "-" 前面的語言碼，
 //      supported 有就回傳它，沒有回傳 "en"。
-//   ② 修正版（L01Fixed.resolve）：requested 用 "-" 拆開；(1) 完整標籤在 supported 裡就回傳；(2) 語言是 zh 時：有 4 個字母的 script 段（Hans／Hant）就用它，
-//      沒有就看地區段（TW、HK、MO 用 Hant，其他用 Hans），回傳 "zh-" 加 script；(3) 語言碼（第一段）在 supported 裡就回傳；(4) 都不是就回傳 "en"。
+//   ② 修正版（L01Fixed.resolve）：requested 用 "-" 拆開；(1) 完整標籤在
+// supported 裡就回傳；(2) 語言是 zh 時：有 4 個字母的 script 段（Hans／Hant）
+// 就用它，
+//      沒有就看地區段（TW、HK、MO 用 Hant，其他用 Hans），回傳 "zh-" 加
+// script；(3) 語言碼（第一段）在 supported 裡就回傳；(4) 都不是就回傳 "en"。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange13-localization/L01_LocaleFallback.kt
 package tw.harry.labs.practice.exchange13localization
@@ -52,29 +62,39 @@ private fun scenario(log: LabLog, resolve: (String, List<String>) -> String) {
 // MARK: - Bug 版
 private object L01Bug {
     fun resolve(requested: String, supported: List<String>): String {
-        // TODO ①：requested == "zh-CN" 回傳 "zh-Hans"，== "zh-TW" 回傳 "zh-Hant"；否則取 requested.substringBefore("-") 當語言碼，
+        // TODO ①：requested == "zh-CN" 回傳 "zh-Hans"，== "zh-TW" 回傳
+        // "zh-Hant"；否則取 requested.substringBefore("-") 當語言碼，
         //        語言碼在 supported 裡就回傳語言碼，否則回傳 "en"
         return "en"
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { requested, supported -> resolve(requested, supported) }
+    suspend fun run(log: LabLog) = scenario(log) { requested, supported ->
+        resolve(requested, supported)
+    }
 }
 
 // MARK: - 修正版
 private object L01Fixed {
     fun resolve(requested: String, supported: List<String>): String {
-        // TODO ②：(1) requested 在 supported 裡就回傳 requested；parts = requested.split("-")，language = parts.first()；
-        //        (2) language == "zh"：parts 裡有 4 個字母的段（Hans／Hant）就用它當 script，沒有就看有沒有 "TW"、"HK"、"MO"（有用 "Hant"，沒有用 "Hans"），回傳 "zh-" + script；
-        //        (3) language 在 supported 裡就回傳 language；(4) 都不是回傳 "en"
+        // TODO ②：(1) requested 在 supported 裡就回傳 requested；parts =
+        // requested.split("-")，language = parts.first()；
+        //        (2) language == "zh"：parts 裡有 4 個字母的段（Hans／Hant）
+        // 就用它當 script，沒有就看有沒有 "TW"、"HK"、"MO"（有用 "Hant"，
+        // 沒有用 "Hans"），回傳 "zh-" + script；
+        //        (3) language 在 supported 裡就回傳 language；(4) 都不是回傳
+        // "en"
         return "en"
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { requested, supported -> resolve(requested, supported) }
+    suspend fun run(log: LabLog) = scenario(log) { requested, supported ->
+        resolve(requested, supported)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 9 個語言標籤") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 9 個語言標籤")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",

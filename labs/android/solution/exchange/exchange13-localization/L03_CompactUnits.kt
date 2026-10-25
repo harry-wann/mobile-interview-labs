@@ -1,17 +1,30 @@
-// L03：成交量顯示「10000万」、「1万」少了零頭（万／億的縮寫：沒有進位升級，用 Double 除再捨入）
+// L03：成交量顯示「10000万」、「1万」少了零頭（万／億的縮寫：沒有進位升級，用
+// Double 除再捨入）
 // 對應複習站：Exchange13Localization 第 3 題「万、億這類大數單位怎麼顯示？」
 //
-// 情境：產品規格要把市值、成交量縮寫成大數單位：兩位小數、四捨五入（half-up）、去掉尾端的 0、捨入後剛好到下一個單位要進位升級。
-//        日文：万（10 的 4 次方）、億（8 次方）、兆（12 次方）；繁體中文：萬、億、兆；簡體中文：万、亿、万亿（12 次方）；英文：K、M、B、T（三位一組）。
+// 情境：產品規格要把市值、成交量縮寫成大數單位：兩位小數、四捨五入（half-up）、
+// 去掉尾端的 0、捨入後剛好到下一個單位要進位升級。
+//        日文：万（10 的 4 次方）、億（8 次方）、兆（12 次方）；繁體中文：萬、
+// 億、兆；簡體中文：万、亿、万亿（12 次方）；英文：K、M、B、T（三位一組）。
 //        小於最小單位的數字不縮寫，但要有千分位。演練檢查 11 筆：
-//        ja 9999 → 9,999；12345 → 1.23万；10050 → 1.01万；100000000 → 1億；99999999 → 1億（9999.9999万 捨入成 10000万，要升級成 1億）；
-//        123456789 → 1.23億；1234567890123 → 1.23兆；en 123456789 → 123.46M；zh-Hans 123456789 → 1.23亿；1234567890123 → 1.23万亿；zh-Hant 12345 → 1.23萬。
-//        compact 是有損的顯示，只用在市值、成交量這類輔助標籤，不能用在下單數量、確認頁、損益明細。
-// Bug 版：用 Double 除以單位，乘 100 之後 Math.round 再除以 100.0（常見的「取兩位小數」寫法），去掉尾端的 .0：10050 ÷ 10000 = 1.005，
-//        在二進位裡 1.005 × 100 = 100.49999999999999，Math.round 得到 100，顯示成「1万」（應該是 1.01万）；
-//        99999999 ÷ 10000 = 9999.9999 捨入成 10000.0，顯示「10000万」，沒有升級成 1億；小於 1万的數字沒有千分位（9999）。
-//        （Java 的 "%.2f".format(1.005) 反而會得到 1.01：它是用 Double 的最短十進位表示再 HALF_UP，和 C 語言的 printf 不一樣；平台之間的行為不同，所以不要靠 Double 的捨入。）
-// 修正版：全程用整數運算：先放大 100 倍再整除（加上單位的一半 = half-up），捨入後如果達到下一個單位，就升級；最後把整數部分與兩位小數拼回字串。
+//        ja 9999 → 9,999；12345 → 1.23万；10050 → 1.01万；100000000 → 1億；
+// 99999999 → 1億（9999.9999万 捨入成 10000万，要升級成 1億）；
+//        123456789 → 1.23億；1234567890123 → 1.23兆；en 123456789 → 123.46M；
+// zh-Hans 123456789 → 1.23亿；1234567890123 → 1.23万亿；zh-Hant 12345 → 1.
+// 23萬。
+//        compact 是有損的顯示，只用在市值、成交量這類輔助標籤，
+// 不能用在下單數量、確認頁、損益明細。
+// Bug 版：用 Double 除以單位，乘 100 之後 Math.round 再除以 100.
+// 0（常見的「取兩位小數」寫法），去掉尾端的 0：10050 ÷ 10000 = 1.005，
+//        在二進位裡 1.005 × 100 = 100.49999999999999，Math.round 得到 100，
+// 顯示成「1万」（應該是 1.01万）；
+//        99999999 ÷ 10000 = 9999.9999 捨入成 10000.0，顯示「10000万」，
+// 沒有升級成 1億；小於 1万的數字沒有千分位（9999）。
+//        （Java 的 "%.2f".format(1.005) 反而會得到 1.01：它是用 Double
+// 的最短十進位表示再 HALF_UP，和 C 語言的 printf 不一樣；平台之間的行為不同，
+// 所以不要靠 Double 的捨入。）
+// 修正版：全程用整數運算：先放大 100 倍再整除（加上單位的一半 = half-up），
+// 捨入後如果達到下一個單位，就升級；最後把整數部分與兩位小數拼回字串。
 package tw.harry.labs.solution.exchange13localization
 
 import java.util.Locale
@@ -24,17 +37,42 @@ private class L03Unit(val value: Long, val label: String)
 
 /** 每個語言的單位，由小排到大 */
 private fun units(language: String): List<L03Unit> = when (language) {
-    "ja" -> listOf(L03Unit(10_000, "万"), L03Unit(100_000_000, "億"), L03Unit(1_000_000_000_000, "兆"))
-    "zh-Hant" -> listOf(L03Unit(10_000, "萬"), L03Unit(100_000_000, "億"), L03Unit(1_000_000_000_000, "兆"))
-    "zh-Hans" -> listOf(L03Unit(10_000, "万"), L03Unit(100_000_000, "亿"), L03Unit(1_000_000_000_000, "万亿"))
-    else -> listOf(L03Unit(1_000, "K"), L03Unit(1_000_000, "M"), L03Unit(1_000_000_000, "B"), L03Unit(1_000_000_000_000, "T"))
+    "ja" -> listOf(
+        L03Unit(10_000, "万"),
+        L03Unit(100_000_000, "億"),
+        L03Unit(1_000_000_000_000, "兆"),
+    )
+
+    "zh-Hant" -> listOf(
+        L03Unit(10_000, "萬"),
+        L03Unit(100_000_000, "億"),
+        L03Unit(1_000_000_000_000, "兆"),
+    )
+
+    "zh-Hans" -> listOf(
+        L03Unit(10_000, "万"),
+        L03Unit(100_000_000, "亿"),
+        L03Unit(1_000_000_000_000, "万亿"),
+    )
+
+    else -> listOf(
+        L03Unit(1_000, "K"),
+        L03Unit(1_000_000, "M"),
+        L03Unit(1_000_000_000, "B"),
+        L03Unit(1_000_000_000_000, "T"),
+    )
 }
 
 /** 千分位（小於最小單位的數字用） */
-private fun grouped(value: Long): String = String.format(Locale.US, "%,d", value)
+private fun grouped(value: Long): String =
+    String.format(Locale.US, "%,d", value)
 
 /** （語言, 數值, 正確的結果） */
-private class L03Case(val language: String, val value: Long, val expected: String)
+private class L03Case(
+    val language: String,
+    val value: Long,
+    val expected: String,
+)
 
 private val cases = listOf(
     L03Case("ja", 9_999, "9,999"),
@@ -68,14 +106,24 @@ private fun scenario(log: LabLog, compact: (Long, String) -> String) {
 // MARK: - Bug 版
 private object L03Bug {
     fun compact(value: Long, language: String): String {
-        val unit = units(language).lastOrNull { value >= it.value } ?: return value.toString()          // 小於最小單位：沒有千分位
-        val rounded = Math.round(value.toDouble() / unit.value.toDouble() * 100) / 100.0                 // Double 運算：1.005 × 100 = 100.49999999999999
-        var text = rounded.toString()                                                                    // "1.0"、"10000.0"、"1.23"
-        if (text.endsWith(".0")) text = text.dropLast(2)                                                 // 去掉結尾的 .0
-        return text + unit.label                                                                         // 沒有檢查捨入後是不是已經到下一個單位
+        // 小於最小單位：沒有千分位
+        val unit =
+            units(language).lastOrNull { value >= it.value }
+                ?: return value.toString()
+        // Double 運算：1.005 × 100 = 100.49999999999999
+        val rounded =
+            Math.round(value.toDouble() / unit.value.toDouble() * 100) / 100.0
+        // "1.0"、"10000.0"、"1.23"
+        var text = rounded.toString()
+        // 去掉結尾的 .0
+        if (text.endsWith(".0")) text = text.dropLast(2)
+        // 沒有檢查捨入後是不是已經到下一個單位
+        return text + unit.label
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { value, language -> compact(value, language) }
+    suspend fun run(log: LabLog) = scenario(log) { value, language ->
+        compact(value, language)
+    }
 }
 
 // MARK: - 修正版
@@ -83,26 +131,46 @@ private object L03Fixed {
     fun compact(value: Long, language: String): String {
         val us = units(language)
         var index = us.indexOfLast { value >= it.value }
-        if (index < 0) return grouped(value)                                                             // 小於最小單位：不縮寫，有千分位
-        var scaled = (value * 100 + us[index].value / 2) / us[index].value                              // 兩位小數、half-up，全程整數
-        while (index + 1 < us.size && scaled >= (us[index + 1].value / us[index].value) * 100) {        // 捨入後達到下一個單位：升級
+        // 小於最小單位：不縮寫，有千分位
+        if (index < 0) return grouped(value)
+        // 兩位小數、half-up，全程整數
+        var scaled = (value * 100 + us[index].value / 2) / us[index].value
+        // 捨入後達到下一個單位：升級
+        while (index + 1 < us.size &&
+            scaled >= (us[index + 1].value / us[index].value) * 100
+        ) {
             index++
             scaled = (value * 100 + us[index].value / 2) / us[index].value
         }
-        var text = (scaled / 100).toString()                                                             // 整數部分
+        // 整數部分
+        var text = (scaled / 100).toString()
         val fraction = scaled % 100
         if (fraction != 0L) {
-            text += "." + (if (fraction % 10 == 0L) (fraction / 10).toString() else "%02d".format(fraction))   // 兩位小數，去掉尾端的 0
+            // 兩位小數，去掉尾端的 0
+            text +=
+                "." +
+                (
+                    if (fraction % 10 ==
+                        0L
+                    ) {
+                        (fraction / 10).toString()
+                    } else {
+                        "%02d".format(fraction)
+                    }
+                )
         }
         return text + us[index].label
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { value, language -> compact(value, language) }
+    suspend fun run(log: LabLog) = scenario(log) { value, language ->
+        compact(value, language)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 11 筆") }?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 11 筆")
+}?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l03 = Lab(
     id = "L03",

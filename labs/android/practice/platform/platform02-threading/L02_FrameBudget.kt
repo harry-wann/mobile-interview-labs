@@ -1,8 +1,12 @@
-// L02：120 Hz 的手機上，掉了一格卻沒被偵測到（每一格的時間預算 = 1000 ÷ 刷新率）
-// 對應複習站：Platform02Threading 第 2 題「每一格畫面有多少時間？60 Hz 和 120 Hz 差在哪？」
+// L02：120 Hz 的手機上，掉了一格卻沒被偵測到（每一格的時間預算 = 1000 ÷
+// 刷新率）
+// 對應複習站：Platform02Threading 第 2 題「每一格畫面有多少時間？60 Hz 和 120
+// Hz 差在哪？」
 //
-// 情境：App 裡有一個卡頓偵測，量每一格花了多少 ms，超過「時間預算」的 1.5 倍就算掉格（jank）。
-//        演練用兩份錄下來的資料：60 Hz 與 120 Hz 的手機各量了一段，每一格花的毫秒數已經寫好。
+// 情境：App 裡有一個卡頓偵測，量每一格花了多少 ms，超過「時間預算」的 1.5
+// 倍就算掉格（jank）。
+//        演練用兩份錄下來的資料：60 Hz 與 120 Hz 的手機各量了一段，
+// 每一格花的毫秒數已經寫好。
 //
 // 你要寫：
 //   ① Bug 版（L02Bug）：每一格的時間預算寫死 16.7 ms。
@@ -16,11 +20,19 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** 卡頓偵測（兩個版本共用）：一格花的時間超過預算的 1.5 倍，就算掉格 */
-private fun hitchCount(frameMs: List<Double>, budgetMs: Double): Int = frameMs.count { it > budgetMs * 1.5 }
+private fun hitchCount(frameMs: List<Double>, budgetMs: Double): Int =
+    frameMs.count {
+        it >
+            budgetMs * 1.5
+    }
 
 /** 錄下來的資料（兩個版本共用）：每一格花的毫秒數 */
-private val frames60 = listOf(16.67, 16.67, 33.33, 16.67, 50.0, 16.67)                        // 實際掉了 2 次
-private val frames120 = listOf(8.33, 8.33, 16.67, 8.33, 16.67, 8.33, 33.33, 8.33)             // 實際掉了 3 次
+// 實際掉了 2 次
+private val frames60 = listOf(16.67, 16.67, 33.33, 16.67, 50.0, 16.67)
+
+// 實際掉了 3 次
+private val frames120 =
+    listOf(8.33, 8.33, 16.67, 8.33, 16.67, 8.33, 33.33, 8.33)
 
 /** 演練流程（兩個版本共用） */
 private fun scenario(log: LabLog, budgetMs: (refreshRate: Double) -> Double) {
@@ -33,8 +45,8 @@ private fun scenario(log: LabLog, budgetMs: (refreshRate: Double) -> Double) {
 // MARK: - Bug 版
 private object L02Bug {
     /** 這一格的時間預算 */
-    fun budgetMs(refreshRate: Double): Double =
-        0.0                                              // TODO ①：改成寫死的 16.7（只想到 60 Hz）
+    fun budgetMs(refreshRate: Double): Double = // TODO ①：改成寫死的 16.7（只想到 60 Hz）
+        0.0
 
     fun run(log: LabLog) = scenario(log, ::budgetMs)
 }
@@ -42,14 +54,17 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun budgetMs(refreshRate: Double): Double =
-        0.0                                              // TODO ②：改成 1000 除以 refreshRate（一秒 ÷ 每秒幾格）
+        // TODO ②：改成 1000 除以 refreshRate（一秒 ÷ 每秒幾格）
+        0.0
 
     fun run(log: LabLog) = scenario(log, ::budgetMs)
 }
 
 // MARK: - 演練設定
 private fun detected(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.substringBefore(" ")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.substringBefore(" ")?.toIntOrNull()
 
 val l02 = Lab(
     id = "L02",

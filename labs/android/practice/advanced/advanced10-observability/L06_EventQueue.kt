@@ -1,15 +1,23 @@
-// L06：事件重複送出，也有送不出去就消失的（沒有本機佇列，也沒有 idempotency key）
-// 對應複習站：Advanced10Observability 第 5 題「analytics 事件怎麼設計，才能算出漏斗又不洩漏資料？」
+// L06：事件重複送出，也有送不出去就消失的（沒有本機佇列，也沒有 idempotency
+// key）
+// 對應複習站：Advanced10Observability 第 5 題「analytics 事件怎麼設計，
+// 才能算出漏斗又不洩漏資料？」
 //
-// 情境：App 要把下單漏斗的三個事件送到分析服務：order_form_viewed、order_submitted、order_acked。網路狀況依序是：
-//       ① 送 order_form_viewed 時：伺服器收到了，但回應在途中遺失，App 看到逾時；
+// 情境：App 要把下單漏斗的三個事件送到分析服務：order_form_viewed、
+// order_submitted、order_acked。網路狀況依序是：
+//       ① 送 order_form_viewed 時：伺服器收到了，但回應在途中遺失，App
+// 看到逾時；
 //       ② 送 order_submitted 時：App 沒有網路；
-//       ③ 送 order_acked 時：網路恢復正常。最後使用者回到前景，App 再試著送一次。
-//       分析服務是假的，它會記下每個事件被算了幾次；如果事件有 eventId，它會自動去除重複（idempotent，同一個 id 只算一次）。
+//       ③ 送 order_acked 時：網路恢復正常。最後使用者回到前景，App
+// 再試著送一次。
+//       分析服務是假的，它會記下每個事件被算了幾次；如果事件有 eventId，
+// 它會自動去除重複（idempotent，同一個 id 只算一次）。
 //
 // 你要寫：
-//   ① Bug 版：track 直接送出，失敗就立刻重送一次，還是失敗就丟掉；事件沒有 id。會重複、也會遺失。
-//   ② 修正版：事件先放進本機佇列，每個事件有唯一的 eventId；flush 整批送出，成功才移出佇列，失敗留著下次再送。
+//   ① Bug 版：track 直接送出，失敗就立刻重送一次，還是失敗就丟掉；事件沒有 id。
+// 會重複、也會遺失。
+//   ② 修正版：事件先放進本機佇列，每個事件有唯一的 eventId；flush 整批送出，
+// 成功才移出佇列，失敗留著下次再送。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced10-observability/L06_EventQueue.kt
 package tw.harry.labs.practice.advanced10observability
@@ -33,19 +41,27 @@ private class L06FakeCollector {
     @Throws(IOException::class)
     fun send(events: List<L06Event>) {
         when (mode) {
-            L06Network.OFFLINE -> throw IOException("沒有網路")
-            L06Network.DROP_RESPONSE_ONCE -> {
-                receive(events)                                 // 伺服器收到了
-                mode = L06Network.ONLINE
-                throw IOException("逾時（回應遺失）")              // 但 App 沒收到回應
+            L06Network.OFFLINE -> {
+                throw IOException("沒有網路")
             }
-            L06Network.ONLINE -> receive(events)
+
+            L06Network.DROP_RESPONSE_ONCE -> {
+                receive(events) // 伺服器收到了
+                mode = L06Network.ONLINE
+                // 但 App 沒收到回應
+                throw IOException("逾時（回應遺失）")
+            }
+
+            L06Network.ONLINE -> {
+                receive(events)
+            }
         }
     }
 
     private fun receive(events: List<L06Event>) {
         for (event in events) {
-            if (event.id != null && !seenIds.add(event.id)) continue   // 有 id：同一個只算一次
+            // 有 id：同一個只算一次
+            if (event.id != null && !seenIds.add(event.id)) continue
             counts[event.name] = (counts[event.name] ?: 0) + 1
         }
     }
@@ -57,28 +73,37 @@ private interface L06Tracker {
 }
 
 /** 演練流程（兩個版本共用） */
-private fun scenario(log: LabLog, makeTracker: (L06FakeCollector) -> L06Tracker) {
+private fun scenario(
+    log: LabLog,
+    makeTracker: (L06FakeCollector) -> L06Tracker,
+) {
     val collector = L06FakeCollector()
     val tracker = makeTracker(collector)
 
     collector.mode = L06Network.DROP_RESPONSE_ONCE
-    tracker.track("order_form_viewed"); tracker.flush()         // ① 伺服器收到，回應遺失
+    // ① 伺服器收到，回應遺失
+    tracker.track("order_form_viewed"); tracker.flush()
     collector.mode = L06Network.OFFLINE
-    tracker.track("order_submitted"); tracker.flush()           // ② 沒有網路
+    tracker.track("order_submitted"); tracker.flush() // ② 沒有網路
     collector.mode = L06Network.ONLINE
-    tracker.track("order_acked"); tracker.flush()               // ③ 網路恢復
-    tracker.flush()                                             // 使用者回到前景，再送一次
+    tracker.track("order_acked"); tracker.flush() // ③ 網路恢復
+    // 使用者回到前景，再送一次
+    tracker.flush()
 
     val c = collector.counts
-    log("伺服器算到：order_form_viewed ×${c["order_form_viewed"] ?: 0}、order_submitted ×${c["order_submitted"] ?: 0}、order_acked ×${c["order_acked"] ?: 0}")
+    log(
+        "伺服器算到：order_form_viewed ×${c["order_form_viewed"] ?: 0}、order_submitted ×${c["order_submitted"] ?: 0}、order_acked ×${c["order_acked"] ?: 0}",
+    )
 }
 
 // MARK: - Bug 版
 private object L06Bug {
     class SimpleTracker(private val collector: L06FakeCollector) : L06Tracker {
         override fun track(name: String) {
-            // TODO ①：建立沒有 id 的事件 L06Event(name)，用 collector.send(listOf(event)) 直接送出；
-            //         丟出 IOException 就立刻重送一次，還是失敗就丟掉（runCatching 可以吞掉例外）
+            // TODO ①：建立沒有 id 的事件 L06Event(name)，用 collector.
+            // send(listOf(event)) 直接送出；
+            //         丟出 IOException 就立刻重送一次，
+            // 還是失敗就丟掉（runCatching 可以吞掉例外）
         }
 
         override fun flush() {}
@@ -90,15 +115,19 @@ private object L06Bug {
 // MARK: - 修正版
 private object L06Fixed {
     class QueuedTracker(private val collector: L06FakeCollector) : L06Tracker {
-        private val queue = mutableListOf<L06Event>()           // 真正的 App 會存到檔案或 Room，重新啟動後還在
+        // 真正的 App 會存到檔案或 Room，重新啟動後還在
+        private val queue = mutableListOf<L06Event>()
 
         override fun track(name: String) {
-            // TODO ②-1：把事件放進 queue，每個事件的 id 用 UUID.randomUUID().toString()（唯一的 eventId）
+            // TODO ②-1：把事件放進 queue，每個事件的 id 用 UUID.randomUUID().
+            // toString()（唯一的 eventId）
         }
 
         override fun flush() {
-            // TODO ②-2：佇列是空的就什麼都不做；否則用 collector.send(queue.toList()) 整批送出，
-            //           成功才 queue.clear()；丟出 IOException 就留著，下次 flush 再送
+            // TODO ②-2：佇列是空的就什麼都不做；否則用 collector.send(queue.
+            // toList()) 整批送出，
+            //           成功才 queue.clear()；丟出 IOException 就留著，下次
+            // flush 再送
         }
     }
 
@@ -129,18 +158,34 @@ val l06 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("伺服器算到") } -> "演練沒有跑完：要用 scenario 執行"
-            "伺服器算到：order_form_viewed ×2、order_submitted ×0、order_acked ×1" !in lines ->
+            lines.none { it.startsWith("伺服器算到") } -> {
+                "演練沒有跑完：要用 scenario 執行"
+            }
+
+            "伺服器算到：order_form_viewed ×2、order_submitted ×0、order_acked ×1" !in
+                lines -> {
                 "Bug 還沒重現：track 要直接送出，失敗就立刻重送一次、再失敗就丟掉（事件不帶 id）"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("伺服器算到") } -> "演練沒有跑完：要用 scenario 執行"
-            "伺服器算到：order_form_viewed ×1、order_submitted ×1、order_acked ×1" !in lines ->
+            lines.none { it.startsWith("伺服器算到") } -> {
+                "演練沒有跑完：要用 scenario 執行"
+            }
+
+            "伺服器算到：order_form_viewed ×1、order_submitted ×1、order_acked ×1" !in
+                lines -> {
                 "每個事件都應該剛好算 1 次：事件要有唯一的 id、先放進佇列，flush 成功才清掉，失敗留著"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

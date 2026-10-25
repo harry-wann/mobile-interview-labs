@@ -1,11 +1,14 @@
 // L03：@Volatile 的計數器還是少算了（volatile 保證可見性，不保證原子性）
-// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）在規範什麼？什麼是可見性？」
+// 對應複習站：Kotlin10JavaInterop 第 4 題「Java Memory Model（JMM）
+// 在規範什麼？什麼是可見性？」
 //
-// 情境：行情 SDK 的 Counter 要統計收到幾筆訊息。4 條執行緒各自呼叫 increment() 100,000 次，預期總共 400,000。
+// 情境：行情 SDK 的 Counter 要統計收到幾筆訊息。4 條執行緒各自呼叫 increment()
+// 100,000 次，預期總共 400,000。
 //
 // 你要寫：
 //   ① Bug 版（L03Bug.Counter）：@Volatile var count，increment() 裡寫 count++。
-//   ② 修正版（L03Fixed.Counter）：用 AtomicInteger，increment() 呼叫 incrementAndGet()，get() 回傳目前的值。
+//   ② 修正版（L03Fixed.Counter）：用 AtomicInteger，increment() 呼叫
+// incrementAndGet()，get() 回傳目前的值。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin10-java-interop/L03_VolatileCounter.kt
 package tw.harry.labs.practice.kotlin10javainterop
@@ -21,10 +24,19 @@ import tw.harry.labs.kit.Variant
 private const val THREADS = 4
 private const val PER_THREAD = 100_000
 
-/** 演練流程（兩個版本共用）：4 條執行緒各呼叫 increment() 100,000 次，最後讀 [total] */
-private suspend fun scenario(log: LabLog, increment: () -> Unit, total: () -> Int) {
+/**
+ * 演練流程（兩個版本共用）：4 條執行緒各呼叫 increment() 100,000 次，最後讀
+ * [total]
+ */
+private suspend fun scenario(
+    log: LabLog,
+    increment: () -> Unit,
+    total: () -> Int,
+) {
     withContext(Dispatchers.Default) {
-        List(THREADS) { thread { repeat(PER_THREAD) { increment() } } }.forEach { it.join() }
+        List(THREADS) {
+            thread { repeat(PER_THREAD) { increment() } }
+        }.forEach { it.join() }
     }
     log("預期 ${THREADS * PER_THREAD}，實際 ${total()}")
 }
@@ -66,8 +78,9 @@ private object L03Fixed {
 }
 
 // MARK: - 演練設定
-private fun actual(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("預期 ") }?.substringAfter("實際 ")?.toIntOrNull()
+private fun actual(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("預期 ")
+}?.substringAfter("實際 ")?.toIntOrNull()
 
 val l03 = Lab(
     id = "L03",

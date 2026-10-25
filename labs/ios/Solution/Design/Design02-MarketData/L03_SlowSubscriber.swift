@@ -1,12 +1,17 @@
-// L03：開著訂單簿詳細頁，行情列表跟著變慢（分派訊息時，一個慢的畫面拖住所有畫面）
+// L03：開著訂單簿詳細頁，行情列表跟著變慢（分派訊息時，
+// 一個慢的畫面拖住所有畫面）
 // 對應複習站：Design02MarketData 第 5 題「每秒很多則訊息，畫面怎麼保持順暢？」
 //
-// 情境：分派器收到 socket 傳來的價格，要交給兩個畫面：行情列表（處理很快）和 BTC 訂單簿詳細頁（每筆要算 20 檔、格式化，約 40 毫秒）。
+// 情境：分派器收到 socket 傳來的價格，要交給兩個畫面：行情列表（處理很快）和
+// BTC 訂單簿詳細頁（每筆要算 20 檔、格式化，約 40 毫秒）。
 //       一瞬間來了 8 筆價格（編號 1 到 8），都在 socket 的佇列上交給分派器。
 //       看行情列表什麼時候收到最後一筆（#8），以及詳細頁處理了幾筆。
-// Bug 版：分派器在 socket 的佇列上依序呼叫每個畫面的處理函式。詳細頁處理一筆要 40 毫秒，socket 的佇列被它占住，
-//        行情列表每一筆都要等前一筆的詳細頁處理完才輪到，最後一筆 #8 要晚 300 毫秒左右才收到；詳細頁則把 8 筆全部依序處理。
-// 修正版：每個畫面有自己的緩衝區（AsyncStream 的 .bufferingNewest(1)）和自己的消費者 Task。分派器只負責把價格丟進每個畫面的緩衝區，
+// Bug 版：分派器在 socket 的佇列上依序呼叫每個畫面的處理函式。詳細頁處理一筆要
+// 40 毫秒，socket 的佇列被它占住，
+//        行情列表每一筆都要等前一筆的詳細頁處理完才輪到，最後一筆 #8 要晚 300
+// 毫秒左右才收到；詳細頁則把 8 筆全部依序處理。
+// 修正版：每個畫面有自己的緩衝區（AsyncStream 的 bufferingNewest(1)）
+// 和自己的消費者 Task。分派器只負責把價格丟進每個畫面的緩衝區，
 //        馬上就結束；慢的畫面只處理最新的幾筆，快的畫面不受影響。
 import Foundation
 import LabKit
@@ -48,21 +53,26 @@ private func scenario(_ log: LabLog, makeDispatcher: () -> Dispatcher) async {
     let board = Board()
     dispatcher.register("行情列表") { tick in board.listGot(tick) }
     dispatcher.register("訂單簿詳細頁") { tick in
-        Thread.sleep(forTimeInterval: Double(slowCostMs) / 1000)          // 算 20 檔、格式化：40 毫秒
+        // 算 20 檔、格式化：40 毫秒
+        Thread.sleep(forTimeInterval: Double(slowCostMs) / 1000)
         board.detailDone(tick)
     }
 
     let socket = DispatchQueue(label: "socket")
     let start = d02NowMs()
     for tick in 1...tickCount {
-        socket.async { dispatcher.publish(tick) }                         // 一瞬間來了 8 筆
+        // 一瞬間來了 8 筆
+        socket.async { dispatcher.publish(tick) }
     }
     log("一瞬間來了 \(tickCount) 筆價格（#1 到 #\(tickCount)），交給分派器")
 
-    let deadline = start + 2000                                           // 最多等 2 秒
+    // 最多等 2 秒
+    let deadline = start + 2000
     while d02NowMs() < deadline {
         let now = board.snapshot
-        if now.listGotLastAt != nil && now.detailTicks.last == tickCount { break }
+        if now.listGotLastAt != nil && now.detailTicks.last == tickCount {
+            break
+        }
         try? await Task.sleep(for: .milliseconds(5))
     }
 
@@ -74,10 +84,19 @@ private func scenario(_ log: LabLog, makeDispatcher: () -> Dispatcher) async {
     }
     let lag = Int(listAt - start)
     log("行情列表收到最後一筆（#\(tickCount)）：距離這批價格送到 \(lag) 毫秒")
-    log("訂單簿詳細頁處理了 \(result.detailTicks.count) 筆：\(result.detailTicks.map { "#\($0)" }.joined(separator: " "))")
-    let listText = lag >= 150 ? "被拖慢了（最後一筆晚了 150 毫秒以上）" : (lag < 100 ? "不受影響（最後一筆在 100 毫秒內收到）" : "有點慢（最後一筆晚了 \(lag) 毫秒）")
-    let detailText = result.detailTicks.count == tickCount ? "把 \(tickCount) 筆全部依序處理" : "只處理最新的幾筆（少於 \(tickCount) 筆）"
-    log("最後：行情列表\(listText)；詳細頁\(detailText)，最後處理的是 #\(result.detailTicks.last ?? 0)")
+    log(
+        "訂單簿詳細頁處理了 \(result.detailTicks.count) 筆：\(result.detailTicks.map { "#\($0)" }.joined(separator: " "))"
+    )
+    let listText =
+        lag >= 150
+        ? "被拖慢了（最後一筆晚了 150 毫秒以上）"
+        : (lag < 100 ? "不受影響（最後一筆在 100 毫秒內收到）" : "有點慢（最後一筆晚了 \(lag) 毫秒）")
+    let detailText =
+        result.detailTicks.count == tickCount
+        ? "把 \(tickCount) 筆全部依序處理" : "只處理最新的幾筆（少於 \(tickCount) 筆）"
+    log(
+        "最後：行情列表\(listText)；詳細頁\(detailText)，最後處理的是 #\(result.detailTicks.last ?? 0)"
+    )
 }
 
 // MARK: - Bug 版
@@ -90,7 +109,8 @@ private enum L03Bug {
         }
 
         func publish(_ tick: Int) {
-            for handler in handlers { handler(tick) }                     // 在 socket 的佇列上，一個一個呼叫：前一個沒做完，後一個就要等
+            // 在 socket 的佇列上，一個一個呼叫：前一個沒做完，後一個就要等
+            for handler in handlers { handler(tick) }
         }
     }
 
@@ -105,15 +125,19 @@ private enum L03Fixed {
         private var inboxes: [AsyncStream<Int>.Continuation] = []
 
         func register(_ name: String, handler: @escaping (Int) -> Void) {
-            let (stream, inbox) = AsyncStream.makeStream(of: Int.self, bufferingPolicy: .bufferingNewest(1))   // 每個畫面自己的緩衝區：只留最新一筆
+            // 每個畫面自己的緩衝區：只留最新一筆
+            let (stream, inbox) = AsyncStream.makeStream(
+                of: Int.self, bufferingPolicy: .bufferingNewest(1))
             inboxes.append(inbox)
             Task.detached {
-                for await tick in stream { handler(tick) }                // 每個畫面自己的消費者：慢只慢自己
+                // 每個畫面自己的消費者：慢只慢自己
+                for await tick in stream { handler(tick) }
             }
         }
 
         func publish(_ tick: Int) {
-            for inbox in inboxes { inbox.yield(tick) }                    // 只是丟進各自的緩衝區，馬上結束
+            // 只是丟進各自的緩衝區，馬上結束
+            for inbox in inboxes { inbox.yield(tick) }
         }
     }
 
@@ -128,15 +152,18 @@ extension Design02MarketData {
         id: "L03",
         title: "開著訂單簿詳細頁，行情列表跟著變慢",
         question: "第 5 題：每秒很多則訊息，畫面怎麼保持順暢？",
-        goal: "分派器不能在 socket 的佇列上直接呼叫每個畫面的處理函式：一個慢的畫面會拖住所有畫面。每個畫面要有自己的緩衝區（只留最新一筆）和自己的消費者，分派器只負責把價格丟進去。",
+        goal:
+            "分派器不能在 socket 的佇列上直接呼叫每個畫面的處理函式：一個慢的畫面會拖住所有畫面。每個畫面要有自己的緩衝區（只留最新一筆）和自己的消費者，分派器只負責把價格丟進去。",
         steps: [
             "選「Bug 版」執行，看行情列表收到最後一筆（#8）距離這批價格送到幾毫秒，以及詳細頁處理了幾筆。",
             "想一想：行情列表的處理明明很快，為什麼會被詳細頁拖慢？（在同一條佇列上一個接一個呼叫。）",
             "選「修正版」執行：行情列表幾乎馬上收到 #8；詳細頁只處理最新的幾筆，最後一筆仍然是 #8。",
             "想一想：詳細頁少處理了幾筆，使用者會看到錯的資料嗎？（行情只在乎最新的價格；成交明細這類不能丟的資料不能這樣做，見 Advanced05 第 4 題。）",
         ],
-        expectBug: "行情列表最後一筆 #8 晚了約 300 毫秒才收到（超過 150 毫秒）；詳細頁把 8 筆全部依序處理：「最後：行情列表被拖慢了（最後一筆晚了 150 毫秒以上）；詳細頁把 8 筆全部依序處理，最後處理的是 #8」。",
-        expectFixed: "行情列表幾乎馬上（0 到幾毫秒）收到 #8；詳細頁只處理最新的幾筆（通常是 #1 和 #8 共 2 筆），最後處理的仍是 #8：「最後：行情列表不受影響（最後一筆在 100 毫秒內收到）；詳細頁只處理最新的幾筆（少於 8 筆），最後處理的是 #8」。",
+        expectBug:
+            "行情列表最後一筆 #8 晚了約 300 毫秒才收到（超過 150 毫秒）；詳細頁把 8 筆全部依序處理：「最後：行情列表被拖慢了（最後一筆晚了 150 毫秒以上）；詳細頁把 8 筆全部依序處理，最後處理的是 #8」。",
+        expectFixed:
+            "行情列表幾乎馬上（0 到幾毫秒）收到 #8；詳細頁只處理最新的幾筆（通常是 #1 和 #8 共 2 筆），最後處理的仍是 #8：「最後：行情列表不受影響（最後一筆在 100 毫秒內收到）；詳細頁只處理最新的幾筆（少於 8 筆），最後處理的是 #8」。",
         run: { variant, log in
             switch variant {
             case .bug: await L03Bug.run(log)
@@ -144,17 +171,33 @@ extension Design02MarketData {
             }
         },
         checkBug: { lines in
-            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else { return "演練沒有跑完：要用 scenario(log, makeDispatcher:) 執行" }
-            if last == "最後：行情列表沒有收到最後一筆" { return "行情列表沒有收到價格：register 要把 handler 存起來，publish 要依序呼叫每個 handler" }
-            return last == "最後：行情列表被拖慢了（最後一筆晚了 150 毫秒以上）；詳細頁把 8 筆全部依序處理，最後處理的是 #8"
-                ? nil : "Bug 還沒重現：publish 要在 socket 的佇列上直接 for handler in handlers { handler(tick) }，慢的詳細頁才會拖住行情列表"
+            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else {
+                return "演練沒有跑完：要用 scenario(log, makeDispatcher:) 執行"
+            }
+            if last == "最後：行情列表沒有收到最後一筆" {
+                return
+                    "行情列表沒有收到價格：register 要把 handler 存起來，publish 要依序呼叫每個 handler"
+            }
+            return last
+                == "最後：行情列表被拖慢了（最後一筆晚了 150 毫秒以上）；詳細頁把 8 筆全部依序處理，最後處理的是 #8"
+                ? nil
+                : "Bug 還沒重現：publish 要在 socket 的佇列上直接 for handler in handlers { handler(tick) }，慢的詳細頁才會拖住行情列表"
         },
         checkFixed: { lines in
-            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else { return "演練沒有跑完：要用 scenario(log, makeDispatcher:) 執行" }
-            if last == "最後：行情列表沒有收到最後一筆" { return "行情列表沒有收到價格：register 要建立 AsyncStream 與消費者 Task，publish 要 yield 給每個畫面" }
-            if !last.hasPrefix("最後：行情列表不受影響（最後一筆在 100 毫秒內收到）") { return "行情列表還是被拖慢：publish 不能直接呼叫 handler，要 yield 進每個畫面各自的 AsyncStream（.bufferingNewest(1)）" }
+            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else {
+                return "演練沒有跑完：要用 scenario(log, makeDispatcher:) 執行"
+            }
+            if last == "最後：行情列表沒有收到最後一筆" {
+                return
+                    "行情列表沒有收到價格：register 要建立 AsyncStream 與消費者 Task，publish 要 yield 給每個畫面"
+            }
+            if !last.hasPrefix("最後：行情列表不受影響（最後一筆在 100 毫秒內收到）") {
+                return
+                    "行情列表還是被拖慢：publish 不能直接呼叫 handler，要 yield 進每個畫面各自的 AsyncStream（.bufferingNewest(1)）"
+            }
             return last.hasSuffix("最後處理的是 #8") && last.contains("只處理最新的幾筆")
-                ? nil : "每個畫面自己的緩衝區要用 .bufferingNewest(1)：慢的詳細頁只處理最新的幾筆，最後一筆是 #8"
+                ? nil
+                : "每個畫面自己的緩衝區要用 .bufferingNewest(1)：慢的詳細頁只處理最新的幾筆，最後一筆是 #8"
         }
     )
 }

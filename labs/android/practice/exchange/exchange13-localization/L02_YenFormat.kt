@@ -1,15 +1,26 @@
-// L02：日圓金額顯示成「¥1,234,567.80」，負數變成「¥-1,234.40」（貨幣符號、小數位數、負號位置寫死）
-// 對應複習站：Exchange13Localization 第 2 題「數字怎麼顯示？千分位、日圓沒有小數、預設捨入有什麼陷阱？」
+// L02：日圓金額顯示成「¥1,234,567.80」，負數變成「¥-1,234.40」（貨幣符號、
+// 小數位數、負號位置寫死）
+// 對應複習站：Exchange13Localization 第 2 題「數字怎麼顯示？千分位、
+// 日圓沒有小數、預設捨入有什麼陷阱？」
 //
-// 情境：日圓（JPY）的最小單位就是 1 圓，沒有小數位數（Currency.getInstance("JPY").defaultFractionDigits 是 0）；貨幣符號和負號的位置依語系不同。
-//        演練把四筆資料交給 formatYen 顯示：①1234567.8（ja-JP）②-1234.4（ja-JP）③1234567.8（en-US）④1234567.8（zh-Hans-CN）。
-//        檢查看三件事：數字是不是「整數、有千分位」（日圓沒有小數）、負數的 - 是不是在最前面、符號出現在哪裡不檢查（交給平台依語系決定）。
-//        （四捨五入的模式在 Exchange02 的演練 5 練過，這題的資料都避開剛好在中間的值。）
+// 情境：日圓（JPY）的最小單位就是 1 圓，沒有小數位數（Currency.
+// getInstance("JPY").defaultFractionDigits 是 0）；
+// 貨幣符號和負號的位置依語系不同。
+//        演練把四筆資料交給 formatYen 顯示：①1234567.8（ja-JP）②-1234.
+// 4（ja-JP）③1234567.8（en-US）④1234567.8（zh-Hans-CN）。
+//        檢查看三件事：數字是不是「整數、有千分位」（日圓沒有小數）、負數的 -
+// 是不是在最前面、符號出現在哪裡不檢查（交給平台依語系決定）。
+//        （四捨五入的模式在 Exchange02 的演練 5 練過，
+// 這題的資料都避開剛好在中間的值。）
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.formatYen）：回傳 "¥" 加上 DecimalFormat("#,##0.00", DecimalFormatSymbols(Locale.US)).format(amount)（固定兩位小數、有千分位）。
-//   ② 修正版（L02Fixed.formatYen）：NumberFormat.getCurrencyInstance(locale)，currency = Currency.getInstance("JPY")，
-//      minimumFractionDigits 與 maximumFractionDigits 都設成 currency.defaultFractionDigits，roundingMode = RoundingMode.HALF_UP，回傳 format(amount)。
+//   ① Bug 版（L02Bug.formatYen）：回傳 "¥" 加上 DecimalFormat("#,##0.00",
+// DecimalFormatSymbols(Locale.US)).format(amount)（固定兩位小數、有千分位）。
+//   ② 修正版（L02Fixed.formatYen）：NumberFormat.getCurrencyInstance(locale)，
+// currency = Currency.getInstance("JPY")，
+//      minimumFractionDigits 與 maximumFractionDigits 都設成 currency.
+// defaultFractionDigits，roundingMode = RoundingMode.HALF_UP，回傳
+// format(amount)。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange13-localization/L02_YenFormat.kt
 package tw.harry.labs.practice.exchange13localization
@@ -26,13 +37,37 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 /** （描述, 金額, 語系, 數字部分應該是什麼（只有數字）, 是不是負數） */
-private class L02Case(val name: String, val amount: BigDecimal, val localeTag: String, val digits: String, val negative: Boolean)
+private class L02Case(
+    val name: String,
+    val amount: BigDecimal,
+    val localeTag: String,
+    val digits: String,
+    val negative: Boolean,
+)
 
 private val cases = listOf(
-    L02Case("1234567.8，ja-JP", BigDecimal("1234567.8"), "ja-JP", "1234568", false),
+    L02Case(
+        "1234567.8，ja-JP",
+        BigDecimal("1234567.8"),
+        "ja-JP",
+        "1234568",
+        false,
+    ),
     L02Case("-1234.4，ja-JP", BigDecimal("-1234.4"), "ja-JP", "1234", true),
-    L02Case("1234567.8，en-US", BigDecimal("1234567.8"), "en-US", "1234568", false),
-    L02Case("1234567.8，zh-Hans-CN", BigDecimal("1234567.8"), "zh-Hans-CN", "1234568", false),
+    L02Case(
+        "1234567.8，en-US",
+        BigDecimal("1234567.8"),
+        "en-US",
+        "1234568",
+        false,
+    ),
+    L02Case(
+        "1234567.8，zh-Hans-CN",
+        BigDecimal("1234567.8"),
+        "zh-Hans-CN",
+        "1234568",
+        false,
+    ),
 )
 
 /** 演練流程（兩個版本共用）：四筆金額逐一顯示，檢查數字、千分位與負號的位置 */
@@ -41,7 +76,12 @@ private fun scenario(log: LabLog, formatYen: (BigDecimal, Locale) -> String) {
     for (c in cases) {
         val text = formatYen(c.amount, Locale.forLanguageTag(c.localeTag))
         val shownDigits = text.filter { it in '0'..'9' }
-        val negativeOK = if (c.negative) text.firstOrNull() == '-' || text.firstOrNull() == '−' else !text.contains('-')
+        val negativeOK = if (c.negative) {
+            text.firstOrNull() == '-' ||
+                text.firstOrNull() == '−'
+        } else {
+            !text.contains('-')
+        }
         val groupingOK = c.digits.length <= 3 || text.contains(',')
         val problems = mutableListOf<String>()
         if (shownDigits != c.digits) problems += "數字應該是 ${c.digits}（日圓沒有小數）"
@@ -60,27 +100,36 @@ private fun scenario(log: LabLog, formatYen: (BigDecimal, Locale) -> String) {
 // MARK: - Bug 版
 private object L02Bug {
     fun formatYen(amount: BigDecimal, locale: Locale): String {
-        // TODO ①：回傳 "¥" + DecimalFormat("#,##0.00", DecimalFormatSymbols(Locale.US)).format(amount)
+        // TODO ①：回傳 "¥" + DecimalFormat("#,##0.00",
+        // DecimalFormatSymbols(Locale.US)).format(amount)
         return ""
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { amount, locale -> formatYen(amount, locale) }
+    suspend fun run(log: LabLog) = scenario(log) { amount, locale ->
+        formatYen(amount, locale)
+    }
 }
 
 // MARK: - 修正版
 private object L02Fixed {
     fun formatYen(amount: BigDecimal, locale: Locale): String {
-        // TODO ②：NumberFormat.getCurrencyInstance(locale)；currency = Currency.getInstance("JPY")；
-        //        minimumFractionDigits 與 maximumFractionDigits 都設成 currency.defaultFractionDigits（JPY 是 0）；roundingMode = RoundingMode.HALF_UP；回傳 format(amount)
+        // TODO ②：NumberFormat.getCurrencyInstance(locale)；currency =
+        // Currency.getInstance("JPY")；
+        //        minimumFractionDigits 與 maximumFractionDigits 都設成
+        // currency.defaultFractionDigits（JPY 是 0）；roundingMode =
+        // RoundingMode.HALF_UP；回傳 format(amount)
         return ""
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { amount, locale -> formatYen(amount, locale) }
+    suspend fun run(log: LabLog) = scenario(log) { amount, locale ->
+        formatYen(amount, locale)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 4 筆金額") }?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 4 筆金額")
+}?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l02 = Lab(
     id = "L02",
@@ -107,9 +156,17 @@ val l02 = Lab(
         val n = wrongCount(lines)
         when {
             n == null -> "演練沒有跑完：要用 scenario(log) { amount, locale -> … } 執行"
-            lines.none { it.startsWith("1234567.8，ja-JP → ¥1,234,567.80") } -> "Bug 還沒重現：寫死 \"¥\" 並固定兩位小數，1234567.8 會顯示成 ¥1,234,567.80"
-            lines.none { it.startsWith("-1234.4，ja-JP → ¥-1,234.40") } -> "Bug 還沒重現：符號寫死在最前面，負號會跑到後面（¥-1,234.40）"
+
+            lines.none {
+                it.startsWith("1234567.8，ja-JP → ¥1,234,567.80")
+            } -> "Bug 還沒重現：寫死 \"¥\" 並固定兩位小數，1234567.8 會顯示成 ¥1,234,567.80"
+
+            lines.none {
+                it.startsWith("-1234.4，ja-JP → ¥-1,234.40")
+            } -> "Bug 還沒重現：符號寫死在最前面，負號會跑到後面（¥-1,234.40）"
+
             n != 4 -> "Bug 版四筆都應該顯示錯（目前錯 $n 筆）"
+
             else -> null
         }
     },

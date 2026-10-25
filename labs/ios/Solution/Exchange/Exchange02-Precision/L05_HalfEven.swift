@@ -1,18 +1,23 @@
 // L05：畫面上的手續費合計和伺服器的帳單差了 2 円（formatter 預設是銀行家捨入）
 // 對應複習站：Exchange02Precision 第 5 題「數字要怎麼顯示？」（捨入模式）
 //
-// 情境：日圓沒有小數，手續費要四捨五入到整數。四筆成交，金額 12,500、37,500、62,500、87,500 円，手續費率 0.1%（演練假設），
-//       手續費剛好是 12.5、37.5、62.5、87.5 円。伺服器的帳單規則（演練假設）是四捨五入，剛好 0.5 進位：13、38、63、88，合計 202 円。
+// 情境：日圓沒有小數，手續費要四捨五入到整數。四筆成交，金額 12,500、37,500、
+// 62,500、87,500 円，手續費率 0.1%（演練假設），
+//       手續費剛好是 12.5、37.5、62.5、87.5 円。伺服器的帳單規則（演練假設）
+// 是四捨五入，剛好 0.5 進位：13、38、63、88，合計 202 円。
 //       App 用 NumberFormatter 把手續費顯示成整數。
-// Bug 版：NumberFormatter 沒有設 roundingMode，預設是 .halfEven（銀行家捨入，剛好 0.5 時進位到偶數）：12.5 → 12、62.5 → 62，
+// Bug 版：NumberFormatter 沒有設 roundingMode，預設是 halfEven（銀行家捨入，
+// 剛好 0.5 時進位到偶數）：12.5 → 12、62.5 → 62，
 //        畫面上的合計是 200 円，和帳單差 2 円。
-// 修正版：明確設定 roundingMode = .halfUp（四捨五入，剛好 0.5 進位），和伺服器的規則一致。
+// 修正版：明確設定 roundingMode = halfUp（四捨五入，剛好 0.5 進位），
+// 和伺服器的規則一致。
 import Foundation
 import LabKit
 
 private let amounts = ["12500", "37500", "62500", "87500"]
-private let serverFees = [13, 38, 63, 88]          // 伺服器帳單（四捨五入）
-private let feeRate = e02("0.001")                  // 演練假設：0.1%
+// 伺服器帳單（四捨五入）
+private let serverFees = [13, 38, 63, 88]
+private let feeRate = e02("0.001")  // 演練假設：0.1%
 
 /// 演練流程（兩個版本共用）：逐筆算手續費、用 formatter 顯示，和帳單比對
 private func scenario(_ log: LabLog, format: (Decimal) -> String) {
@@ -24,7 +29,9 @@ private func scenario(_ log: LabLog, format: (Decimal) -> String) {
         log("成交 \(amount) 円，手續費 \(fee) 円 → 畫面顯示 \(shown)（伺服器帳單 \(serverFee)）")
     }
     let serverTotal = serverFees.reduce(0, +)
-    log("畫面手續費合計 \(shownTotal) 円，伺服器帳單合計 \(serverTotal) 円，差 \(serverTotal - shownTotal) 円")
+    log(
+        "畫面手續費合計 \(shownTotal) 円，伺服器帳單合計 \(serverTotal) 円，差 \(serverTotal - shownTotal) 円"
+    )
 }
 
 // MARK: - Bug 版
@@ -34,8 +41,9 @@ private enum L05Bug {
         formatter.numberStyle = .decimal
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.usesGroupingSeparator = false
-        formatter.maximumFractionDigits = 0                     // 日圓沒有小數
-        return formatter.string(from: NSDecimalNumber(decimal: value)) ?? ""   // 沒有設 roundingMode：預設是 .halfEven
+        formatter.maximumFractionDigits = 0  // 日圓沒有小數
+        // 沒有設 roundingMode：預設是 .halfEven
+        return formatter.string(from: NSDecimalNumber(decimal: value)) ?? ""
     }
 
     static func run(_ log: LabLog) async {
@@ -51,7 +59,8 @@ private enum L05Fixed {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.usesGroupingSeparator = false
         formatter.maximumFractionDigits = 0
-        formatter.roundingMode = .halfUp                        // 明確指定：剛好 0.5 時進位
+        // 明確指定：剛好 0.5 時進位
+        formatter.roundingMode = .halfUp
         return formatter.string(from: NSDecimalNumber(decimal: value)) ?? ""
     }
 
@@ -73,8 +82,10 @@ extension Exchange02Precision {
             "選「修正版」執行，四筆都要和帳單一樣。",
             "進階：Android 的 DecimalFormat 預設也是 HALF_EVEN；兩個平台都要明確指定，而且捨入規則也要放進共用測試資料。",
         ],
-        expectBug: "12.5 顯示 12、62.5 顯示 62（37.5、87.5 剛好一樣），「畫面手續費合計 200 円，伺服器帳單合計 202 円，差 2 円」。",
-        expectFixed: "四筆都和帳單一樣：13、38、63、88，「畫面手續費合計 202 円，伺服器帳單合計 202 円，差 0 円」。",
+        expectBug:
+            "12.5 顯示 12、62.5 顯示 62（37.5、87.5 剛好一樣），「畫面手續費合計 200 円，伺服器帳單合計 202 円，差 2 円」。",
+        expectFixed:
+            "四筆都和帳單一樣：13、38、63、88，「畫面手續費合計 202 円，伺服器帳單合計 202 円，差 0 円」。",
         run: { variant, log in
             switch variant {
             case .bug: await L05Bug.run(log)
@@ -82,12 +93,17 @@ extension Exchange02Precision {
             }
         },
         checkBug: { lines in
-            if !lines.contains(where: { $0.hasPrefix("畫面手續費合計") }) { return "演練沒有跑完：要用 scenario(log, format:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("畫面手續費合計") }) {
+                return "演練沒有跑完：要用 scenario(log, format:) 執行"
+            }
             return lines.contains("畫面手續費合計 200 円，伺服器帳單合計 202 円，差 2 円")
-                ? nil : "Bug 還沒重現：NumberFormatter 不要設 roundingMode（預設 .halfEven），12.5 會顯示 12、62.5 會顯示 62"
+                ? nil
+                : "Bug 還沒重現：NumberFormatter 不要設 roundingMode（預設 .halfEven），12.5 會顯示 12、62.5 會顯示 62"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("畫面手續費合計") }) { return "演練沒有跑完：要用 scenario(log, format:) 執行" }
+            if !lines.contains(where: { $0.hasPrefix("畫面手續費合計") }) {
+                return "演練沒有跑完：要用 scenario(log, format:) 執行"
+            }
             return lines.contains("畫面手續費合計 202 円，伺服器帳單合計 202 円，差 0 円")
                 ? nil : "formatter 要設 roundingMode = .halfUp，剛好 0.5 才會進位"
         }

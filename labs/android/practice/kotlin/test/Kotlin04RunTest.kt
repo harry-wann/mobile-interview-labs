@@ -16,8 +16,14 @@ import tw.harry.labs.practice.kotlin04coroutinesync.L08Fixed
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class Kotlin04RunTest {
-    /** 一次執行的結果：載入的資料、真實花了幾 ms、runTest 的虛擬時鐘走了幾 ms */
-    private class Measured(val data: String, val realMs: Long, val virtualMs: Long)
+    /**
+     * 一次執行的結果：載入的資料、真實花了幾 ms、runTest 的虛擬時鐘走了幾 ms
+     */
+    private class Measured(
+        val data: String,
+        val realMs: Long,
+        val virtualMs: Long,
+    )
 
     private fun bug(): Measured {
         var measured: Measured? = null
@@ -25,7 +31,12 @@ class Kotlin04RunTest {
             val repo = L08Bug.OrderRepo()
             val start = System.nanoTime()
             val data = repo.load()
-            measured = Measured(data, (System.nanoTime() - start) / 1_000_000, currentTime)
+            measured =
+                Measured(
+                    data,
+                    (System.nanoTime() - start) / 1_000_000,
+                    currentTime,
+                )
         }
         return measured!!
     }
@@ -33,10 +44,16 @@ class Kotlin04RunTest {
     private fun fixed(): Measured {
         var measured: Measured? = null
         runTest {
-            val repo = L08Fixed.OrderRepo(StandardTestDispatcher(testScheduler))   // 共用測試的 scheduler
+            // 共用測試的 scheduler
+            val repo = L08Fixed.OrderRepo(StandardTestDispatcher(testScheduler))
             val start = System.nanoTime()
             val data = repo.load()
-            measured = Measured(data, (System.nanoTime() - start) / 1_000_000, currentTime)
+            measured =
+                Measured(
+                    data,
+                    (System.nanoTime() - start) / 1_000_000,
+                    currentTime,
+                )
         }
         return measured!!
     }
@@ -52,7 +69,12 @@ class Kotlin04RunTest {
             b.virtualMs >= 100 -> "Bug 版的虛擬時鐘不應該走（走了 ${b.virtualMs} ms）"
             else -> null
         }
-        report("Bug 版", bugReason, "真實 ${b.realMs} ms、虛擬 ${b.virtualMs} ms", failures)
+        report(
+            "Bug 版",
+            bugReason,
+            "真實 ${b.realMs} ms、虛擬 ${b.virtualMs} ms",
+            failures,
+        )
 
         val f = fixed()
         val fixedReason = when {
@@ -61,16 +83,32 @@ class Kotlin04RunTest {
             f.realMs >= 500 -> "修正版還是真的等了 ${f.realMs} ms：load() 要用 withContext(io)，測試傳入 StandardTestDispatcher(testScheduler)"
             else -> null
         }
-        report("修正版", fixedReason, "真實 ${f.realMs} ms、虛擬 ${f.virtualMs} ms", failures)
+        report(
+            "修正版",
+            fixedReason,
+            "真實 ${f.realMs} ms、虛擬 ${f.virtualMs} ms",
+            failures,
+        )
 
-        println("[SELFTEST] Kotlin04CoroutineSync L08 還差 ${failures.size} 個版本沒通過")
+        println(
+            "[SELFTEST] Kotlin04CoroutineSync L08 還差 ${failures.size} 個版本沒通過",
+        )
     }
 
-    private fun report(variant: String, reason: String?, detail: String, failures: MutableList<String>) {
+    private fun report(
+        variant: String,
+        reason: String?,
+        detail: String,
+        failures: MutableList<String>,
+    ) {
         if (reason == null) {
-            println("[SELFTEST] Kotlin04CoroutineSync L08 $variant PASS　$detail")
+            println(
+                "[SELFTEST] Kotlin04CoroutineSync L08 $variant PASS　$detail",
+            )
         } else {
-            println("[SELFTEST] Kotlin04CoroutineSync L08 $variant FAIL：$reason")
+            println(
+                "[SELFTEST] Kotlin04CoroutineSync L08 $variant FAIL：$reason",
+            )
             failures += "$variant：$reason"
         }
     }

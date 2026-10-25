@@ -1,11 +1,15 @@
 // L07：新插入的幣種顯示成展開，原本展開的卻收起來了（LazyColumn 沒給 key）
-// 對應複習站：Kotlin06Recomposition 第 6 題「remember、rememberSaveable 和 key 怎麼用？」
+// 對應複習站：Kotlin06Recomposition 第 6 題「remember、rememberSaveable 和 key
+// 怎麼用？」
 //
-// 情境：行情列表每一列有一個「展開詳細資料」的狀態，用 remember 保存在那一列裡。
+// 情境：行情列表每一列有一個「展開詳細資料」的狀態，用 remember
+// 保存在那一列裡。
 //        使用者把 BTC 展開，這時列表最上面插入了一檔新的 SOL。
-// Bug 版：items(coins) { … } 沒有給 key。沒給 key 時，Compose 用「位置」當身分，展開的狀態留在原本的位置（第 1 列），
+// Bug 版：items(coins) { … } 沒有給 key。沒給 key 時，Compose 用「位置」
+// 當身分，展開的狀態留在原本的位置（第 1 列），
 //        但第 1 列現在是 SOL：畫面變成「SOL 被展開、BTC 卻收起來」。
-// 修正版：items(coins, key = { it.symbol }) { … }。Compose 用 symbol 辨認每一列，展開的狀態跟著 BTC 走。
+// 修正版：items(coins, key = { it.symbol }) { … }。Compose 用 symbol
+// 辨認每一列，展開的狀態跟著 BTC 走。
 //        key 必須唯一而且穩定（同一檔幣種的 key 不能變）。
 package tw.harry.labs.solution.kotlin06recomposition
 
@@ -33,7 +37,9 @@ import tw.harry.labs.kit.Variant
 
 private class Coin(val symbol: String)
 
-/** 一列（兩個版本共用）：點一下展開或收起，展開的狀態用 remember 保存在這一列裡 */
+/**
+ * 一列（兩個版本共用）：點一下展開或收起，展開的狀態用 remember 保存在這一列裡
+ */
 @Composable
 private fun CoinRow(coin: Coin) {
     var expanded by remember { mutableStateOf(false) }
@@ -52,7 +58,8 @@ private fun CoinRow(coin: Coin) {
 @Composable
 private fun L07BugList(coins: List<Coin>) {
     LazyColumn(Modifier.height(240.dp)) {
-        items(coins) { coin -> CoinRow(coin) }                              // 沒給 key：用位置當身分
+        // 沒給 key：用位置當身分
+        items(coins) { coin -> CoinRow(coin) }
     }
 }
 
@@ -60,14 +67,16 @@ private fun L07BugList(coins: List<Coin>) {
 @Composable
 private fun L07FixedList(coins: List<Coin>) {
     LazyColumn(Modifier.height(240.dp)) {
-        items(coins, key = { it.symbol }) { coin -> CoinRow(coin) }         // 用 symbol 當身分
+        // 用 symbol 當身分
+        items(coins, key = { it.symbol }) { coin -> CoinRow(coin) }
     }
 }
 
 // MARK: - 演練設定
 @Composable
 private fun L07Demo(variant: Variant, log: LabLog) {
-    val coins = remember { mutableStateListOf(Coin("BTC"), Coin("ETH"), Coin("XRP")) }
+    val coins =
+        remember { mutableStateListOf(Coin("BTC"), Coin("ETH"), Coin("XRP")) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             enabled = coins.none { it.symbol == "SOL" },

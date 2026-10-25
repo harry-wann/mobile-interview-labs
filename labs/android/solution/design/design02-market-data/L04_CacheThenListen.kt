@@ -1,13 +1,21 @@
-// L04：切到詳細頁，畫面顯示的是舊價格，要等下一筆推送才更新（先給畫面快取，再登記監聽，中間的推送漏掉了）
-// 對應複習站：Design02MarketData 第 3 題「一條連線、好幾個畫面，要怎麼共用？」（Repository 的快取與推送要接得起來）
+// L04：切到詳細頁，畫面顯示的是舊價格，要等下一筆推送才更新（先給畫面快取，
+// 再登記監聽，中間的推送漏掉了）
+// 對應複習站：Design02MarketData 第 3 題「一條連線、好幾個畫面，要怎麼共用？」
+// （Repository 的快取與推送要接得起來）
 //
-// 情境：Repository 把最新的價格存在快取裡，WebSocket 每推來一筆就更新快取、並通知已登記的畫面。
-//       畫面打開詳細頁時呼叫 observe(symbol, onPrice)：要先拿到快取的價格（馬上有東西可以顯示），再收到之後的推送。
-//       快取裡是 10000000 円。訂閱 topic 要等伺服器回應（suspend），就在這段時間裡，伺服器剛好推出一筆新價格 10000500 円。
+// 情境：Repository 把最新的價格存在快取裡，WebSocket 每推來一筆就更新快取、
+// 並通知已登記的畫面。
+//       畫面打開詳細頁時呼叫 observe(symbol, onPrice)：
+// 要先拿到快取的價格（馬上有東西可以顯示），再收到之後的推送。
+//       快取裡是 10000000 円。訂閱 topic 要等伺服器回應（suspend），
+// 就在這段時間裡，伺服器剛好推出一筆新價格 10000500 円。
 //       這個交易對不常成交，下一筆推送要很久以後才會來。
-// Bug 版：observe 先把快取交給畫面，接著等訂閱，最後才登記畫面的監聽。等待訂閱的那段時間推來的 10000500 円，
-//        快取收到了、更新了，但畫面還沒登記，沒有人通知它。畫面停在 10000000 円，而快取裡明明已經是 10000500 円。
-// 修正版：先登記監聽，再把快取交給畫面（這兩步中間沒有 suspend，不會被插隊），最後才等訂閱。
+// Bug 版：observe 先把快取交給畫面，接著等訂閱，最後才登記畫面的監聽。
+// 等待訂閱的那段時間推來的 10000500 円，
+//        快取收到了、更新了，但畫面還沒登記，沒有人通知它。畫面停在 10000000
+// 円，而快取裡明明已經是 10000500 円。
+// 修正版：先登記監聽，再把快取交給畫面（這兩步中間沒有 suspend，不會被插隊），
+// 最後才等訂閱。
 //        之後不管推送在哪個時間點來，畫面都收得到。
 package tw.harry.labs.solution.design02marketdata
 
@@ -23,14 +31,19 @@ private const val L04_NEW_PRICE = 10_000_500
 private class L04FakeSocket {
     var onMessage: ((String, Int) -> Unit)? = null
 
-    /** 向伺服器訂閱：要等伺服器回應。就在這段時間裡，伺服器剛好推出一筆新價格 */
+    /**
+     * 向伺服器訂閱：要等伺服器回應。就在這段時間裡，伺服器剛好推出一筆新價格
+     */
     suspend fun subscribe(topic: String) {
         yield()
         onMessage?.invoke(topic, L04_NEW_PRICE)
     }
 }
 
-/** Repository：快取＋監聽。收到推送的處理（receive）兩個版本一樣：先更新快取，再通知已登記的畫面 */
+/**
+ * Repository：快取＋監聽。收到推送的處理（receive）兩個版本一樣：先更新快取，
+ * 再通知已登記的畫面
+ */
 private open class L04Repository {
     val socket = L04FakeSocket()
     val cache = mutableMapOf("btcjpy" to L04_OLD_PRICE)
@@ -66,9 +79,12 @@ private suspend fun scenario(log: LabLog, repository: L04Repository) {
 private object L04Bug {
     class Repo : L04Repository() {
         override suspend fun observe(symbol: String, onPrice: (Int) -> Unit) {
-            cache[symbol]?.let(onPrice)                                     // 步驟 1：先把快取交給畫面
-            socket.subscribe("market.$symbol.bbo")                          // 步驟 2：訂閱（這段時間推來的價格，還沒有人登記要聽）
-            listeners.getOrPut(symbol) { mutableListOf() }.add(onPrice)     // 步驟 3：最後才登記監聽
+            // 步驟 1：先把快取交給畫面
+            cache[symbol]?.let(onPrice)
+            // 步驟 2：訂閱（這段時間推來的價格，還沒有人登記要聽）
+            socket.subscribe("market.$symbol.bbo")
+            // 步驟 3：最後才登記監聽
+            listeners.getOrPut(symbol) { mutableListOf() }.add(onPrice)
         }
     }
 
@@ -79,9 +95,12 @@ private object L04Bug {
 private object L04Fixed {
     class Repo : L04Repository() {
         override suspend fun observe(symbol: String, onPrice: (Int) -> Unit) {
-            listeners.getOrPut(symbol) { mutableListOf() }.add(onPrice)     // 步驟 1：先登記監聽，之後推來的價格都收得到
-            cache[symbol]?.let(onPrice)                                     // 步驟 2：再把快取交給畫面（和步驟 1 之間沒有 suspend，不會被插隊）
-            socket.subscribe("market.$symbol.bbo")                          // 步驟 3：最後才訂閱
+            // 步驟 1：先登記監聽，之後推來的價格都收得到
+            listeners.getOrPut(symbol) { mutableListOf() }.add(onPrice)
+            // 步驟 2：再把快取交給畫面（和步驟 1 之間沒有 suspend，不會被插隊）
+            cache[symbol]?.let(onPrice)
+            // 步驟 3：最後才訂閱
+            socket.subscribe("market.$symbol.bbo")
         }
     }
 
@@ -111,20 +130,40 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, repository) 執行"
-            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> "observe 還沒寫：要先把快取交給畫面、呼叫 socket.subscribe，最後才登記監聽"
-            "最後：畫面顯示 10000000 円，快取裡是 10000500 円" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, repository) 執行"
+            }
+
+            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> {
+                "observe 還沒寫：要先把快取交給畫面、呼叫 socket.subscribe，最後才登記監聽"
+            }
+
+            "最後：畫面顯示 10000000 円，快取裡是 10000500 円" !in lines -> {
                 "Bug 還沒重現：先把快取交給畫面，接著 socket.subscribe，最後才把 onPrice 加進 listeners，訂閱期間的推送就沒人收"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, repository) 執行"
-            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> "observe 還沒寫：先登記監聽，再給畫面快取，最後 socket.subscribe"
-            "最後：畫面顯示 10000500 円，快取裡是 10000500 円" !in lines ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, repository) 執行"
+            }
+
+            "最後：畫面顯示 （沒有） 円，快取裡是 10000000 円" in lines -> {
+                "observe 還沒寫：先登記監聽，再給畫面快取，最後 socket.subscribe"
+            }
+
+            "最後：畫面顯示 10000500 円，快取裡是 10000500 円" !in lines -> {
                 "先把 onPrice 加進 listeners[symbol]，再交出快取，最後才 socket.subscribe"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

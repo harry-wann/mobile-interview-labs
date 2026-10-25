@@ -1,13 +1,20 @@
-// L02：同時處理三個請求，log 上的 request id 卻對不上自己的請求（coroutine 換執行緒時 id 遺失、被別的請求蓋掉）
-// 對應複習站：Advanced10Observability 第 1 題「可觀測性是什麼？log、指標、追蹤各回答什麼問題？」（每筆 log 都帶關聯 ID）
+// L02：同時處理三個請求，log 上的 request id 卻對不上自己的請求（coroutine
+// 換執行緒時 id 遺失、被別的請求蓋掉）
+// 對應複習站：Advanced10Observability 第 1 題「可觀測性是什麼？log、指標、
+// 追蹤各回答什麼問題？」（每筆 log 都帶關聯 ID）
 //
-// 情境：每個請求進來時，App 要替它記一個 request id，之後這個請求相關的所有 log 都帶著這個 id，才能把一次操作從 App 串到伺服器
-//       （就像 Timber 或 MDC 的做法）。演練同時處理三個請求（req-1、req-2、req-3），每個請求「開始 → 等回應 → 收到回應 → 切到 IO 執行緒寫入」，
-//       每一行 log 前面印出「logger 認為現在是哪個 request id」，後面寫這一行真正屬於哪個請求，兩邊對得上才正確。
+// 情境：每個請求進來時，App 要替它記一個 request id，之後這個請求相關的所有
+// log 都帶著這個 id，才能把一次操作從 App 串到伺服器
+//       （就像 Timber 或 MDC 的做法）。演練同時處理三個請求（req-1、req-2、
+// req-3），每個請求「開始 → 等回應 → 收到回應 → 切到 IO 執行緒寫入」，
+//       每一行 log 前面印出「logger 認為現在是哪個 request id」，
+// 後面寫這一行真正屬於哪個請求，兩邊對得上才正確。
 //
 // 你要寫：
-//   ① Bug 版：request id 放在 ThreadLocal。ThreadLocal 綁的是執行緒，不是請求：交錯執行會被蓋掉，切到別條執行緒就不見。
-//   ② 修正版：用 ThreadLocal.asContextElement(id) 把值放進 CoroutineContext，coroutine 在哪條執行緒恢復都讀得到自己的 id。
+//   ① Bug 版：request id 放在 ThreadLocal。ThreadLocal 綁的是執行緒，不是請求：
+// 交錯執行會被蓋掉，切到別條執行緒就不見。
+//   ② 修正版：用 ThreadLocal.asContextElement(id) 把值放進 CoroutineContext，
+// coroutine 在哪條執行緒恢復都讀得到自己的 id。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced10-observability/L02_RequestIdLost.kt
 package tw.harry.labs.practice.advanced10observability
@@ -38,7 +45,10 @@ private class L02Collector {
     }
 }
 
-/** 演練流程（兩個版本共用）：withRequest 讓 body 在「這個請求的環境」裡執行；currentId 讀目前的 request id */
+/**
+ * 演練流程（兩個版本共用）：withRequest 讓 body 在「這個請求的環境」裡執行；
+ * currentId 讀目前的 request id
+ */
 private suspend fun scenario(
     log: LabLog,
     withRequest: suspend (String, suspend () -> Unit) -> Unit,
@@ -50,9 +60,13 @@ private suspend fun scenario(
         delay(startDelayMs)
         withRequest(owner) {
             collector.emit(currentId(), owner, "開始")
-            delay(waitMs)                                                   // 等伺服器回應
+            // 等伺服器回應
+            delay(waitMs)
             collector.emit(currentId(), owner, "收到回應")
-            withContext(Dispatchers.IO) { collector.emit(currentId(), owner, "寫入資料庫") }   // 切到 IO 執行緒
+            // 切到 IO 執行緒
+            withContext(Dispatchers.IO) {
+                collector.emit(currentId(), owner, "寫入資料庫")
+            }
         }
     }
 
@@ -64,7 +78,9 @@ private suspend fun scenario(
         ).awaitAll()
     }
     collector.lines.forEach { log(it) }
-    log("共 ${collector.lines.size} 行 log，request id 對不上的有 ${collector.mismatches.get()} 行")
+    log(
+        "共 ${collector.lines.size} 行 log，request id 對不上的有 ${collector.mismatches.get()} 行",
+    )
 }
 
 // MARK: - Bug 版
@@ -72,7 +88,8 @@ private object L02Bug {
     suspend fun run(log: LabLog) = scenario(
         log,
         withRequest = { id, body ->
-            // TODO ①：把 id 存進 ThreadLocal（requestIdLocal.set(id)，之後的 log 都讀它），再執行 body()
+            // TODO ①：把 id 存進 ThreadLocal（requestIdLocal.set(id)，之後的
+            // log 都讀它），再執行 body()
             body()
         },
         currentId = { requestIdLocal.get() ?: "—" },
@@ -84,7 +101,8 @@ private object L02Fixed {
     suspend fun run(log: LabLog) = scenario(
         log,
         withRequest = { id, body ->
-            // TODO ②：用 withContext(requestIdLocal.asContextElement(id)) { … } 把 body() 包起來執行（值綁在 coroutine 的 context 上）
+            // TODO ②：用 withContext(requestIdLocal.asContextElement(id)) { …
+            // } 把 body() 包起來執行（值綁在 coroutine 的 context 上）
             body()
         },
         currentId = { requestIdLocal.get() ?: "—" },
@@ -115,16 +133,29 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("共 ") && "request id 對不上的有" in it } -> "演練沒有跑完：要用 scenario 執行"
-            (1..3).any { "[req-$it] req-$it 的開始" !in lines } -> "請求一開始就要把 request id 設定好：「開始」那一行的 [id] 應該是自己的 id"
-            lines.any { it.endsWith("對不上的有 0 行") } -> "Bug 還沒重現：request id 要放在 ThreadLocal，請求開始時 set，後來的請求會把它蓋掉、換執行緒也讀不到"
+            lines.none {
+                it.startsWith("共 ") && "request id 對不上的有" in it
+            } -> "演練沒有跑完：要用 scenario 執行"
+
+            (1..3).any {
+                "[req-$it] req-$it 的開始" !in lines
+            } -> "請求一開始就要把 request id 設定好：「開始」那一行的 [id] 應該是自己的 id"
+
+            lines.any {
+                it.endsWith("對不上的有 0 行")
+            } -> "Bug 還沒重現：request id 要放在 ThreadLocal，請求開始時 set，後來的請求會把它蓋掉、換執行緒也讀不到"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("共 ") && "request id 對不上的有" in it } -> "演練沒有跑完：要用 scenario 執行"
+            lines.none {
+                it.startsWith("共 ") && "request id 對不上的有" in it
+            } -> "演練沒有跑完：要用 scenario 執行"
+
             "共 9 行 log，request id 對不上的有 0 行" !in lines -> "還有對不上的行：要用 requestIdLocal.asContextElement(id) 放進 withContext，包住整個請求的處理"
+
             else -> null
         }
     },

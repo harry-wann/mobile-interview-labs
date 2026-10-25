@@ -1,10 +1,15 @@
 // L01：按下「買入」之後，要等一下才有反應（重工作寫在主執行緒）
-// 對應複習站：Platform02Threading 第 1 題「主執行緒到底在做什麼？為什麼不能被卡住？」
+// 對應複習站：Platform02Threading 第 1
+// 題「主執行緒到底在做什麼？為什麼不能被卡住？」
 //
-// 情境：行情頁收到一份訂單簿資料，解碼要花約 80 ms（演練用忙碌迴圈代替真的解碼，每次花的時間固定）。
-//        收到資料之後 10 ms，使用者按下「買入」。按鈕的事件要排進主執行緒的佇列，等主執行緒有空才會處理。
-// Bug 版：在主執行緒解碼。主執行緒被佔住 80 ms，按鈕的事件排在後面，要等解碼完才被處理。
-// 修正版：解碼放到背景執行緒（Task.detached），只把「更新畫面」丟回主執行緒（MainActor.run）。
+// 情境：行情頁收到一份訂單簿資料，解碼要花約 80
+// ms（演練用忙碌迴圈代替真的解碼，每次花的時間固定）。
+//        收到資料之後 10 ms，使用者按下「買入」。
+// 按鈕的事件要排進主執行緒的佇列，等主執行緒有空才會處理。
+// Bug 版：在主執行緒解碼。主執行緒被佔住 80 ms，按鈕的事件排在後面，
+// 要等解碼完才被處理。
+// 修正版：解碼放到背景執行緒（Task.detached），只把「更新畫面」
+// 丟回主執行緒（MainActor.run）。
 import Foundation
 import LabKit
 
@@ -13,28 +18,37 @@ private struct OrderBook {
     let bestBid: Int
 }
 
-/// 解碼要花約 80 ms（兩個版本共用）：用忙碌迴圈代替，Debug 與 Release 花的時間一樣
+/// 解碼要花約 80 ms（兩個版本共用）：用忙碌迴圈代替，Debug 與 Release
+/// 花的時間一樣
 private func decodeOrderBook(_ raw: Data) -> OrderBook {
     let end = DispatchTime.now().uptimeNanoseconds + 80_000_000
     while DispatchTime.now().uptimeNanoseconds < end {}
     return OrderBook(bestBid: raw.count)
 }
 
-/// 演練流程（兩個版本共用）：收到資料 → 10 ms 後使用者按下買入 → 看按鈕的事件等了多久才被處理
+/// 演練流程（兩個版本共用）：收到資料 → 10 ms 後使用者按下買入 →
+/// 看按鈕的事件等了多久才被處理
 @MainActor
-private func scenario(_ log: LabLog, receive: @escaping (Data, @escaping @MainActor (OrderBook) -> Void) -> Void) async {
+private func scenario(
+    _ log: LabLog,
+    receive: @escaping (Data, @escaping @MainActor (OrderBook) -> Void) -> Void
+) async {
     var rendered = false
     var tapDelayMs: Int?
-    // 10 ms 後，使用者按下買入：事件從別的執行緒排進主執行緒的佇列，記下排進去的時間，等主執行緒處理時再量
+    // 10 ms 後，使用者按下買入：事件從別的執行緒排進主執行緒的佇列，
+    // 記下排進去的時間，等主執行緒處理時再量
     DispatchQueue.global().asyncAfter(deadline: .now() + 0.01) {
         let posted = DispatchTime.now().uptimeNanoseconds
         DispatchQueue.main.async {
-            tapDelayMs = Int((DispatchTime.now().uptimeNanoseconds - posted) / 1_000_000)
+            tapDelayMs = Int(
+                (DispatchTime.now().uptimeNanoseconds - posted) / 1_000_000)
         }
     }
-    receive(Data(count: 1_000)) { _ in rendered = true }          // 收到一份訂單簿資料
+    // 收到一份訂單簿資料
+    receive(Data(count: 1_000)) { _ in rendered = true }
     var waited = 0
-    while (tapDelayMs == nil || !rendered) && waited < 200 {          // 最多等 2 秒，避免沒寫完的時候卡住
+    // 最多等 2 秒，避免沒寫完的時候卡住
+    while (tapDelayMs == nil || !rendered) && waited < 200 {
         try? await Task.sleep(for: .milliseconds(10))
         waited += 1
     }
@@ -46,7 +60,8 @@ private func scenario(_ log: LabLog, receive: @escaping (Data, @escaping @MainAc
 private enum L01Bug {
     @MainActor static func run(_ log: LabLog) async {
         await scenario(log) { raw, render in
-            let book = decodeOrderBook(raw)             // 在主執行緒解碼：主執行緒被佔住 80 ms
+            // 在主執行緒解碼：主執行緒被佔住 80 ms
+            let book = decodeOrderBook(raw)
             render(book)
         }
     }
@@ -57,8 +72,9 @@ private enum L01Fixed {
     @MainActor static func run(_ log: LabLog) async {
         await scenario(log) { raw, render in
             Task.detached {
-                let book = decodeOrderBook(raw)         // 在背景執行緒解碼
-                await MainActor.run { render(book) }    // 只把更新畫面丟回主執行緒
+                let book = decodeOrderBook(raw)  // 在背景執行緒解碼
+                // 只把更新畫面丟回主執行緒
+                await MainActor.run { render(book) }
             }
         }
     }
@@ -67,7 +83,11 @@ private enum L01Fixed {
 // MARK: - 演練設定
 private func delayMs(_ lines: [String]) -> Int? {
     lines.first { $0.hasPrefix("按下買入的事件，在佇列裡等了 ") }
-        .flatMap { Int($0.replacingOccurrences(of: "按下買入的事件，在佇列裡等了 ", with: "").replacingOccurrences(of: " ms 才被處理", with: "")) }
+        .flatMap {
+            Int(
+                $0.replacingOccurrences(of: "按下買入的事件，在佇列裡等了 ", with: "")
+                    .replacingOccurrences(of: " ms 才被處理", with: ""))
+        }
 }
 
 extension Platform02Threading {
@@ -81,7 +101,8 @@ extension Platform02Threading {
             "選「修正版」執行：解碼放背景之後，按鈕的事件幾乎立刻被處理。",
             "想一想：為什麼解碼 80 ms，使用者卻等了不到 80 ms？（按鈕在解碼開始後 10 ms 才按，之後的時間都在排隊）",
         ],
-        expectBug: "按下買入的事件等了約 70 到 80 ms 才被處理（解碼佔住主執行緒約 80 ms，按鈕在解碼開始後 10 ms 才按）。",
+        expectBug:
+            "按下買入的事件等了約 70 到 80 ms 才被處理（解碼佔住主執行緒約 80 ms，按鈕在解碼開始後 10 ms 才按）。",
         expectFixed: "按下買入的事件等了不到 5 ms，幾乎立刻被處理。",
         run: { variant, log in
             switch variant {
@@ -90,14 +111,20 @@ extension Platform02Threading {
             }
         },
         checkBug: { lines in
-            if !lines.contains("訂單簿已經顯示") { return "訂單簿沒有顯示：要呼叫 decodeOrderBook(raw)，再呼叫 render" }
+            if !lines.contains("訂單簿已經顯示") {
+                return "訂單簿沒有顯示：要呼叫 decodeOrderBook(raw)，再呼叫 render"
+            }
             guard let ms = delayMs(lines) else { return "演練沒有跑完" }
-            return ms >= 40 ? nil : "Bug 還沒重現（等了 \(ms) ms）：要在主執行緒直接呼叫 decodeOrderBook"
+            return ms >= 40
+                ? nil : "Bug 還沒重現（等了 \(ms) ms）：要在主執行緒直接呼叫 decodeOrderBook"
         },
         checkFixed: { lines in
-            if !lines.contains("訂單簿已經顯示") { return "訂單簿沒有顯示：要呼叫 decodeOrderBook(raw)，再呼叫 render" }
+            if !lines.contains("訂單簿已經顯示") {
+                return "訂單簿沒有顯示：要呼叫 decodeOrderBook(raw)，再呼叫 render"
+            }
             guard let ms = delayMs(lines) else { return "演練沒有跑完" }
-            return ms < 25 ? nil : "按鈕還是等了 \(ms) ms：解碼要放到背景（Task.detached），只有 render 回主執行緒"
+            return ms < 25
+                ? nil : "按鈕還是等了 \(ms) ms：解碼要放到背景（Task.detached），只有 render 回主執行緒"
         }
     )
 }

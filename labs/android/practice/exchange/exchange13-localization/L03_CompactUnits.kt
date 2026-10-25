@@ -1,18 +1,30 @@
-// L03：成交量顯示「10000万」、「1万」少了零頭（万／億的縮寫：沒有進位升級，用 Double 除再捨入）
+// L03：成交量顯示「10000万」、「1万」少了零頭（万／億的縮寫：沒有進位升級，用
+// Double 除再捨入）
 // 對應複習站：Exchange13Localization 第 3 題「万、億這類大數單位怎麼顯示？」
 //
-// 情境：產品規格要把市值、成交量縮寫成大數單位：兩位小數、四捨五入（half-up）、去掉尾端的 0、捨入後剛好到下一個單位要進位升級。
-//        日文：万（10 的 4 次方）、億（8 次方）、兆（12 次方）；繁體中文：萬、億、兆；簡體中文：万、亿、万亿（12 次方）；英文：K、M、B、T（三位一組）。
+// 情境：產品規格要把市值、成交量縮寫成大數單位：兩位小數、四捨五入（half-up）、
+// 去掉尾端的 0、捨入後剛好到下一個單位要進位升級。
+//        日文：万（10 的 4 次方）、億（8 次方）、兆（12 次方）；繁體中文：萬、
+// 億、兆；簡體中文：万、亿、万亿（12 次方）；英文：K、M、B、T（三位一組）。
 //        小於最小單位的數字不縮寫，但要有千分位。演練檢查 11 筆：
-//        ja 9999 → 9,999；12345 → 1.23万；10050 → 1.01万；100000000 → 1億；99999999 → 1億（9999.9999万 捨入成 10000万，要升級成 1億）；
-//        123456789 → 1.23億；1234567890123 → 1.23兆；en 123456789 → 123.46M；zh-Hans 123456789 → 1.23亿；1234567890123 → 1.23万亿；zh-Hant 12345 → 1.23萬。
-//        compact 是有損的顯示，只用在市值、成交量這類輔助標籤，不能用在下單數量、確認頁、損益明細。
+//        ja 9999 → 9,999；12345 → 1.23万；10050 → 1.01万；100000000 → 1億；
+// 99999999 → 1億（9999.9999万 捨入成 10000万，要升級成 1億）；
+//        123456789 → 1.23億；1234567890123 → 1.23兆；en 123456789 → 123.46M；
+// zh-Hans 123456789 → 1.23亿；1234567890123 → 1.23万亿；zh-Hant 12345 → 1.
+// 23萬。
+//        compact 是有損的顯示，只用在市值、成交量這類輔助標籤，
+// 不能用在下單數量、確認頁、損益明細。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.compact）：由大到小找第一個 value >= 單位的單位；用 value.toDouble() / 單位.toDouble() 除，乘 100 後 Math.round 再除以 100.0，
-//      轉成字串（toString()），去掉結尾的 ".0"，接上單位文字；小於最小單位就直接 value.toString()。
-//   ② 修正版（L03Fixed.compact）：整數運算：scaled = (value * 100 + 單位 / 2) / 單位（兩位小數、half-up）；
-//      如果 scaled 已經達到「下一個單位 ÷ 這個單位 × 100」，就改用下一個單位重算（可以連續升級）；整數部分 = scaled / 100，小數 = scaled % 100（去掉尾端的 0）；
+//   ① Bug 版（L03Bug.compact）：由大到小找第一個 value >= 單位的單位；用 value.
+// toDouble() / 單位.toDouble() 除，乘 100 後 Math.round 再除以 100.0，
+//      轉成字串（toString()），去掉結尾的 ".0"，接上單位文字；
+// 小於最小單位就直接 value.toString()。
+//   ② 修正版（L03Fixed.compact）：整數運算：scaled = (value * 100 + 單位 / 2)
+// / 單位（兩位小數、half-up）；
+//      如果 scaled 已經達到「下一個單位 ÷ 這個單位 × 100」，
+// 就改用下一個單位重算（可以連續升級）；整數部分 = scaled / 100，小數 = scaled
+// % 100（去掉尾端的 0）；
 //      小於最小單位就用千分位格式（這個檔案裡已經寫好的 grouped）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange13-localization/L03_CompactUnits.kt
@@ -28,17 +40,42 @@ private class L03Unit(val value: Long, val label: String)
 
 /** 每個語言的單位，由小排到大 */
 private fun units(language: String): List<L03Unit> = when (language) {
-    "ja" -> listOf(L03Unit(10_000, "万"), L03Unit(100_000_000, "億"), L03Unit(1_000_000_000_000, "兆"))
-    "zh-Hant" -> listOf(L03Unit(10_000, "萬"), L03Unit(100_000_000, "億"), L03Unit(1_000_000_000_000, "兆"))
-    "zh-Hans" -> listOf(L03Unit(10_000, "万"), L03Unit(100_000_000, "亿"), L03Unit(1_000_000_000_000, "万亿"))
-    else -> listOf(L03Unit(1_000, "K"), L03Unit(1_000_000, "M"), L03Unit(1_000_000_000, "B"), L03Unit(1_000_000_000_000, "T"))
+    "ja" -> listOf(
+        L03Unit(10_000, "万"),
+        L03Unit(100_000_000, "億"),
+        L03Unit(1_000_000_000_000, "兆"),
+    )
+
+    "zh-Hant" -> listOf(
+        L03Unit(10_000, "萬"),
+        L03Unit(100_000_000, "億"),
+        L03Unit(1_000_000_000_000, "兆"),
+    )
+
+    "zh-Hans" -> listOf(
+        L03Unit(10_000, "万"),
+        L03Unit(100_000_000, "亿"),
+        L03Unit(1_000_000_000_000, "万亿"),
+    )
+
+    else -> listOf(
+        L03Unit(1_000, "K"),
+        L03Unit(1_000_000, "M"),
+        L03Unit(1_000_000_000, "B"),
+        L03Unit(1_000_000_000_000, "T"),
+    )
 }
 
 /** 千分位（小於最小單位的數字用） */
-private fun grouped(value: Long): String = String.format(Locale.US, "%,d", value)
+private fun grouped(value: Long): String =
+    String.format(Locale.US, "%,d", value)
 
 /** （語言, 數值, 正確的結果） */
-private class L03Case(val language: String, val value: Long, val expected: String)
+private class L03Case(
+    val language: String,
+    val value: Long,
+    val expected: String,
+)
 
 private val cases = listOf(
     L03Case("ja", 9_999, "9,999"),
@@ -72,30 +109,43 @@ private fun scenario(log: LabLog, compact: (Long, String) -> String) {
 // MARK: - Bug 版
 private object L03Bug {
     fun compact(value: Long, language: String): String {
-        // TODO ①：由大到小找第一個 value >= it.value 的單位（units(language).lastOrNull），找不到就回傳 value.toString()；
-        //        rounded = Math.round(value.toDouble() / unit.value.toDouble() * 100) / 100.0；text = rounded.toString()，結尾是 ".0" 就去掉；回傳 text + unit.label
+        // TODO ①：由大到小找第一個 value >= it.value 的單位（units(language).
+        // lastOrNull），找不到就回傳 value.toString()；
+        //        rounded = Math.round(value.toDouble() / unit.value.toDouble()
+        // * 100) / 100.0；text = rounded.toString()，結尾是 ".0" 就去掉；回傳
+        // text + unit.label
         return ""
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { value, language -> compact(value, language) }
+    suspend fun run(log: LabLog) = scenario(log) { value, language ->
+        compact(value, language)
+    }
 }
 
 // MARK: - 修正版
 private object L03Fixed {
     fun compact(value: Long, language: String): String {
-        // TODO ②：us = units(language)；index = us.indexOfLast { value >= it.value }，小於 0 就回傳 grouped(value)；
-        //        scaled = (value * 100 + us[index].value / 2) / us[index].value；
-        //        while 還有下一個單位，而且 scaled >= (下一個單位的 value / 這個單位的 value) * 100：index 加 1，用新的單位重算 scaled；
-        //        text = (scaled / 100).toString()；fraction = scaled % 100，不是 0 就加上 "." 和小數（兩位，尾端的 0 去掉）；回傳 text + us[index].label
+        // TODO ②：us = units(language)；index = us.indexOfLast { value >= it.
+        // value }，小於 0 就回傳 grouped(value)；
+        //        scaled = (value * 100 + us[index].value / 2) / us[index].
+        // value；
+        //        while 還有下一個單位，而且 scaled >= (下一個單位的 value /
+        // 這個單位的 value) * 100：index 加 1，用新的單位重算 scaled；
+        //        text = (scaled / 100).toString()；fraction = scaled % 100，
+        // 不是 0 就加上 "." 和小數（兩位，尾端的 0 去掉）；回傳 text +
+        // us[index].label
         return ""
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { value, language -> compact(value, language) }
+    suspend fun run(log: LabLog) = scenario(log) { value, language ->
+        compact(value, language)
+    }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("共 11 筆") }?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("共 11 筆")
+}?.let { Regex("(\\d+) 筆$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l03 = Lab(
     id = "L03",

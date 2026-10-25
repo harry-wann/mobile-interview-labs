@@ -6,6 +6,7 @@ enum Platform02Threading {
         id: "platform-threading",
         code: "Platform02Threading",
         title: "執行緒與主執行緒",
-        labs: [l01, l02, l03, l04, l05, l08, l09]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l04, l05, l08, l09]
     )
 }

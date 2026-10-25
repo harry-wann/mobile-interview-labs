@@ -1,12 +1,17 @@
 // L08：一瞬間來了 200 筆價格，畫面卻停在第 65 筆（callbackFlow 沒加 conflate）
-// 對應複習站：Kotlin05Flow 第 6 題「怎麼用 callbackFlow 把 WebSocket 的 callback 包成 Flow？」
+// 對應複習站：Kotlin05Flow 第 6 題「怎麼用 callbackFlow 把 WebSocket 的
+// callback 包成 Flow？」
 //
-// 情境：WebSocket 在一瞬間推送 200 筆價格（價格 1 到 200，最新的是 200）。畫面處理一筆要 5 ms，比來得慢。
+// 情境：WebSocket 在一瞬間推送 200 筆價格（價格 1 到 200，最新的是 200）。
+// 畫面處理一筆要 5 ms，比來得慢。
 //
 // 你要寫：
-//   ① Bug 版（L08Bug）：用 callbackFlow 包 socket（register、trySend、awaitClose 解除註冊），不加 conflate()。
-//      預設的 buffer 約 64，滿了之後 trySend 失敗，丟掉的是最新的一筆，畫面停在舊價格。
-//   ② 修正版（L08Fixed）：在 callbackFlow { } 後面加 .conflate()，丟的是舊值，最後顯示 200。
+//   ① Bug 版（L08Bug）：用 callbackFlow 包 socket（register、trySend、
+// awaitClose 解除註冊），不加 conflate()。
+//      預設的 buffer 約 64，滿了之後 trySend 失敗，丟掉的是最新的一筆，
+// 畫面停在舊價格。
+//   ② 修正版（L08Fixed）：在 callbackFlow { } 後面加 conflate()，丟的是舊值，
+// 最後顯示 200。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin05-flow/L08_CallbackConflate.kt
 package tw.harry.labs.practice.kotlin05flow
@@ -46,26 +51,37 @@ private class BurstSocket {
     }
 }
 
-/** 演練流程（兩個版本共用）：畫面開始收集 → socket 一瞬間推送 200 筆 → 等畫面處理完，看最後顯示哪一筆 */
-private suspend fun scenario(log: LabLog, socket: BurstSocket, prices: Flow<Int>) {
+/**
+ * 演練流程（兩個版本共用）：畫面開始收集 → socket 一瞬間推送 200 筆 →
+ * 等畫面處理完，看最後顯示哪一筆
+ */
+private suspend fun scenario(
+    log: LabLog,
+    socket: BurstSocket,
+    prices: Flow<Int>,
+) {
     var shown = 0
     val screen = CoroutineScope(Dispatchers.Default).launch {
         prices.collect { price ->
-            delay(5)                                        // 處理一筆要 5 ms
+            delay(5) // 處理一筆要 5 ms
             shown = price
         }
     }
-    withTimeoutOrNull(1_000) { while (socket.listenerCount == 0) delay(1) }   // 等畫面註冊好 listener
+    // 等畫面註冊好 listener
+    withTimeoutOrNull(1_000) { while (socket.listenerCount == 0) delay(1) }
     socket.burst(200)
-    delay(800)                                              // 給畫面足夠的時間處理完
+    // 給畫面足夠的時間處理完
+    delay(800)
     screen.cancelAndJoin()
     log("最後顯示的價格 #$shown（最新的是 #200）")
 }
 
 // MARK: - Bug 版
 private object L08Bug {
-    // TODO ①：用 callbackFlow { } 包 socket：val listener: (Int) -> Unit = { price -> trySend(price) }、socket.register(listener)、
-    //        awaitClose { socket.unregister(listener) }。不要加 conflate()（buffer 滿了，trySend 失敗，丟掉的是最新的）
+    // TODO ①：用 callbackFlow { } 包 socket：val listener: (Int) -> Unit = {
+    // price -> trySend(price) }、socket.register(listener)、
+    //        awaitClose { socket.unregister(listener) }。不要加 conflate()
+    // （buffer 滿了，trySend 失敗，丟掉的是最新的）
     fun prices(socket: BurstSocket): Flow<Int> = emptyFlow()
 
     suspend fun run(log: LabLog) {
@@ -81,7 +97,8 @@ private object L08Fixed {
         socket.register(listener)
         awaitClose { socket.unregister(listener) }
     }
-    // TODO ②：在上面 callbackFlow { } 的右大括號後面加 .conflate()（只保留最新的一筆：丟的是舊值）
+    // TODO ②：在上面 callbackFlow { } 的右大括號後面加 conflate()
+    // （只保留最新的一筆：丟的是舊值）
 
     suspend fun run(log: LabLog) {
         val socket = BurstSocket()
@@ -90,8 +107,9 @@ private object L08Fixed {
 }
 
 // MARK: - 演練設定
-private fun shownPrice(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("最後顯示的價格 #") }?.removePrefix("最後顯示的價格 #")?.substringBefore("（")?.toIntOrNull()
+private fun shownPrice(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("最後顯示的價格 #")
+}?.removePrefix("最後顯示的價格 #")?.substringBefore("（")?.toIntOrNull()
 
 val l08 = Lab(
     id = "L08",

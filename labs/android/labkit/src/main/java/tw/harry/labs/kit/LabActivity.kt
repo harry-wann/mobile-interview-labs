@@ -74,10 +74,14 @@ abstract class LabRootActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val open = intent.getStringExtra("open")
-        val source = intent.getStringExtra("source")?.let { s -> Source.entries.firstOrNull { it.name.equals(s, true) } }
+        val source = intent.getStringExtra("source")?.let { s ->
+            Source.entries.firstOrNull { it.name.equals(s, true) }
+        }
         setContent {
             val dark = isSystemInDarkTheme()
-            MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
+            MaterialTheme(
+                colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
+            ) {
                 Surface(Modifier.fillMaxSize()) {
                     LabRoot(practice, solution, open, source ?: Source.PRACTICE)
                 }
@@ -87,12 +91,20 @@ abstract class LabRootActivity : ComponentActivity() {
 }
 
 private fun findUnit(code: String, sections: List<LabSection>): LabUnit? =
-    sections.firstNotNullOfOrNull { s -> s.units.firstOrNull { it.code == code } }
+    sections.firstNotNullOfOrNull { s ->
+        s.units.firstOrNull { it.code == code }
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LabRoot(practice: List<LabSection>, solution: List<LabSection>, open: String?, initialSource: Source) {
-    // 目前畫面："" 首頁、"Kotlin03Coroutines" 單元、"Kotlin03Coroutines/L05" 演練
+fun LabRoot(
+    practice: List<LabSection>,
+    solution: List<LabSection>,
+    open: String?,
+    initialSource: Source,
+) {
+    // 目前畫面："" 首頁、"Kotlin03Coroutines" 單元、"Kotlin03Coroutines/L05"
+    // 演練
     var route by rememberSaveable { mutableStateOf(open ?: "") }
     val unitCode = route.substringBefore('/')
     val labId = route.substringAfter('/', "")
@@ -118,7 +130,10 @@ fun LabRoot(practice: List<LabSection>, solution: List<LabSection>, open: String
                 },
                 navigationIcon = {
                     if (route.isNotEmpty()) {
-                        TextButton(onClick = { route = if (labId.isNotEmpty()) unitCode else "" }) { Text("‹ 返回") }
+                        TextButton(onClick = {
+                            route =
+                                if (labId.isNotEmpty()) unitCode else ""
+                        }) { Text("‹ 返回") }
                     }
                 },
             )
@@ -128,21 +143,42 @@ fun LabRoot(practice: List<LabSection>, solution: List<LabSection>, open: String
             when {
                 lab != null && unit != null -> key(route) {
                     LabDetail(
-                        practice = findUnit(unit.code, practice)?.labs?.firstOrNull { it.id == lab.id },
+                        practice = findUnit(
+                            unit.code,
+                            practice,
+                        )?.labs?.firstOrNull {
+                            it.id ==
+                                lab.id
+                        },
                         solution = lab,
                         initialSource = initialSource,
                     )
                 }
-                unit != null -> UnitScreen(unit) { route = "${unit.code}/${it.id}" }
-                else -> HomeScreen(solution, onOpen = { route = it.code }, onOpenLab = { code, labId -> route = "$code/$labId" })
+
+                unit != null -> UnitScreen(unit) {
+                    route =
+                        "${unit.code}/${it.id}"
+                }
+
+                else -> HomeScreen(solution, onOpen = {
+                    route = it.code
+                }, onOpenLab = { code, labId ->
+                    route =
+                        "$code/$labId"
+                })
             }
         }
     }
 }
 
 @Composable
-private fun HomeScreen(sections: List<LabSection>, onOpen: (LabUnit) -> Unit, onOpenLab: (String, String) -> Unit) {
-    // 「四大主題」：記憶體、效能、架構、UI/UX 四項各自對應的演練（labs/topics.yaml）；「依區」：技術分區
+private fun HomeScreen(
+    sections: List<LabSection>,
+    onOpen: (LabUnit) -> Unit,
+    onOpenLab: (String, String) -> Unit,
+) {
+    // 「四大主題」：記憶體、效能、架構、UI/UX 四項各自對應的演練（labs/topics.
+    // yaml）；「依區」：技術分區
     var byFocus by rememberSaveable { mutableStateOf(true) }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
@@ -153,38 +189,80 @@ private fun HomeScreen(sections: List<LabSection>, onOpen: (LabUnit) -> Unit, on
                 modifier = Modifier.padding(16.dp),
             )
             Box(Modifier.padding(horizontal = 16.dp)) {
-                Segmented(listOf(true, false), byFocus, { if (it) "四大主題" else "依區" }) { byFocus = it }
+                Segmented(listOf(true, false), byFocus, {
+                    if (it) "四大主題" else "依區"
+                }) {
+                    byFocus =
+                        it
+                }
             }
         }
         if (byFocus) {
             JdFocus.topics.forEachIndexed { index, topic ->
                 item(key = "topic-${topic.id}") {
-                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp)) {
-                        Text("${index + 1}　${topic.title}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                        Text(topic.why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(
+                        Modifier.padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 20.dp,
+                            bottom = 4.dp,
+                        ),
+                    ) {
+                        Text(
+                            "${index + 1}　${topic.title}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            topic.why,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
                 topic.groups.forEachIndexed { gi, group ->
                     item(key = "group-${topic.id}-$gi") {
-                        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)) {
+                        Column(
+                            Modifier.padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 12.dp,
+                                bottom = 4.dp,
+                            ),
+                        ) {
                             Text(group.title, fontWeight = FontWeight.SemiBold)
                             if (group.note != null) {
-                                Text(group.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    group.note,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
-                    items(group.labs, key = { "lab-${it.code}-${it.labId}" }) { ref ->
+                    items(group.labs, key = {
+                        "lab-${it.code}-${it.labId}"
+                    }) { ref ->
                         val unit = findUnit(ref.code, sections)
                         val lab = unit?.labs?.firstOrNull { it.id == ref.labId }
                         if (lab != null) {
                             Column(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { onOpenLab(ref.code, ref.labId) }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    .clickable {
+                                        onOpenLab(ref.code, ref.labId)
+                                    }
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 10.dp,
+                                    ),
                             ) {
                                 Text(lab.title)
-                                Text("${ref.code} ${ref.labId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "${ref.code} ${ref.labId}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                             HorizontalDivider()
                         }
@@ -199,7 +277,11 @@ private fun HomeScreen(sections: List<LabSection>, onOpen: (LabUnit) -> Unit, on
                     section.title,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        top = 16.dp,
+                        bottom = 4.dp,
+                    ),
                 )
             }
             items(section.units, key = { it.code }) { unit ->
@@ -238,7 +320,11 @@ private fun UnitScreen(unit: LabUnit, onOpen: (Lab) -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text("${lab.id}　${lab.title}", fontWeight = FontWeight.SemiBold)
-                Text(lab.question, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    lab.question,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             HorizontalDivider()
         }
@@ -246,7 +332,12 @@ private fun UnitScreen(unit: LabUnit, onOpen: (Lab) -> Unit) {
 }
 
 @Composable
-private fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+private fun <T> Segmented(
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
             SegmentedButton(
@@ -260,24 +351,51 @@ private fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, o
 
 @Composable
 private fun LabDetail(practice: Lab?, solution: Lab, initialSource: Source) {
-    var source by rememberSaveable { mutableStateOf(if (practice == null) Source.SOLUTION else initialSource) }
+    var source by rememberSaveable {
+        mutableStateOf(
+            if (practice ==
+                null
+            ) {
+                Source.SOLUTION
+            } else {
+                initialSource
+            },
+        )
+    }
     var variant by rememberSaveable { mutableStateOf(Variant.BUG) }
     val log = remember { LabLog() }
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
     var showGuide by rememberSaveable { mutableStateOf(true) }
     var showHint by rememberSaveable { mutableStateOf(false) }
-    // 每個「來源 × 版本」最近一次的檢查結果："" = 符合預期，其他 = 還差什麼；沒有 = 還沒執行
+    // 每個「來源 × 版本」最近一次的檢查結果："" = 符合預期，其他 = 還差什麼；
+    // 沒有 = 還沒執行
     val results = remember { mutableStateMapOf<String, String>() }
     val lab = if (source == Source.PRACTICE) practice else solution
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Segmented(Source.entries, source, { it.title }) { job?.cancel(); source = it }
-            Segmented(Variant.entries, variant, { it.title }) { job?.cancel(); variant = it }
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Segmented(Source.entries, source, {
+                it.title
+            }) {
+                job?.cancel(); source =
+                    it
+            }
+            Segmented(Variant.entries, variant, {
+                it.title
+            }) {
+                job?.cancel(); variant =
+                    it
+            }
         }
         if (lab != null) {
-            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Variant.entries.forEach { v ->
                     val r = results["${source.name}-${v.name}"]
                     val text = when {
@@ -310,7 +428,10 @@ private fun LabDetail(practice: Lab?, solution: Lab, initialSource: Source) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (lab == null) {
-                Text("練習檔案還沒建立。請先切到「解答」。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "練習檔案還沒建立。請先切到「解答」。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 return@Column
             }
             if (lab.bugCrashes && variant == Variant.BUG) {
@@ -325,34 +446,64 @@ private fun LabDetail(practice: Lab?, solution: Lab, initialSource: Source) {
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.5f,
+                            ),
+                            RoundedCornerShape(10.dp),
+                        )
                         .padding(10.dp),
                 ) {
                     key(source, variant) { demo(variant, log) }
                 }
             }
-            TextButton(onClick = { showGuide = !showGuide }) { Text(if (showGuide) "▾ 題目與步驟" else "▸ 題目與步驟") }
+            TextButton(onClick = {
+                showGuide = !showGuide
+            }) { Text(if (showGuide) "▾ 題目與步驟" else "▸ 題目與步驟") }
             if (showGuide) {
-                Text(lab.question, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    lab.question,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(lab.goal)
-                lab.steps.forEachIndexed { i, step -> Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium) }
+                lab.steps.forEachIndexed {
+                    i,
+                    step,
+                    ->
+                    Text(
+                        "${i + 1}. $step",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Text(
                     "檔案：${source.name.lowercase()}/${lab.file}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = { showHint = !showHint }) { Text(if (showHint) "▾ 提示：寫對了會看到什麼" else "▸ 提示：寫對了會看到什麼") }
+                TextButton(onClick = {
+                    showHint = !showHint
+                }) { Text(if (showHint) "▾ 提示：寫對了會看到什麼" else "▸ 提示：寫對了會看到什麼") }
                 if (showHint) {
-                    Text("Bug 版：${lab.expectBug}", style = MaterialTheme.typography.bodyMedium)
-                    Text("修正版：${lab.expectFixed}", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Bug 版：${lab.expectBug}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "修正版：${lab.expectFixed}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
         }
 
         HorizontalDivider()
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(
+                horizontal = 16.dp,
+                vertical = 8.dp,
+            ),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val running = job?.isActive == true
@@ -370,8 +521,17 @@ private fun LabDetail(practice: Lab?, solution: Lab, initialSource: Source) {
                                 run(v, log)
                                 if (check != null) {
                                     val reason = check(log.textsSince(mark))
-                                    results["${s.name}-${v.name}"] = reason ?: ""
-                                    log(if (reason == null) "✓ 符合預期" else "✗ 還沒符合預期：$reason")
+                                    results["${s.name}-${v.name}"] =
+                                        reason ?: ""
+                                    log(
+                                        if (reason ==
+                                            null
+                                        ) {
+                                            "✓ 符合預期"
+                                        } else {
+                                            "✗ 還沒符合預期：$reason"
+                                        },
+                                    )
                                 }
                             } finally {
                                 job = null
@@ -396,7 +556,9 @@ fun LogConsole(log: LabLog, modifier: Modifier = Modifier) {
     LaunchedEffect(lines.size) {
         if (lines.isNotEmpty()) state.scrollToItem(lines.size - 1)
     }
-    SelectionContainer(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+    SelectionContainer(
+        modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
         LazyColumn(state = state, modifier = Modifier.padding(8.dp)) {
             items(lines, key = { it.id }) { line ->
                 Text(
@@ -404,9 +566,14 @@ fun LogConsole(log: LabLog, modifier: Modifier = Modifier) {
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     color = when {
-                        line.text.startsWith("────") -> MaterialTheme.colorScheme.primary
+                        line.text.startsWith(
+                            "────",
+                        ) -> MaterialTheme.colorScheme.primary
+
                         line.text.startsWith("✓") -> Color(0xFF2E7D32)
+
                         line.text.startsWith("✗") -> Color(0xFFE65100)
+
                         else -> MaterialTheme.colorScheme.onSurface
                     },
                 )

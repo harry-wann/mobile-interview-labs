@@ -1,9 +1,14 @@
-// L08：行情每秒幾百筆，每一筆都丟回主執行緒，畫面被淹沒（背景合併，固定頻率更新畫面）
-// 對應複習站：Platform02Threading 第 6 題「行情每秒推幾百筆，執行緒要怎麼設計？」
+// L08：行情每秒幾百筆，每一筆都丟回主執行緒，畫面被淹沒（背景合併，
+// 固定頻率更新畫面）
+// 對應複習站：Platform02Threading 第 6 題「行情每秒推幾百筆，
+// 執行緒要怎麼設計？」
 //
-// 情境：行情頁收到 WebSocket 推來的報價。演練送出 300 筆報價（6 檔幣種輪流，每 2 ms 一筆，約 0.6 秒），看畫面被更新了幾次，以及最後畫面上的價格對不對。
-// Bug 版：每收到一筆就 DispatchQueue.main.async 更新一次畫面。300 筆就更新 300 次，主執行緒的佇列被塞滿，觸控排在後面。
-// 修正版：收到的報價先存進 actor 裡的字典（每檔只留最新一筆），主執行緒每 200 ms 取一次整份快照，只更新畫面一次。
+// 情境：行情頁收到 WebSocket 推來的報價。演練送出 300 筆報價（6 檔幣種輪流，每
+// 2 ms 一筆，約 0.6 秒），看畫面被更新了幾次，以及最後畫面上的價格對不對。
+// Bug 版：每收到一筆就 DispatchQueue.main.async 更新一次畫面。300 筆就更新 300
+// 次，主執行緒的佇列被塞滿，觸控排在後面。
+// 修正版：收到的報價先存進 actor 裡的字典（每檔只留最新一筆），主執行緒每 200
+// ms 取一次整份快照，只更新畫面一次。
 import Foundation
 import LabKit
 
@@ -26,22 +31,27 @@ private final class MarketScreen {
 
 /// 收到報價之後要做的事（兩個版本各自實作）
 private protocol Pipeline: AnyObject, Sendable {
-    func receive(_ tick: Tick)                 // 在背景執行緒被呼叫（WebSocket 收到一筆）
-    func finish() async                        // 演練結束前，等還沒處理完的更新都處理完
+    // 在背景執行緒被呼叫（WebSocket 收到一筆）
+    func receive(_ tick: Tick)
+    // 演練結束前，等還沒處理完的更新都處理完
+    func finish() async
 }
 
 private let symbols = ["BTC", "ETH", "XRP", "LTC", "ADA", "DOT"]
 
 /// 演練流程（兩個版本共用）：背景每 2 ms 送一筆報價，共 300 筆
 @MainActor
-private func scenario(_ log: LabLog, makePipeline: (MarketScreen) -> Pipeline) async {
+private func scenario(
+    _ log: LabLog, makePipeline: (MarketScreen) -> Pipeline
+) async {
     let screen = MarketScreen()
     let pipeline = makePipeline(screen)
     var lastPrice: [String: Int] = [:]
     await withCheckedContinuation { continuation in
         DispatchQueue.global().async {
             for i in 0..<300 {
-                let tick = Tick(symbol: symbols[i % symbols.count], price: 1_000 + i)
+                let tick = Tick(
+                    symbol: symbols[i % symbols.count], price: 1_000 + i)
                 pipeline.receive(tick)
                 Thread.sleep(forTimeInterval: 0.002)
             }
@@ -65,7 +75,10 @@ private enum L08Bug {
 
         func receive(_ tick: Tick) {
             DispatchQueue.main.async { [screen] in
-                MainActor.assumeIsolated { screen.render([tick.symbol: tick.price]) }     // 每一筆都排進主執行緒，更新一次畫面
+                // 每一筆都排進主執行緒，更新一次畫面
+                MainActor.assumeIsolated {
+                    screen.render([tick.symbol: tick.price])
+                }
             }
         }
 
@@ -98,13 +111,16 @@ private enum L08Fixed {
             let store = store
             let (stream, continuation) = AsyncStream.makeStream(of: Tick.self)
             self.continuation = continuation
-            consumer = Task {                                                    // 背景合併：依序放進字典，不碰主執行緒
+            // 背景合併：依序放進字典，不碰主執行緒
+            consumer = Task {
                 for await tick in stream { await store.update(tick) }
             }
             refresher = Task { @MainActor in
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(200))               // 固定頻率
-                    screen.render(await store.snapshot())                        // 整份快照，只更新畫面一次
+                    // 固定頻率
+                    try? await Task.sleep(for: .milliseconds(200))
+                    // 整份快照，只更新畫面一次
+                    screen.render(await store.snapshot())
                 }
             }
         }
@@ -115,8 +131,10 @@ private enum L08Fixed {
 
         func finish() async {
             continuation.finish()
-            await consumer.value                                                 // 全部放進字典
-            try? await Task.sleep(for: .milliseconds(250))                       // 讓最後一次更新跑完
+            // 全部放進字典
+            await consumer.value
+            // 讓最後一次更新跑完
+            try? await Task.sleep(for: .milliseconds(250))
             refresher.cancel()
         }
     }
@@ -129,7 +147,11 @@ private enum L08Fixed {
 // MARK: - 演練設定
 private func updateCount(_ lines: [String]) -> Int? {
     lines.first { $0.hasPrefix("收到 300 筆報價，畫面更新了 ") }
-        .flatMap { Int($0.replacingOccurrences(of: "收到 300 筆報價，畫面更新了 ", with: "").replacingOccurrences(of: " 次", with: "")) }
+        .flatMap {
+            Int(
+                $0.replacingOccurrences(of: "收到 300 筆報價，畫面更新了 ", with: "")
+                    .replacingOccurrences(of: " 次", with: ""))
+        }
 }
 
 extension Platform02Threading {
@@ -137,7 +159,8 @@ extension Platform02Threading {
         id: "L08",
         title: "每一筆報價都更新畫面，主執行緒被淹沒",
         question: "第 6 題：行情每秒推幾百筆，執行緒要怎麼設計？",
-        goal: "報價在背景合併（每檔只留最新一筆），再用固定頻率把整份快照交給主執行緒。畫面更新的次數要遠少於報價的筆數，而且最後的價格要是對的。",
+        goal:
+            "報價在背景合併（每檔只留最新一筆），再用固定頻率把整份快照交給主執行緒。畫面更新的次數要遠少於報價的筆數，而且最後的價格要是對的。",
         steps: [
             "選「Bug 版」按執行，看「畫面更新了幾次」：和收到的報價筆數比一比。",
             "選「修正版」執行：畫面只更新幾次？最後畫面上的價格是不是每檔的最後一筆？",
@@ -153,13 +176,19 @@ extension Platform02Threading {
         },
         checkBug: { lines in
             guard let n = updateCount(lines) else { return "演練沒有跑完" }
-            return n >= 250 ? nil : "Bug 還沒重現（畫面只更新 \(n) 次）：receive 要對每一筆報價都 DispatchQueue.main.async 更新一次畫面"
+            return n >= 250
+                ? nil
+                : "Bug 還沒重現（畫面只更新 \(n) 次）：receive 要對每一筆報價都 DispatchQueue.main.async 更新一次畫面"
         },
         checkFixed: { lines in
             guard let n = updateCount(lines) else { return "演練沒有跑完" }
             if n == 0 { return "畫面一次都沒有更新：每 200 ms 要取一次快照，呼叫 screen.render" }
-            if n > 12 { return "畫面更新了 \(n) 次，太多了：receive 只存進字典，每 200 ms 才取一次快照更新畫面" }
-            if !lines.contains("最後畫面上的價格和每檔最後一筆一致") { return "最後畫面上的價格不對：每一檔都要保留最新的一筆，快照要包含全部 6 檔" }
+            if n > 12 {
+                return "畫面更新了 \(n) 次，太多了：receive 只存進字典，每 200 ms 才取一次快照更新畫面"
+            }
+            if !lines.contains("最後畫面上的價格和每檔最後一筆一致") {
+                return "最後畫面上的價格不對：每一檔都要保留最新的一筆，快照要包含全部 6 檔"
+            }
             return nil
         }
     )

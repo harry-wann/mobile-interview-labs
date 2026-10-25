@@ -1,10 +1,14 @@
-// L04：存快照的時候，畫面讀一下價格就被卡住（鎖裡面做 I/O，主執行緒等背景執行緒持有的鎖）
+// L04：存快照的時候，畫面讀一下價格就被卡住（鎖裡面做 I/O，
+// 主執行緒等背景執行緒持有的鎖）
 // 對應複習站：Advanced04Races 第 5 題「priority inversion 是什麼？」
 //
-// 情境：價格表同時被兩個地方使用：背景執行緒（優先權比較低，能分到的 CPU 時間比較少）每隔一陣子把整份價格寫到檔案（存快照，約 400 毫秒的 I/O），
+// 情境：價格表同時被兩個地方使用：背景執行緒（優先權比較低，能分到的 CPU
+// 時間比較少）每隔一陣子把整份價格寫到檔案（存快照，約 400 毫秒的 I/O），
 //        主執行緒（演練用 fake-main 這條執行緒代表）要讀一筆最新價來顯示。
-// Bug 版：背景執行緒在 synchronized(lock) 裡面「持鎖的期間寫檔案」。主執行緒要讀價格，得等整個寫檔案做完，卡約 400 毫秒；
-//        如果背景執行緒又因為優先權低而分不到 CPU，主執行緒會等更久（priority inversion）。主執行緒卡超過 5 秒就是 ANR。
+// Bug 版：背景執行緒在 synchronized(lock) 裡面「持鎖的期間寫檔案」。
+// 主執行緒要讀價格，得等整個寫檔案做完，卡約 400 毫秒；
+//        如果背景執行緒又因為優先權低而分不到 CPU，主執行緒會等更久（priority
+// inversion）。主執行緒卡超過 5 秒就是 ANR。
 // 修正版：持鎖期間只複製資料（幾微秒），寫檔案放到鎖外面。主執行緒幾乎不用等。
 package tw.harry.labs.solution.advanced04races
 
@@ -16,36 +20,48 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 演練流程（兩個版本共用）：背景開始存快照，fake-main 在存的途中讀價格，量它等了多久 */
-private suspend fun scenario(log: LabLog, saveSnapshot: (started: CountDownLatch) -> Unit, readLatest: () -> Int) =
-    withContext(Dispatchers.Default) {
-        val started = CountDownLatch(1)
-        val saver = thread(name = "snapshot-writer") { saveSnapshot(started) }
-        started.await()                                          // 等背景開始存（Bug 版是已經拿到鎖）
-        Thread.sleep(20)
-        var price = 0
-        var waited = 0.0
-        val reader = thread(name = "fake-main") {
-            val t0 = a04NowMs()
-            price = readLatest()                                 // 「主執行緒」讀一筆價格
-            waited = a04NowMs() - t0
-        }
-        reader.join()
-        saver.join()
-        log("主執行緒讀到價格 $price，等了 ${waited.toInt()} ms")
-        log("快照寫完了")
+/**
+ * 演練流程（兩個版本共用）：背景開始存快照，fake-main 在存的途中讀價格，
+ * 量它等了多久
+ */
+private suspend fun scenario(
+    log: LabLog,
+    saveSnapshot: (started: CountDownLatch) -> Unit,
+    readLatest: () -> Int,
+) = withContext(Dispatchers.Default) {
+    val started = CountDownLatch(1)
+    val saver = thread(name = "snapshot-writer") { saveSnapshot(started) }
+    // 等背景開始存（Bug 版是已經拿到鎖）
+    started.await()
+    Thread.sleep(20)
+    var price = 0
+    var waited = 0.0
+    val reader = thread(name = "fake-main") {
+        val t0 = a04NowMs()
+        // 「主執行緒」讀一筆價格
+        price = readLatest()
+        waited = a04NowMs() - t0
     }
+    reader.join()
+    saver.join()
+    log("主執行緒讀到價格 $price，等了 ${waited.toInt()} ms")
+    log("快照寫完了")
+}
 
 // MARK: - Bug 版
 private object L04Bug {
     class PriceTable {
         private val lock = Any()
-        private val prices = mutableMapOf("BTC/JPY" to 15_000_000, "ETH/JPY" to 400_000)
+        private val prices = mutableMapOf(
+            "BTC/JPY" to 15_000_000,
+            "ETH/JPY" to 400_000,
+        )
 
         fun saveSnapshot(started: CountDownLatch) {
             synchronized(lock) {
                 started.countDown()
-                Thread.sleep(400)                                // 持鎖的期間寫檔案（示意）：I/O 在鎖裡面
+                // 持鎖的期間寫檔案（示意）：I/O 在鎖裡面
+                Thread.sleep(400)
             }
         }
 
@@ -54,7 +70,9 @@ private object L04Bug {
 
     suspend fun run(log: LabLog) {
         val table = PriceTable()
-        scenario(log, saveSnapshot = { table.saveSnapshot(it) }, readLatest = { table.latest() })
+        scenario(log, saveSnapshot = {
+            table.saveSnapshot(it)
+        }, readLatest = { table.latest() })
     }
 }
 
@@ -62,12 +80,17 @@ private object L04Bug {
 private object L04Fixed {
     class PriceTable {
         private val lock = Any()
-        private val prices = mutableMapOf("BTC/JPY" to 15_000_000, "ETH/JPY" to 400_000)
+        private val prices = mutableMapOf(
+            "BTC/JPY" to 15_000_000,
+            "ETH/JPY" to 400_000,
+        )
 
         fun saveSnapshot(started: CountDownLatch) {
-            val copy = synchronized(lock) { prices.toMap() }     // 持鎖期間只複製資料
+            // 持鎖期間只複製資料
+            val copy = synchronized(lock) { prices.toMap() }
             started.countDown()
-            Thread.sleep(400)                                    // 寫檔案在鎖外面
+            // 寫檔案在鎖外面
+            Thread.sleep(400)
             check(copy.isNotEmpty())
         }
 
@@ -76,7 +99,9 @@ private object L04Fixed {
 
     suspend fun run(log: LabLog) {
         val table = PriceTable()
-        scenario(log, saveSnapshot = { table.saveSnapshot(it) }, readLatest = { table.latest() })
+        scenario(log, saveSnapshot = {
+            table.saveSnapshot(it)
+        }, readLatest = { table.latest() })
     }
 }
 

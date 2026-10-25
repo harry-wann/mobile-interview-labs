@@ -1,10 +1,15 @@
-// L02：剛更新過價格的資料讀不到，容量 2 的快取卻存了 3 筆（LRU 的 put 遇到已經存在的 key）
-// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put 都很快？」
+// L02：剛更新過價格的資料讀不到，容量 2 的快取卻存了 3 筆（LRU 的 put
+// 遇到已經存在的 key）
+// 對應複習站：Coding01DataStructures 第 3 題「LRU 快取怎麼做到 get、put
+// 都很快？」
 //
 // 情境：價格快取，容量 2。放進 BTC、ETH，BTC 的價格有更新，再放進 XRP。
-// Bug 版：put 不管 key 存不存在，一律建立新節點。BTC 的舊節點還留在串列上，Map 卻指向新節點；
-//        放進 XRP 超過容量時，淘汰了串列最後面那個舊的 BTC 節點，同時把 Map 裡「BTC」這個 key 也刪了，剛更新的 BTC 就讀不到。
-// 修正版：key 已經存在就更新 value、移到最前面，不建立新節點，串列和 Map 的筆數永遠一樣。
+// Bug 版：put 不管 key 存不存在，一律建立新節點。BTC 的舊節點還留在串列上，Map
+// 卻指向新節點；
+//        放進 XRP 超過容量時，淘汰了串列最後面那個舊的 BTC 節點，同時把 Map
+// 裡「BTC」這個 key 也刪了，剛更新的 BTC 就讀不到。
+// 修正版：key 已經存在就更新 value、移到最前面，不建立新節點，串列和 Map
+// 的筆數永遠一樣。
 package tw.harry.labs.solution.coding01datastructures
 
 import tw.harry.labs.kit.Lab
@@ -47,7 +52,8 @@ private object L02Bug {
         }
 
         override fun put(key: String, value: Int) {
-            val node = C01Node(key, value)                  // 不管 key 存不存在，一律建立新節點
+            // 不管 key 存不存在，一律建立新節點
+            val node = C01Node(key, value)
             map[key] = node
             list.insertAfterHead(node)
             if (map.size > capacity) {
@@ -76,7 +82,8 @@ private object L02Fixed {
 
         override fun put(key: String, value: Int) {
             val existing = map[key]
-            if (existing != null) {                         // key 已經存在：更新值、移到最前面，數量不變
+            // key 已經存在：更新值、移到最前面，數量不變
+            if (existing != null) {
                 existing.value = value
                 list.unlink(existing)
                 list.insertAfterHead(existing)
@@ -118,17 +125,27 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("串列上有") } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+            lines.none {
+                it.startsWith("串列上有")
+            } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+
             "串列上有 3 個節點（容量 2）" !in lines -> "Bug 還沒重現：put 要一律建立新節點，舊的 BTC 節點才會留在串列上"
+
             "get(BTC) → 找不到" !in lines -> "Bug 還沒重現：淘汰舊 BTC 節點時，也會把 Map 裡的 BTC 刪掉，剛更新的 BTC 就讀不到"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("串列上有") } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+            lines.none {
+                it.startsWith("串列上有")
+            } -> "演練沒有跑完：要用 scenario(log, cache, capacity) 執行"
+
             "串列上有 2 個節點（容量 2）" !in lines -> "key 已經存在時不能建立新節點：更新 value、unlink 再 insertAfterHead 就好"
+
             "get(BTC) → 3" !in lines -> "更新過的 BTC 應該讀得到 3：put 已存在的 key 要更新 node.value"
+
             else -> null
         }
     },

@@ -1,20 +1,31 @@
 // L03：覆蓋率 100%、測試全過，但程式被改壞測試還是過（沒有檢查邊界）
 // 對應複習站：Testing01Strategy 第 4 題「怎麼知道測試真的有用？」
 //
-// 情境：單筆出金達到 100 萬日圓，就要再做一次兩步驟驗證。T01Withdrawal.requiresTwoFactor 是被測的函式。
-//       mutation testing 的做法：故意把程式改壞（這裡手寫一個 requiresTwoFactorMutant：>= 變成 >），再跑一次測試。
+// 情境：單筆出金達到 100 萬日圓，就要再做一次兩步驟驗證。T01Withdrawal.
+// requiresTwoFactor 是被測的函式。
+//       mutation testing 的做法：故意把程式改壞（這裡手寫一個
+// requiresTwoFactorMutant：>= 變成 >），再跑一次測試。
 //       演練把同一個測試，分別對「正確的實作」和「被改壞的實作」各跑一次。
-// Bug 版：測試只驗兩個離邊界很遠的例子（500 萬要驗證、100 日圓不用）。兩個分支都跑到了，覆蓋率 100%，
-//        但被改壞的實作（正好 100 萬日圓不再要求驗證）測試照樣通過，這個 bug 會直接上線。
-// 修正版：加上邊界的例子：999,999、1,000,000、1,000,001。被改壞的實作在 1,000,000 回傳 false，測試失敗，抓到了。
+// Bug 版：測試只驗兩個離邊界很遠的例子（500 萬要驗證、100 日圓不用）。
+// 兩個分支都跑到了，覆蓋率 100%，
+//        但被改壞的實作（正好 100 萬日圓不再要求驗證）測試照樣通過，這個 bug
+// 會直接上線。
+// 修正版：加上邊界的例子：999,999、1,000,000、1,000,001。被改壞的實作在 1,000,
+// 000 回傳 false，測試失敗，抓到了。
 package tw.harry.labs.solution.testing01strategy
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 把同一個測試分別對「正確的實作」和「被改壞的實作」各跑一次，並記下函式被呼叫了幾次、兩個分支有沒有跑到 */
-private fun runMatrix(log: LabLog, test: (requires: (Int) -> Boolean, t: T01Expect) -> Unit) {
+/**
+ * 把同一個測試分別對「正確的實作」和「被改壞的實作」各跑一次，
+ * 並記下函式被呼叫了幾次、兩個分支有沒有跑到
+ */
+private fun runMatrix(
+    log: LabLog,
+    test: (requires: (Int) -> Boolean, t: T01Expect) -> Unit,
+) {
     val implementations = listOf<Pair<String, (Int) -> Boolean>>(
         "正確的實作" to T01Withdrawal::requiresTwoFactor,
         "被改壞的實作（>= 改成 >）" to T01Withdrawal::requiresTwoFactorMutant,
@@ -31,9 +42,13 @@ private fun runMatrix(log: LabLog, test: (requires: (Int) -> Boolean, t: T01Expe
         }
         val t = T01Expect()
         test(spy, t)
-        log("$name：${if (t.failures.isEmpty()) "測試通過" else "測試失敗（${t.failures[0]}）"}")
+        log(
+            "$name：${if (t.failures.isEmpty()) "測試通過" else "測試失敗（${t.failures[0]}）"}",
+        )
         if (name == "正確的實作") {
-            log("覆蓋：函式被呼叫 $calls 次，true 分支${if (sawTrue) "有" else "沒有"}跑到，false 分支${if (sawFalse) "有" else "沒有"}跑到")
+            log(
+                "覆蓋：函式被呼叫 $calls 次，true 分支${if (sawTrue) "有" else "沒有"}跑到，false 分支${if (sawFalse) "有" else "沒有"}跑到",
+            )
         }
     }
 }
@@ -41,7 +56,7 @@ private fun runMatrix(log: LabLog, test: (requires: (Int) -> Boolean, t: T01Expe
 // MARK: - Bug 版
 private object L03Bug {
     fun test(requires: (Int) -> Boolean, t: T01Expect) {
-        t.equal(requires(5_000_000), true)      // 離邊界很遠的例子
+        t.equal(requires(5_000_000), true) // 離邊界很遠的例子
         t.equal(requires(100), false)
     }
 
@@ -53,9 +68,10 @@ private object L03Fixed {
     fun test(requires: (Int) -> Boolean, t: T01Expect) {
         t.equal(requires(5_000_000), true)
         t.equal(requires(100), false)
-        t.equal(requires(999_999), false)       // 邊界前一個
-        t.equal(requires(1_000_000), true)      // 剛好在邊界：>= 和 > 在這裡不一樣
-        t.equal(requires(1_000_001), true)      // 邊界後一個
+        t.equal(requires(999_999), false) // 邊界前一個
+        // 剛好在邊界：>= 和 > 在這裡不一樣
+        t.equal(requires(1_000_000), true)
+        t.equal(requires(1_000_001), true) // 邊界後一個
     }
 
     fun run(log: LabLog) = runMatrix(log, ::test)
@@ -92,8 +108,16 @@ val l03 = Lab(
     checkFixed = { lines ->
         when {
             "正確的實作：測試通過" !in lines -> "測試在正確的實作上要通過"
-            lines.none { it.startsWith("覆蓋：函式被呼叫 ") && !it.startsWith("覆蓋：函式被呼叫 0 次") } -> "測試沒有呼叫 requires：要驗邊界 999_999、1_000_000、1_000_001"
-            lines.none { it.startsWith("被改壞的實作（>= 改成 >）：測試失敗") } -> "被改壞的實作也通過了：補上剛好 1_000_000 的例子，預期 true"
+
+            lines.none {
+                it.startsWith("覆蓋：函式被呼叫 ") &&
+                    !it.startsWith("覆蓋：函式被呼叫 0 次")
+            } -> "測試沒有呼叫 requires：要驗邊界 999_999、1_000_000、1_000_001"
+
+            lines.none {
+                it.startsWith("被改壞的實作（>= 改成 >）：測試失敗")
+            } -> "被改壞的實作也通過了：補上剛好 1_000_000 的例子，預期 true"
+
             else -> null
         }
     },

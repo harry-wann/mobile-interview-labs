@@ -41,7 +41,13 @@ class Lab(
     val checkBug: ((List<String>) -> String?)? = null,
     val checkFixed: ((List<String>) -> String?)? = null,
 ) {
-    fun check(variant: Variant) = if (variant == Variant.BUG) checkBug else checkFixed
+    fun check(variant: Variant) = if (variant ==
+        Variant.BUG
+    ) {
+        checkBug
+    } else {
+        checkFixed
+    }
 }
 
 /** 一個單元（對應複習站的一個單元，例如 Kotlin03Coroutines） */
@@ -55,8 +61,4 @@ class LabUnit(
 )
 
 /** 一區（一個 module），例如 Kotlin & Compose */
-class LabSection(
-    val id: String,
-    val title: String,
-    val units: List<LabUnit>,
-)
+class LabSection(val id: String, val title: String, val units: List<LabUnit>)

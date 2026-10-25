@@ -1,12 +1,19 @@
-// L02：成交量比委託量還多，訂單卻顯示「已成交」（把伺服器給的累計成交量當成增量加起來）
-// 對應複習站：Exchange08OrderFlow 第 2 題「訂單有哪些狀態？事件亂序或重複時，怎麼合併成正確的狀態？」
+// L02：成交量比委託量還多，訂單卻顯示「已成交」
+// （把伺服器給的累計成交量當成增量加起來）
+// 對應複習站：Exchange08OrderFlow 第 2 題「訂單有哪些狀態？事件亂序或重複時，
+// 怎麼合併成正確的狀態？」
 //
-// 情境：委託量 1.0 BTC。伺服器每次推送「到目前為止一共成交多少」（累計值），依序到達：0.1、0.4、0.2（過期的）、0.4（重複的）、0.9。
-//        正確的最終狀態：partialFilled，成交量 0.9；其中 0.2 和第二個 0.4 是過期或重複的，要忽略（2 個）。
+// 情境：委託量 1.0 BTC。伺服器每次推送「到目前為止一共成交多少」（累計值），
+// 依序到達：0.1、0.4、0.2（過期的）、0.4（重複的）、0.9。
+//        正確的最終狀態：partialFilled，成交量 0.9；其中 0.2 和第二個 0.4
+// 是過期或重複的，要忽略（2 個）。
 //
 // 你要寫：
-//   ① Bug 版（L02Bug.Merge.fill）：把 total 加到 filled 上（增量的想法），filled 大於等於 amount 就是 FILLED，否則 PARTIAL_FILLED。
-//   ② 修正版（L02Fixed.Merge.fill）：total 小於等於目前的 filled（過期、重複）或大於 amount（無效）就原樣回傳；否則 filled 換成 total，等於 amount 是 FILLED，否則 PARTIAL_FILLED。
+//   ① Bug 版（L02Bug.Merge.fill）：把 total 加到 filled 上（增量的想法），
+// filled 大於等於 amount 就是 FILLED，否則 PARTIAL_FILLED。
+//   ② 修正版（L02Fixed.Merge.fill）：total 小於等於目前的 filled（過期、重複）
+// 或大於 amount（無效）就原樣回傳；否則 filled 換成 total，等於 amount 是
+// FILLED，否則 PARTIAL_FILLED。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange08-order-flow/L02_CumulativeFill.kt
 package tw.harry.labs.practice.exchange08orderflow
@@ -22,10 +29,16 @@ private enum class L02Status(val label: String) {
     FILLED("filled"),
 }
 
-private data class L02Order(val status: L02Status, val filled: BigDecimal, val amount: BigDecimal)
+private data class L02Order(
+    val status: L02Status,
+    val filled: BigDecimal,
+    val amount: BigDecimal,
+)
 
 private interface L02Reducer {
-    /** 累計成交量 total 的 fill 事件到達：回傳新的訂單（事件要忽略就原樣回傳） */
+    /**
+     * 累計成交量 total 的 fill 事件到達：回傳新的訂單（事件要忽略就原樣回傳）
+     */
     fun fill(order: L02Order, total: BigDecimal): L02Order
 }
 
@@ -35,12 +48,22 @@ private fun scenario(log: LabLog, reducer: L02Reducer) {
     var ignored = 0
     for (total in listOf("0.1", "0.4", "0.2", "0.4", "0.9")) {
         val next = reducer.fill(order, e08(total))
-        val isIgnored = next.status == order.status && next.filled.compareTo(order.filled) == 0
+        val isIgnored =
+            next.status == order.status &&
+                next.filled.compareTo(order.filled) == 0
         if (isIgnored) ignored++
         order = next
-        log("fill(累計 $total) → ${order.status.label} ${e08Text(order.filled)}${if (isIgnored) "（忽略）" else ""}")
+        log(
+            "fill(累計 $total) → ${order.status.label} ${e08Text(
+                order.filled,
+            )}${if (isIgnored) "（忽略）" else ""}",
+        )
     }
-    log("最後：${order.status.label} ${e08Text(order.filled)}，忽略了 $ignored 個過期或重複的事件（正確答案：partialFilled 0.9，忽略 2 個）")
+    log(
+        "最後：${order.status.label} ${e08Text(
+            order.filled,
+        )}，忽略了 $ignored 個過期或重複的事件（正確答案：partialFilled 0.9，忽略 2 個）",
+    )
 }
 
 // MARK: - Bug 版
@@ -48,7 +71,9 @@ private object L02Bug {
     class Merge : L02Reducer {
         override fun fill(order: L02Order, total: BigDecimal): L02Order {
             // TODO ①：filled = order.filled + total（把累計值當成增量加上去）；
-            //        status：filled 大於等於 amount 是 FILLED，否則 PARTIAL_FILLED；用 order.copy(...) 回傳。目前原樣回傳 order 只是佔位
+            //        status：filled 大於等於 amount 是 FILLED，否則
+            // PARTIAL_FILLED；用 order.copy(...) 回傳。目前原樣回傳 order
+            // 只是佔位
             return order
         }
     }
@@ -60,8 +85,10 @@ private object L02Bug {
 private object L02Fixed {
     class Merge : L02Reducer {
         override fun fill(order: L02Order, total: BigDecimal): L02Order {
-            // TODO ②：total 小於等於 order.filled（過期、重複），或大於 order.amount（無效）：原樣回傳 order；
-            //        否則 filled 換成 total，status：total 等於 amount 是 FILLED，否則 PARTIAL_FILLED；用 order.copy(...) 回傳。
+            // TODO ②：total 小於等於 order.filled（過期、重複），或大於 order.
+            // amount（無效）：原樣回傳 order；
+            //        否則 filled 換成 total，status：total 等於 amount 是
+            // FILLED，否則 PARTIAL_FILLED；用 order.copy(...) 回傳。
             //        目前原樣回傳 order 只是佔位
             return order
         }
@@ -94,18 +121,32 @@ val l02 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, reducer) 執行"
-            lines.none { it.startsWith("最後：filled 2，忽略了 0 個") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, reducer) 執行"
+            }
+
+            lines.none { it.startsWith("最後：filled 2，忽略了 0 個") } -> {
                 "Bug 還沒重現：fill 要把 total 加到 filled 上（order.filled + total），並依 filled 是否大於等於 amount 決定 filled 或 partialFilled"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, reducer) 執行"
-            lines.none { it.startsWith("最後：partialFilled 0.9，忽略了 2 個") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, reducer) 執行"
+            }
+
+            lines.none { it.startsWith("最後：partialFilled 0.9，忽略了 2 個") } -> {
                 "total 小於等於 order.filled（過期、重複）或大於 order.amount（無效）就原樣回傳 order；否則 filled 換成 total，等於 amount 是 filled，否則 partialFilled"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

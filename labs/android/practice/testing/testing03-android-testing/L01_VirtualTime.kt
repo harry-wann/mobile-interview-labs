@@ -1,16 +1,24 @@
 // L01：測一個會重試的函式，測試真的等了 3 秒（runBlocking 的 delay 是真實時間）
-// 對應複習站：Testing03AndroidTesting 第 1 題「有 delay 的 coroutine，測試時怎麼不用真的等？」
+// 對應複習站：Testing03AndroidTesting 第 1 題「有 delay 的 coroutine，
+// 測試時怎麼不用真的等？」
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 practice/testing/test/Testing03L01Test.kt。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// practice/testing/test/Testing03L01Test.kt。
 //
-// 情境：t03Retry 在遇到 IOException 時，等 1 秒再試、再失敗就等 2 秒再試（每次加倍），最多試 3 次。
-//       假的伺服器 T03FlakyApi 前兩次呼叫逾時、第三次成功，所以整個流程要「等」3 秒。
+// 情境：t03Retry 在遇到 IOException 時，等 1 秒再試、再失敗就等 2
+// 秒再試（每次加倍），最多試 3 次。
+//       假的伺服器 T03FlakyApi 前兩次呼叫逾時、第三次成功，所以整個流程要「等」
+// 3 秒。
 //
 // 你要寫（在 test/Testing03L01Test.kt）：
-//   ① Bug 版：L01Bug.run() 用 runBlocking { t03Retry { api.fetchPrice() } } 取得價格，並用 System.nanoTime() 量真實花了幾 ms。
-//   ② 修正版：L01Fixed.run() 用 runTest：async 啟動 t03Retry；依序 runCurrent()、advanceTimeBy(1_000)、runCurrent()、advanceTimeBy(2_000) 加 runCurrent()，
+//   ① Bug 版：L01Bug.run() 用 runBlocking { t03Retry { api.fetchPrice() } }
+// 取得價格，並用 System.nanoTime() 量真實花了幾 ms。
+//   ② 修正版：L01Fixed.run() 用 runTest：async 啟動 t03Retry；依序
+// runCurrent()、advanceTimeBy(1_000)、runCurrent()、advanceTimeBy(2_000) 加
+// runCurrent()，
 //      每一步記下 api.calls；最後 await() 取得價格，並記下 currentTime。
-// 只改有 TODO 的地方。解答：solution/testing/testing03-android-testing/L01_VirtualTime.kt
+// 只改有 TODO 的地方。解答：
+// solution/testing/testing03-android-testing/L01_VirtualTime.kt
 package tw.harry.labs.practice.testing03androidtesting
 
 import java.io.IOException

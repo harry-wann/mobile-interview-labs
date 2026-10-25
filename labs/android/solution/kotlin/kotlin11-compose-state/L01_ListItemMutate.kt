@@ -1,11 +1,18 @@
-// L01：成交了一部分，委託列表那一列卻沒變（mutableStateListOf 裡的物件被原地修改）
-// 對應複習站：Kotlin11ComposeState 第 3 題「mutableStateOf 與它的家族該怎麼選？」
+// L01：成交了一部分，委託列表那一列卻沒變（mutableStateListOf
+// 裡的物件被原地修改）
+// 對應複習站：Kotlin11ComposeState 第 3 題「mutableStateOf
+// 與它的家族該怎麼選？」
 //
-// 情境：委託列表放在 mutableStateListOf 裡，畫面顯示每一筆委託已成交多少。收到「ETH_JPY 成交了 0.5」的回報後，要更新那一列。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
-// Bug 版：OrderRow 的 filled 是 var，收到回報就直接 orders[1].filled = 0.5。清單本身沒有「被改」（還是同樣兩個物件），
-//        mutableStateListOf 只會在清單的內容（新增、刪除、換掉某一格）改變時通知 Compose，看不到物件裡面的欄位，畫面不會更新。
-// 修正版：OrderRow 改成 data class，欄位都是 val；收到回報就換掉那一格：orders[1] = orders[1].copy(filled = 0.5)。
+// 情境：委託列表放在 mutableStateListOf 裡，畫面顯示每一筆委託已成交多少。
+// 收到「ETH_JPY 成交了 0.5」的回報後，要更新那一列。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
+// Bug 版：OrderRow 的 filled 是 var，收到回報就直接 orders[1].filled = 0.5。
+// 清單本身沒有「被改」（還是同樣兩個物件），
+//        mutableStateListOf 只會在清單的內容（新增、刪除、換掉某一格）
+// 改變時通知 Compose，看不到物件裡面的欄位，畫面不會更新。
+// 修正版：OrderRow 改成 data class，欄位都是 val；收到回報就換掉那一格：
+// orders[1] = orders[1].copy(filled = 0.5)。
 //        換掉一格是清單的內容改變，Compose 就知道要重組。
 package tw.harry.labs.solution.kotlin11composestate
 
@@ -43,40 +50,66 @@ private suspend fun scenario(
 
 // MARK: - Bug 版
 private object L01Bug {
-    class OrderRow(val symbol: String, var filled: Double)          // filled 是 var：可以直接改
+    // filled 是 var：可以直接改
+    class OrderRow(val symbol: String, var filled: Double)
 
     @Composable
     fun OrderList(orders: List<OrderRow>, onShow: (String) -> Unit) {
-        HeadlessText(orders.joinToString("、") { "${it.symbol} 已成交 ${it.filled}" }, onShow)
+        HeadlessText(
+            orders.joinToString("、") {
+                "${it.symbol} 已成交 ${it.filled}"
+            },
+            onShow,
+        )
     }
 
     suspend fun run(log: LabLog) {
-        val orders = mutableStateListOf(OrderRow("BTC_JPY", 0.0), OrderRow("ETH_JPY", 0.0))
+        val orders =
+            mutableStateListOf(
+                OrderRow("BTC_JPY", 0.0),
+                OrderRow("ETH_JPY", 0.0),
+            )
         scenario(
             log,
             screen = { onShow -> OrderList(orders, onShow) },
-            fillEth = { orders[1].filled = 0.5 },                    // 原地修改物件的欄位：清單不知道，Compose 也不知道
-            inList = { orders.joinToString("、") { "${it.symbol} 已成交 ${it.filled}" } },
+            // 原地修改物件的欄位：清單不知道，Compose 也不知道
+            fillEth = { orders[1].filled = 0.5 },
+            inList = {
+                orders.joinToString("、") { "${it.symbol} 已成交 ${it.filled}" }
+            },
         )
     }
 }
 
 // MARK: - 修正版
 private object L01Fixed {
-    data class OrderRow(val symbol: String, val filled: Double)     // 欄位都是 val：要改就換一個新的
+    // 欄位都是 val：要改就換一個新的
+    data class OrderRow(val symbol: String, val filled: Double)
 
     @Composable
     fun OrderList(orders: List<OrderRow>, onShow: (String) -> Unit) {
-        HeadlessText(orders.joinToString("、") { "${it.symbol} 已成交 ${it.filled}" }, onShow)
+        HeadlessText(
+            orders.joinToString("、") {
+                "${it.symbol} 已成交 ${it.filled}"
+            },
+            onShow,
+        )
     }
 
     suspend fun run(log: LabLog) {
-        val orders = mutableStateListOf(OrderRow("BTC_JPY", 0.0), OrderRow("ETH_JPY", 0.0))
+        val orders =
+            mutableStateListOf(
+                OrderRow("BTC_JPY", 0.0),
+                OrderRow("ETH_JPY", 0.0),
+            )
         scenario(
             log,
             screen = { onShow -> OrderList(orders, onShow) },
-            fillEth = { orders[1] = orders[1].copy(filled = 0.5) },  // 換掉清單的某一格：清單的內容變了，Compose 會重組
-            inList = { orders.joinToString("、") { "${it.symbol} 已成交 ${it.filled}" } },
+            // 換掉清單的某一格：清單的內容變了，Compose 會重組
+            fillEth = { orders[1] = orders[1].copy(filled = 0.5) },
+            inList = {
+                orders.joinToString("、") { "${it.symbol} 已成交 ${it.filled}" }
+            },
         )
     }
 }
@@ -110,10 +143,20 @@ val l01 = Lab(
         val after = line(lines, "收到回報後，畫面顯示：")
         val shows = line(lines, "畫面共更新了 ")?.removeSuffix(" 次")?.toIntOrNull()
         when {
-            before?.contains("ETH_JPY 已成交 0.0") != true -> "畫面還沒顯示委託：OrderList 要用 HeadlessText 顯示每一筆的 symbol 和 filled"
-            inList?.contains("ETH_JPY 已成交 0.5") != true -> "清單裡的資料沒有更新：收到回報時要直接改 orders[1].filled = 0.5"
-            after?.contains("ETH_JPY 已成交 0.5") == true -> "畫面已經更新了：Bug 版要原地修改 orders[1].filled，不要換掉清單的那一格"
+            before?.contains(
+                "ETH_JPY 已成交 0.0",
+            ) != true -> "畫面還沒顯示委託：OrderList 要用 HeadlessText 顯示每一筆的 symbol 和 filled"
+
+            inList?.contains(
+                "ETH_JPY 已成交 0.5",
+            ) != true -> "清單裡的資料沒有更新：收到回報時要直接改 orders[1].filled = 0.5"
+
+            after?.contains(
+                "ETH_JPY 已成交 0.5",
+            ) == true -> "畫面已經更新了：Bug 版要原地修改 orders[1].filled，不要換掉清單的那一格"
+
             shows != 1 -> "畫面更新了 $shows 次：Bug 版原地修改欄位，畫面不會重組，應該只有第一次組合的 1 次"
+
             else -> null
         }
     },
@@ -122,9 +165,16 @@ val l01 = Lab(
         val after = line(lines, "收到回報後，畫面顯示：")
         val shows = line(lines, "畫面共更新了 ")?.removeSuffix(" 次")?.toIntOrNull()
         when {
-            before?.contains("ETH_JPY 已成交 0.0") != true -> "畫面還沒顯示委託：OrderList 要用 HeadlessText 顯示每一筆的 symbol 和 filled"
-            after?.contains("ETH_JPY 已成交 0.5") != true -> "畫面沒有跟著更新：要換掉清單的那一格，orders[1] = orders[1].copy(filled = 0.5)"
+            before?.contains(
+                "ETH_JPY 已成交 0.0",
+            ) != true -> "畫面還沒顯示委託：OrderList 要用 HeadlessText 顯示每一筆的 symbol 和 filled"
+
+            after?.contains(
+                "ETH_JPY 已成交 0.5",
+            ) != true -> "畫面沒有跟著更新：要換掉清單的那一格，orders[1] = orders[1].copy(filled = 0.5)"
+
             shows != 2 -> "畫面更新了 $shows 次：換掉清單的那一格之後應該重組 1 次，加上第一次組合共 2 次"
+
             else -> null
         }
     },

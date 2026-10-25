@@ -1,10 +1,15 @@
 // L05：只要前 10 名，卻把 2 萬筆全部排序（比較次數差 10 倍以上）
-// 對應複習站：Coding01DataStructures 第 4 題「排行榜取前 k 名，要排序還是用 heap？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
+// 對應複習站：Coding01DataStructures 第 4 題「排行榜取前 k 名，要排序還是用
+// heap？」（也是第 2 題「時間複雜度怎麼用白話講」的實測）
 //
-// 情境：逐筆成交的統計表有 2 萬個項目，要取成交量最高的前 10 名。成交量一樣時，依代號字母排序。
-//       演練用計數器數「比較了幾次」，看兩種做法的成本。（幣種只有幾百個的排行榜，排序完全夠用，這裡是 n 很大、k 很小的情況。）
-// Bug 版：全部排序再取前 10 個。O(n log n)，2 萬筆要比較 20 多萬次，其中大部分是在排「根本不會顯示」的名次。
-// 修正版：用大小為 k 的 min-heap，只保留目前最大的 10 筆。新的一筆只要和 heap 最小的比一次，比它大才換進去。O(n log k)。
+// 情境：逐筆成交的統計表有 2 萬個項目，要取成交量最高的前 10 名。成交量一樣時，
+// 依代號字母排序。
+//       演練用計數器數「比較了幾次」，看兩種做法的成本。
+// （幣種只有幾百個的排行榜，排序完全夠用，這裡是 n 很大、k 很小的情況。）
+// Bug 版：全部排序再取前 10 個。O(n log n)，2 萬筆要比較 20 多萬次，
+// 其中大部分是在排「根本不會顯示」的名次。
+// 修正版：用大小為 k 的 min-heap，只保留目前最大的 10 筆。新的一筆只要和 heap
+// 最小的比一次，比它大才換進去。O(n log k)。
 import LabKit
 
 private let count = 20_000
@@ -15,7 +20,8 @@ private func makeEntries() -> [C01Entry] {
     var state: UInt64 = 2026
     return (0..<count).map { i in
         state = state &* 6364136223846793005 &+ 1442695040888963407
-        return C01Entry(symbol: "COIN\(i)", volume: Int(state >> 33) % 1_000_000)
+        return C01Entry(
+            symbol: "COIN\(i)", volume: Int(state >> 33) % 1_000_000)
     }
 }
 
@@ -24,8 +30,11 @@ private func isBetter(_ lhs: C01Entry, _ rhs: C01Entry) -> Bool {
     lhs.volume != rhs.volume ? lhs.volume > rhs.volume : lhs.symbol < rhs.symbol
 }
 
-/// 演練流程（兩個版本共用）：產生資料 → 取前 10 名 → 數比較次數，並和標準答案比對
-private func scenario(_ log: LabLog, topK: ([C01Entry], Int, C01Counter) -> [C01Entry]) {
+/// 演練流程（兩個版本共用）：產生資料 → 取前 10 名 → 數比較次數，
+/// 並和標準答案比對
+private func scenario(
+    _ log: LabLog, topK: ([C01Entry], Int, C01Counter) -> [C01Entry]
+) {
     let entries = makeEntries()
     let counter = C01Counter()
     let result = topK(entries, k, counter)
@@ -37,19 +46,27 @@ private func scenario(_ log: LabLog, topK: ([C01Entry], Int, C01Counter) -> [C01
 
 /// 從「…比較了 N 次」那一行取出 N（自動檢查用）
 private func comparisons(in lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasSuffix(" 次") && $0.contains("比較了") }),
-          let range = line.range(of: "比較了 ") else { return nil }
+    guard
+        let line = lines.first(where: {
+            $0.hasSuffix(" 次") && $0.contains("比較了")
+        }),
+        let range = line.range(of: "比較了 ")
+    else { return nil }
     return Int(line[range.upperBound...].dropLast(2))
 }
 
 // MARK: - Bug 版
 private enum L05Bug {
-    static func topK(_ entries: [C01Entry], _ k: Int, _ counter: C01Counter) -> [C01Entry] {
+    static func topK(
+        _ entries: [C01Entry], _ k: Int, _ counter: C01Counter
+    ) -> [C01Entry] {
         let sorted = entries.sorted { lhs, rhs in
-            counter.count += 1                                    // 每比較一次記一筆
+            // 每比較一次記一筆
+            counter.count += 1
             return isBetter(lhs, rhs)
         }
-        return Array(sorted.prefix(k))                            // 全部排好，只取前 k 個
+        // 全部排好，只取前 k 個
+        return Array(sorted.prefix(k))
     }
 
     static func run(_ log: LabLog) async {
@@ -59,22 +76,28 @@ private enum L05Bug {
 
 // MARK: - 修正版
 private enum L05Fixed {
-    static func topK(_ entries: [C01Entry], _ k: Int, _ counter: C01Counter) -> [C01Entry] {
+    static func topK(
+        _ entries: [C01Entry], _ k: Int, _ counter: C01Counter
+    ) -> [C01Entry] {
         guard k > 0 else { return [] }
         // heap 最上面是「目前保留的 k 筆裡最差的」：isLess(a, b) 代表 a 比 b 差
         var heap = C01MinHeap<C01Entry> { lhs, rhs in
-            counter.count += 1                                    // 每比較一次記一筆
+            // 每比較一次記一筆
+            counter.count += 1
             return isBetter(rhs, lhs)
         }
         for entry in entries {
             if heap.count < k {
-                heap.push(entry)                                  // 還沒滿 k 筆：直接放進去
+                // 還沒滿 k 筆：直接放進去
+                heap.push(entry)
             } else if let worst = heap.top {
                 counter.count += 1
-                if isBetter(entry, worst) { heap.replaceTop(with: entry) }   // 比最差的好，才換進去
+                // 比最差的好，才換進去
+                if isBetter(entry, worst) { heap.replaceTop(with: entry) }
             }
         }
-        return Array(heap.drainAscending().reversed())            // 由差到好，反過來就是由好到差
+        // 由差到好，反過來就是由好到差
+        return Array(heap.drainAscending().reversed())
     }
 
     static func run(_ log: LabLog) async {
@@ -88,13 +111,15 @@ extension Coding01DataStructures {
         id: "L05",
         title: "只要前 10 名，卻排了 2 萬筆",
         question: "第 4 題：排行榜取前 k 名，要排序還是用 heap？（第 2 題：時間複雜度怎麼用白話講）",
-        goal: "n 很大、k 很小時，用大小為 k 的 min-heap：每筆資料只和 heap 最差的比一次，比較次數從 O(n log n) 降到接近 n。",
+        goal:
+            "n 很大、k 很小時，用大小為 k 的 min-heap：每筆資料只和 heap 最差的比一次，比較次數從 O(n log n) 降到接近 n。",
         steps: [
             "選「Bug 版」執行，看「比較了幾次」，以及前 10 名是否和標準答案一致。",
             "選「修正版」執行，比較兩個版本的次數。",
             "對照第 4 題：為什麼幣種只有幾百個的排行榜，直接排序就夠了？",
         ],
-        expectBug: "2 萬筆全部排序，比較 26 萬到 39 萬次（iOS 約 39 萬、Android 約 26 萬，排序演算法不同），一定超過 10 萬次。",
+        expectBug:
+            "2 萬筆全部排序，比較 26 萬到 39 萬次（iOS 約 39 萬、Android 約 26 萬，排序演算法不同），一定超過 10 萬次。",
         expectFixed: "比較約 2 萬次出頭（每筆和 heap 最差的比一次，少數幾次換進去時多比幾次），前 10 名一致。",
         run: { variant, log in
             switch variant {
@@ -103,14 +128,25 @@ extension Coding01DataStructures {
             }
         },
         checkBug: { lines in
-            guard let comparisons = comparisons(in: lines) else { return "演練沒有跑完：要用 scenario(log, topK:) 執行" }
-            if !lines.contains("前 10 名和標準答案一致：是") { return "topK 還沒寫：排序之後取前 10 個" }
-            return comparisons >= 100_000 ? nil : "Bug 還沒重現：要把 2 萬筆全部排序（sorted），比較次數才會超過 10 萬次"
+            guard let comparisons = comparisons(in: lines) else {
+                return "演練沒有跑完：要用 scenario(log, topK:) 執行"
+            }
+            if !lines.contains("前 10 名和標準答案一致：是") {
+                return "topK 還沒寫：排序之後取前 10 個"
+            }
+            return comparisons >= 100_000
+                ? nil : "Bug 還沒重現：要把 2 萬筆全部排序（sorted），比較次數才會超過 10 萬次"
         },
         checkFixed: { lines in
-            guard let comparisons = comparisons(in: lines) else { return "演練沒有跑完：要用 scenario(log, topK:) 執行" }
-            if !lines.contains("前 10 名和標準答案一致：是") { return "前 10 名不對：heap 最上面要是目前最差的，比它好才換進去，最後由好到差輸出" }
-            return comparisons < 60_000 ? nil : "比較了 \(comparisons) 次，太多了：新的一筆只要和 heap.top 比一次，比它好才 replaceTop"
+            guard let comparisons = comparisons(in: lines) else {
+                return "演練沒有跑完：要用 scenario(log, topK:) 執行"
+            }
+            if !lines.contains("前 10 名和標準答案一致：是") {
+                return "前 10 名不對：heap 最上面要是目前最差的，比它好才換進去，最後由好到差輸出"
+            }
+            return comparisons < 60_000
+                ? nil
+                : "比較了 \(comparisons) 次，太多了：新的一筆只要和 heap.top 比一次，比它好才 replaceTop"
         }
     )
 }

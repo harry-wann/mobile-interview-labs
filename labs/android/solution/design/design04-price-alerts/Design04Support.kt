@@ -6,4 +6,5 @@ import java.text.NumberFormat
 import java.util.Locale
 
 /** 日圓價格加上千分位，例如 10000000 → "10,000,000" */
-fun d04Yen(amount: Int): String = NumberFormat.getIntegerInstance(Locale.US).format(amount)
+fun d04Yen(amount: Int): String =
+    NumberFormat.getIntegerInstance(Locale.US).format(amount)

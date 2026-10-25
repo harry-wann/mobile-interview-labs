@@ -1,12 +1,19 @@
-// L03：BTC 顯示成 ETH 的價格（TaskGroup 的 for await 是依「完成的順序」，不是加入的順序）
-// 對應複習站：Swift04StructuredConcurrency 第 2 題「async let 和 TaskGroup 怎麼選？怎麼限制同時進行的請求數量？」
+// L03：BTC 顯示成 ETH 的價格（TaskGroup 的 for await 是依「完成的順序」，
+// 不是加入的順序）
+// 對應複習站：Swift04StructuredConcurrency 第 2 題「async let 和 TaskGroup
+// 怎麼選？怎麼限制同時進行的請求數量？」
 //
-// 情境：自選清單 BTC、ETH、XRP 同時抓價格。ETH 的回應最快（100 毫秒），XRP 次之（200 毫秒），BTC 最慢（300 毫秒）。
+// 情境：自選清單 BTC、ETH、XRP 同時抓價格。ETH 的回應最快（100 毫秒），XRP
+// 次之（200 毫秒），BTC 最慢（300 毫秒）。
 //
 // 你要寫：
-//   ① Bug 版：用 withTaskGroup(of: Double.self) 同時抓三個價格，for await 依序放進陣列，再用 zip(symbols, prices) 配對、log("\(symbol)：\(Int(price))")。
-//   ② 修正版：任務回傳 (交易對, 價格)，收進以交易對當 key 的字典，再依 symbols 的順序 log("\(symbol)：\(Int(price))")。
-// 只改有 TODO 的地方。解答：Solution/Swift/Swift04-StructuredConcurrency/L03_TaskGroupOrder.swift
+//   ① Bug 版：用 withTaskGroup(of: Double.self) 同時抓三個價格，for await
+// 依序放進陣列，再用 zip(symbols, prices) 配對、log("\(symbol)：\(Int(price))
+// ")。
+//   ② 修正版：任務回傳 (交易對, 價格)，收進以交易對當 key 的字典，再依 symbols
+// 的順序 log("\(symbol)：\(Int(price))")。
+// 只改有 TODO 的地方。解答：
+// Solution/Swift/Swift04-StructuredConcurrency/L03_TaskGroupOrder.swift
 import Foundation
 import LabKit
 
@@ -30,16 +37,20 @@ private let symbols = ["BTC/JPY", "ETH/JPY", "XRP/JPY"]
 // MARK: - Bug 版
 private enum L03Bug {
     static func run(_ log: LabLog) async {
-        // TODO ①-1：用 withTaskGroup(of: Double.self)：每個 symbol 都 addTask { await fetchPrice(symbol) }，for await 依序放進陣列 prices
-        // TODO ①-2：用 zip(symbols, prices) 配對，每個交易對 log("\(symbol)：\(Int(price))")
+        // TODO ①-1：用 withTaskGroup(of: Double.self)：每個 symbol 都 addTask
+        // { await fetchPrice(symbol) }，for await 依序放進陣列 prices
+        // TODO ①-2：用 zip(symbols, prices) 配對，每個交易對 log("\(symbol)：
+        // \(Int(price))")
     }
 }
 
 // MARK: - 修正版
 private enum L03Fixed {
     static func run(_ log: LabLog) async {
-        // TODO ②-1：用 withTaskGroup(of: (String, Double).self)：每個任務把交易對和價格一起回傳，收進字典
-        // TODO ②-2：依照 symbols 的順序，每個交易對 log("\(symbol)：\(Int(價格))")
+        // TODO ②-1：用 withTaskGroup(of: (String, Double).self)：
+        // 每個任務把交易對和價格一起回傳，收進字典
+        // TODO ②-2：依照 symbols 的順序，每個交易對 log("\(symbol)：
+        // \(Int(價格))")
     }
 }
 
@@ -66,11 +77,15 @@ extension Swift04StructuredConcurrency {
         checkBug: { lines in
             guard lines.count >= 3 else { return "三個交易對都要顯示一行價格" }
             return lines.contains("BTC/JPY：400000")
-                ? nil : "Bug 還沒重現：BTC 應該（錯誤地）顯示成最快回來的 ETH 價格 400000（依 for await 的順序放進陣列，再用 zip 配對）"
+                ? nil
+                : "Bug 還沒重現：BTC 應該（錯誤地）顯示成最快回來的 ETH 價格 400000（依 for await 的順序放進陣列，再用 zip 配對）"
         },
         checkFixed: { lines in
-            guard lines.contains("BTC/JPY：15000000") else { return "BTC/JPY 應該顯示 15000000：每個任務要把交易對一起回傳，結果存進字典" }
-            guard lines.contains("ETH/JPY：400000"), lines.contains("XRP/JPY：80") else { return "ETH/JPY 應該是 400000、XRP/JPY 應該是 80" }
+            guard lines.contains("BTC/JPY：15000000") else {
+                return "BTC/JPY 應該顯示 15000000：每個任務要把交易對一起回傳，結果存進字典"
+            }
+            guard lines.contains("ETH/JPY：400000"), lines.contains("XRP/JPY：80")
+            else { return "ETH/JPY 應該是 400000、XRP/JPY 應該是 80" }
             return nil
         }
     )

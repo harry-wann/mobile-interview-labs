@@ -1,12 +1,16 @@
 // L01：被改過的 App 直接把出金送出去，超過限額也照樣出金（限額只在 App 檢查）
-// 對應複習站：Advanced08Security 第 1 題「交易所 App 要保護什麼、防誰？MASVS 是什麼？」（手機上的 App 是不可信的環境）
+// 對應複習站：Advanced08Security 第 1 題「交易所 App 要保護什麼、防誰？MASVS
+// 是什麼？」（手機上的 App 是不可信的環境）
 //
-// 情境：每日出金限額是 100 萬日圓。App 在送出前會先檢查金額，超過就不讓使用者按送出。
-//       攻擊者拿到自己的手機，用工具改寫 App，跳過這個檢查，直接把請求送給伺服器（演練用「被改過的 App」代表，
+// 情境：每日出金限額是 100 萬日圓。App 在送出前會先檢查金額，
+// 超過就不讓使用者按送出。
+//       攻擊者拿到自己的手機，用工具改寫 App，跳過這個檢查，
+// 直接把請求送給伺服器（演練用「被改過的 App」代表，
 //       伺服器和 App 都是演練裡的假物件，不會連到任何外部服務）。
 //
 // 你要寫：
-//   ① Bug 版：伺服器相信「App 已經檢查過了」，收到什麼金額都受理。被改過的 App 送出 500 萬，伺服器照辦。
+//   ① Bug 版：伺服器相信「App 已經檢查過了」，收到什麼金額都受理。被改過的 App
+// 送出 500 萬，伺服器照辦。
 //   ② 修正版：伺服器自己再檢查一次：當日累計出金加上這筆，超過限額就拒絕。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/advanced/advanced08-security/L01_ClientOnlyLimit.kt
@@ -19,7 +23,9 @@ import tw.harry.labs.kit.Variant
 private const val DAILY_LIMIT = 1_000_000
 
 /** 假的伺服器：記錄今天已經受理的出金。withdraw 回傳這筆請求有沒有被受理 */
-private class L01FakeServer(private val accepts: (amount: Int, totalSoFar: Int) -> Boolean) {
+private class L01FakeServer(
+    private val accepts: (amount: Int, totalSoFar: Int) -> Boolean,
+) {
     var total = 0
         private set
 
@@ -30,8 +36,14 @@ private class L01FakeServer(private val accepts: (amount: Int, totalSoFar: Int) 
     }
 }
 
-/** 演練流程（兩個版本共用）：accepts 是各版本的伺服器邏輯（這筆金額, 今天已經出金多少） */
-private fun scenario(log: LabLog, accepts: (amount: Int, totalSoFar: Int) -> Boolean) {
+/**
+ * 演練流程（兩個版本共用）：accepts 是各版本的伺服器邏輯（這筆金額,
+ * 今天已經出金多少）
+ */
+private fun scenario(
+    log: LabLog,
+    accepts: (amount: Int, totalSoFar: Int) -> Boolean,
+) {
     val server = L01FakeServer(accepts)
     fun text(ok: Boolean) = if (ok) "受理" else "拒絕"
 
@@ -65,7 +77,8 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     fun accepts(amount: Int, totalSoFar: Int): Boolean {
-        // TODO ②：伺服器自己檢查：今天累計出金（totalSoFar）加上這一筆（amount）不能超過 DAILY_LIMIT
+        // TODO ②：伺服器自己檢查：今天累計出金（totalSoFar）
+        // 加上這一筆（amount）不能超過 DAILY_LIMIT
         return false
     }
 

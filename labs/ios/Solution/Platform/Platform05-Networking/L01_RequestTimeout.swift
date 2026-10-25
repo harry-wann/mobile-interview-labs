@@ -1,23 +1,32 @@
 // L01：逾時明明設 1 秒，下載卻等了 2 秒多還不逾時（URLSession 的兩種逾時）
-// 對應複習站：Platform05Networking 第 1 題「URLSession 和 OkHttp 怎麼對照？預設的逾時和傳輸安全規則差在哪？」
+// 對應複習站：Platform05Networking 第 1 題「URLSession 和 OkHttp
+// 怎麼對照？預設的逾時和傳輸安全規則差在哪？」
 //
-// 情境：App 下載一份資產明細。本機假伺服器每 0.2 秒送出 1 個位元組，共 12 個，全部送完要 2.2 秒（網速很慢，但連線沒有斷）。
+// 情境：App 下載一份資產明細。本機假伺服器每 0.2 秒送出 1 個位元組，共 12 個，
+// 全部送完要 2.2 秒（網速很慢，但連線沒有斷）。
 //       工程師希望「整個下載最多等 1 秒，超過就逾時，顯示重試按鈕」。
-// Bug 版：設 timeoutIntervalForRequest = 1。這個值是「兩次收到資料之間最久等多久」，每收到一點資料就重新計時，
+// Bug 版：設 timeoutIntervalForRequest = 1。
+// 這個值是「兩次收到資料之間最久等多久」，每收到一點資料就重新計時，
 //        伺服器每 0.2 秒就送一點，永遠不會逾時，等了約 2.2 秒才完成。
-// 修正版：改設 timeoutIntervalForResource = 1。它才是「整個請求的總時限」，1 秒一到就逾時。
+// 修正版：改設 timeoutIntervalForResource = 1。它才是「整個請求的總時限」，1
+// 秒一到就逾時。
 import Foundation
 import LabKit
 
 /// 下載一次（兩個版本共用）：configure 負責設定 URLSessionConfiguration 的逾時
-private func download(_ log: LabLog, configure: (URLSessionConfiguration) -> Void) async {
-    guard let server = try? P05LocalServer(handler: { _, writer in
-        writer.head(200, ["Content-Length": "12"])
-        for i in 0..<12 {
-            if i > 0 { writer.pause(milliseconds: 200) }    // 每 0.2 秒送 1 個位元組：慢，但一直有資料
-            writer.body("x")
-        }
-    }) else {
+private func download(
+    _ log: LabLog, configure: (URLSessionConfiguration) -> Void
+) async {
+    guard
+        let server = try? P05LocalServer(handler: { _, writer in
+            writer.head(200, ["Content-Length": "12"])
+            for i in 0..<12 {
+                // 每 0.2 秒送 1 個位元組：慢，但一直有資料
+                if i > 0 { writer.pause(milliseconds: 200) }
+                writer.body("x")
+            }
+        })
+    else {
         log("本機伺服器啟動失敗")
         return
     }
@@ -27,7 +36,9 @@ private func download(_ log: LabLog, configure: (URLSessionConfiguration) -> Voi
     configure(config)
     let session = URLSession(configuration: config)
     defer { session.invalidateAndCancel() }
-    log("設定：request 逾時 \(Int(config.timeoutIntervalForRequest)) 秒，resource 逾時 \(Int(config.timeoutIntervalForResource)) 秒")
+    log(
+        "設定：request 逾時 \(Int(config.timeoutIntervalForRequest)) 秒，resource 逾時 \(Int(config.timeoutIntervalForResource)) 秒"
+    )
 
     let start = DispatchTime.now()
     do {
@@ -44,7 +55,8 @@ private func download(_ log: LabLog, configure: (URLSessionConfiguration) -> Voi
 private enum L01Bug {
     static func run(_ log: LabLog) async {
         await download(log) { config in
-            config.timeoutIntervalForRequest = 1            // 以為這是「整個請求最多 1 秒」：其實是兩次收到資料之間的空檔
+            // 以為這是「整個請求最多 1 秒」：其實是兩次收到資料之間的空檔
+            config.timeoutIntervalForRequest = 1
         }
     }
 }
@@ -53,7 +65,8 @@ private enum L01Bug {
 private enum L01Fixed {
     static func run(_ log: LabLog) async {
         await download(log) { config in
-            config.timeoutIntervalForResource = 1           // 整個請求的總時限：1 秒到就逾時
+            // 整個請求的總時限：1 秒到就逾時
+            config.timeoutIntervalForResource = 1
         }
     }
 }
@@ -61,8 +74,9 @@ private enum L01Fixed {
 // MARK: - 演練設定
 private func elapsed(_ lines: [String]) -> Int? {
     guard let line = lines.first(where: { $0.contains("花了") }),
-          let range = line.range(of: "花了 "),
-          let end = line.range(of: " 毫秒") else { return nil }
+        let range = line.range(of: "花了 "),
+        let end = line.range(of: " 毫秒")
+    else { return nil }
     return Int(line[range.upperBound..<end.lowerBound])
 }
 
@@ -90,16 +104,22 @@ extension Platform05Networking {
             if !lines.contains("設定：request 逾時 1 秒，resource 逾時 604800 秒") {
                 return "Bug 版要把 timeoutIntervalForRequest 設成 1（resource 逾時保持預設）"
             }
-            guard let ms = elapsed(lines), lines.contains(where: { $0.hasPrefix("沒有逾時") }) else {
+            guard let ms = elapsed(lines),
+                lines.contains(where: { $0.hasPrefix("沒有逾時") })
+            else {
                 return "Bug 還沒重現：伺服器一直有資料送來，只設 request 逾時時，下載應該不會逾時"
             }
             return ms >= 2000 ? nil : "Bug 版應該等滿約 2200 毫秒才完成（實際 \(ms) 毫秒）"
         },
         checkFixed: { lines in
-            if !lines.contains(where: { $0.hasPrefix("設定：") && $0.contains("resource 逾時 1 秒") }) {
+            if !lines.contains(where: {
+                $0.hasPrefix("設定：") && $0.contains("resource 逾時 1 秒")
+            }) {
                 return "修正版要把 timeoutIntervalForResource 設成 1"
             }
-            guard let ms = elapsed(lines), lines.contains(where: { $0.hasPrefix("逾時") }) else {
+            guard let ms = elapsed(lines),
+                lines.contains(where: { $0.hasPrefix("逾時") })
+            else {
                 return "下載應該在 1 秒左右逾時，但它沒有逾時"
             }
             return ms < 1800 ? nil : "逾時太晚了（\(ms) 毫秒）：resource 逾時應該設成 1 秒"

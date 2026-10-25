@@ -1,14 +1,20 @@
-// L01：App 被關掉之後，價格到了卻沒有提醒（提醒的條件只存在 App 裡，由 App 判斷）
+// L01：App 被關掉之後，價格到了卻沒有提醒（提醒的條件只存在 App 裡，由 App
+// 判斷）
 // 對應複習站：Design04PriceAlerts 第 2 題「為什麼價格的判斷一定要放在伺服器？」
 //
-// 情境：使用者建立兩個提醒：a1「BTC 高於 9,960,000 円」、a2「BTC 高於 10,000,000 円」。價格依序是 9,900,000、9,970,000、10,020,000、10,050,000。
+// 情境：使用者建立兩個提醒：a1「BTC 高於 9,960,000 円」、a2「BTC 高於 10,000,
+// 000 円」。價格依序是 9,900,000、9,970,000、10,020,000、10,050,000。
 //       在第三個價格出現之前，使用者把 App 從多工畫面滑掉（App 被關閉）。
-//       行情只會送到還活著的 App；伺服器的價格串流則一直都在。手機的通知中心不管通知是 App 自己發的，還是伺服器透過 APNs／FCM 推播來的，
-//       App 關掉之後都看得到推播（本機通知要靠 App 活著才發得出來）。看手機最後收到哪些通知。
+//       行情只會送到還活著的 App；伺服器的價格串流則一直都在。
+// 手機的通知中心不管通知是 App 自己發的，還是伺服器透過 APNs／FCM 推播來的，
+//       App 關掉之後都看得到推播（本機通知要靠 App 活著才發得出來）。
+// 看手機最後收到哪些通知。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.App）：createAlert 把提醒存在 App 裡；onPrice 在 App 裡比對價格，條件成立就發通知。
-//   ② 修正版（L01Fixed.App.createAlert）：把提醒送到伺服器（register）。App 自己不判斷價格（onPrice 已經是空的）。
+//   ① Bug 版（L01Bug.App）：createAlert 把提醒存在 App 裡；onPrice 在 App
+// 裡比對價格，條件成立就發通知。
+//   ② 修正版（L01Fixed.App.createAlert）：把提醒送到伺服器（register）。App
+// 自己不判斷價格（onPrice 已經是空的）。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Design/Design04-PriceAlerts/L01_ServerSideJudge.swift
 import LabKit
@@ -22,10 +28,13 @@ private struct Alert {
 private final class Phone {
     private(set) var notifications: [String] = []
     func notify(_ alertId: String) { notifications.append(alertId) }
-    var summary: String { notifications.isEmpty ? "（沒有）" : notifications.joined(separator: "、") }
+    var summary: String {
+        notifications.isEmpty ? "（沒有）" : notifications.joined(separator: "、")
+    }
 }
 
-/// 伺服器（兩個版本共用，已經寫好）：記下 App 登記的提醒；每來一個價格，條件成立又還沒觸發過的，就推播到手機
+/// 伺服器（兩個版本共用，已經寫好）：記下 App 登記的提醒；每來一個價格，
+/// 條件成立又還沒觸發過的，就推播到手機
 private final class FakeServer {
     private var alerts: [Alert] = []
     private var fired: Set<String> = []
@@ -33,7 +42,8 @@ private final class FakeServer {
     func register(_ alert: Alert) { alerts.append(alert) }
 
     func onPrice(_ price: Int, push: (String) -> Void) {
-        for alert in alerts where price >= alert.threshold && !fired.contains(alert.id) {
+        for alert in alerts
+        where price >= alert.threshold && !fired.contains(alert.id) {
             fired.insert(alert.id)
             push(alert.id)
         }
@@ -47,7 +57,10 @@ private protocol AlertApp: AnyObject {
     func onPrice(_ price: Int)
 }
 
-private let alertList = [Alert(id: "a1", threshold: 9_960_000), Alert(id: "a2", threshold: 10_000_000)]
+private let alertList = [
+    Alert(id: "a1", threshold: 9_960_000),
+    Alert(id: "a2", threshold: 10_000_000),
+]
 private let prices = [9_900_000, 9_970_000, 10_020_000, 10_050_000]
 
 /// 演練流程（兩個版本共用）
@@ -65,8 +78,10 @@ private func scenario(_ log: LabLog, makeApp: (FakeServer, Phone) -> AlertApp) {
             appRunning = false
             log("使用者把 App 從多工畫面滑掉（App 被關閉）")
         }
-        if appRunning { app.onPrice(price) }                          // 行情只送到還活著的 App
-        server.onPrice(price) { phone.notify($0) }                    // 伺服器的價格串流一直都在
+        // 行情只送到還活著的 App
+        if appRunning { app.onPrice(price) }
+        // 伺服器的價格串流一直都在
+        server.onPrice(price) { phone.notify($0) }
         log("價格 \(d04Yen(price)) 円 → 手機收到的通知：\(phone.summary)")
     }
     log("最後：手機收到 \(phone.notifications.count) 則通知：\(phone.summary)")
@@ -85,7 +100,8 @@ private enum L01Bug {
         }
 
         func onPrice(_ price: Int) {
-            // TODO ①-2：App 自己比對：走過 alerts，價格 >= 門檻、而且還沒觸發過（id 不在 fired 裡）的提醒，
+            // TODO ①-2：App 自己比對：走過 alerts，價格 >= 門檻、
+            // 而且還沒觸發過（id 不在 fired 裡）的提醒，
             //           把 id 記進 fired，並呼叫 phone.notify(alert.id)
         }
     }
@@ -105,7 +121,8 @@ private enum L01Fixed {
             // TODO ②：條件送到伺服器，由伺服器判斷：呼叫 server.register(alert)
         }
 
-        func onPrice(_ price: Int) {}                                 // App 不判斷價格
+        // App 不判斷價格
+        func onPrice(_ price: Int) {}
     }
 
     static func run(_ log: LabLog) async {
@@ -119,7 +136,8 @@ extension Design04PriceAlerts {
         id: "L01",
         title: "App 被關掉之後，價格到了卻沒有提醒",
         question: "第 2 題：為什麼價格的判斷一定要放在伺服器？",
-        goal: "價格有沒有到，只能由伺服器判斷：App 在背景不能可靠地持續執行（被關掉就完全不執行）。App 的工作是把提醒條件送到伺服器，伺服器條件成立就推播。先寫出 App 自己判斷的 Bug 版，再寫修正版。",
+        goal:
+            "價格有沒有到，只能由伺服器判斷：App 在背景不能可靠地持續執行（被關掉就完全不執行）。App 的工作是把提醒條件送到伺服器，伺服器條件成立就推播。先寫出 App 自己判斷的 Bug 版，再寫修正版。",
         steps: [
             "打開 Practice/Design/Design04-PriceAlerts/L01_ServerSideJudge.swift，寫 TODO ①（Bug 版）。",
             "選「練習」「Bug 版」執行，看使用者把 App 滑掉前後，手機收到的通知有什麼不同。",
@@ -136,16 +154,27 @@ extension Design04PriceAlerts {
             }
         },
         checkBug: { lines in
-            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else { return "演練沒有跑完：要用 scenario(log, makeApp:) 執行" }
-            if last.hasPrefix("最後：手機收到 0 則通知") { return "App 還沒判斷價格：createAlert 要把提醒存進 alerts，onPrice 要比對價格並呼叫 phone.notify" }
+            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else {
+                return "演練沒有跑完：要用 scenario(log, makeApp:) 執行"
+            }
+            if last.hasPrefix("最後：手機收到 0 則通知") {
+                return
+                    "App 還沒判斷價格：createAlert 要把提醒存進 alerts，onPrice 要比對價格並呼叫 phone.notify"
+            }
             return last == "最後：手機收到 1 則通知：a1"
-                ? nil : "Bug 還沒重現：App 活著的時候比對價格、發通知（a1 會響）；App 被關閉之後沒有人比對，a2 不會響"
+                ? nil
+                : "Bug 還沒重現：App 活著的時候比對價格、發通知（a1 會響）；App 被關閉之後沒有人比對，a2 不會響"
         },
         checkFixed: { lines in
-            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else { return "演練沒有跑完：要用 scenario(log, makeApp:) 執行" }
-            if last.hasPrefix("最後：手機收到 0 則通知") { return "createAlert 還沒把條件送給伺服器：呼叫 server.register(alert)" }
+            guard let last = lines.last(where: { $0.hasPrefix("最後") }) else {
+                return "演練沒有跑完：要用 scenario(log, makeApp:) 執行"
+            }
+            if last.hasPrefix("最後：手機收到 0 則通知") {
+                return "createAlert 還沒把條件送給伺服器：呼叫 server.register(alert)"
+            }
             return last == "最後：手機收到 2 則通知：a1、a2"
-                ? nil : "App 不判斷價格：createAlert 只要 server.register(alert)，a1、a2 都由伺服器推播"
+                ? nil
+                : "App 不判斷價格：createAlert 只要 server.register(alert)，a1、a2 都由伺服器推播"
         }
     )
 }

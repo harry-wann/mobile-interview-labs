@@ -4,7 +4,8 @@ import Combine
 /// 演練用的 log。任何執行緒都可以寫：`log("訊息")`。
 ///
 /// 每一行會記下「從開始到現在幾毫秒」與「在哪條執行緒」，
-/// 同時印到 Xcode 的主控台（前綴 `[LAB]`），方便和 Instruments、TSan 的輸出對照。
+/// 同時印到 Xcode 的主控台（前綴 `[LAB]`），方便和 Instruments、TSan
+/// 的輸出對照。
 public final class LabLog: ObservableObject, @unchecked Sendable {
     public struct Line: Identifiable, Sendable {
         public let id: Int
@@ -30,7 +31,9 @@ public final class LabLog: ObservableObject, @unchecked Sendable {
     public func callAsFunction(_ text: String) {
         let thread = LabLog.currentThreadLabel()
         lock.lock()
-        let ms = Int((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+        let ms = Int(
+            (DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+                / 1_000_000)
         let line = Line(id: nextID, ms: ms, thread: thread, text: text)
         nextID += 1
         buffer.append(line)

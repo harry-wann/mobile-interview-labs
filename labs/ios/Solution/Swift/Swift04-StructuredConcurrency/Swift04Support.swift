@@ -1,4 +1,5 @@
-// Swift04StructuredConcurrency 共用的小工具（和 bug 本身無關，已經寫好，不用改）。
+// Swift04StructuredConcurrency 共用的小工具（和 bug 本身無關，已經寫好，
+// 不用改）。
 import Foundation
 import LabKit
 
@@ -16,7 +17,11 @@ extension Swift04StructuredConcurrency {
         private let lock = NSLock()
         private var current = 0
         private var maximum = 0
-        func enter() { lock.withLock { current += 1; maximum = max(maximum, current) } }
+        func enter() {
+            lock.withLock {
+                current += 1; maximum = max(maximum, current)
+            }
+        }
         func leave() { lock.withLock { current -= 1 } }
         var peak: Int { lock.withLock { maximum } }
     }

@@ -25,7 +25,8 @@ struct E01Level {
 struct E01Book {
     var asks: [E01Level]
 
-    /// 買單從最便宜的價位開始吃。`limit` 不是 nil 時（指値），價格高於 limit 的價位不吃。
+    /// 買單從最便宜的價位開始吃。`limit` 不是 nil 時（指値），價格高於 limit
+    /// 的價位不吃。
     /// 吃到的成交價是「板上的價格」，不是使用者的委託價；這些成交都是 taker。
     mutating func takeAsks(qty: Decimal, limit: Decimal? = nil) -> [E01Fill] {
         var remaining = qty

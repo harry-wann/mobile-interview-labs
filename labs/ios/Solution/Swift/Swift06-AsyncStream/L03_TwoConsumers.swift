@@ -1,9 +1,14 @@
-// L03：兩個畫面各自 for await 同一個 stream，各自只收到一半的價格（AsyncStream 只支援單一消費者）
-// 對應複習站：Swift06AsyncStream 第 2 題「行情來得比畫面處理得快時怎麼辦？」（最後一個限制：AsyncStream 只支援單一消費者）
+// L03：兩個畫面各自 for await 同一個 stream，各自只收到一半的價格（AsyncStream
+// 只支援單一消費者）
+// 對應複習站：Swift06AsyncStream 第 2 題「行情來得比畫面處理得快時怎麼辦？」
+// （最後一個限制：AsyncStream 只支援單一消費者）
 //
-// 情境：同一份價格 stream，報價標籤和走勢圖兩個地方都想收到每一筆價格（每 10 毫秒一筆，共 20 筆）。
-// Bug 版：兩個地方各開一個 Task 對同一個 stream 做 for await。AsyncStream 不是廣播，兩個消費者會「分食」元素，各自只拿到一部分。
-// 修正版：自己做 fan-out：只有一個 Task 讀 stream，每收到一筆就轉送給每個訂閱者各自的 stream。
+// 情境：同一份價格 stream，報價標籤和走勢圖兩個地方都想收到每一筆價格（每 10
+// 毫秒一筆，共 20 筆）。
+// Bug 版：兩個地方各開一個 Task 對同一個 stream 做 for await。AsyncStream
+// 不是廣播，兩個消費者會「分食」元素，各自只拿到一部分。
+// 修正版：自己做 fan-out：只有一個 Task 讀 stream，
+// 每收到一筆就轉送給每個訂閱者各自的 stream。
 import Foundation
 import LabKit
 
@@ -27,8 +32,10 @@ private enum L03Bug {
         let labelCount = Swift06AsyncStream.Counter()
         let chartCount = Swift06AsyncStream.Counter()
 
-        let label = Task { for await _ in stream { labelCount.hit() } }      // 報價標籤
-        let chart = Task { for await _ in stream { chartCount.hit() } }      // 走勢圖：對同一個 stream 再 for await 一次
+        // 報價標籤
+        let label = Task { for await _ in stream { labelCount.hit() } }
+        // 走勢圖：對同一個 stream 再 for await 一次
+        let chart = Task { for await _ in stream { chartCount.hit() } }
         startProducing(continuation)
         await label.value
         await chart.value
@@ -39,7 +46,8 @@ private enum L03Bug {
 
 // MARK: - 修正版
 private enum L03Fixed {
-    /// 簡單的 fan-out：每個訂閱者拿到自己的 stream，來源的每一筆都轉送給每一個訂閱者
+    /// 簡單的 fan-out：每個訂閱者拿到自己的 stream，
+    /// 來源的每一筆都轉送給每一個訂閱者
     final class Broadcaster: @unchecked Sendable {
         private let lock = NSLock()
         private var continuations: [AsyncStream<Int>.Continuation] = []
@@ -52,10 +60,15 @@ private enum L03Fixed {
 
         func run(source: AsyncStream<Int>) {
             Task {
-                for await value in source {                          // 只有這裡讀來源 stream
-                    for continuation in lock.withLock({ continuations }) { continuation.yield(value) }
+                // 只有這裡讀來源 stream
+                for await value in source {
+                    for continuation in lock.withLock({ continuations }) {
+                        continuation.yield(value)
+                    }
                 }
-                for continuation in lock.withLock({ continuations }) { continuation.finish() }
+                for continuation in lock.withLock({ continuations }) {
+                    continuation.finish()
+                }
             }
         }
     }
@@ -100,15 +113,22 @@ extension Swift06AsyncStream {
             }
         },
         checkBug: { lines in
-            guard let last = lines.last, last.hasPrefix("報價標籤收到 ") else { return "找不到兩個消費者收到的筆數" }
-            let numbers = last.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            guard let last = lines.last, last.hasPrefix("報價標籤收到 ") else {
+                return "找不到兩個消費者收到的筆數"
+            }
+            let numbers = last.split(whereSeparator: { !$0.isNumber })
+                .compactMap { Int($0) }
             guard numbers.count == 2 else { return "找不到兩個消費者收到的筆數" }
-            guard numbers[0] + numbers[1] == 20 else { return "兩個消費者收到的筆數加起來應該是 20（分食），實際是 \(numbers[0] + numbers[1])" }
-            return numbers[0] < 20 && numbers[1] < 20 ? nil : "Bug 還沒重現：兩個消費者應該各只收到一部分（兩個 Task 對同一個 stream for await）"
+            guard numbers[0] + numbers[1] == 20 else {
+                return "兩個消費者收到的筆數加起來應該是 20（分食），實際是 \(numbers[0] + numbers[1])"
+            }
+            return numbers[0] < 20 && numbers[1] < 20
+                ? nil : "Bug 還沒重現：兩個消費者應該各只收到一部分（兩個 Task 對同一個 stream for await）"
         },
         checkFixed: { lines in
             lines.last == "報價標籤收到 20 筆、走勢圖收到 20 筆"
-                ? nil : "兩個消費者都應該收到 20 筆：只讓一個 Task 讀來源 stream，每筆轉送給每個訂閱者各自的 stream"
+                ? nil
+                : "兩個消費者都應該收到 20 筆：只讓一個 Task 讀來源 stream，每筆轉送給每個訂閱者各自的 stream"
         }
     )
 }

@@ -1,4 +1,5 @@
-// L04、L05 共用的工具（不是演練，不用改）：在電腦上模擬「旋轉螢幕」，看 rememberSaveable 存下來的狀態有沒有還原。
+// L04、L05 共用的工具（不是演練，不用改）：在電腦上模擬「旋轉螢幕」，看
+// rememberSaveable 存下來的狀態有沒有還原。
 package tw.harry.labs.practice.kotlin11composestate
 
 import android.os.Parcelable
@@ -18,10 +19,13 @@ import tw.harry.labs.kit.withHeadlessCompose
  */
 internal fun canBeSavedToBundle(value: Any): Boolean {
     if (value is SnapshotMutableState<*>) {
-        val inner = value.value                                     // MutableState：檢查它裡面裝的東西
+        // MutableState：檢查它裡面裝的東西
+        val inner = value.value
         return inner == null || canBeSavedToBundle(inner)
     }
-    return value is String || value is Number || value is Boolean || value is Serializable || value is Parcelable
+    return value is String || value is Number || value is Boolean ||
+        value is Serializable ||
+        value is Parcelable
 }
 
 /**
@@ -30,12 +34,19 @@ internal fun canBeSavedToBundle(value: Any): Boolean {
  */
 private suspend fun <S, R> showScreen(
     restored: Map<String, List<Any?>>?,
-    screen: @Composable (onState: (S) -> Unit, onShow: (String) -> Unit) -> Unit,
+    screen: @Composable (
+        onState: (S) -> Unit,
+        onShow: (String) -> Unit,
+    ) -> Unit,
     onState: (S) -> Unit,
     onShow: (String) -> Unit,
     interact: suspend HeadlessCompose.(SaveableStateRegistry) -> R,
 ): R = withHeadlessCompose {
-    val registry = SaveableStateRegistry(restoredValues = restored, canBeSaved = ::canBeSavedToBundle)
+    val registry =
+        SaveableStateRegistry(
+            restoredValues = restored,
+            canBeSaved = ::canBeSavedToBundle,
+        )
     setContent {
         CompositionLocalProvider(LocalSaveableStateRegistry provides registry) {
             screen(onState, onShow)
@@ -55,18 +66,23 @@ private suspend fun <S, R> showScreen(
  * 例外會直接往外丟。
  */
 internal suspend fun <S> rotateScreen(
-    screen: @Composable (onState: (S) -> Unit, onShow: (String) -> Unit) -> Unit,
+    screen: @Composable (
+        onState: (S) -> Unit,
+        onShow: (String) -> Unit,
+    ) -> Unit,
     edit: (S) -> Unit,
 ): Pair<String, String> {
     var before = ""
     var after = ""
     var state: S? = null
-    val saved = showScreen(null, screen, { state = it }, { before = it }) { registry ->
-        @Suppress("UNCHECKED_CAST")
-        edit(state as S)
-        settle()                                                    // 等畫面重組完，旋轉前畫面顯示的才是改過的草稿
-        registry.performSave()
-    }
+    val saved =
+        showScreen(null, screen, { state = it }, { before = it }) { registry ->
+            @Suppress("UNCHECKED_CAST")
+            edit(state as S)
+            // 等畫面重組完，旋轉前畫面顯示的才是改過的草稿
+            settle()
+            registry.performSave()
+        }
     showScreen<S, Unit>(saved, screen, {}, { after = it }) {}
     return before to after
 }

@@ -1,12 +1,19 @@
 // L03：訂單簿明明更新了，最佳買價卻不動（neverEqualPolicy）
-// 對應複習站：Kotlin11ComposeState 第 4 題「mutableStateOf 怎麼判斷『值變了』？什麼時候要換 policy？」
+// 對應複習站：Kotlin11ComposeState 第 4 題「mutableStateOf 怎麼判斷『值變了』
+// ？什麼時候要換 policy？」
 //
-// 情境：訂單簿引擎 OrderBook 為了效率，內部用 TreeMap 就地更新，整個 App 共用同一個物件，不會每次複製一份。
-//        收到深度更新（價位 101 有 1.5 BTC 的買單）後，畫面要顯示最新的最佳買價。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
-// Bug 版：mutableStateOf(book)，更新引擎之後再寫一次 state.value = book，以為這樣會通知畫面。
-//        寫進去的還是同一個物件，equals 當然相等，這次寫入被當成「沒變」，畫面不重組，最佳買價停在 100。
-// 修正版：mutableStateOf(book, neverEqualPolicy())。這個 policy 認為「任何一次寫入都算變了」，同一個物件寫進去也會通知畫面。
+// 情境：訂單簿引擎 OrderBook 為了效率，內部用 TreeMap 就地更新，整個 App
+// 共用同一個物件，不會每次複製一份。
+//        收到深度更新（價位 101 有 1.5 BTC 的買單）後，
+// 畫面要顯示最新的最佳買價。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
+// Bug 版：mutableStateOf(book)，更新引擎之後再寫一次 state.value = book，
+// 以為這樣會通知畫面。
+//        寫進去的還是同一個物件，equals 當然相等，這次寫入被當成「沒變」，
+// 畫面不重組，最佳買價停在 100。
+// 修正版：mutableStateOf(book, neverEqualPolicy())。這個 policy
+// 認為「任何一次寫入都算變了」，同一個物件寫進去也會通知畫面。
 package tw.harry.labs.solution.kotlin11composestate
 
 import androidx.compose.runtime.Composable
@@ -32,20 +39,32 @@ private class L03OrderBook {
 }
 
 @Composable
-private fun L03BestBid(state: MutableState<L03OrderBook>, onShow: (String) -> Unit) {
+private fun L03BestBid(
+    state: MutableState<L03OrderBook>,
+    onShow: (String) -> Unit,
+) {
     HeadlessText("最佳買價 ${state.value.bestBid}", onShow)
 }
 
-/** 演練流程（兩個版本共用）：組合畫面（最佳買價 100）→ 收到深度更新（價位 101）→ 更新引擎，再寫一次 state.value */
-private suspend fun scenario(log: LabLog, book: L03OrderBook, state: MutableState<L03OrderBook>) {
+/**
+ * 演練流程（兩個版本共用）：組合畫面（最佳買價 100）→ 收到深度更新（價位 101）
+ * → 更新引擎，再寫一次 state.value
+ */
+private suspend fun scenario(
+    log: LabLog,
+    book: L03OrderBook,
+    state: MutableState<L03OrderBook>,
+) {
     var shown = ""
     var shows = 0
     withHeadlessCompose {
         setContent { L03BestBid(state) { shown = it; shows++ } }
         settle()
         log("更新前，畫面顯示：$shown")
-        book.update(101, 1.5)                                       // 就地更新引擎
-        state.value = book                                          // 以為這樣會通知畫面
+        // 就地更新引擎
+        book.update(101, 1.5)
+        // 以為這樣會通知畫面
+        state.value = book
         settle()
         log("更新後，訂單簿的最佳買價：${book.bestBid}")
         log("更新後，畫面顯示：$shown")
@@ -57,7 +76,8 @@ private suspend fun scenario(log: LabLog, book: L03OrderBook, state: MutableStat
 private object L03Bug {
     suspend fun run(log: LabLog) {
         val book = L03OrderBook().apply { update(100, 2.0); update(99, 4.0) }
-        val state = mutableStateOf(book)                            // 預設用 equals 判斷「值有沒有變」
+        // 預設用 equals 判斷「值有沒有變」
+        val state = mutableStateOf(book)
         scenario(log, book, state)
     }
 }
@@ -66,7 +86,8 @@ private object L03Bug {
 private object L03Fixed {
     suspend fun run(log: LabLog) {
         val book = L03OrderBook().apply { update(100, 2.0); update(99, 4.0) }
-        val state = mutableStateOf(book, neverEqualPolicy())        // 每次寫入都算變了
+        // 每次寫入都算變了
+        val state = mutableStateOf(book, neverEqualPolicy())
         scenario(log, book, state)
     }
 }

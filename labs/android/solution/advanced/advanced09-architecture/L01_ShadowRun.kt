@@ -1,12 +1,20 @@
-// L01：整個換成新的手續費計算，使用者被多收、少收了幾圓，卻沒有人發現（strangler：新舊並存、先比對再切換）
-// 對應複習站：Advanced09Architecture 第 1 題「面對已經上線的舊專案，怎麼逐步演進，而不是整個重寫？」
+// L01：整個換成新的手續費計算，使用者被多收、少收了幾圓，
+// 卻沒有人發現（strangler：新舊並存、先比對再切換）
+// 對應複習站：Advanced09Architecture 第 1 題「面對已經上線的舊專案，
+// 怎麼逐步演進，而不是整個重寫？」
 //
-// 情境：舊的手續費計算（legacy）是「每一筆成交各自算 0.1%，四捨五入到圓，再加總」。團隊把它重寫成乾淨的新實作，
-//       新實作「先把成交金額加總，再算一次 0.1% 並四捨五入」。看起來只是整理程式碼，但四捨五入的時機不同，結果就不同。
-//       演練有 6 筆委託，每筆有 1 到 3 筆成交（金額單位日圓）。這個差異沒有測試保護（沒有 characterization test）。
-// Bug 版：big bang：直接把呼叫端換成新實作。6 筆裡有 3 筆手續費和舊的不一樣（使用者被多收或少收 1 圓），系統完全沒有記錄，沒人知道。
-// 修正版：strangler 的 shadow run：使用者看到的仍然是舊實作的結果，同時在旁邊跑一份新實作，兩邊不一致就記錄下來。
-//        先靠記錄找出新實作的差異、修好，不一致降到 0 之後，才把開關切到新實作。
+// 情境：舊的手續費計算（legacy）是「每一筆成交各自算 0.1%，四捨五入到圓，
+// 再加總」。團隊把它重寫成乾淨的新實作，
+//       新實作「先把成交金額加總，再算一次 0.1% 並四捨五入」。
+// 看起來只是整理程式碼，但四捨五入的時機不同，結果就不同。
+//       演練有 6 筆委託，每筆有 1 到 3 筆成交（金額單位日圓）。
+// 這個差異沒有測試保護（沒有 characterization test）。
+// Bug 版：big bang：直接把呼叫端換成新實作。6 筆裡有 3
+// 筆手續費和舊的不一樣（使用者被多收或少收 1 圓），系統完全沒有記錄，沒人知道。
+// 修正版：strangler 的 shadow run：使用者看到的仍然是舊實作的結果，
+// 同時在旁邊跑一份新實作，兩邊不一致就記錄下來。
+//        先靠記錄找出新實作的差異、修好，不一致降到 0 之後，
+// 才把開關切到新實作。
 package tw.harry.labs.solution.advanced09architecture
 
 import tw.harry.labs.kit.Lab
@@ -37,13 +45,20 @@ private val orders = listOf(
     listOf(2_600, 2_600),
 )
 
-/** 演練流程（兩個版本共用）：makeCalculator(舊實作, 新實作, 不一致時的記錄函式) 回傳「呼叫端實際使用的計算函式」 */
-private fun scenario(log: LabLog, makeCalculator: (FeeFunction, FeeFunction, OnMismatch) -> FeeFunction) {
+/**
+ * 演練流程（兩個版本共用）：makeCalculator(舊實作, 新實作, 不一致時的記錄函式)
+ * 回傳「呼叫端實際使用的計算函式」
+ */
+private fun scenario(
+    log: LabLog,
+    makeCalculator: (FeeFunction, FeeFunction, OnMismatch) -> FeeFunction,
+) {
     val legacy = orders.map(::legacyFee)
     log("舊實作的手續費：$legacy")
 
     var recorded = 0
-    val calculator = makeCalculator(::legacyFee, ::newFeeV1) { _, _, _ -> recorded++ }
+    val calculator =
+        makeCalculator(::legacyFee, ::newFeeV1) { _, _, _ -> recorded++ }
     val charged = orders.map(calculator)
     log("使用者被收的手續費：$charged")
     log("和舊實作不一樣的有 ${charged.zip(legacy).count { (a, b) -> a != b }} 筆")
@@ -51,26 +66,38 @@ private fun scenario(log: LabLog, makeCalculator: (FeeFunction, FeeFunction, OnM
 
     // 修好新實作（V2）之後再比對一輪
     recorded = 0
-    val calculatorAfterFix = makeCalculator(::legacyFee, ::newFeeV2) { _, _, _ -> recorded++ }
+    val calculatorAfterFix =
+        makeCalculator(::legacyFee, ::newFeeV2) { _, _, _ -> recorded++ }
     orders.forEach { calculatorAfterFix(it) }
     log("修正新實作之後再比對，系統記錄到的不一致：$recorded 筆")
 }
 
 // MARK: - Bug 版
 private object L01Bug {
-    fun makeCalculator(legacy: FeeFunction, candidate: FeeFunction, onMismatch: OnMismatch): FeeFunction =
-        candidate                                               // big bang：直接換成新實作，沒有任何比對
+    fun makeCalculator(
+        legacy: FeeFunction,
+        candidate: FeeFunction,
+        onMismatch: OnMismatch,
+    ): FeeFunction = // big bang：直接換成新實作，沒有任何比對
+        candidate
 
     suspend fun run(log: LabLog) = scenario(log, ::makeCalculator)
 }
 
 // MARK: - 修正版
 private object L01Fixed {
-    fun makeCalculator(legacy: FeeFunction, candidate: FeeFunction, onMismatch: OnMismatch): FeeFunction = { fills ->
+    fun makeCalculator(
+        legacy: FeeFunction,
+        candidate: FeeFunction,
+        onMismatch: OnMismatch,
+    ): FeeFunction = { fills ->
         val old = legacy(fills)
-        val new = candidate(fills)                              // shadow run：新實作在旁邊跑
-        if (old != new) onMismatch(fills, old, new)             // 不一致就記錄下來
-        old                                                     // 使用者看到的仍然是舊實作的結果
+        // shadow run：新實作在旁邊跑
+        val new = candidate(fills)
+        // 不一致就記錄下來
+        if (old != new) onMismatch(fills, old, new)
+        // 使用者看到的仍然是舊實作的結果
+        old
     }
 
     suspend fun run(log: LabLog) = scenario(log, ::makeCalculator)

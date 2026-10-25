@@ -1,23 +1,38 @@
-// L02：使用者剛好在換碼的瞬間輸入就被拒絕，而同一個碼卻可以被重複使用（TOTP 的驗證視窗與重放）
-// 對應複習站：Exchange10AccountSecurity 第 2 題「伺服器驗證 TOTP 時要注意什麼？」
+// L02：使用者剛好在換碼的瞬間輸入就被拒絕，而同一個碼卻可以被重複使用（TOTP
+// 的驗證視窗與重放）
+// 對應複習站：Exchange10AccountSecurity 第 2 題「伺服器驗證 TOTP
+// 時要注意什麼？」
 //
-// 情境：伺服器收到使用者輸入的 6 位數驗證碼，要判斷對不對。手機和伺服器的時鐘有一點誤差，使用者輸入也要幾秒，
-//        所以通常除了「現在這個 30 秒」，也接受前一個和後一個（視窗 ±1，共 3 個碼）；而且同一個 counter 的碼只能用一次，否則被旁人看到的碼可以重放。
-//        演練用 4 個情境（每個情境各自一台全新的伺服器，秘密是 RFC 的測試資料；第 59 秒的碼是 287082，第 100 秒的碼是 969429）：
-//        ① 使用者在第 59 秒看到 287082，第 61 秒才送出（跨過了 30 秒的邊界）→ 應該受理
-//        ② 同一個碼 287082 在第 40 秒送出被受理，第 55 秒（還在同一個 30 秒裡）又被送出一次（旁人重放）→ 第 2 次應該拒絕
-//        ③ 第 59 秒的碼 287082，到第 119 秒才送出（已經差了 2 個 time step）→ 應該拒絕
-//        ④ 使用者手機的時鐘快了 30 秒：第 61 秒收到第 100 秒的碼 969429 → 應該受理
-// Bug 版：只算「現在這個 30 秒」的碼來比對，沒有視窗，也沒有記住用過的 counter。
-//        ① ④ 剛好在邊界或時鐘有一點誤差的使用者被拒絕；② 同一個碼在同一個 30 秒裡可以一直用。
-// 修正版：算 counter 前一個、現在、後一個三個碼，其中比「上次成功的 counter」大的才算數；成功後記住這個 counter。
+// 情境：伺服器收到使用者輸入的 6 位數驗證碼，要判斷對不對。
+// 手機和伺服器的時鐘有一點誤差，使用者輸入也要幾秒，
+//        所以通常除了「現在這個 30 秒」，也接受前一個和後一個（視窗 ±1，共 3
+// 個碼）；而且同一個 counter 的碼只能用一次，否則被旁人看到的碼可以重放。
+//        演練用 4 個情境（每個情境各自一台全新的伺服器，秘密是 RFC 的測試資料；
+// 第 59 秒的碼是 287082，第 100 秒的碼是 969429）：
+//        ① 使用者在第 59 秒看到 287082，第 61 秒才送出（跨過了 30 秒的邊界）→
+// 應該受理
+//        ② 同一個碼 287082 在第 40 秒送出被受理，第 55 秒（還在同一個 30 秒裡）
+// 又被送出一次（旁人重放）→ 第 2 次應該拒絕
+//        ③ 第 59 秒的碼 287082，到第 119 秒才送出（已經差了 2 個 time step）→
+// 應該拒絕
+//        ④ 使用者手機的時鐘快了 30 秒：第 61 秒收到第 100 秒的碼 969429 →
+// 應該受理
+// Bug 版：只算「現在這個 30 秒」的碼來比對，沒有視窗，也沒有記住用過的
+// counter。
+//        ① ④ 剛好在邊界或時鐘有一點誤差的使用者被拒絕；② 同一個碼在同一個 30
+// 秒裡可以一直用。
+// 修正版：算 counter 前一個、現在、後一個三個碼，其中比「上次成功的 counter」
+// 大的才算數；成功後記住這個 counter。
 package tw.harry.labs.solution.exchange10accountsecurity
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 一台伺服器的驗證函式：給驗證碼與伺服器現在的 Unix 秒，回傳受理（true）或拒絕（false）。每次建立都是全新的狀態。 */
+/**
+ * 一台伺服器的驗證函式：給驗證碼與伺服器現在的 Unix 秒，回傳受理（true）
+ * 或拒絕（false）。每次建立都是全新的狀態。
+ */
 private typealias Verifier = (code: String, now: Long) -> Boolean
 
 /** 演練流程（兩個版本共用）：4 個情境，每個情境各自一台全新的伺服器 */
@@ -49,10 +64,9 @@ private fun scenario(log: LabLog, makeVerifier: () -> Verifier) {
 
 // MARK: - Bug 版
 private object L02Bug {
-    fun makeVerifier(): Verifier {
-        return { code, now ->
-            code == E10.hotp(E10.rfcSecret, now / 30)               // 只比對現在這個 30 秒；也不記住用過的碼
-        }
+    fun makeVerifier(): Verifier = { code, now ->
+        // 只比對現在這個 30 秒；也不記住用過的碼
+        code == E10.hotp(E10.rfcSecret, now / 30)
     }
 
     suspend fun run(log: LabLog) = scenario(log) { makeVerifier() }
@@ -61,15 +75,19 @@ private object L02Bug {
 // MARK: - 修正版
 private object L02Fixed {
     fun makeVerifier(): Verifier {
-        var lastUsed: Long? = null                                   // 這位使用者上次成功的 counter
+        // 這位使用者上次成功的 counter
+        var lastUsed: Long? = null
         return { code, now ->
             val current = now / 30
             var accepted = false
-            for (counter in (current - 1)..(current + 1)) {          // 視窗 ±1：共 3 個碼有效
+            // 視窗 ±1：共 3 個碼有效
+            for (counter in (current - 1)..(current + 1)) {
                 val last = lastUsed
-                if (last != null && counter <= last) continue         // 用過的 counter（和更舊的）不能再用
+                // 用過的 counter（和更舊的）不能再用
+                if (last != null && counter <= last) continue
                 if (E10.hotp(E10.rfcSecret, counter) == code) {
-                    lastUsed = counter                               // 記住：同一個 counter 的碼只能用一次
+                    // 記住：同一個 counter 的碼只能用一次
+                    lastUsed = counter
                     accepted = true
                     break
                 }
@@ -82,8 +100,9 @@ private object L02Fixed {
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("4 個情境") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("4 個情境")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l02 = Lab(
     id = "L02",
@@ -108,14 +127,29 @@ val l02 = Lab(
     checkBug = { lines ->
         val n = wrongCount(lines)
         when {
-            n == null -> "演練沒有跑完：要用 scenario(log) { makeVerifier() } 執行"
-            "情境 2（重放）：第 1 次：第 40 秒送出 287082 → 受理 ✓" !in lines -> "Bug 版也要能驗證：現在這個 30 秒的碼要受理（第 40 秒送出 287082）"
-            "情境 2（重放）：第 2 次：第 55 秒又送出同一個碼 287082 → 受理 ✗（應該拒絕）" !in lines ->
+            n == null -> {
+                "演練沒有跑完：要用 scenario(log) { makeVerifier() } 執行"
+            }
+
+            "情境 2（重放）：第 1 次：第 40 秒送出 287082 → 受理 ✓" !in lines -> {
+                "Bug 版也要能驗證：現在這個 30 秒的碼要受理（第 40 秒送出 287082）"
+            }
+
+            "情境 2（重放）：第 2 次：第 55 秒又送出同一個碼 287082 → 受理 ✗（應該拒絕）" !in lines -> {
                 "Bug 還沒重現：沒有記住用過的 counter，同一個碼第 2 次也會被受理"
-            "情境 1（跨過邊界）：第 61 秒送出第 59 秒的碼 287082 → 拒絕 ✗（應該受理）" !in lines ->
+            }
+
+            "情境 1（跨過邊界）：第 61 秒送出第 59 秒的碼 287082 → 拒絕 ✗（應該受理）" !in lines -> {
                 "Bug 還沒重現：只比對現在這個 30 秒，跨過邊界的碼會被拒絕"
-            n != 3 -> "Bug 版應該判斷錯 3 個情境（目前 $n 個）"
-            else -> null
+            }
+
+            n != 3 -> {
+                "Bug 版應該判斷錯 3 個情境（目前 $n 個）"
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->

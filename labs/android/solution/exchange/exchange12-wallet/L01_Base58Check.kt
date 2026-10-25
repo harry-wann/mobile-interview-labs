@@ -1,21 +1,35 @@
 // L01：合法的比特幣地址被判定無效（Base58Check 解碼丟掉了開頭的 1）
-// 對應複習站：Exchange12Wallet 第 2 題「加密資產的地址怎麼驗證？Base58Check、Bech32、EIP-55 是什麼？」
+// 對應複習站：Exchange12Wallet 第 2 題「加密資產的地址怎麼驗證？Base58Check、
+// Bech32、EIP-55 是什麼？」
 //
-// 情境：比特幣傳統地址是 Base58Check：把字串當成 58 進位的大整數轉成位元組，第一個位元組是版本、最後 4 個位元組是校驗碼，
-//        校驗碼 = 前面所有位元組做兩次 SHA-256 的前 4 個位元組。**開頭每個 `1` 代表一個 0x00 位元組**，轉成大整數時開頭的 0 會消失，要自己補回來。
-//        大整數轉位元組（E12.base58Magnitude，不處理開頭的 0，BigInteger 多出來的符號位元組也處理好了）與校驗碼（E12.checksum4）已經寫好在 Exchange12Support.kt。
-//        演練檢查 5 個地址（都是公開的測試地址）：比特幣創世區塊的地址 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa、另一個以 1 開頭的合法地址、
-//        以 3 開頭的合法地址（P2SH），最後一個字元被改掉的地址（校驗碼不符），含有 0（不在字母表）的地址。
-// Bug 版：直接拿大整數轉出來的位元組去算校驗碼，沒有把開頭的 `1` 補回成 0x00。以 `1` 開頭的地址少了版本位元組，
-//        校驗碼是用錯的資料算的，合法的地址被當成無效；以 `3` 開頭的剛好不受影響，所以測試時很容易漏掉。
-// 修正版：數出字串開頭有幾個 `1`，在位元組前面補上同樣數量的 0x00，再檢查校驗碼。
+// 情境：比特幣傳統地址是 Base58Check：把字串當成 58 進位的大整數轉成位元組，
+// 第一個位元組是版本、最後 4 個位元組是校驗碼，
+//        校驗碼 = 前面所有位元組做兩次 SHA-256 的前 4 個位元組。**開頭每個 `1`
+// 代表一個 0x00 位元組**，轉成大整數時開頭的 0 會消失，要自己補回來。
+//        大整數轉位元組（E12.base58Magnitude，不處理開頭的 0，BigInteger
+// 多出來的符號位元組也處理好了）與校驗碼（E12.checksum4）已經寫好在
+// Exchange12Support.kt。
+//        演練檢查 5 個地址（都是公開的測試地址）：比特幣創世區塊的地址
+// 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa、另一個以 1 開頭的合法地址、
+//        以 3 開頭的合法地址（P2SH），最後一個字元被改掉的地址（校驗碼不符），
+// 含有 0（不在字母表）的地址。
+// Bug 版：直接拿大整數轉出來的位元組去算校驗碼，沒有把開頭的 `1` 補回成 0x00。
+// 以 `1` 開頭的地址少了版本位元組，
+//        校驗碼是用錯的資料算的，合法的地址被當成無效；以 `3`
+// 開頭的剛好不受影響，所以測試時很容易漏掉。
+// 修正版：數出字串開頭有幾個 `1`，在位元組前面補上同樣數量的 0x00，
+// 再檢查校驗碼。
 package tw.harry.labs.solution.exchange12wallet
 
 import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private class L01Case(val name: String, val address: String, val expected: Boolean)
+private class L01Case(
+    val name: String,
+    val address: String,
+    val expected: Boolean,
+)
 
 private val cases = listOf(
     L01Case("創世區塊的地址（以 1 開頭）", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", true),
@@ -45,9 +59,13 @@ private fun scenario(log: LabLog, isValid: (String) -> Boolean) {
 private object L01Bug {
     fun isValid(s: String): Boolean {
         val magnitude = E12.base58Magnitude(s) ?: return false
-        val bytes = magnitude                                      // 沒有補回開頭的 0x00：以 1 開頭的地址少了版本位元組
-        if (bytes.size < 5) return false                           // 至少要有 1 個版本位元組加 4 個校驗位元組
-        return E12.checksum4(bytes.copyOfRange(0, bytes.size - 4)).contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))
+        // 沒有補回開頭的 0x00：以 1 開頭的地址少了版本位元組
+        val bytes = magnitude
+        // 至少要有 1 個版本位元組加 4 個校驗位元組
+        if (bytes.size < 5) return false
+        return E12.checksum4(
+            bytes.copyOfRange(0, bytes.size - 4),
+        ).contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))
     }
 
     suspend fun run(log: LabLog) = scenario(log) { isValid(it) }
@@ -57,18 +75,23 @@ private object L01Bug {
 private object L01Fixed {
     fun isValid(s: String): Boolean {
         val magnitude = E12.base58Magnitude(s) ?: return false
-        val zeros = s.takeWhile { it == '1' }.length               // 開頭每個 1 代表一個 0x00 位元組
+        // 開頭每個 1 代表一個 0x00 位元組
+        val zeros = s.takeWhile { it == '1' }.length
         val bytes = ByteArray(zeros) + magnitude
-        if (bytes.size < 5) return false                           // 至少要有 1 個版本位元組加 4 個校驗位元組
-        return E12.checksum4(bytes.copyOfRange(0, bytes.size - 4)).contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))
+        // 至少要有 1 個版本位元組加 4 個校驗位元組
+        if (bytes.size < 5) return false
+        return E12.checksum4(
+            bytes.copyOfRange(0, bytes.size - 4),
+        ).contentEquals(bytes.copyOfRange(bytes.size - 4, bytes.size))
     }
 
     suspend fun run(log: LabLog) = scenario(log) { isValid(it) }
 }
 
 // MARK: - 演練設定
-private fun wrongCount(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("5 個地址") }?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
+private fun wrongCount(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("5 個地址")
+}?.let { Regex("(\\d+) 個$").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l01 = Lab(
     id = "L01",

@@ -6,10 +6,15 @@ import java.lang.ref.WeakReference
 /** 從 log 找出以 prefix 開頭的第一行，取出後面接的數字 */
 internal fun a03Number(lines: List<String>, prefix: String): Double? {
     val line = lines.firstOrNull { it.startsWith(prefix) } ?: return null
-    return line.removePrefix(prefix).takeWhile { it.isDigit() || it == '.' || it == '-' }.toDoubleOrNull()
+    return line.removePrefix(prefix).takeWhile {
+        it.isDigit() || it == '.' ||
+            it == '-'
+    }.toDoubleOrNull()
 }
 
-/** 先 GC 再量：目前 Java heap 用了幾 MB（要看有沒有一直長，GC 之後的數字才準） */
+/**
+ * 先 GC 再量：目前 Java heap 用了幾 MB（要看有沒有一直長，GC 之後的數字才準）
+ */
 internal fun a03UsedHeapMB(): Double {
     val runtime = Runtime.getRuntime()
     repeat(3) { a03ForceGc() }

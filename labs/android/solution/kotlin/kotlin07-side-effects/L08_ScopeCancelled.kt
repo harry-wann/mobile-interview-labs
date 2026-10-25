@@ -1,12 +1,20 @@
-// L08：按了送出、馬上返回，訂單卻沒有送出去（rememberCoroutineScope 與 ViewModel）
-// 對應複習站：Kotlin07SideEffects 第 5 題「使用者點按鈕時要啟動 coroutine，為什麼要用 rememberCoroutineScope？」
+// L08：按了送出、馬上返回，訂單卻沒有送出去（rememberCoroutineScope 與
+// ViewModel）
+// 對應複習站：Kotlin07SideEffects 第 5 題「使用者點按鈕時要啟動 coroutine，
+// 為什麼要用 rememberCoroutineScope？」
 //
-// 情境：下單畫面按「送出」會呼叫伺服器（約 400 ms）。使用者按下送出、20 ms 後就返回上一頁。
-//        演練裡的 OrderViewModel 代表 ViewModel：它的 scope（viewModelScope）撐過畫面離開。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
-// Bug 版：onClick 裡用 rememberCoroutineScope() 的 scope 送單。這個 scope 綁在畫面的 composition 上，
-//        使用者一離開畫面就被取消，請求在半路被中斷，伺服器沒收到訂單，使用者也不知道單到底有沒有送出。
-// 修正版：送單這種必須做完的工作交給 ViewModel（viewModelScope）。畫面只負責呼叫 vm.submit()。
+// 情境：下單畫面按「送出」會呼叫伺服器（約 400 ms）。使用者按下送出、20 ms
+// 後就返回上一頁。
+//        演練裡的 OrderViewModel 代表 ViewModel：它的 scope（viewModelScope）
+// 撐過畫面離開。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
+// Bug 版：onClick 裡用 rememberCoroutineScope() 的 scope 送單。這個 scope
+// 綁在畫面的 composition 上，
+//        使用者一離開畫面就被取消，請求在半路被中斷，伺服器沒收到訂單，
+// 使用者也不知道單到底有沒有送出。
+// 修正版：送單這種必須做完的工作交給 ViewModel（viewModelScope）。
+// 畫面只負責呼叫 vm.submit()。
 package tw.harry.labs.solution.kotlin07sideeffects
 
 import androidx.compose.runtime.Composable
@@ -36,14 +44,26 @@ private class L08Api(private val log: LabLog) {
 }
 
 /** 假的 ViewModel：scope 代表 viewModelScope，不會因為畫面離開而取消 */
-private class L08OrderViewModel(val api: L08Api, private val scope: CoroutineScope) {
+private class L08OrderViewModel(
+    val api: L08Api,
+    private val scope: CoroutineScope,
+) {
     fun submit() {
         scope.launch { api.submit() }
     }
 }
 
-/** 演練流程（兩個版本共用）：按送出 → 20 ms 後離開畫面 → 再等 800 ms，看伺服器有沒有收到訂單 */
-private suspend fun scenario(log: LabLog, screen: @Composable (vm: L08OrderViewModel, expose: (click: () -> Unit) -> Unit) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：按送出 → 20 ms 後離開畫面 → 再等 800 ms，
+ * 看伺服器有沒有收到訂單
+ */
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (
+        vm: L08OrderViewModel,
+        expose: (click: () -> Unit) -> Unit,
+    ) -> Unit,
+) {
     val api = L08Api(log)
     val viewModelJob = Job()
     val vm = L08OrderViewModel(api, CoroutineScope(viewModelJob))
@@ -67,24 +87,37 @@ private suspend fun scenario(log: LabLog, screen: @Composable (vm: L08OrderViewM
 // MARK: - Bug 版
 private object L08Bug {
     @Composable
-    fun OrderScreen(vm: L08OrderViewModel, expose: (click: () -> Unit) -> Unit) {
-        val scope = rememberCoroutineScope()                // 綁在這個畫面的 composition 上
+    fun OrderScreen(
+        vm: L08OrderViewModel,
+        expose: (click: () -> Unit) -> Unit,
+    ) {
+        // 綁在這個畫面的 composition 上
+        val scope = rememberCoroutineScope()
         val onSubmit: () -> Unit = { scope.launch { vm.api.submit() } }
-        SideEffect { expose(onSubmit) }                     // 演練用：把按鈕的 onClick 交出去
+        // 演練用：把按鈕的 onClick 交出去
+        SideEffect { expose(onSubmit) }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { vm, expose -> OrderScreen(vm, expose) }
+    suspend fun run(log: LabLog) = scenario(log) { vm, expose ->
+        OrderScreen(vm, expose)
+    }
 }
 
 // MARK: - 修正版
 private object L08Fixed {
     @Composable
-    fun OrderScreen(vm: L08OrderViewModel, expose: (click: () -> Unit) -> Unit) {
-        val onSubmit: () -> Unit = { vm.submit() }          // 交給 ViewModel：離開畫面不會取消
+    fun OrderScreen(
+        vm: L08OrderViewModel,
+        expose: (click: () -> Unit) -> Unit,
+    ) {
+        // 交給 ViewModel：離開畫面不會取消
+        val onSubmit: () -> Unit = { vm.submit() }
         SideEffect { expose(onSubmit) }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { vm, expose -> OrderScreen(vm, expose) }
+    suspend fun run(log: LabLog) = scenario(log) { vm, expose ->
+        OrderScreen(vm, expose)
+    }
 }
 
 // MARK: - 演練設定

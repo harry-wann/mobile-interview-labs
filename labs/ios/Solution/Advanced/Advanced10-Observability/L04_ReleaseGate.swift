@@ -1,13 +1,21 @@
-// L04：放量 1% 時只有 40 位使用者，gate 卻憑這個數字決定要擴大或暫停（樣本太少的數字不能拿來決定）
-// 對應複習站：Advanced10Observability 第 3 題「新版本發布時，怎麼用指標決定要不要繼續擴大？」
+// L04：放量 1% 時只有 40 位使用者，gate
+// 卻憑這個數字決定要擴大或暫停（樣本太少的數字不能拿來決定）
+// 對應複習站：Advanced10Observability 第 3 題「新版本發布時，
+// 怎麼用指標決定要不要繼續擴大？」
 //
-// 情境：新版本分階段放量，每一階段結束時 gate 要決定「擴大」或「暫停」。比較的指標是 crash-free users，基準是上一版的 99.2%。
+// 情境：新版本分階段放量，每一階段結束時 gate 要決定「擴大」或「暫停」。
+// 比較的指標是 crash-free users，基準是上一版的 99.2%。
 //       演練有四個階段的資料：
-//         A. 放量 1%，只有 40 位使用者，沒有人 crash（100%）。B. 放量 1%，40 位使用者，1 位 crash（97.5%）。
-//         C. 放量 5%，2000 位使用者，60 位 crash（97.0%）。D. 放量 5%，2000 位使用者，14 位 crash（99.3%）。
-// Bug 版：只比較數字：新版 crash-free users 大於等於上一版就擴大，否則暫停。40 位使用者的 100% 沒有意義，卻決定擴大；
-//        同樣 40 位、只多 1 位 crash，卻決定暫停（一位使用者的偶然就改變了結論）。
-// 修正版：先看樣本數：使用者不到 1000 位就「等待，繼續收集」，不做決定；樣本夠了才比較，並容許 0.3 個百分點以內的誤差。
+//         A. 放量 1%，只有 40 位使用者，沒有人 crash（100%）。B. 放量 1%，40
+// 位使用者，1 位 crash（97.5%）。
+//         C. 放量 5%，2000 位使用者，60 位 crash（97.0%）。D. 放量 5%，2000
+// 位使用者，14 位 crash（99.3%）。
+// Bug 版：只比較數字：新版 crash-free users 大於等於上一版就擴大，否則暫停。40
+// 位使用者的 100% 沒有意義，卻決定擴大；
+//        同樣 40 位、只多 1 位 crash，
+// 卻決定暫停（一位使用者的偶然就改變了結論）。
+// 修正版：先看樣本數：使用者不到 1000 位就「等待，繼續收集」，不做決定；
+// 樣本夠了才比較，並容許 0.3 個百分點以內的誤差。
 import Foundation
 import LabKit
 
@@ -26,7 +34,10 @@ private let stages = [
     Stage(name: "D. 放量 5%（2000 位，14 位 crash）", users: 2_000, crashedUsers: 14),
 ]
 
-/** 演練流程（兩個版本共用）：decide(階段, 上一版的 crash-free users) 回傳「擴大」「暫停」或「等待」 */
+/**
+ * 演練流程（兩個版本共用）：decide(階段, 上一版的 crash-free users)
+ * 回傳「擴大」「暫停」或「等待」
+ */
 private func scenario(_ log: LabLog, decide: (Stage, Double) -> String) {
     for stage in stages {
         log("\(stage.name)：\(decide(stage, previousCrashFree))")
@@ -36,7 +47,8 @@ private func scenario(_ log: LabLog, decide: (Stage, Double) -> String) {
 // MARK: - Bug 版
 private enum L04Bug {
     static func decide(_ stage: Stage, _ previous: Double) -> String {
-        stage.crashFree >= previous ? "擴大" : "暫停"            // 只比數字，不管樣本有多少
+        // 只比數字，不管樣本有多少
+        stage.crashFree >= previous ? "擴大" : "暫停"
     }
 
     static func run(_ log: LabLog) async {
@@ -81,17 +93,33 @@ extension Advanced10Observability {
             }
         },
         checkBug: { lines in
-            guard lines.contains(where: { $0.hasPrefix("A.") }) else { return "演練沒有跑完：要用 scenario 執行" }
-            if !lines.contains("A. 放量 1%（40 位，0 位 crash）：擴大") { return "Bug 還沒重現：只比較 crash-free users 大於等於上一版就擴大，A 應該是「擴大」" }
-            if !lines.contains("B. 放量 1%（40 位，1 位 crash）：暫停") { return "Bug 還沒重現：B 的 crash-free users 是 97.5%，低於上一版，應該是「暫停」" }
+            guard lines.contains(where: { $0.hasPrefix("A.") }) else {
+                return "演練沒有跑完：要用 scenario 執行"
+            }
+            if !lines.contains("A. 放量 1%（40 位，0 位 crash）：擴大") {
+                return "Bug 還沒重現：只比較 crash-free users 大於等於上一版就擴大，A 應該是「擴大」"
+            }
+            if !lines.contains("B. 放量 1%（40 位，1 位 crash）：暫停") {
+                return "Bug 還沒重現：B 的 crash-free users 是 97.5%，低於上一版，應該是「暫停」"
+            }
             return nil
         },
         checkFixed: { lines in
-            guard lines.contains(where: { $0.hasPrefix("A.") }) else { return "演練沒有跑完：要用 scenario 執行" }
-            if !lines.contains("A. 放量 1%（40 位，0 位 crash）：等待（樣本不足，繼續收集）") { return "A 只有 40 位使用者，應該回「等待（樣本不足，繼續收集）」" }
-            if !lines.contains("B. 放量 1%（40 位，1 位 crash）：等待（樣本不足，繼續收集）") { return "B 只有 40 位使用者，應該回「等待（樣本不足，繼續收集）」" }
-            if !lines.contains("C. 放量 5%（2000 位，60 位 crash）：暫停") { return "C 樣本夠了，97.0% 比上一版低很多，應該「暫停」" }
-            if !lines.contains("D. 放量 5%（2000 位，14 位 crash）：擴大") { return "D 樣本夠了，99.3% 不比上一版差，應該「擴大」" }
+            guard lines.contains(where: { $0.hasPrefix("A.") }) else {
+                return "演練沒有跑完：要用 scenario 執行"
+            }
+            if !lines.contains("A. 放量 1%（40 位，0 位 crash）：等待（樣本不足，繼續收集）") {
+                return "A 只有 40 位使用者，應該回「等待（樣本不足，繼續收集）」"
+            }
+            if !lines.contains("B. 放量 1%（40 位，1 位 crash）：等待（樣本不足，繼續收集）") {
+                return "B 只有 40 位使用者，應該回「等待（樣本不足，繼續收集）」"
+            }
+            if !lines.contains("C. 放量 5%（2000 位，60 位 crash）：暫停") {
+                return "C 樣本夠了，97.0% 比上一版低很多，應該「暫停」"
+            }
+            if !lines.contains("D. 放量 5%（2000 位，14 位 crash）：擴大") {
+                return "D 樣本夠了，99.3% 不比上一版差，應該「擴大」"
+            }
             return nil
         }
     )

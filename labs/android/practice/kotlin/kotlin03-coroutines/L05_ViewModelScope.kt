@@ -1,12 +1,16 @@
 // L05：ViewModel 自己開 scope，關掉畫面後還在背景輪詢（viewModelScope）
-// 對應複習站：Kotlin03Coroutines 第 5 題「viewModelScope 和 lifecycleScope 是什麼？dispatcher 為什麼要注入？」
+// 對應複習站：Kotlin03Coroutines 第 5 題「viewModelScope 和 lifecycleScope
+// 是什麼？dispatcher 為什麼要注入？」
 //
-// 情境：行情畫面的 ViewModel 一建立就開始每 0.5 秒輪詢價格。這個演練用畫面操作：「打開行情畫面」「關閉行情畫面」。
+// 情境：行情畫面的 ViewModel 一建立就開始每 0.5 秒輪詢價格。
+// 這個演練用畫面操作：「打開行情畫面」「關閉行情畫面」。
 //
 // 你要寫：
-//   ① Bug 版：在 ViewModel 裡自己建立 CoroutineScope 來輪詢。反覆開關畫面，會看到「輪詢中」一直增加。
+//   ① Bug 版：在 ViewModel 裡自己建立 CoroutineScope 來輪詢。反覆開關畫面，
+// 會看到「輪詢中」一直增加。
 //   ② 修正版：改用 viewModelScope。
-// 只改有 TODO 的地方。解答：solution/kotlin/kotlin03-coroutines/L05_ViewModelScope.kt
+// 只改有 TODO 的地方。解答：
+// solution/kotlin/kotlin03-coroutines/L05_ViewModelScope.kt
 package tw.harry.labs.practice.kotlin03coroutines
 
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +34,10 @@ import tw.harry.labs.kit.Variant
 
 private const val POLLING = "輪詢中"
 
-/** 每 0.5 秒輪詢一次價格（已寫好）。最多 30 次（15 秒）就停，避免洩漏的輪詢一直跑 */
+/**
+ * 每 0.5 秒輪詢一次價格（已寫好）。最多 30 次（15 秒）就停，
+ * 避免洩漏的輪詢一直跑
+ */
 private suspend fun pollPrices(log: LabLog) {
     LiveObjects.add(POLLING)
     try {
@@ -71,7 +78,8 @@ private fun L05Demo(variant: Variant, log: LabLog) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LiveObjectsView(POLLING)
         FakeScreenHost(log, name = "行情畫面") {
-            // 每次打開畫面都會拿到一個新的 ViewModel；關閉時它的 onCleared 會被呼叫
+            // 每次打開畫面都會拿到一個新的 ViewModel；關閉時它的 onCleared
+            // 會被呼叫
             when (variant) {
                 Variant.BUG -> viewModel { L05Bug.PriceViewModel(log) }
                 Variant.FIXED -> viewModel { L05Fixed.PriceViewModel(log) }

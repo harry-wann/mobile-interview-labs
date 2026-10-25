@@ -176,3 +176,25 @@ grep -ho "\[SELFTEST\][^<]*" practice/<區>/build/test-results/testDebugUnitTest
 - 只能用單元測試驗證的演練（例如要用 `runTest` 的虛擬時間），`run` 設 `null`，檢查寫在區資料夾的 `test/`（解答用 assert，練習只印 `[SELFTEST]` 不讓建置失敗）。
 
 **複習站**：`npm run content:check` 要 0 錯誤、0 警告（lab fence 的路徑或區段寫錯會出警告）。
+
+## 程式碼排版（2026-10-25 起，兩個平台都適用）
+
+複習站的「實際演練」會把這裡的原始碼直接顯示在網頁上，所以排版要以「在網頁和手機上好讀」為準：
+
+- 每行最多 80 欄（中日韓全形字算 2 欄）。字串字面值、URL、ASCII 圖例外，不要為了湊字數改字串內容。
+- 註解寫在它說明的那行程式碼**上一行**，同縮排；行尾只放 20 欄以內的短註解。
+- 一行只做一件事：不用 `;` 串接、`if` 不寫成單行、closure 裡有兩個以上陳述就換行。
+- 宣告、主體、回傳之間空一行。
+- `// MARK: - Bug 版`／`// MARK: - 修正版`／`// MARK: - 演練設定` 三行一字不差，複習站靠它擷取區段。
+
+工具（寫完新演練先跑，再跑自動檢查）：
+
+```
+# iOS：Xcode 內建的 swift-format，設定檔在 ios/.swift-format
+cd ios && xcrun swift-format format --in-place --recursive Practice Solution LabKit App
+
+# Android：ktlint（brew install ktlint），設定檔在 android/.editorconfig
+cd android && ktlint -F "practice/**/*.kt" "solution/**/*.kt" "labkit/**/*.kt" "app/**/*.kt" "!**/build/**"
+```
+
+兩個工具都不會把行尾註解移到上一行，寫的時候就直接寫在上一行。

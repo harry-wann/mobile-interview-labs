@@ -1,17 +1,24 @@
 // L04：Release 版也能打開「略過憑證檢查」的除錯開關（#if DEBUG）
-// 對應複習站：Platform07Release 第 7 題「一個完整的發布流程是什麼樣子？」（用 Release 設定建置並驗證）
+// 對應複習站：Platform07Release 第 7 題「一個完整的發布流程是什麼樣子？」（用
+// Release 設定建置並驗證）
 //
 // 這題 Debug 建置看不出差別，要用 Release 建置執行：
-//   Xcode：Product > Scheme > Edit Scheme > Run > Build Configuration 改成 Release，再按 ⌘R。
+//   Xcode：Product > Scheme > Edit Scheme > Run > Build Configuration 改成
+// Release，再按 ⌘R。
 //   指令列：LABS_CONFIG=Release ./check.sh selftest Platform07Release
 //
-// 情境：測試人員為了用 Charles 看封包，工程師加了一個除錯開關：在除錯選單把 UserDefaults 的 "skipPinning" 打開，
-//       App 就不檢查伺服器的憑證（直接信任）。出貨前沒有人記得拿掉。演練把開關打開，再讓攻擊者的假憑證（pin 對不上）來連線。
+// 情境：測試人員為了用 Charles 看封包，工程師加了一個除錯開關：在除錯選單把
+// UserDefaults 的 "skipPinning" 打開，
+//       App 就不檢查伺服器的憑證（直接信任）。出貨前沒有人記得拿掉。
+// 演練把開關打開，再讓攻擊者的假憑證（pin 對不上）來連線。
 //
 // 你要寫：
-//   ① Bug 版：skipPinningEnabled 直接回傳 UserDefaults.standard.bool(forKey: switchKey)。
-//   ② 修正版：用 #if DEBUG 包起來：Debug 建置回傳 UserDefaults 的值，#else（Release）回傳 false。
-// 只改有 TODO 的地方。解答：Solution/Platform/Platform07-Release/L04_DebugSwitch.swift
+//   ① Bug 版：skipPinningEnabled 直接回傳 UserDefaults.standard.bool(forKey:
+// switchKey)。
+//   ② 修正版：用 #if DEBUG 包起來：Debug 建置回傳 UserDefaults 的值，
+// #else（Release）回傳 false。
+// 只改有 TODO 的地方。解答：
+// Solution/Platform/Platform07-Release/L04_DebugSwitch.swift
 import Foundation
 import LabKit
 
@@ -25,25 +32,29 @@ private func evaluate(pinMatches: Bool, skipPinning: Bool) -> String {
 /// 目前是 Debug 還是 Release 建置（兩個版本共用）
 private let buildConfiguration: String = {
     #if DEBUG
-    "Debug"
+        "Debug"
     #else
-    "Release"
+        "Release"
     #endif
 }()
 
 /// 演練流程（兩個版本共用）
 private func scenario(_ log: LabLog, skipPinningEnabled: () -> Bool) {
-    UserDefaults.standard.set(true, forKey: switchKey)                  // 除錯選單把開關打開
+    // 除錯選單把開關打開
+    UserDefaults.standard.set(true, forKey: switchKey)
     defer { UserDefaults.standard.removeObject(forKey: switchKey) }
     log("建置組態：\(buildConfiguration)")
-    log("除錯開關已打開，攻擊者的假憑證（pin 對不上）：\(evaluate(pinMatches: false, skipPinning: skipPinningEnabled()))")
+    log(
+        "除錯開關已打開，攻擊者的假憑證（pin 對不上）：\(evaluate(pinMatches: false, skipPinning: skipPinningEnabled()))"
+    )
     if buildConfiguration == "Debug" { log("（Debug 建置看不出差別，請改用 Release 建置執行）") }
 }
 
 // MARK: - Bug 版
 private enum L04Bug {
     static func skipPinningEnabled() -> Bool {
-        // TODO ①：直接回傳 UserDefaults.standard.bool(forKey: switchKey)，沒有任何建置組態的限制
+        // TODO ①：直接回傳 UserDefaults.standard.bool(forKey: switchKey)，
+        // 沒有任何建置組態的限制
         false
     }
 
@@ -55,7 +66,8 @@ private enum L04Bug {
 // MARK: - 修正版
 private enum L04Fixed {
     static func skipPinningEnabled() -> Bool {
-        // TODO ②：用 #if DEBUG … #else … #endif：Debug 建置回傳 UserDefaults.standard.bool(forKey: switchKey)，
+        // TODO ②：用 #if DEBUG … #else … #endif：Debug 建置回傳 UserDefaults.
+        // standard.bool(forKey: switchKey)，
         //        Release 建置（#else）回傳 false
         false
     }
@@ -88,11 +100,14 @@ extension Platform07Release {
         },
         checkBug: { lines in
             lines.contains("除錯開關已打開，攻擊者的假憑證（pin 對不上）：放行")
-                ? nil : "Bug 還沒重現：skipPinningEnabled() 直接讀 UserDefaults.standard.bool(forKey: switchKey)，不管哪種建置都放行"
+                ? nil
+                : "Bug 還沒重現：skipPinningEnabled() 直接讀 UserDefaults.standard.bool(forKey: switchKey)，不管哪種建置都放行"
         },
         checkFixed: { lines in
             let expected = lines.contains("建置組態：Release") ? "擋下" : "放行"
-            if lines.contains("除錯開關已打開，攻擊者的假憑證（pin 對不上）：\(expected)") { return nil }
+            if lines.contains("除錯開關已打開，攻擊者的假憑證（pin 對不上）：\(expected)") {
+                return nil
+            }
             return expected == "擋下"
                 ? "Release 建置不該有這個開關：把讀 UserDefaults 的那行放進 #if DEBUG，#else 回傳 false"
                 : "Debug 建置的除錯開關還要能用：#if DEBUG 裡面讀 UserDefaults.standard.bool(forKey: switchKey)"

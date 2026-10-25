@@ -1,12 +1,17 @@
 // L06：按下按鈕後畫面卡住不動（runBlocking 卡住執行緒）
-// 對應複習站：Kotlin04CoroutineSync 第 3 題「runBlocking 為什麼危險？什麼時候可以用？」
+// 對應複習站：Kotlin04CoroutineSync 第 3 題「runBlocking
+// 為什麼危險？什麼時候可以用？」
 //
-// 情境：用一條叫 fake-main 的執行緒代表 Android 主執行緒，上面有一個「畫面」每 10 ms 更新一次。
-//        使用者按下按鈕，要向伺服器載入資料（約 600 ms）。演練會量「畫面最長一次沒有更新」是多久。
+// 情境：用一條叫 fake-main 的執行緒代表 Android 主執行緒，上面有一個「畫面」每
+// 10 ms 更新一次。
+//        使用者按下按鈕，要向伺服器載入資料（約 600 ms）。
+// 演練會量「畫面最長一次沒有更新」是多久。
 //
 // 你要寫：
-//   ① Bug 版（L06Bug）：按鈕的處理函式在主執行緒上用 runBlocking 等資料，卡住主執行緒約 600 ms。
-//   ② 修正版（L06Fixed）：處理函式直接用 withContext(Dispatchers.IO) 到背景等資料，主執行緒繼續更新畫面。
+//   ① Bug 版（L06Bug）：按鈕的處理函式在主執行緒上用 runBlocking 等資料，
+// 卡住主執行緒約 600 ms。
+//   ② 修正版（L06Fixed）：處理函式直接用 withContext(Dispatchers.IO)
+// 到背景等資料，主執行緒繼續更新畫面。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin04-coroutine-sync/L06_RunBlocking.kt
 package tw.harry.labs.practice.kotlin04coroutinesync
@@ -32,23 +37,32 @@ private suspend fun loadOrders(): String {
     return "50 筆訂單"
 }
 
-/** 演練流程（兩個版本共用）：在 fake-main 上更新畫面；0.1 秒後使用者按下按鈕，執行 onTap */
+/**
+ * 演練流程（兩個版本共用）：在 fake-main 上更新畫面；0.1 秒後使用者按下按鈕，
+ * 執行 onTap
+ */
 private suspend fun scenario(log: LabLog, onTap: suspend () -> String) {
-    val main = Executors.newSingleThreadExecutor { Thread(it, "fake-main") }.asCoroutineDispatcher()
+    val main = Executors.newSingleThreadExecutor {
+        Thread(it, "fake-main")
+    }.asCoroutineDispatcher()
     val maxGapMs = AtomicLong(0)
     try {
         coroutineScope {
-            val frames = launch(main) {                     // 畫面：每 10 ms 更新一次，記下兩次更新之間最長隔了多久
+            // 畫面：每 10 ms 更新一次，記下兩次更新之間最長隔了多久
+            val frames = launch(main) {
                 var last = System.nanoTime()
                 while (isActive) {
                     delay(10)
                     val now = System.nanoTime()
-                    maxGapMs.updateAndGet { maxOf(it, (now - last) / 1_000_000) }
+                    maxGapMs.updateAndGet {
+                        maxOf(it, (now - last) / 1_000_000)
+                    }
                     last = now
                 }
             }
             delay(100)
-            val result = withContext(main) { onTap() }      // 按鈕的處理函式在主執行緒上執行
+            // 按鈕的處理函式在主執行緒上執行
+            val result = withContext(main) { onTap() }
             log("載入完成：$result")
             frames.cancelAndJoin()
         }
@@ -62,7 +76,8 @@ private suspend fun scenario(log: LabLog, onTap: suspend () -> String) {
 private object L06Bug {
     suspend fun run(log: LabLog) {
         scenario(log) {
-            // TODO ①：在這裡用 runBlocking { withContext(Dispatchers.IO) { loadOrders() } } 等資料，並回傳結果（卡住主執行緒）
+            // TODO ①：在這裡用 runBlocking { withContext(Dispatchers.IO) {
+            // loadOrders() } } 等資料，並回傳結果（卡住主執行緒）
             "（還沒寫）"
         }
     }
@@ -72,15 +87,17 @@ private object L06Bug {
 private object L06Fixed {
     suspend fun run(log: LabLog) {
         scenario(log) {
-            // TODO ②：不要用 runBlocking，直接 withContext(Dispatchers.IO) { loadOrders() } 並回傳結果
+            // TODO ②：不要用 runBlocking，直接 withContext(Dispatchers.IO) {
+            // loadOrders() } 並回傳結果
             "（還沒寫）"
         }
     }
 }
 
 // MARK: - 演練設定
-private fun maxGap(lines: List<String>): Long? =
-    lines.firstOrNull { it.startsWith("畫面最長一次沒有更新：") }?.removePrefix("畫面最長一次沒有更新：")?.removeSuffix(" ms")?.toLongOrNull()
+private fun maxGap(lines: List<String>): Long? = lines.firstOrNull {
+    it.startsWith("畫面最長一次沒有更新：")
+}?.removePrefix("畫面最長一次沒有更新：")?.removeSuffix(" ms")?.toLongOrNull()
 
 val l06 = Lab(
     id = "L06",

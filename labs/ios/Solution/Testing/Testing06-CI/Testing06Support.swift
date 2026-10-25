@@ -9,7 +9,8 @@ import LabKit
 
 // L01：CI 檢查結果
 
-/// 一個 CI job 的結果。cancelled 是被取消（例如逾時），skipped 是被略過（例如條件不符、或前一個 job 失敗）
+/// 一個 CI job 的結果。cancelled 是被取消（例如逾時），skipped
+/// 是被略過（例如條件不符、或前一個 job 失敗）
 enum T06JobResult: String {
     case success, failure, cancelled, skipped
 }
@@ -50,7 +51,8 @@ struct T06TestFile {
 enum T06Hash {
     /// 內容的 SHA-256，取前 12 個十六進位字元。內容只要差一個字，結果就不同
     static func shortHash(_ text: String) -> String {
-        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined().prefix(12).description
+        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }
+            .joined().prefix(12).description
     }
 }
 
@@ -63,11 +65,14 @@ final class T06Cache {
 }
 
 enum T06Lockfile {
-    /// 套件鎖定檔（相當於 Package.resolved 或 gradle.lockfile）的內容，這裡簡化成「套件@版本」
+    /// 套件鎖定檔（相當於 Package.resolved 或 gradle.lockfile）的內容，
+    /// 這裡簡化成「套件@版本」
     static func content(version: String) -> String { "Alamofire@\(version)" }
 
     /// 從鎖定檔讀出版本
-    static func version(of lockfile: String) -> String { String(lockfile.split(separator: "@").last ?? "") }
+    static func version(of lockfile: String) -> String {
+        String(lockfile.split(separator: "@").last ?? "")
+    }
 }
 
 // L04：分階段發布
@@ -77,7 +82,9 @@ struct T06Stats {
     let crashFreeSessions: Int
 
     /// crash-free session 比例（百分比）
-    var crashFreeRate: Double { Double(crashFreeSessions) / Double(sessions) * 100 }
+    var crashFreeRate: Double {
+        Double(crashFreeSessions) / Double(sessions) * 100
+    }
 }
 
 enum T06Decision: String {

@@ -1,13 +1,18 @@
 // L01：下單成功清空數量後，輸入欄卻還留著舊數量（state hoisting：只留一份狀態）
-// 對應複習站：Kotlin09ComposeArchitecture 第 1 題「state hoisting 是什麼？狀態應該放在哪一層？」
+// 對應複習站：Kotlin09ComposeArchitecture 第 1 題「state hoisting
+// 是什麼？狀態應該放在哪一層？」
 //
-// 情境：下單畫面有輸入欄（OrderForm）和預估金額（Summary），兩邊都要用同一個數量 qty。使用者打字輸入 0.5，
+// 情境：下單畫面有輸入欄（OrderForm）和預估金額（Summary），
+// 兩邊都要用同一個數量 qty。使用者打字輸入 0.5，
 //        下單成功後，父層（OrderScreen）把數量清成空字串。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.OrderForm）：把傳進來的 qty 複製進自己的 remember { mutableStateOf(qty) }，打字時改自己那一份並通知父層。
-//   ② 修正版（L01Fixed.OrderForm）：狀態提升。OrderForm 變 stateless：打字直接交給 onQtyChange，畫面顯示上層傳下來的 qty。
+//   ① Bug 版（L01Bug.OrderForm）：把傳進來的 qty 複製進自己的 remember {
+// mutableStateOf(qty) }，打字時改自己那一份並通知父層。
+//   ② 修正版（L01Fixed.OrderForm）：狀態提升。OrderForm 變 stateless：
+// 打字直接交給 onQtyChange，畫面顯示上層傳下來的 qty。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin09-compose-architecture/L01_StateHoisting.kt
 package tw.harry.labs.practice.kotlin09composearchitecture
@@ -24,7 +29,10 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 import tw.harry.labs.kit.withHeadlessCompose
 
-/** 演練用的操作：模擬使用者在輸入欄打字、下單成功後父層清空數量（由畫面在組合時交出來） */
+/**
+ * 演練用的操作：模擬使用者在輸入欄打字、
+ * 下單成功後父層清空數量（由畫面在組合時交出來）
+ */
 private class L01Actions {
     var type: (String) -> Unit = {}
     var clear: () -> Unit = {}
@@ -36,10 +44,17 @@ private fun L01Summary(qty: String, onShow: (String) -> Unit) {
     HeadlessText(qty, onShow)
 }
 
-/** 演練流程（兩個版本共用）：打字輸入 0.5 → 下單成功，父層清空數量，看輸入欄與預估金額欄各是什麼 */
+/**
+ * 演練流程（兩個版本共用）：打字輸入 0.5 → 下單成功，父層清空數量，
+ * 看輸入欄與預估金額欄各是什麼
+ */
 private suspend fun scenario(
     log: LabLog,
-    screen: @Composable (actions: L01Actions, onForm: (String) -> Unit, onSummary: (String) -> Unit) -> Unit,
+    screen: @Composable (
+        actions: L01Actions,
+        onForm: (String) -> Unit,
+        onSummary: (String) -> Unit,
+    ) -> Unit,
 ) {
     val actions = L01Actions()
     var form = ""
@@ -59,42 +74,70 @@ private suspend fun scenario(
 // MARK: - Bug 版
 private object L01Bug {
     @Composable
-    fun OrderScreen(actions: L01Actions, onForm: (String) -> Unit, onSummary: (String) -> Unit) {
-        var qty by remember { mutableStateOf("") }                      // 父層的一份（預估金額用）
-        SideEffect { actions.clear = { qty = "" } }                     // 演練用：下單成功後父層清空數量
-        OrderForm(qty, { qty = it }, actions, onForm)
-        L01Summary(qty, onSummary)
-    }
-
-    @Composable
-    fun OrderForm(qty: String, onQtyChange: (String) -> Unit, actions: L01Actions, onShow: (String) -> Unit) {
-        // TODO ①-1：把參數複製進自己的狀態：var text by remember { mutableStateOf(qty) }
-        // TODO ①-2：SideEffect { actions.type = { … } }：打字時改 text，再呼叫 onQtyChange(it) 通知父層
-        // TODO ①-3：把下面的 qty 換成 text：顯示自己那一份
-        HeadlessText(qty, onShow)
-    }
-
-    suspend fun run(log: LabLog) = scenario(log) { actions, onForm, onSummary -> OrderScreen(actions, onForm, onSummary) }
-}
-
-// MARK: - 修正版
-private object L01Fixed {
-    @Composable
-    fun OrderScreen(actions: L01Actions, onForm: (String) -> Unit, onSummary: (String) -> Unit) {
-        var qty by remember { mutableStateOf("") }                      // qty 只放在這裡一份
+    fun OrderScreen(
+        actions: L01Actions,
+        onForm: (String) -> Unit,
+        onSummary: (String) -> Unit,
+    ) {
+        // 父層的一份（預估金額用）
+        var qty by remember { mutableStateOf("") }
+        // 演練用：下單成功後父層清空數量
         SideEffect { actions.clear = { qty = "" } }
         OrderForm(qty, { qty = it }, actions, onForm)
         L01Summary(qty, onSummary)
     }
 
     @Composable
-    fun OrderForm(qty: String, onQtyChange: (String) -> Unit, actions: L01Actions, onShow: (String) -> Unit) {
-        // TODO ②-1：SideEffect { actions.type = onQtyChange }：stateless，打字直接交給上層，自己不存
+    fun OrderForm(
+        qty: String,
+        onQtyChange: (String) -> Unit,
+        actions: L01Actions,
+        onShow: (String) -> Unit,
+    ) {
+        // TODO ①-1：把參數複製進自己的狀態：var text by remember {
+        // mutableStateOf(qty) }
+        // TODO ①-2：SideEffect { actions.type = { … } }：打字時改 text，再呼叫
+        // onQtyChange(it) 通知父層
+        // TODO ①-3：把下面的 qty 換成 text：顯示自己那一份
+        HeadlessText(qty, onShow)
+    }
+
+    suspend fun run(log: LabLog) = scenario(log) { actions, onForm, onSummary ->
+        OrderScreen(actions, onForm, onSummary)
+    }
+}
+
+// MARK: - 修正版
+private object L01Fixed {
+    @Composable
+    fun OrderScreen(
+        actions: L01Actions,
+        onForm: (String) -> Unit,
+        onSummary: (String) -> Unit,
+    ) {
+        // qty 只放在這裡一份
+        var qty by remember { mutableStateOf("") }
+        SideEffect { actions.clear = { qty = "" } }
+        OrderForm(qty, { qty = it }, actions, onForm)
+        L01Summary(qty, onSummary)
+    }
+
+    @Composable
+    fun OrderForm(
+        qty: String,
+        onQtyChange: (String) -> Unit,
+        actions: L01Actions,
+        onShow: (String) -> Unit,
+    ) {
+        // TODO ②-1：SideEffect { actions.type = onQtyChange }：stateless，
+        // 打字直接交給上層，自己不存
         // TODO ②-2：把下面的 "" 換成 qty：顯示上層傳下來的值
         HeadlessText("", onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { actions, onForm, onSummary -> OrderScreen(actions, onForm, onSummary) }
+    suspend fun run(log: LabLog) = scenario(log) { actions, onForm, onSummary ->
+        OrderScreen(actions, onForm, onSummary)
+    }
 }
 
 // MARK: - 演練設定
@@ -102,7 +145,12 @@ private val pattern = Regex("輸入欄「(.*)」，預估金額欄的數量「(.
 
 /** 取得某一行 log 裡的（輸入欄, 預估金額欄） */
 private fun values(lines: List<String>, prefix: String): Pair<String, String>? =
-    lines.firstOrNull { it.startsWith(prefix) }?.let { line -> pattern.find(line)?.let { it.groupValues[1] to it.groupValues[2] } }
+    lines.firstOrNull { it.startsWith(prefix) }?.let { line ->
+        pattern.find(line)?.let {
+            it.groupValues[1] to
+                it.groupValues[2]
+        }
+    }
 
 private const val TYPED = "輸入 0.5 之後："
 private const val CLEARED = "下單成功、清空數量之後："

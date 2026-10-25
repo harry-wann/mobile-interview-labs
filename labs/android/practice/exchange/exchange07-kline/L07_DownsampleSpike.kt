@@ -1,13 +1,20 @@
-// L07：縮小圖表之後，那根暴漲的針不見了（縮小時用「每隔幾根取一根」，沒有取最高和最低）
-// 對應複習站：Exchange07Kline 第 6 題「資料量很大時，圖表怎麼只畫看得到的範圍？圖表元件怎麼選？」
+// L07：縮小圖表之後，那根暴漲的針不見了（縮小時用「每隔幾根取一根」，
+// 沒有取最高和最低）
+// 對應複習站：Exchange07Kline 第 6 題「資料量很大時，
+// 圖表怎麼只畫看得到的範圍？圖表元件怎麼選？」
 //
-// 情境：圖表縮小到一個畫面塞進很多根 K 線，每根連 1 個像素都不到，要把落在同一個像素欄位的 K 線合併。
-//        演練用 12 根 K 線縮成 4 欄（每 3 根一欄）。第 5 根（索引 4）有一根暴漲的針：最高 130（其他都在 101 到 106 之間）。
-//        正確的縮小：每一欄 open 取最早的一根、close 取最晚的一根、high 取最大、low 取最小。
+// 情境：圖表縮小到一個畫面塞進很多根 K 線，每根連 1 個像素都不到，
+// 要把落在同一個像素欄位的 K 線合併。
+//        演練用 12 根 K 線縮成 4 欄（每 3 根一欄）。第 5 根（索引 4）
+// 有一根暴漲的針：最高 130（其他都在 101 到 106 之間）。
+//        正確的縮小：每一欄 open 取最早的一根、close 取最晚的一根、high
+// 取最大、low 取最小。
 //
 // 你要寫：
-//   ① Bug 版（L07Bug.downsample）：每隔 step（candles.size / columns）根取 1 根（index % step == 0）。
-//   ② 修正版（L07Fixed.downsample）：每 size 根合併成一欄：open 取第一根的 open、high 取最大、low 取最小、close 取最後一根的 close。
+//   ① Bug 版（L07Bug.downsample）：每隔 step（candles.size / columns）根取 1
+// 根（index % step == 0）。
+//   ② 修正版（L07Fixed.downsample）：每 size 根合併成一欄：open 取第一根的
+// open、high 取最大、low 取最小、close 取最後一根的 close。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange07-kline/L07_DownsampleSpike.kt
 package tw.harry.labs.practice.exchange07kline
@@ -16,18 +23,41 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-private class L07Candle(val open: Int, val high: Int, val low: Int, val close: Int)
+private class L07Candle(
+    val open: Int,
+    val high: Int,
+    val low: Int,
+    val close: Int,
+)
 
 private val candles = listOf(
-    L07Candle(100, 101, 99, 100), L07Candle(100, 102, 99, 101), L07Candle(101, 102, 100, 100), L07Candle(100, 101, 99, 100),
-    L07Candle(100, 130, 98, 101), L07Candle(101, 103, 100, 102), L07Candle(102, 103, 101, 102), L07Candle(102, 104, 101, 103),
-    L07Candle(103, 104, 102, 103), L07Candle(103, 105, 102, 104), L07Candle(104, 105, 103, 104), L07Candle(104, 106, 103, 105),
+    L07Candle(100, 101, 99, 100),
+    L07Candle(100, 102, 99, 101),
+    L07Candle(101, 102, 100, 100),
+    L07Candle(100, 101, 99, 100),
+    L07Candle(100, 130, 98, 101),
+    L07Candle(101, 103, 100, 102),
+    L07Candle(102, 103, 101, 102),
+    L07Candle(102, 104, 101, 103),
+    L07Candle(103, 104, 102, 103),
+    L07Candle(103, 105, 102, 104),
+    L07Candle(104, 105, 103, 104),
+    L07Candle(104, 106, 103, 105),
 )
 
 /** 演練流程（兩個版本共用）：把 12 根縮成 4 欄 */
-private fun scenario(log: LabLog, downsample: (List<L07Candle>, Int) -> List<L07Candle>) {
+private fun scenario(
+    log: LabLog,
+    downsample: (List<L07Candle>, Int) -> List<L07Candle>,
+) {
     val small = downsample(candles, 4)
-    log("縮成 ${small.size} 欄：" + small.joinToString("、") { "${it.open}/${it.high}/${it.low}/${it.close}" } + "（開/高/低/收）")
+    log(
+        "縮成 ${small.size} 欄：" +
+            small.joinToString("、") {
+                "${it.open}/${it.high}/${it.low}/${it.close}"
+            } +
+            "（開/高/低/收）",
+    )
     val maxHigh = small.maxOfOrNull { it.high }?.toString() ?: "-"
     log("最後：縮小後的最高價 $maxHigh（真正的最高價 ${candles.maxOf { it.high }}）")
 }
@@ -35,7 +65,8 @@ private fun scenario(log: LabLog, downsample: (List<L07Candle>, Int) -> List<L07
 // MARK: - Bug 版
 private object L07Bug {
     fun downsample(candles: List<L07Candle>, columns: Int): List<L07Candle> {
-        // TODO ①：step = candles.size / columns；用 filterIndexed 每隔 step 根（index % step == 0）取 1 根。目前回傳空清單只是佔位
+        // TODO ①：step = candles.size / columns；用 filterIndexed 每隔 step
+        // 根（index % step == 0）取 1 根。目前回傳空清單只是佔位
         return emptyList()
     }
 
@@ -45,8 +76,10 @@ private object L07Bug {
 // MARK: - 修正版
 private object L07Fixed {
     fun downsample(candles: List<L07Candle>, columns: Int): List<L07Candle> {
-        // TODO ②：size = candles.size / columns；用 chunked(size) 每 size 根分一組，每組合併成一根 L07Candle：
-        //        open 取第一根的 open、high 取最大的 high、low 取最小的 low、close 取最後一根的 close。目前回傳空清單只是佔位
+        // TODO ②：size = candles.size / columns；用 chunked(size) 每 size
+        // 根分一組，每組合併成一根 L07Candle：
+        //        open 取第一根的 open、high 取最大的 high、low 取最小的 low、
+        // close 取最後一根的 close。目前回傳空清單只是佔位
         return emptyList()
     }
 
@@ -77,17 +110,34 @@ val l07 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, downsample) 執行"
-            lines.none { it.startsWith("最後：縮小後的最高價 105") } -> "Bug 還沒重現：每隔 step（candles.size / columns）根取 1 根（index % step == 0），針在索引 4 會被跳過"
+            lines.none {
+                it.startsWith("最後")
+            } -> "演練沒有跑完：要用 scenario(log, downsample) 執行"
+
+            lines.none {
+                it.startsWith("最後：縮小後的最高價 105")
+            } -> "Bug 還沒重現：每隔 step（candles.size / columns）根取 1 根（index % step == 0），針在索引 4 會被跳過"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, downsample) 執行"
-            lines.none { it.startsWith("縮成 4 欄：100/102/99/100、100/130/98/102、102/104/101/103、103/106/102/105") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, downsample) 執行"
+            }
+
+            lines.none {
+                it.startsWith(
+                    "縮成 4 欄：100/102/99/100、100/130/98/102、102/104/101/103、103/106/102/105",
+                )
+            } -> {
                 "把每 3 根合併成一欄：open 取第一根的 open、high 取最大、low 取最小、close 取最後一根的 close"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

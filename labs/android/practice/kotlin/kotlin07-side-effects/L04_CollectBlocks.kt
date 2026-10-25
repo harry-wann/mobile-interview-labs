@@ -1,11 +1,16 @@
-// L04：委託狀態從來沒有更新，因為前一段 collect 永遠不會結束（同一個 LaunchedEffect 裡有兩段 collect）
-// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key 是什麼意思？」
+// L04：委託狀態從來沒有更新，因為前一段 collect 永遠不會結束（同一個
+// LaunchedEffect 裡有兩段 collect）
+// 對應複習站：Kotlin07SideEffects 第 2 題「LaunchedEffect 解決什麼問題？key
+// 是什麼意思？」
 //
-// 情境：交易畫面要同時收兩個不會結束的 Flow：行情（ticks）和委託狀態（orders），各自每 20 ms 送一筆。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合、重組與 effect。
+// 情境：交易畫面要同時收兩個不會結束的 Flow：行情（ticks）
+// 和委託狀態（orders），各自每 20 ms 送一筆。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合、重組與 effect。
 //
 // 你要寫：
-//   ① Bug 版（L04Bug）：同一個 LaunchedEffect 裡，先 server.ticks.collect { onTick() }，再 server.orders.collect { onOrder() }。第二段永遠執行不到。
+//   ① Bug 版（L04Bug）：同一個 LaunchedEffect 裡，先 server.ticks.collect {
+// onTick() }，再 server.orders.collect { onOrder() }。第二段永遠執行不到。
 //   ② 修正版（L04Fixed）：兩段 collect 各自放進 launch { }，同時收集。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin07-side-effects/L04_CollectBlocks.kt
@@ -38,12 +43,23 @@ private class L04Server {
 }
 
 /** 演練流程（兩個版本共用）：進入畫面 300 ms，看收到幾筆行情、幾筆委託狀態 */
-private suspend fun scenario(log: LabLog, screen: @Composable (server: L04Server, onTick: () -> Unit, onOrder: () -> Unit) -> Unit) {
+private suspend fun scenario(
+    log: LabLog,
+    screen: @Composable (
+        server: L04Server,
+        onTick: () -> Unit,
+        onOrder: () -> Unit,
+    ) -> Unit,
+) {
     val server = L04Server()
     val ticks = AtomicInteger()
     val orders = AtomicInteger()
     withHeadlessCompose {
-        setContent { screen(server, { ticks.incrementAndGet() }, { orders.incrementAndGet() }) }
+        setContent {
+            screen(server, {
+                ticks.incrementAndGet()
+            }, { orders.incrementAndGet() })
+        }
         delay(300)
         log("進入畫面 300 ms：收到行情 ${ticks.get()} 筆")
         log("進入畫面 300 ms：收到委託狀態 ${orders.get()} 筆")
@@ -53,30 +69,45 @@ private suspend fun scenario(log: LabLog, screen: @Composable (server: L04Server
 // MARK: - Bug 版
 private object L04Bug {
     @Composable
-    fun TradeScreen(server: L04Server, onTick: () -> Unit, onOrder: () -> Unit) {
+    fun TradeScreen(
+        server: L04Server,
+        onTick: () -> Unit,
+        onOrder: () -> Unit,
+    ) {
         LaunchedEffect(Unit) {
-            // TODO ①：先 server.ticks.collect { onTick() }，接著在下一行 server.orders.collect { onOrder() }（不要用 launch）
+            // TODO ①：先 server.ticks.collect { onTick() }，接著在下一行
+            // server.orders.collect { onOrder() }（不要用 launch）
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder -> TradeScreen(server, onTick, onOrder) }
+    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder ->
+        TradeScreen(server, onTick, onOrder)
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
     @Composable
-    fun TradeScreen(server: L04Server, onTick: () -> Unit, onOrder: () -> Unit) {
+    fun TradeScreen(
+        server: L04Server,
+        onTick: () -> Unit,
+        onOrder: () -> Unit,
+    ) {
         LaunchedEffect(Unit) {
             // TODO ②：兩段 collect 各自放進 launch { }，同時收集行情與委託狀態
         }
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder -> TradeScreen(server, onTick, onOrder) }
+    suspend fun run(log: LabLog) = scenario(log) { server, onTick, onOrder ->
+        TradeScreen(server, onTick, onOrder)
+    }
 }
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 筆")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 筆")?.toIntOrNull()
 
 private const val TICKS = "進入畫面 300 ms：收到行情 "
 private const val ORDERS = "進入畫面 300 ms：收到委託狀態 "

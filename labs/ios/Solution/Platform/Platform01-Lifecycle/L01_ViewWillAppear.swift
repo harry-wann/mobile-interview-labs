@@ -1,10 +1,14 @@
 // L01：每返回行情頁一次，同一筆報價就多處理一次（viewWillAppear 會重複執行）
-// 對應複習站：Platform01Lifecycle 第 1 題「畫面從打開到關掉，iOS 和 Android 各會經過哪些階段？」
+// 對應複習站：Platform01Lifecycle 第 1 題「畫面從打開到關掉，iOS 和 Android
+// 各會經過哪些階段？」
 //
-// 情境：行情頁（MarketViewController）一出現就訂閱價格。使用者點進下單頁再返回，來回三次，最後來一筆新報價。
-// Bug 版：在 viewWillAppear 訂閱，卻沒有取消。viewDidLoad 只會執行一次，但 viewWillAppear 每次「回到這個畫面」都會執行，
+// 情境：行情頁（MarketViewController）一出現就訂閱價格。
+// 使用者點進下單頁再返回，來回三次，最後來一筆新報價。
+// Bug 版：在 viewWillAppear 訂閱，卻沒有取消。viewDidLoad 只會執行一次，但
+// viewWillAppear 每次「回到這個畫面」都會執行，
 //        每回來一次就多一個訂閱，一筆報價被處理好幾次。
-// 修正版：viewWillAppear 訂閱，viewDidDisappear 取消，兩個成對出現；來回幾次都只有一個訂閱。
+// 修正版：viewWillAppear 訂閱，viewDidDisappear 取消，兩個成對出現；
+// 來回幾次都只有一個訂閱。
 import UIKit
 import LabKit
 
@@ -28,9 +32,13 @@ private final class PriceFeed {
     }
 }
 
-/// 演練流程（兩個版本共用）：行情頁放在導覽列裡，點進下單頁再返回，來回三次，最後來一筆報價
+/// 演練流程（兩個版本共用）：行情頁放在導覽列裡，點進下單頁再返回，來回三次，
+/// 最後來一筆報價
 @MainActor
-private func scenario(_ log: LabLog, makeMarket: (PriceFeed, @escaping (Int) -> Void) -> UIViewController) async {
+private func scenario(
+    _ log: LabLog,
+    makeMarket: (PriceFeed, @escaping (Int) -> Void) -> UIViewController
+) async {
     let feed = PriceFeed()
     var handled = 0
     let market = makeMarket(feed) { _ in handled += 1 }
@@ -38,9 +46,11 @@ private func scenario(_ log: LabLog, makeMarket: (PriceFeed, @escaping (Int) -> 
     let stage = SwiftUILabStage(viewController: nav)
     await stage.settle()
     for _ in 1...3 {
-        nav.pushViewController(UIViewController(), animated: false)      // 點進下單頁：行情頁 viewDidDisappear
+        // 點進下單頁：行情頁 viewDidDisappear
+        nav.pushViewController(UIViewController(), animated: false)
         await stage.settle(ms: 60)
-        nav.popViewController(animated: false)                           // 返回行情頁：行情頁 viewWillAppear 又執行一次
+        // 返回行情頁：行情頁 viewWillAppear 又執行一次
+        nav.popViewController(animated: false)
         await stage.settle(ms: 60)
     }
     feed.publish(10_000_000)
@@ -61,16 +71,21 @@ private enum L01Bug {
             super.init(nibName: nil, bundle: nil)
         }
 
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            _ = feed.subscribe(onPrice)               // 每次回到這個畫面都訂閱一次，從來沒有取消
+            // 每次回到這個畫面都訂閱一次，從來沒有取消
+            _ = feed.subscribe(onPrice)
         }
     }
 
     @MainActor static func run(_ log: LabLog) async {
-        await scenario(log) { feed, onPrice in MarketViewController(feed: feed, onPrice: onPrice) }
+        await scenario(log) { feed, onPrice in
+            MarketViewController(feed: feed, onPrice: onPrice)
+        }
     }
 }
 
@@ -87,7 +102,9 @@ private enum L01Fixed {
             super.init(nibName: nil, bundle: nil)
         }
 
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
@@ -96,20 +113,28 @@ private enum L01Fixed {
 
         override func viewDidDisappear(_ animated: Bool) {
             super.viewDidDisappear(animated)
-            if let subscription { feed.unsubscribe(subscription) }      // 畫面消失就取消，和 viewWillAppear 成對
+            // 畫面消失就取消，和 viewWillAppear 成對
+            if let subscription { feed.unsubscribe(subscription) }
             subscription = nil
         }
     }
 
     @MainActor static func run(_ log: LabLog) async {
-        await scenario(log) { feed, onPrice in MarketViewController(feed: feed, onPrice: onPrice) }
+        await scenario(log) { feed, onPrice in
+            MarketViewController(feed: feed, onPrice: onPrice)
+        }
     }
 }
 
 // MARK: - 演練設定
 private func handledCount(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasPrefix("來回 3 次後，來一筆新報價，行情頁處理了 ") }) else { return nil }
-    return Int(line.replacingOccurrences(of: "來回 3 次後，來一筆新報價，行情頁處理了 ", with: "").replacingOccurrences(of: " 次", with: ""))
+    guard
+        let line = lines.first(where: { $0.hasPrefix("來回 3 次後，來一筆新報價，行情頁處理了 ") }
+        )
+    else { return nil }
+    return Int(
+        line.replacingOccurrences(of: "來回 3 次後，來一筆新報價，行情頁處理了 ", with: "")
+            .replacingOccurrences(of: " 次", with: ""))
 }
 
 extension Platform01Lifecycle {
@@ -140,7 +165,10 @@ extension Platform01Lifecycle {
         checkFixed: { lines in
             guard let n = handledCount(lines) else { return "演練沒有跑完" }
             if n == 0 { return "行情頁沒有收到報價：要在 viewWillAppear 裡訂閱" }
-            if n > 1 { return "一筆報價被處理了 \(n) 次：每次回到畫面都訂閱，卻沒有取消。要在 viewDidDisappear 取消上一次的訂閱" }
+            if n > 1 {
+                return
+                    "一筆報價被處理了 \(n) 次：每次回到畫面都訂閱，卻沒有取消。要在 viewDidDisappear 取消上一次的訂閱"
+            }
             return nil
         }
     )

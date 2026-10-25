@@ -1,11 +1,16 @@
 // L02：K 線的最高價比真正的最高價低（先 conflate 才聚合，最高點被丟掉了）
 // 對應複習站：Swift06AsyncStream 第 2 題「行情來得比畫面處理得快時怎麼辦？」
 //
-// 情境：一分鐘內連續收到 5 筆成交：價格 100、101、150、102、103，成交量 1、2、3、1、2。
-//       畫面要顯示最新價，K 線要算這一分鐘的最高價（真正是 150）和成交量合計（真正是 9）。
-// Bug 版：成交先送進 .bufferingNewest(1) 的 stream（conflation），消費者再從 stream 讀出來算最高價與成交量。
-//        消費者還沒開始讀的時候，前四筆已經被擠掉，只剩最後一筆：最高價 103、成交量 2。
-// 修正版：聚合要在 conflate 之前做：每筆成交一收到就累積進 K 線，再把最新價送進 stream 給畫面。
+// 情境：一分鐘內連續收到 5 筆成交：價格 100、101、150、102、103，成交量 1、2、
+// 3、1、2。
+//       畫面要顯示最新價，K 線要算這一分鐘的最高價（真正是 150）
+// 和成交量合計（真正是 9）。
+// Bug 版：成交先送進 bufferingNewest(1) 的 stream（conflation），消費者再從
+// stream 讀出來算最高價與成交量。
+//        消費者還沒開始讀的時候，前四筆已經被擠掉，只剩最後一筆：最高價 103、
+// 成交量 2。
+// 修正版：聚合要在 conflate 之前做：每筆成交一收到就累積進 K 線，
+// 再把最新價送進 stream 給畫面。
 import Foundation
 import LabKit
 
@@ -15,20 +20,26 @@ private struct Trade {
     let volume: Int
 }
 
-private let trades = [Trade(price: 100, volume: 1), Trade(price: 101, volume: 2), Trade(price: 150, volume: 3),
-                      Trade(price: 102, volume: 1), Trade(price: 103, volume: 2)]
+private let trades = [
+    Trade(price: 100, volume: 1), Trade(price: 101, volume: 2),
+    Trade(price: 150, volume: 3),
+    Trade(price: 102, volume: 1), Trade(price: 103, volume: 2),
+]
 
 // MARK: - Bug 版
 private enum L02Bug {
     static func run(_ log: LabLog) async {
-        let (stream, continuation) = AsyncStream.makeStream(of: Trade.self, bufferingPolicy: .bufferingNewest(1))
-        for trade in trades { continuation.yield(trade) }            // 消費者還沒讀，舊的被擠掉
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Trade.self, bufferingPolicy: .bufferingNewest(1))
+        // 消費者還沒讀，舊的被擠掉
+        for trade in trades { continuation.yield(trade) }
         continuation.finish()
 
         var high = 0
         var volume = 0
         var latest = 0
-        for await trade in stream {                                  // 先 conflate，再聚合
+        // 先 conflate，再聚合
+        for await trade in stream {
             high = max(high, trade.price)
             volume += trade.volume
             latest = trade.price
@@ -41,13 +52,16 @@ private enum L02Bug {
 // MARK: - 修正版
 private enum L02Fixed {
     static func run(_ log: LabLog) async {
-        let (stream, continuation) = AsyncStream.makeStream(of: Int.self, bufferingPolicy: .bufferingNewest(1))
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Int.self, bufferingPolicy: .bufferingNewest(1))
         var high = 0
         var volume = 0
         for trade in trades {
-            high = max(high, trade.price)                            // 先聚合：每一筆都累積進 K 線
+            // 先聚合：每一筆都累積進 K 線
+            high = max(high, trade.price)
             volume += trade.volume
-            continuation.yield(trade.price)                          // 再 conflate：畫面只需要最新價
+            // 再 conflate：畫面只需要最新價
+            continuation.yield(trade.price)
         }
         continuation.finish()
 
@@ -81,7 +95,8 @@ extension Swift06AsyncStream {
         checkBug: { lines in
             guard lines.contains("畫面最新價：103") else { return "畫面最新價應該是 103" }
             return lines.last == "K 線最高價 103、成交量 2"
-                ? nil : "Bug 還沒重現：聚合應該發生在 stream 的消費端（conflate 之後），最高價 103、成交量 2"
+                ? nil
+                : "Bug 還沒重現：聚合應該發生在 stream 的消費端（conflate 之後），最高價 103、成交量 2"
         },
         checkFixed: { lines in
             guard lines.contains("畫面最新價：103") else { return "畫面最新價應該是 103" }

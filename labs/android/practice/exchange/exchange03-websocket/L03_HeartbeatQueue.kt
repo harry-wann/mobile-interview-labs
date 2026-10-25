@@ -1,13 +1,20 @@
 // L03：行情一多，伺服器就把連線切斷（心跳排在行情處理的後面）
-// 對應複習站：Exchange03WebSocket 第 3 題「心跳 ping／pong 是什麼？為什麼要最先處理？」
+// 對應複習站：Exchange03WebSocket 第 3 題「心跳 ping／pong
+// 是什麼？為什麼要最先處理？」
 //
-// 情境：伺服器一次推來 20 則行情，緊接著送一則 {"ping":N}，並規定 0.5 秒內要收到 {"pong":N}，否則切斷連線。
-//        每則行情要在「畫面執行緒」上處理，一則花 40 毫秒（用 Thread.sleep 代表列表正在忙著畫畫面）。
-//        訊息從 socket 的背景執行緒進來；畫面執行緒是另一條單一執行緒，一次只做一件事。（演練的時限是為了縮短等待而假設的，真正的伺服器約每 5 秒送一次 ping。）
+// 情境：伺服器一次推來 20 則行情，緊接著送一則 {"ping":N}，並規定 0.5
+// 秒內要收到 {"pong":N}，否則切斷連線。
+//        每則行情要在「畫面執行緒」上處理，一則花 40 毫秒（用 Thread.sleep
+// 代表列表正在忙著畫畫面）。
+//        訊息從 socket 的背景執行緒進來；畫面執行緒是另一條單一執行緒，
+// 一次只做一件事。（演練的時限是為了縮短等待而假設的，真正的伺服器約每 5
+// 秒送一次 ping。）
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.makeHandler）：每一則訊息（包括 ping）都丟到畫面執行緒 ui.execute 裡處理。
-//   ② 修正版（L03Fixed.makeHandler）：先在 socket 的背景執行緒檢查心跳，ping 立刻回 pong；只有行情才丟到畫面執行緒。
+//   ① Bug 版（L03Bug.makeHandler）：每一則訊息（包括 ping）都丟到畫面執行緒 ui.
+// execute 裡處理。
+//   ② 修正版（L03Fixed.makeHandler）：先在 socket 的背景執行緒檢查心跳，ping
+// 立刻回 pong；只有行情才丟到畫面執行緒。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/exchange/exchange03-websocket/L03_HeartbeatQueue.kt
 package tw.harry.labs.practice.exchange03websocket
@@ -30,7 +37,13 @@ private class Stopwatch {
     private fun nowMs() = (System.nanoTime() - start) / 1_000_000.0
 
     @Synchronized fun markPingSent() { pingSentAt = nowMs() }
-    @Synchronized fun markPong(text: String) { if (pongAt == null) { pongAt = nowMs(); pongText = text } }
+
+    @Synchronized fun markPong(text: String) {
+        if (pongAt ==
+            null
+        ) { pongAt = nowMs(); pongText = text }
+    }
+
     @Synchronized fun result(): Pair<Double, String>? {
         val sent = pingSentAt ?: return null
         val at = pongAt ?: return null
@@ -41,8 +54,14 @@ private class Stopwatch {
 /** 處理一則行情要花的時間（代表畫面忙著更新列表） */
 private fun renderQuote() = Thread.sleep(40)
 
-/** 演練流程（兩個版本共用）：socket 執行緒依序送進 20 則行情與 1 則 ping，等 1.3 秒，看 pong 什麼時候到 */
-private suspend fun scenario(log: LabLog, makeHandler: (ui: Executor, send: (String) -> Unit) -> (ByteArray) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：socket 執行緒依序送進 20 則行情與 1 則 ping，等 1.
+ * 3 秒，看 pong 什麼時候到
+ */
+private suspend fun scenario(
+    log: LabLog,
+    makeHandler: (ui: Executor, send: (String) -> Unit) -> (ByteArray) -> Unit,
+) {
     val clock = Stopwatch()
     val socket: ExecutorService = Executors.newSingleThreadExecutor()
     val ui: ExecutorService = Executors.newSingleThreadExecutor()
@@ -50,7 +69,9 @@ private suspend fun scenario(log: LabLog, makeHandler: (ui: Executor, send: (Str
         val handle = makeHandler(ui) { text -> clock.markPong(text) }
         log("伺服器：送出 20 則行情，接著送 {\"ping\":777}，要求 0.5 秒內回 pong")
         for (i in 1..20) {
-            val frame = E03Wire.frame("""{"ch":"market.btcjpy.bbo","tick":{"seqId":$i}}""")
+            val frame = E03Wire.frame(
+                """{"ch":"market.btcjpy.bbo","tick":{"seqId":$i}}""",
+            )
             socket.execute { handle(frame) }
         }
         val pingFrame = E03Wire.frame("""{"ping":777}""")
@@ -79,29 +100,37 @@ private suspend fun scenario(log: LabLog, makeHandler: (ui: Executor, send: (Str
 
 // MARK: - Bug 版
 private object L03Bug {
-    fun makeHandler(ui: Executor, send: (String) -> Unit): (ByteArray) -> Unit = { frame ->
-        // TODO ①：把整個處理流程都丟到 ui.execute { … } 裡（Bug：ping 也要排在行情後面）。在 ui.execute 裡：
-        //   用 E03Wire.text(frame) 解壓、e03Parse 解析；有 "ping" 的數字 N 就呼叫 send("""{"pong":$N}""")，否則呼叫 renderQuote()
-    }
+    fun makeHandler(ui: Executor, send: (String) -> Unit): (ByteArray) -> Unit =
+        { frame ->
+            // TODO ①：把整個處理流程都丟到 ui.execute { … } 裡（Bug：ping
+            // 也要排在行情後面）。在 ui.execute 裡：
+            //   用 E03Wire.text(frame) 解壓、e03Parse 解析；有 "ping" 的數字 N
+            // 就呼叫 send("""{"pong":$N}""")，否則呼叫 renderQuote()
+        }
 
     suspend fun run(log: LabLog) = scenario(log, ::makeHandler)
 }
 
 // MARK: - 修正版
 private object L03Fixed {
-    fun makeHandler(ui: Executor, send: (String) -> Unit): (ByteArray) -> Unit = handler@{ frame ->
-        val json = E03Wire.text(frame)?.let { e03Parse(it) } ?: return@handler
-        val ping = json.e03Long("ping")
-        // TODO ②-1：是 ping（ping 不是 null），就立刻在這裡（socket 的背景執行緒）send("""{"pong":$ping}""")，N 原樣回傳，然後 return@handler
-        // TODO ②-2：不是 ping 的行情，才丟到 ui.execute { renderQuote() }
-    }
+    fun makeHandler(ui: Executor, send: (String) -> Unit): (ByteArray) -> Unit =
+        handler@{ frame ->
+            val json =
+                E03Wire.text(frame)?.let { e03Parse(it) } ?: return@handler
+            val ping = json.e03Long("ping")
+            // TODO ②-1：是 ping（ping 不是 null），就立刻在這裡（socket
+            // 的背景執行緒）send("""{"pong":$ping}""")，N 原樣回傳，然後
+            // return@handler
+            // TODO ②-2：不是 ping 的行情，才丟到 ui.execute { renderQuote() }
+        }
 
     suspend fun run(log: LabLog) = scenario(log, ::makeHandler)
 }
 
 // MARK: - 演練設定
-private fun elapsedMs(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("收到 ") && "在 ping 送出後" in it }?.let { Regex("送出後 (\\d+) ms").find(it)?.groupValues?.get(1)?.toInt() }
+private fun elapsedMs(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("收到 ") && "在 ping 送出後" in it
+}?.let { Regex("送出後 (\\d+) ms").find(it)?.groupValues?.get(1)?.toInt() }
 
 val l03 = Lab(
     id = "L03",
@@ -127,18 +156,28 @@ val l03 = Lab(
     checkBug = { lines ->
         val ms = elapsedMs(lines)
         when {
-            lines.none { it.startsWith("伺服器：送出 20 則行情") } -> "演練沒有跑完：要用 scenario(log, ::makeHandler) 執行"
+            lines.none {
+                it.startsWith("伺服器：送出 20 則行情")
+            } -> "演練沒有跑完：要用 scenario(log, ::makeHandler) 執行"
+
             ms == null -> "Bug 版也要回 pong：解壓、解析之後，收到 ping 就回 {\"pong\":N}"
+
             ms <= 500 -> "Bug 還沒重現：ping 要和行情一樣丟到畫面執行緒（ui.execute）處理，才會排在 20 則行情後面（目前 $ms ms 就回了）"
+
             else -> null
         }
     },
     checkFixed = { lines ->
         val ms = elapsedMs(lines)
         when {
-            lines.none { it.startsWith("伺服器：送出 20 則行情") } -> "演練沒有跑完：要用 scenario(log, ::makeHandler) 執行"
+            lines.none {
+                it.startsWith("伺服器：送出 20 則行情")
+            } -> "演練沒有跑完：要用 scenario(log, ::makeHandler) 執行"
+
             ms == null -> "沒有回 pong：解壓、解析之後，收到 ping 要馬上回 {\"pong\":N}"
+
             "伺服器：pong 準時，連線維持" !in lines -> "pong 太晚才回（$ms ms）：ping 不要丟到畫面執行緒，在 socket 的背景執行緒直接回；數字要和 ping 一模一樣"
+
             else -> null
         }
     },

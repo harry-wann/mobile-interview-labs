@@ -1,10 +1,16 @@
-// L04：整個 ViewModel 標了 @MainActor，解析 K 線時畫面卡住（重運算放在主 actor 上）
-// 對應複習站：Swift05Actors 第 3 題「@MainActor 與 global actor 是什麼？該怎麼用？」
+// L04：整個 ViewModel 標了 @MainActor，解析 K 線時畫面卡住（重運算放在主 actor
+// 上）
+// 對應複習站：Swift05Actors 第 3 題「@MainActor 與 global actor
+// 是什麼？該怎麼用？」
 //
-// 情境：K 線圖的 ViewModel 為了更新畫面狀態，整個標了 @MainActor。載入時要解析 40 萬行 K 線資料（重運算）。
-// Bug 版：解析直接寫在 @MainActor 的方法裡，整個解析過程都佔著主執行緒，畫面（包含按鈕、捲動）卡住那麼久。
-// 修正版：重運算放進 @concurrent 的函式（Swift 6.2），明確離開主 actor 到背景執行；算完回到主 actor，只更新狀態。
-//        （Swift 6.2 之前，用 nonisolated 的 async 函式或 Task.detached 達到同樣效果。）
+// 情境：K 線圖的 ViewModel 為了更新畫面狀態，整個標了 @MainActor。載入時要解析
+// 40 萬行 K 線資料（重運算）。
+// Bug 版：解析直接寫在 @MainActor 的方法裡，整個解析過程都佔著主執行緒，
+// 畫面（包含按鈕、捲動）卡住那麼久。
+// 修正版：重運算放進 @concurrent 的函式（Swift 6.2），明確離開主 actor
+// 到背景執行；算完回到主 actor，只更新狀態。
+//        （Swift 6.2 之前，用 nonisolated 的 async 函式或 Task.detached
+// 達到同樣效果。）
 import Foundation
 import LabKit
 
@@ -25,7 +31,8 @@ private enum L04Bug {
         private(set) var total = 0.0
 
         func load(_ lines: [String]) {
-            total = sumCloses(lines)                                 // 在主 actor 上算：主執行緒被佔住
+            // 在主 actor 上算：主執行緒被佔住
+            total = sumCloses(lines)
         }
     }
 
@@ -54,7 +61,8 @@ private enum L04Fixed {
         private(set) var total = 0.0
 
         func load(_ lines: [String]) async {
-            total = await L04Fixed.parse(lines)                      // 重運算在背景；算完回到主 actor 更新狀態
+            // 重運算在背景；算完回到主 actor 更新狀態
+            total = await L04Fixed.parse(lines)
         }
     }
 
@@ -74,7 +82,8 @@ private enum L04Fixed {
 private func stallMs(_ lines: [String]) -> Int? {
     lines.last.flatMap { line in
         let prefix = "主執行緒最長被卡住 "
-        return line.hasPrefix(prefix) ? Int(line.dropFirst(prefix.count).dropLast(" 毫秒".count)) : nil
+        return line.hasPrefix(prefix)
+            ? Int(line.dropFirst(prefix.count).dropLast(" 毫秒".count)) : nil
     }
 }
 
@@ -99,14 +108,25 @@ extension Swift05Actors {
             }
         },
         checkBug: { lines in
-            guard lines.contains(where: { $0.hasPrefix("解析完成，合計 ") && !$0.hasSuffix("合計 0") }) else { return "解析完成後，ViewModel 的 total 要是 sumCloses 的結果" }
+            guard
+                lines.contains(where: {
+                    $0.hasPrefix("解析完成，合計 ") && !$0.hasSuffix("合計 0")
+                })
+            else { return "解析完成後，ViewModel 的 total 要是 sumCloses 的結果" }
             guard let ms = stallMs(lines) else { return "找不到主執行緒被卡住的毫秒數" }
-            return ms >= 150 ? nil : "主執行緒只被卡住 \(ms) 毫秒：Bug 還沒重現（解析要直接寫在 @MainActor 的 load 裡）"
+            return ms >= 150
+                ? nil
+                : "主執行緒只被卡住 \(ms) 毫秒：Bug 還沒重現（解析要直接寫在 @MainActor 的 load 裡）"
         },
         checkFixed: { lines in
-            guard lines.contains(where: { $0.hasPrefix("解析完成，合計 ") && !$0.hasSuffix("合計 0") }) else { return "解析完成後，ViewModel 的 total 要是 sumCloses 的結果" }
+            guard
+                lines.contains(where: {
+                    $0.hasPrefix("解析完成，合計 ") && !$0.hasSuffix("合計 0")
+                })
+            else { return "解析完成後，ViewModel 的 total 要是 sumCloses 的結果" }
             guard let ms = stallMs(lines) else { return "找不到主執行緒被卡住的毫秒數" }
-            return ms < 100 ? nil : "主執行緒被卡住 \(ms) 毫秒，還是太久：重運算要放進 @concurrent 的函式"
+            return ms < 100
+                ? nil : "主執行緒被卡住 \(ms) 毫秒，還是太久：重運算要放進 @concurrent 的函式"
         }
     )
 }

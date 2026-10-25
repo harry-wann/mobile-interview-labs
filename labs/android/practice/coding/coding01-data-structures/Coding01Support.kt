@@ -1,5 +1,6 @@
 // Coding01DataStructures 共用的小工具（和 bug 本身無關，已經寫好，不用改）。
-// 內容：LRU 用的雙向鏈結串列（頭尾各一個假節點）、前 k 名用的 min-heap、計數器、把結果印成一行文字。
+// 內容：LRU 用的雙向鏈結串列（頭尾各一個假節點）、前 k 名用的 min-heap、
+// 計數器、把結果印成一行文字。
 package tw.harry.labs.practice.coding01datastructures
 
 /** 串列上的一個節點：存一筆資料（key 與 value），前後各指向一個節點 */
@@ -8,7 +9,10 @@ class C01Node(val key: String, var value: Int) {
     var next: C01Node? = null
 }
 
-/** 雙向鏈結串列：最前面是「最近使用」，最後面是「最久沒用」。頭尾各有一個不存資料的假節點，插入與刪除都不用特別處理空串列。 */
+/**
+ * 雙向鏈結串列：最前面是「最近使用」，最後面是「最久沒用」。
+ * 頭尾各有一個不存資料的假節點，插入與刪除都不用特別處理空串列。
+ */
 class C01RecencyList {
     private val head = C01Node("", 0)
     private val tail = C01Node("", 0)
@@ -70,7 +74,10 @@ class C01Counter {
 /** 排行榜上的一個幣種 */
 data class C01Entry(val symbol: String, val volume: Int)
 
-/** 最小堆積（min-heap）：最上面（[top]）永遠是「最小」的那一個。「誰比較小」由 [isLess] 決定。 */
+/**
+ * 最小堆積（min-heap）：最上面（[top]）永遠是「最小」的那一個。「誰比較小」由
+ * [isLess] 決定。
+ */
 class C01MinHeap<T>(private val isLess: (T, T) -> Boolean) {
     private val items = ArrayList<T>()
 
@@ -115,8 +122,16 @@ class C01MinHeap<T>(private val isLess: (T, T) -> Boolean) {
             val left = parent * 2 + 1
             val right = left + 1
             var smallest = parent
-            if (left < items.size && isLess(items[left], items[smallest])) smallest = left
-            if (right < items.size && isLess(items[right], items[smallest])) smallest = right
+            if (left < items.size &&
+                isLess(items[left], items[smallest])
+            ) {
+                smallest = left
+            }
+            if (right < items.size &&
+                isLess(items[right], items[smallest])
+            ) {
+                smallest = right
+            }
             if (smallest == parent) return
             swap(parent, smallest)
             parent = smallest

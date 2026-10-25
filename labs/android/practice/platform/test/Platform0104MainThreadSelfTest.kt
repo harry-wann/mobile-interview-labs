@@ -23,31 +23,45 @@ import tw.harry.labs.kit.LabLog
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class Platform0104MainThreadSelfTest {
-    /** 模擬 Android 的主執行緒：所有工作排進同一條執行緒；immediate 在主執行緒上時直接執行 */
+    /**
+     * 模擬 Android 的主執行緒：所有工作排進同一條執行緒；immediate
+     * 在主執行緒上時直接執行
+     */
     private class FakeMain : MainCoroutineDispatcher() {
-        private val executor = Executors.newSingleThreadExecutor { Thread(it, "main") }
+        private val executor = Executors.newSingleThreadExecutor {
+            Thread(it, "main")
+        }
         private val queue: CoroutineDispatcher = executor.asCoroutineDispatcher()
-        private val mainThread: Thread = executor.submit<Thread> { Thread.currentThread() }.get()
+        private val mainThread: Thread = executor.submit<Thread> {
+            Thread.currentThread()
+        }.get()
 
         override val immediate: MainCoroutineDispatcher = object : MainCoroutineDispatcher() {
             override val immediate: MainCoroutineDispatcher get() = this
-            override fun isDispatchNeeded(context: CoroutineContext) = Thread.currentThread() !== mainThread
-            override fun dispatch(context: CoroutineContext, block: Runnable) = queue.dispatch(context, block)
+            override fun isDispatchNeeded(context: CoroutineContext) =
+                Thread.currentThread() !== mainThread
+            override fun dispatch(context: CoroutineContext, block: Runnable) =
+                queue.dispatch(context, block)
         }
 
         override fun isDispatchNeeded(context: CoroutineContext) = true
-        override fun dispatch(context: CoroutineContext, block: Runnable) = queue.dispatch(context, block)
+        override fun dispatch(context: CoroutineContext, block: Runnable) =
+            queue.dispatch(context, block)
         fun shutdown() = executor.shutdownNow()
     }
 
-    private val deviceOnly = setOf("Platform02Threading L03", "Platform04SecureStorage L06")
+    private val deviceOnly =
+        setOf("Platform02Threading L03", "Platform04SecureStorage L06")
 
     @Test
     fun labs() {
         val main = FakeMain()
         Dispatchers.setMain(main)
         try {
-            for (unit in platformSection.units.filter { it.code.substring(8, 10).toIntOrNull() in 1..4 }) {
+            for (unit in platformSection.units.filter {
+                it.code.substring(8, 10).toIntOrNull() in
+                    1..4
+            }) {
                 for (lab in unit.labs) {
                     val run = lab.run ?: continue
                     val name = "${unit.code} ${lab.id}"
@@ -57,13 +71,18 @@ class Platform0104MainThreadSelfTest {
                         if (variant == Variant.BUG && lab.bugCrashes) continue
                         val log = LabLog(echo = false)
                         runBlocking(Dispatchers.Main) {
-                            withTimeoutOrNull(30_000) { run(variant, log) } ?: log("[SELFTEST] 逾時")
+                            withTimeoutOrNull(30_000) { run(variant, log) }
+                                ?: log("[SELFTEST] 逾時")
                         }
                         val reason = check(log.texts)
                         if (reason == null) {
-                            println("[SELFTEST] $name ${variant.title} PASS（模擬主執行緒）　${log.texts.lastOrNull() ?: ""}")
+                            println(
+                                "[SELFTEST] $name ${variant.title} PASS（模擬主執行緒）　${log.texts.lastOrNull() ?: ""}",
+                            )
                         } else {
-                            println("[SELFTEST] $name ${variant.title} FAIL（模擬主執行緒）：$reason")
+                            println(
+                                "[SELFTEST] $name ${variant.title} FAIL（模擬主執行緒）：$reason",
+                            )
                             println("[SELFTEST]   log：${log.texts.takeLast(8)}")
                         }
                     }

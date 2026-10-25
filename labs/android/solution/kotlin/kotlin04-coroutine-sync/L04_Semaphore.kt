@@ -1,9 +1,13 @@
 // L04：一次查 20 個交易對的報價，同時送出 20 個請求（Semaphore 限流）
-// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，怎麼選工具？」
+// 對應複習站：Kotlin04CoroutineSync 第 1 題「多個 coroutine 同時改同一份資料，
+// 怎麼選工具？」
 //
-// 情境：行情畫面要一次查 20 個交易對的報價。交易所的公開 API 有請求頻率限制，App 自己要限制同時進行的請求數，最多 4 個。
-// Bug 版：每個交易對一個 async，全部同時送出，同時進行的請求數衝到 20，可能被交易所限流（HTTP 429）。
-// 修正版：用 Semaphore(4)，每個請求用 withPermit 包起來，同時最多 4 個在跑，其他排隊。
+// 情境：行情畫面要一次查 20 個交易對的報價。交易所的公開 API 有請求頻率限制，
+// App 自己要限制同時進行的請求數，最多 4 個。
+// Bug 版：每個交易對一個 async，全部同時送出，同時進行的請求數衝到 20，
+// 可能被交易所限流（HTTP 429）。
+// 修正版：用 Semaphore(4)，每個請求用 withPermit 包起來，同時最多 4 個在跑，
+// 其他排隊。
 package tw.harry.labs.solution.kotlin04coroutinesync
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -39,7 +43,10 @@ private object L04Bug {
     suspend fun run(log: LabLog) {
         val api = QuoteApi()
         val quotes = coroutineScope {
-            symbols.map { symbol -> async(Dispatchers.Default) { api.quote(symbol) } }.awaitAll()   // 全部同時送出
+            // 全部同時送出
+            symbols.map { symbol ->
+                async(Dispatchers.Default) { api.quote(symbol) }
+            }.awaitAll()
         }
         log("查了 ${quotes.size} 個交易對")
         log("同時進行的請求數最多 ${api.maxInFlight.get()} 個")
@@ -48,12 +55,16 @@ private object L04Bug {
 
 // MARK: - 修正版
 private object L04Fixed {
-    private val gate = Semaphore(4)                         // 同時最多 4 個
+    private val gate = Semaphore(4) // 同時最多 4 個
 
     suspend fun run(log: LabLog) {
         val api = QuoteApi()
         val quotes = coroutineScope {
-            symbols.map { symbol -> async(Dispatchers.Default) { gate.withPermit { api.quote(symbol) } } }.awaitAll()
+            symbols.map { symbol ->
+                async(Dispatchers.Default) {
+                    gate.withPermit { api.quote(symbol) }
+                }
+            }.awaitAll()
         }
         log("查了 ${quotes.size} 個交易對")
         log("同時進行的請求數最多 ${api.maxInFlight.get()} 個")
@@ -61,8 +72,9 @@ private object L04Fixed {
 }
 
 // MARK: - 演練設定
-private fun maxInFlight(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("同時進行的請求數最多 ") }?.removePrefix("同時進行的請求數最多 ")?.removeSuffix(" 個")?.toIntOrNull()
+private fun maxInFlight(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("同時進行的請求數最多 ")
+}?.removePrefix("同時進行的請求數最多 ")?.removeSuffix(" 個")?.toIntOrNull()
 
 val l04 = Lab(
     id = "L04",
@@ -93,8 +105,15 @@ val l04 = Lab(
     checkFixed = { lines ->
         when {
             "查了 20 個交易對" !in lines -> "20 個交易對都要查"
-            (maxInFlight(lines) ?: 99) > 4 -> "同時進行的請求超過 4 個：用 Semaphore(4)，每個請求用 gate.withPermit { } 包起來"
+
+            (
+                maxInFlight(
+                    lines,
+                ) ?: 99
+            ) > 4 -> "同時進行的請求超過 4 個：用 Semaphore(4)，每個請求用 gate.withPermit { } 包起來"
+
             maxInFlight(lines) != 4 -> "同時進行的請求應該剛好最多 4 個：Semaphore(4)"
+
             else -> null
         }
     },

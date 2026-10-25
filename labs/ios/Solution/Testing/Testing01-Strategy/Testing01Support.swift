@@ -1,7 +1,9 @@
 // Testing01Strategy 共用的小工具（和 bug 本身無關，已經寫好，不用改）。
 // 內容：
-//   迷你測試執行器 T01Suite／T01Expect：這個 App 沒有 XCTest target，用它模擬「一個測試通過或失敗」。
-//   被測的下單規則 T01OrderRules、出金規則 T01Withdrawal，以及模擬 UI 測試、系統時鐘的小工具。
+//   迷你測試執行器 T01Suite／T01Expect：這個 App 沒有 XCTest target，
+// 用它模擬「一個測試通過或失敗」。
+//   被測的下單規則 T01OrderRules、出金規則 T01Withdrawal，以及模擬 UI 測試、
+// 系統時鐘的小工具。
 import Foundation
 import LabKit
 
@@ -16,7 +18,8 @@ final class T01Expect {
     func equal<V: Equatable>(_ actual: V, _ expected: V, _ note: String = "") {
         assertions += 1
         guard actual != expected else { return }
-        failures.append("預期 \(expected)，實際 \(actual)" + (note.isEmpty ? "" : "（\(note)）"))
+        failures.append(
+            "預期 \(expected)，實際 \(actual)" + (note.isEmpty ? "" : "（\(note)）"))
     }
 
     func isTrue(_ condition: Bool, _ note: String) {
@@ -47,13 +50,20 @@ final class T01Suite {
         for (name, body) in tests {
             let t = T01Expect()
             await body(t)
-            results.append(T01Result(name: name, failures: t.failures, assertions: t.assertions))
+            results.append(
+                T01Result(
+                    name: name, failures: t.failures, assertions: t.assertions))
         }
-        let ms = Int(Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+        let ms = Int(
+            Double(
+                DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds)
+                / 1_000_000)
         let failed = results.filter { !$0.passed }
         for r in failed { log("  ✗ \(r.name)：\(r.failures[0])") }
         let checked = results.reduce(0) { $0 + $1.assertions }
-        log("\(label)：跑了 \(results.count) 個案例，通過 \(results.count - failed.count)、失敗 \(failed.count)，檢查了 \(checked) 項，花了 \(ms) ms")
+        log(
+            "\(label)：跑了 \(results.count) 個案例，通過 \(results.count - failed.count)、失敗 \(failed.count)，檢查了 \(checked) 項，花了 \(ms) ms"
+        )
         return results
     }
 }
@@ -67,11 +77,17 @@ struct T01Summary {
     let ms: Int
 
     static func parse(_ lines: [String], label: String) -> T01Summary? {
-        guard let line = lines.first(where: { $0.hasPrefix("\(label)：跑了 ") }) else { return nil }
-        let body = line.dropFirst("\(label)：".count)        // 標籤本身可能有數字（例如 04:10），只讀後面的統計
-        let numbers = body.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        guard let line = lines.first(where: { $0.hasPrefix("\(label)：跑了 ") })
+        else { return nil }
+        // 標籤本身可能有數字（例如 04:10），只讀後面的統計
+        let body = line.dropFirst("\(label)：".count)
+        let numbers = body.split(whereSeparator: { !$0.isNumber }).compactMap {
+            Int($0)
+        }
         guard numbers.count >= 5 else { return nil }
-        return T01Summary(cases: numbers[0], passed: numbers[1], failed: numbers[2], assertions: numbers[3], ms: numbers[4])
+        return T01Summary(
+            cases: numbers[0], passed: numbers[1], failed: numbers[2],
+            assertions: numbers[3], ms: numbers[4])
     }
 }
 
@@ -84,7 +100,8 @@ enum T01OrderError: String, Equatable {
 }
 
 enum T01OrderRules {
-    /// 價格單位是日圓，數量單位是 satoshi（1 BTC = 100,000,000 satoshi）。回傳 nil 代表可以下單。
+    /// 價格單位是日圓，數量單位是 satoshi（1 BTC = 100,000,000 satoshi）。回傳
+    /// nil 代表可以下單。
     static func validate(priceJPY: Int, amountSatoshi: Int) -> T01OrderError? {
         if priceJPY % 1_000 != 0 { return .priceNotOnTick }
         if amountSatoshi < 10_000 { return .amountTooSmall }
@@ -103,23 +120,51 @@ struct T01OrderCase {
     let animationMs: Int
 
     static let all: [T01OrderCase] = [
-        T01OrderCase(name: "正常的限價單", priceJPY: 15_000_000, amountSatoshi: 100_000, expected: nil, animationMs: 60),
-        T01OrderCase(name: "價格不是 1,000 的倍數", priceJPY: 15_000_500, amountSatoshi: 100_000, expected: .priceNotOnTick, animationMs: 140),
-        T01OrderCase(name: "剛好最小下單量", priceJPY: 15_000_000, amountSatoshi: 10_000, expected: nil, animationMs: 75),
-        T01OrderCase(name: "剛好單筆上限", priceJPY: 15_000_000, amountSatoshi: 500_000_000, expected: nil, animationMs: 80),
-        T01OrderCase(name: "最小價格", priceJPY: 1_000, amountSatoshi: 10_000, expected: nil, animationMs: 70),
-        T01OrderCase(name: "超過單筆上限 1 satoshi", priceJPY: 15_000_000, amountSatoshi: 500_000_001, expected: .amountTooLarge, animationMs: 150),
-        T01OrderCase(name: "一般價格與數量", priceJPY: 14_999_000, amountSatoshi: 250_000_000, expected: nil, animationMs: 65),
-        T01OrderCase(name: "價格差 1 日圓", priceJPY: 999, amountSatoshi: 10_000, expected: .priceNotOnTick, animationMs: 130),
-        T01OrderCase(name: "數量差 1 satoshi", priceJPY: 15_000_000, amountSatoshi: 9_999, expected: .amountTooSmall, animationMs: 85),
-        T01OrderCase(name: "數量是 0", priceJPY: 16_500_000, amountSatoshi: 0, expected: .amountTooSmall, animationMs: 160),
-        T01OrderCase(name: "價格與數量都錯：先報價格", priceJPY: 16_000_001, amountSatoshi: 600_000_000, expected: .priceNotOnTick, animationMs: 70),
-        T01OrderCase(name: "數量遠超過上限", priceJPY: 15_000_000, amountSatoshi: 1_000_000_000, expected: .amountTooLarge, animationMs: 145),
+        T01OrderCase(
+            name: "正常的限價單", priceJPY: 15_000_000, amountSatoshi: 100_000,
+            expected: nil, animationMs: 60),
+        T01OrderCase(
+            name: "價格不是 1,000 的倍數", priceJPY: 15_000_500,
+            amountSatoshi: 100_000, expected: .priceNotOnTick, animationMs: 140),
+        T01OrderCase(
+            name: "剛好最小下單量", priceJPY: 15_000_000, amountSatoshi: 10_000,
+            expected: nil, animationMs: 75),
+        T01OrderCase(
+            name: "剛好單筆上限", priceJPY: 15_000_000, amountSatoshi: 500_000_000,
+            expected: nil, animationMs: 80),
+        T01OrderCase(
+            name: "最小價格", priceJPY: 1_000, amountSatoshi: 10_000, expected: nil,
+            animationMs: 70),
+        T01OrderCase(
+            name: "超過單筆上限 1 satoshi", priceJPY: 15_000_000,
+            amountSatoshi: 500_000_001, expected: .amountTooLarge,
+            animationMs: 150),
+        T01OrderCase(
+            name: "一般價格與數量", priceJPY: 14_999_000, amountSatoshi: 250_000_000,
+            expected: nil, animationMs: 65),
+        T01OrderCase(
+            name: "價格差 1 日圓", priceJPY: 999, amountSatoshi: 10_000,
+            expected: .priceNotOnTick, animationMs: 130),
+        T01OrderCase(
+            name: "數量差 1 satoshi", priceJPY: 15_000_000, amountSatoshi: 9_999,
+            expected: .amountTooSmall, animationMs: 85),
+        T01OrderCase(
+            name: "數量是 0", priceJPY: 16_500_000, amountSatoshi: 0,
+            expected: .amountTooSmall, animationMs: 160),
+        T01OrderCase(
+            name: "價格與數量都錯：先報價格", priceJPY: 16_000_001,
+            amountSatoshi: 600_000_000, expected: .priceNotOnTick,
+            animationMs: 70),
+        T01OrderCase(
+            name: "數量遠超過上限", priceJPY: 15_000_000, amountSatoshi: 1_000_000_000,
+            expected: .amountTooLarge, animationMs: 145),
     ]
 }
 
-/// 模擬 UI 測試（XCUITest）的代價。真正的 UI 測試要啟動 App、登入、等動畫、點按鈕，這裡用等待時間代替：
-/// 冷啟動加登入 120 ms、輸入 40 ms、點確認 20 ms；錯誤訊息要等動畫結束才會出現在畫面上。
+/// 模擬 UI 測試（XCUITest）的代價。真正的 UI 測試要啟動 App、登入、等動畫、
+/// 點按鈕，這裡用等待時間代替：
+/// 冷啟動加登入 120 ms、輸入 40 ms、點確認 20 ms；
+/// 錯誤訊息要等動畫結束才會出現在畫面上。
 final class T01FakeOrderScreen {
     private let animationMs: Int
     private var priceJPY = 0
@@ -148,11 +193,15 @@ final class T01FakeOrderScreen {
         tappedAt = DispatchTime.now()
     }
 
-    /// 讀目前畫面上的錯誤訊息。點確認之後動畫還沒結束時，畫面上還沒有訊息（回傳 nil）
+    /// 讀目前畫面上的錯誤訊息。點確認之後動畫還沒結束時，
+    /// 畫面上還沒有訊息（回傳 nil）
     func errorLabel() -> T01OrderError? {
-        let elapsed = Int((DispatchTime.now().uptimeNanoseconds - tappedAt.uptimeNanoseconds) / 1_000_000)
+        let elapsed = Int(
+            (DispatchTime.now().uptimeNanoseconds - tappedAt.uptimeNanoseconds)
+                / 1_000_000)
         guard elapsed >= animationMs else { return nil }
-        return T01OrderRules.validate(priceJPY: priceJPY, amountSatoshi: amountSatoshi)
+        return T01OrderRules.validate(
+            priceJPY: priceJPY, amountSatoshi: amountSatoshi)
     }
 }
 
@@ -165,7 +214,8 @@ enum T01Withdrawal {
         return false
     }
 
-    /// 被改壞的版本：>= 變成 >。mutation testing 工具會自動產生這種版本，這裡手寫一個
+    /// 被改壞的版本：>= 變成 >。mutation testing 工具會自動產生這種版本，
+    /// 這裡手寫一個
     static func requiresTwoFactorMutant(_ amountJPY: Int) -> Bool {
         if amountJPY > 1_000_000 { return true }
         return false
@@ -189,7 +239,9 @@ enum T01Time {
 
     /// 2026-10-26（星期一）日本時間幾點幾分
     static func at(_ hour: Int, _ minute: Int) -> Date {
-        jst.date(from: DateComponents(year: 2026, month: 10, day: 26, hour: hour, minute: minute))!
+        jst.date(
+            from: DateComponents(
+                year: 2026, month: 10, day: 26, hour: hour, minute: minute))!
     }
 
     /// 這個時間點是當天的第幾分鐘（日本時間）

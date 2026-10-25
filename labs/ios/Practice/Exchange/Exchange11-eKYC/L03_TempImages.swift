@@ -1,15 +1,24 @@
-// L03：使用者中途離開開戶流程，證件和臉部影像還留在 App 的沙盒裡（個資只在上傳成功時才刪除）
-// 對應複習站：Exchange11eKYC 第 4 題「證件和臉部影像是高敏感的個人資料，App 要怎麼處理？」
+// L03：使用者中途離開開戶流程，證件和臉部影像還留在 App
+// 的沙盒裡（個資只在上傳成功時才刪除）
+// 對應複習站：Exchange11eKYC 第 4 題「證件和臉部影像是高敏感的個人資料，App
+// 要怎麼處理？」
 //
-// 情境：開戶時要拍證件的正面、背面和臉部自拍，先存成暫存檔（App 沙盒）再上傳。個資的原則是「不要長期保留原始影像」：
-//       上傳成功就立刻刪除；使用者回上一頁、切到背景、被來電中斷、離開整個流程，也要把暫存檔清掉（重試用「可續傳的上傳」滿足，不是留著原始影像）。
-//       演練用一個記憶體裡的假沙盒（不碰真的檔案，也不會有真的影像），三個情境，每個情境各自一個全新的沙盒，都已經拍好三張（front、back、face）：
-//       ①上傳成功 ②使用者按返回離開流程 ③上傳失敗（沒有網路），保留影像讓使用者重試，之後使用者離開流程。
+// 情境：開戶時要拍證件的正面、背面和臉部自拍，先存成暫存檔（App 沙盒）再上傳。
+// 個資的原則是「不要長期保留原始影像」：
+//       上傳成功就立刻刪除；使用者回上一頁、切到背景、被來電中斷、
+// 離開整個流程，也要把暫存檔清掉（重試用「可續傳的上傳」滿足，
+// 不是留著原始影像）。
+//       演練用一個記憶體裡的假沙盒（不碰真的檔案，也不會有真的影像），
+// 三個情境，每個情境各自一個全新的沙盒，都已經拍好三張（front、back、face）：
+//       ①上傳成功 ②使用者按返回離開流程 ③上傳失敗（沒有網路），
+// 保留影像讓使用者重試，之後使用者離開流程。
 //       每個情境結束時，沙盒裡都不應該留下任何影像。
 //
 // 你要寫：
-//   ① Bug 版（L03Bug.onUploadSucceeded、onLeaveFlow）：上傳成功時呼叫 sandbox.clear()；離開流程時什麼都不做。
-//   ② 修正版（L03Fixed.onUploadSucceeded、onLeaveFlow）：兩個時機都呼叫 sandbox.clear()。
+//   ① Bug 版（L03Bug.onUploadSucceeded、onLeaveFlow）：上傳成功時呼叫 sandbox.
+// clear()；離開流程時什麼都不做。
+//   ② 修正版（L03Fixed.onUploadSucceeded、onLeaveFlow）：兩個時機都呼叫
+// sandbox.clear()。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Exchange/Exchange11-eKYC/L03_TempImages.swift
 import Foundation
@@ -34,26 +43,33 @@ private func scenario(
             log("\(name)：結束時沙盒裡沒有證件影像 ✓")
         } else {
             leftover += 1
-            log("\(name)：結束時沙盒裡還留著 \(sandbox.files.count) 個影像檔（\(sandbox.files.joined(separator: "、"))）✗")
+            log(
+                "\(name)：結束時沙盒裡還留著 \(sandbox.files.count) 個影像檔（\(sandbox.files.joined(separator: "、"))）✗"
+            )
         }
     }
     func capture() -> Sandbox {
         let sandbox = Sandbox()
-        for name in ["front.jpg", "back.jpg", "face.jpg"] { sandbox.write(name) }
+        for name in ["front.jpg", "back.jpg", "face.jpg"] {
+            sandbox.write(name)
+        }
         return sandbox
     }
 
     let s1 = capture()
-    onUploadSucceeded(s1)                                    // 上傳成功
+    onUploadSucceeded(s1)  // 上傳成功
     finish("情境 1（上傳成功）", s1)
 
     let s2 = capture()
-    onLeaveFlow(s2)                                          // 使用者按返回離開流程
+    // 使用者按返回離開流程
+    onLeaveFlow(s2)
     finish("情境 2（按返回離開）", s2)
 
-    let s3 = capture()                                       // 上傳失敗：不呼叫任何清理，影像要留著讓使用者重試
+    // 上傳失敗：不呼叫任何清理，影像要留著讓使用者重試
+    let s3 = capture()
     log("情境 3：上傳失敗後、離開流程前，沙盒裡有 \(s3.files.count) 個影像檔（保留給使用者重試）")
-    onLeaveFlow(s3)                                          // 之後使用者離開流程
+    // 之後使用者離開流程
+    onLeaveFlow(s3)
     finish("情境 3（上傳失敗後離開）", s3)
     log("3 個情境，結束時還留著影像的有 \(leftover) 個")
 }
@@ -69,7 +85,9 @@ private enum L03Bug {
     }
 
     static func run(_ log: LabLog) async {
-        scenario(log, onUploadSucceeded: onUploadSucceeded(_:), onLeaveFlow: onLeaveFlow(_:))
+        scenario(
+            log, onUploadSucceeded: onUploadSucceeded(_:),
+            onLeaveFlow: onLeaveFlow(_:))
     }
 }
 
@@ -84,14 +102,19 @@ private enum L03Fixed {
     }
 
     static func run(_ log: LabLog) async {
-        scenario(log, onUploadSucceeded: onUploadSucceeded(_:), onLeaveFlow: onLeaveFlow(_:))
+        scenario(
+            log, onUploadSucceeded: onUploadSucceeded(_:),
+            onLeaveFlow: onLeaveFlow(_:))
     }
 }
 
 // MARK: - 演練設定
 private func leftoverCount(_ lines: [String]) -> Int? {
-    guard let line = lines.first(where: { $0.hasPrefix("3 個情境") }) else { return nil }
-    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.last
+    guard let line = lines.first(where: { $0.hasPrefix("3 個情境") }) else {
+        return nil
+    }
+    return line.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        .last
 }
 
 extension Exchange11eKYC {
@@ -107,8 +130,10 @@ extension Exchange11eKYC {
             "寫 TODO ②（修正版），選「修正版」執行，三個情境結束時都沒有影像；情境 3 在離開流程之前仍保留 3 個檔案（給使用者重試）。",
             "進階：iOS 寫檔時用 completeFileProtection（裝置鎖定時無法讀取）；Android 用 App 私有的內部儲存；影像一律不放相簿，也不進 log 與分析工具。",
         ],
-        expectBug: "「情境 1（上傳成功）：結束時沙盒裡沒有證件影像 ✓」，「情境 2（按返回離開）：結束時沙盒裡還留著 3 個影像檔（front.jpg、back.jpg、face.jpg）✗」，情境 3 也留著 3 個：「3 個情境，結束時還留著影像的有 2 個」。",
-        expectFixed: "三個情境結束時沙盒裡都沒有影像，「情境 3：上傳失敗後、離開流程前，沙盒裡有 3 個影像檔（保留給使用者重試）」，「3 個情境，結束時還留著影像的有 0 個」。",
+        expectBug:
+            "「情境 1（上傳成功）：結束時沙盒裡沒有證件影像 ✓」，「情境 2（按返回離開）：結束時沙盒裡還留著 3 個影像檔（front.jpg、back.jpg、face.jpg）✗」，情境 3 也留著 3 個：「3 個情境，結束時還留著影像的有 2 個」。",
+        expectFixed:
+            "三個情境結束時沙盒裡都沒有影像，「情境 3：上傳失敗後、離開流程前，沙盒裡有 3 個影像檔（保留給使用者重試）」，「3 個情境，結束時還留著影像的有 0 個」。",
         run: { variant, log in
             switch variant {
             case .bug: await L03Bug.run(log)
@@ -116,12 +141,21 @@ extension Exchange11eKYC {
             }
         },
         checkBug: { lines in
-            guard let n = leftoverCount(lines) else { return "演練沒有跑完：要用 scenario(log, onUploadSucceeded:, onLeaveFlow:) 執行" }
-            if !lines.contains("情境 1（上傳成功）：結束時沙盒裡沒有證件影像 ✓") { return "Bug 版在上傳成功時要刪除影像（情境 1 結束時沙盒是空的）" }
-            return n == 2 ? nil : "Bug 還沒重現：離開流程時什麼都不做，情境 2、3 都會留著 3 個影像檔（目前 \(n) 個情境有留）"
+            guard let n = leftoverCount(lines) else {
+                return
+                    "演練沒有跑完：要用 scenario(log, onUploadSucceeded:, onLeaveFlow:) 執行"
+            }
+            if !lines.contains("情境 1（上傳成功）：結束時沙盒裡沒有證件影像 ✓") {
+                return "Bug 版在上傳成功時要刪除影像（情境 1 結束時沙盒是空的）"
+            }
+            return n == 2
+                ? nil : "Bug 還沒重現：離開流程時什麼都不做，情境 2、3 都會留著 3 個影像檔（目前 \(n) 個情境有留）"
         },
         checkFixed: { lines in
-            guard let n = leftoverCount(lines) else { return "演練沒有跑完：要用 scenario(log, onUploadSucceeded:, onLeaveFlow:) 執行" }
+            guard let n = leftoverCount(lines) else {
+                return
+                    "演練沒有跑完：要用 scenario(log, onUploadSucceeded:, onLeaveFlow:) 執行"
+            }
             return n == 0 ? nil : "還有 \(n) 個情境結束時留著影像：上傳成功和離開流程這兩個時機都要清掉暫存"
         }
     )

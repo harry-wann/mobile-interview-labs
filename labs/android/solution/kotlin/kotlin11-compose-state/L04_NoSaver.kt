@@ -1,13 +1,21 @@
 // L04：下單草稿用 rememberSaveable 存，畫面一打開就當掉（自訂型別沒寫 Saver）
-// 對應複習站：Kotlin11ComposeState 第 5 題「remember 和 rememberSaveable 怎麼選？Saver 怎麼寫？」
+// 對應複習站：Kotlin11ComposeState 第 5 題「remember 和 rememberSaveable
+// 怎麼選？Saver 怎麼寫？」
 //
-// 情境：下單畫面把草稿（交易對加數量）放在 rememberSaveable，希望旋轉螢幕後還在。草稿是自訂的 class OrderDraft。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose，
-//        再用 SimulatedRotation.kt 模擬旋轉螢幕（存起來、畫面重建、還原），Android 預設的「只收得下 Bundle 能放的型別」規則也一併模擬。
-// Bug 版：rememberSaveable { mutableStateOf(OrderDraft(…)) }，沒有給 Saver。OrderDraft 不是 String、數字、Serializable、Parcelable，
-//        預設的規則存不下，第一次組合就丟 IllegalArgumentException（手機上就是 App 當掉）。
-// 修正版：用 listSaver 告訴 Compose 怎麼把 OrderDraft 拆成 List（交易對、數量）以及怎麼組回來，
-//        rememberSaveable(stateSaver = draftSaver) { mutableStateOf(OrderDraft(…)) }。旋轉之後草稿還在。
+// 情境：下單畫面把草稿（交易對加數量）放在 rememberSaveable，
+// 希望旋轉螢幕後還在。草稿是自訂的 class OrderDraft。
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose，
+//        再用 SimulatedRotation.kt 模擬旋轉螢幕（存起來、畫面重建、還原），
+// Android 預設的「只收得下 Bundle 能放的型別」規則也一併模擬。
+// Bug 版：rememberSaveable { mutableStateOf(OrderDraft(…)) }，沒有給 Saver。
+// OrderDraft 不是 String、數字、Serializable、Parcelable，
+//        預設的規則存不下，第一次組合就丟 IllegalArgumentException（手機上就是
+// App 當掉）。
+// 修正版：用 listSaver 告訴 Compose 怎麼把 OrderDraft 拆成 List（交易對、數量）
+// 以及怎麼組回來，
+//        rememberSaveable(stateSaver = draftSaver) {
+// mutableStateOf(OrderDraft(…)) }。旋轉之後草稿還在。
 package tw.harry.labs.solution.kotlin11composestate
 
 import androidx.compose.runtime.Composable
@@ -26,49 +34,83 @@ private class L04Draft(val symbol: String, val qty: Double) {
     override fun toString() = "$symbol $qty"
 }
 
-/** 演練流程（兩個版本共用）：打開畫面 → 使用者把草稿改成 ETH_JPY 0.25 → 旋轉螢幕 → 看旋轉後畫面顯示什麼 */
+/**
+ * 演練流程（兩個版本共用）：打開畫面 → 使用者把草稿改成 ETH_JPY 0.25 →
+ * 旋轉螢幕 → 看旋轉後畫面顯示什麼
+ */
 private suspend fun scenario(
     log: LabLog,
-    screen: @Composable (onState: (MutableState<L04Draft>) -> Unit, onShow: (String) -> Unit) -> Unit,
+    screen: @Composable (
+        onState: (MutableState<L04Draft>) -> Unit,
+        onShow: (String) -> Unit,
+    ) -> Unit,
 ) {
     try {
-        val (before, after) = rotateScreen(screen) { it.value = L04Draft("ETH_JPY", 0.25) }
+        val (before, after) = rotateScreen(screen) {
+            it.value =
+                L04Draft("ETH_JPY", 0.25)
+        }
         log("旋轉前，畫面顯示：$before")
         log("旋轉後，畫面顯示：$after")
     } catch (e: IllegalArgumentException) {
-        log("第一次組合就當掉了：${e::class.simpleName}，訊息含「cannot be saved using the current SaveableStateRegistry」=" +
-            (e.message?.contains("cannot be saved using the current SaveableStateRegistry") == true))
+        log(
+            "第一次組合就當掉了：${e::class.simpleName}，訊息含「cannot be saved using the current SaveableStateRegistry」=" +
+                (
+                    e.message?.contains(
+                        "cannot be saved using the current SaveableStateRegistry",
+                    ) ==
+                        true
+                ),
+        )
     }
 }
 
 // MARK: - Bug 版
 private object L04Bug {
     @Composable
-    fun OrderScreen(onState: (MutableState<L04Draft>) -> Unit, onShow: (String) -> Unit) {
-        val draft = rememberSaveable { mutableStateOf(L04Draft("BTC_JPY", 0.1)) }   // 沒給 Saver：預設的規則存不下 L04Draft
+    fun OrderScreen(
+        onState: (MutableState<L04Draft>) -> Unit,
+        onShow: (String) -> Unit,
+    ) {
+        // 沒給 Saver：預設的規則存不下 L04Draft
+        val draft =
+            rememberSaveable { mutableStateOf(L04Draft("BTC_JPY", 0.1)) }
         SideEffect { onState(draft) }
         HeadlessText(draft.value.toString(), onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { onState, onShow -> OrderScreen(onState, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { onState, onShow ->
+        OrderScreen(onState, onShow)
+    }
 }
 
 // MARK: - 修正版
 private object L04Fixed {
-    /** 告訴 Compose：怎麼把 L04Draft 拆成 List（只放 String 和 Double），以及怎麼組回來 */
+    /**
+     * 告訴 Compose：怎麼把 L04Draft 拆成 List（只放 String 和 Double），
+     * 以及怎麼組回來
+     */
     val draftSaver = listSaver<L04Draft, Any>(
         save = { listOf(it.symbol, it.qty) },
         restore = { L04Draft(it[0] as String, it[1] as Double) },
     )
 
     @Composable
-    fun OrderScreen(onState: (MutableState<L04Draft>) -> Unit, onShow: (String) -> Unit) {
-        val draft = rememberSaveable(stateSaver = draftSaver) { mutableStateOf(L04Draft("BTC_JPY", 0.1)) }
+    fun OrderScreen(
+        onState: (MutableState<L04Draft>) -> Unit,
+        onShow: (String) -> Unit,
+    ) {
+        val draft =
+            rememberSaveable(stateSaver = draftSaver) {
+                mutableStateOf(L04Draft("BTC_JPY", 0.1))
+            }
         SideEffect { onState(draft) }
         HeadlessText(draft.value.toString(), onShow)
     }
 
-    suspend fun run(log: LabLog) = scenario(log) { onState, onShow -> OrderScreen(onState, onShow) }
+    suspend fun run(log: LabLog) = scenario(log) { onState, onShow ->
+        OrderScreen(onState, onShow)
+    }
 }
 
 // MARK: - 演練設定
@@ -98,7 +140,11 @@ val l04 = Lab(
         val crashed = line(lines, "第一次組合就當掉了：")
         when {
             crashed == null -> "沒有當掉：Bug 版要用 rememberSaveable { mutableStateOf(L04Draft(…)) }，而且不要給 Saver"
-            !crashed.endsWith("=true") -> "當掉了，但不是 rememberSaveable 存不下：$crashed"
+
+            !crashed.endsWith(
+                "=true",
+            ) -> "當掉了，但不是 rememberSaveable 存不下：$crashed"
+
             else -> null
         }
     },

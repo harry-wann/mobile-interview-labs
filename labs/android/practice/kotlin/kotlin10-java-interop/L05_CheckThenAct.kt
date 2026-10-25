@@ -1,13 +1,19 @@
 // L05：每個存取都有同步，餘額還是被扣成負的（race condition：先檢查、再行動）
-// 對應複習站：Kotlin10JavaInterop 第 5 題「happens-before 是什麼？volatile、synchronized、Atomic 各保證什麼？」
+// 對應複習站：Kotlin10JavaInterop 第 5 題「happens-before 是什麼？volatile、
+// synchronized、Atomic 各保證什麼？」
 //
-// 情境：帳戶餘額 100 日圓，4 條執行緒同時開始，各嘗試提領 1 日圓 100 次（共 400 次嘗試）。正確結果是剛好成功 100 次，餘額 0。
-//        每次提領在「檢查餘額」和「扣款」之間，還要做一次風控檢查（約 20 微秒）。
+// 情境：帳戶餘額 100 日圓，4 條執行緒同時開始，各嘗試提領 1 日圓 100 次（共
+// 400 次嘗試）。正確結果是剛好成功 100 次，餘額 0。
+//        每次提領在「檢查餘額」和「扣款」之間，還要做一次風控檢查（約 20
+// 微秒）。
 //        演練重複最多 100 輪，看有沒有哪一輪成功的次數超過 100。
 //
 // 你要寫：
-//   ① Bug 版（L05Bug.Account.withdraw）：先用 balance() 檢查夠不夠，接著 riskCheck()，再 setBalance(balance() - amount)，三步分開呼叫（讀、寫各自都有 @Synchronized）。
-//   ② 修正版（L05Fixed.Account）：用 synchronized(lock) 把「檢查、riskCheck()、扣款」放在同一個區塊。
+//   ① Bug 版（L05Bug.Account.withdraw）：先用 balance() 檢查夠不夠，接著
+// riskCheck()，再 setBalance(balance() - amount)，三步分開呼叫（讀、寫各自都有
+// @Synchronized）。
+//   ② 修正版（L05Fixed.Account）：用 synchronized(lock) 把「檢查、riskCheck()、
+// 扣款」放在同一個區塊。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/kotlin/kotlin10-java-interop/L05_CheckThenAct.kt
 package tw.harry.labs.practice.kotlin10javainterop
@@ -28,8 +34,14 @@ private const val ROUNDS = 100
 /** 風控檢查：約 20 微秒（兩個版本共用） */
 private fun riskCheck() = LockSupport.parkNanos(20_000)
 
-/** 演練流程（兩個版本共用）：每輪建一個新帳戶，4 條執行緒各嘗試提領 100 次；[newAccount] 回傳「提領 1 日圓是否成功」的函式 */
-private suspend fun scenario(log: LabLog, newAccount: (initial: Long) -> () -> Boolean) {
+/**
+ * 演練流程（兩個版本共用）：每輪建一個新帳戶，4 條執行緒各嘗試提領 100 次；
+ * [newAccount] 回傳「提領 1 日圓是否成功」的函式
+ */
+private suspend fun scenario(
+    log: LabLog,
+    newAccount: (initial: Long) -> () -> Boolean,
+) {
     var overdrawn = 0
     var short = 0
     var rounds = 0
@@ -38,8 +50,16 @@ private suspend fun scenario(log: LabLog, newAccount: (initial: Long) -> () -> B
             val withdraw = newAccount(INITIAL)
             val succeeded = AtomicInteger()
             val start = CountDownLatch(1)
-            val threads = List(4) { thread { start.await(); repeat(100) { if (withdraw()) succeeded.incrementAndGet() } } }
-            start.countDown()                               // 4 條執行緒同時開始
+            val threads =
+                List(4) {
+                    thread {
+                        start.await(); repeat(100) {
+                            if (withdraw()) succeeded.incrementAndGet()
+                        }
+                    }
+                }
+            // 4 條執行緒同時開始
+            start.countDown()
             threads.forEach { it.join() }
             if (succeeded.get() > INITIAL) overdrawn++
             if (succeeded.get() < INITIAL) short++
@@ -56,14 +76,15 @@ private object L05Bug {
         private var balance = initial
 
         @Synchronized
-        fun balance(): Long = balance                       // 讀有同步
+        fun balance(): Long = balance // 讀有同步
 
         @Synchronized
-        fun setBalance(value: Long) {                       // 寫也有同步
+        fun setBalance(value: Long) { // 寫也有同步
             balance = value
         }
 
-        // TODO ①：withdraw(amount)：if (balance() >= amount) { riskCheck(); setBalance(balance() - amount); return true }，否則回傳 false
+        // TODO ①：withdraw(amount)：if (balance() >= amount) { riskCheck();
+        // setBalance(balance() - amount); return true }，否則回傳 false
         //         （檢查與扣款是分開的呼叫，每次呼叫各自有同步）
         fun withdraw(amount: Long): Boolean = false
     }
@@ -79,7 +100,9 @@ private object L05Bug {
 private object L05Fixed {
     class Account(initial: Long) {
         // TODO ②-1：private var balance = initial；private val lock = Any()
-        // TODO ②-2：withdraw(amount)：整段放進 synchronized(lock) { … }：if (balance >= amount) { riskCheck(); balance -= amount; true } else false
+        // TODO ②-2：withdraw(amount)：整段放進 synchronized(lock) { … }：if
+        // (balance >= amount) { riskCheck(); balance -= amount; true } else
+        // false
         fun withdraw(amount: Long): Boolean = false
     }
 
@@ -91,11 +114,13 @@ private object L05Fixed {
 }
 
 // MARK: - 演練設定
-private fun overdrawn(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("跑了 ") }?.substringAfter("其中 ")?.substringBefore(" 輪")?.toIntOrNull()
+private fun overdrawn(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("跑了 ")
+}?.substringAfter("其中 ")?.substringBefore(" 輪")?.toIntOrNull()
 
-private fun shortRounds(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("另外有 ") }?.removePrefix("另外有 ")?.substringBefore(" 輪")?.toIntOrNull()
+private fun shortRounds(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("另外有 ")
+}?.removePrefix("另外有 ")?.substringBefore(" 輪")?.toIntOrNull()
 
 val l05 = Lab(
     id = "L05",

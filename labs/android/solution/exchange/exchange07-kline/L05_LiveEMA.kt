@@ -1,11 +1,18 @@
-// L05：進行中的 K 線，EMA 越跳越高（每個 tick 都把算出來的值寫回「上一根的 EMA」）
-// 對應複習站：Exchange07Kline 第 4 題「移動平均（SMA、EMA）和 RSI 怎麼算？即時更新時要注意什麼？」
+// L05：進行中的 K 線，EMA 越跳越高（每個 tick 都把算出來的值寫回「上一根的
+// EMA」）
+// 對應複習站：Exchange07Kline 第 4 題「移動平均（SMA、EMA）和 RSI
+// 怎麼算？即時更新時要注意什麼？」
 //
-// 情境：EMA 週期 9（k = 2 ÷ (9 + 1) = 0.2），公式 ema = prev + k × (價格 − prev)。上一根已收盤的 EMA 是 100。
-//        這一根還在進行中，連續收到三個 tick，價格都是 110；收盤之後，下一根的第一個 tick 價格是 104。
-//        正確的顯示值：三個 tick 都是 102（100 + 0.2 × 10）；收盤後 EMA 固定為 102；下一根第一個 tick：102 + 0.2 × (104 − 102) = 102.4。
-// Bug 版：每個 tick 都把算出來的值寫回 prev，下一個 tick 又拿它當 prev：102、103.6、104.88，越來越高；收盤時這個被放大的值成為下一根的 prev。
-// 修正版：進行中的值只用來顯示，不寫回 prev（prevClosed）；收盤時才把最後的顯示值固定成新的 prevClosed。
+// 情境：EMA 週期 9（k = 2 ÷ (9 + 1) = 0.2），公式 ema = prev + k × (價格 −
+// prev)。上一根已收盤的 EMA 是 100。
+//        這一根還在進行中，連續收到三個 tick，價格都是 110；收盤之後，
+// 下一根的第一個 tick 價格是 104。
+//        正確的顯示值：三個 tick 都是 102（100 + 0.2 × 10）；收盤後 EMA 固定為
+// 102；下一根第一個 tick：102 + 0.2 × (104 − 102) = 102.4。
+// Bug 版：每個 tick 都把算出來的值寫回 prev，下一個 tick 又拿它當 prev：102、
+// 103.6、104.88，越來越高；收盤時這個被放大的值成為下一根的 prev。
+// 修正版：進行中的值只用來顯示，不寫回 prev（prevClosed）；
+// 收盤時才把最後的顯示值固定成新的 prevClosed。
 package tw.harry.labs.solution.exchange07kline
 
 import java.math.BigDecimal
@@ -35,7 +42,11 @@ private fun scenario(log: LabLog, ema: L05LiveEMA) {
     ema.onCandleClose()
     val next = ema.onTick(e07("104"))
     log("收盤後，下一根的第一個 tick 104 → EMA ${e07Text(next)}")
-    log("最後：三個 tick 的 EMA 是 ${shown.joinToString("、") { e07Text(it) }}，下一根第一個 tick 是 ${e07Text(next)}（正確答案：102、102、102，下一根 102.4）")
+    log(
+        "最後：三個 tick 的 EMA 是 ${shown.joinToString("、") {
+            e07Text(it)
+        }}，下一根第一個 tick 是 ${e07Text(next)}（正確答案：102、102、102，下一根 102.4）",
+    )
 }
 
 // MARK: - Bug 版
@@ -44,7 +55,8 @@ private object L05Bug {
         private var prev = e07("100")
 
         override fun onTick(price: BigDecimal): BigDecimal {
-            prev = prev + k * (price - prev)                // 把進行中的值寫回 prev：每個 tick 都重複計入
+            // 把進行中的值寫回 prev：每個 tick 都重複計入
+            prev = prev + k * (price - prev)
             return prev
         }
 
@@ -57,16 +69,19 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     class EMA : L05LiveEMA {
-        private var prevClosed = e07("100")                 // 上一根「已收盤」的 EMA
+        // 上一根「已收盤」的 EMA
+        private var prevClosed = e07("100")
         private var live = e07("100")
 
         override fun onTick(price: BigDecimal): BigDecimal {
-            live = prevClosed + k * (price - prevClosed)    // 只用來顯示，不寫回 prevClosed
+            // 只用來顯示，不寫回 prevClosed
+            live = prevClosed + k * (price - prevClosed)
             return live
         }
 
         override fun onCandleClose() {
-            prevClosed = live                               // 收盤時才固定成新的 prevClosed
+            // 收盤時才固定成新的 prevClosed
+            prevClosed = live
         }
     }
 
@@ -96,18 +111,38 @@ val l05 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, ema) 執行"
-            lines.none { it.startsWith("最後：三個 tick 的 EMA 是 102、103.6、104.88") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, ema) 執行"
+            }
+
+            lines.none {
+                it.startsWith("最後：三個 tick 的 EMA 是 102、103.6、104.88")
+            } -> {
                 "Bug 還沒重現：onTick 要把算出來的值寫回 prev（prev = prev + k * (price - prev)），再回傳 prev"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, ema) 執行"
-            lines.none { it.startsWith("最後：三個 tick 的 EMA 是 102、102、102，下一根第一個 tick 是 102.4") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, ema) 執行"
+            }
+
+            lines.none {
+                it.startsWith(
+                    "最後：三個 tick 的 EMA 是 102、102、102，下一根第一個 tick 是 102.4",
+                )
+            } -> {
                 "onTick 用 prevClosed 算出 live 再回傳（不寫回 prevClosed）；onCandleClose 才把 prevClosed 換成 live"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

@@ -1,13 +1,19 @@
-// L01：AI 產生的 5 個測試全過、覆蓋率 100%，被改壞的程式卻只抓到 1 個（用覆蓋率當合併條件）
+// L01：AI 產生的 5 個測試全過、覆蓋率 100%，被改壞的程式卻只抓到 1
+// 個（用覆蓋率當合併條件）
 // 對應複習站：Testing05AITesting 第 2 題「怎麼確保 AI 產生的測試是可信的？」
 //
-// 情境：AI 幫手續費函式 T05Fee.calculate 產生了 5 個單元測試，全部通過，每個檢查點都跑到（覆蓋率 100%）。
+// 情境：AI 幫手續費函式 T05Fee.calculate 產生了 5 個單元測試，全部通過，
+// 每個檢查點都跑到（覆蓋率 100%）。
 //       審查規則 accepts(suite) 決定「這批測試能不能合併」。
-//       另外有 5 個「故意改壞的版本」（T05Mutation.allMutants：>= 改成 >、費率對調、四捨五入、拿掉最少 1 日圓、VIP 沒減半），
-//       suite.passes(某個版本) 會用這個版本跑一次全部測試，沒有通過代表測試「抓到」這個壞版本。
+//       另外有 5 個「故意改壞的版本」（T05Mutation.allMutants：>= 改成 >、
+// 費率對調、四捨五入、拿掉最少 1 日圓、VIP 沒減半），
+//       suite.passes(某個版本) 會用這個版本跑一次全部測試，
+// 沒有通過代表測試「抓到」這個壞版本。
 //       演練分別審查兩批測試：AI 產生的、人補強過的（檢查精確數字與邊界）。
-// Bug 版：「測試全過，而且覆蓋率 ≥ 80%」就允許合併。AI 產生的測試被放行，但它只抓到 5 個壞版本裡的 1 個。
-// 修正版：加上 mutation score：對每個改壞的版本跑一次測試，被抓到的比例（mutation score）要 ≥ 80% 才允許合併。
+// Bug 版：「測試全過，而且覆蓋率 ≥ 80%」就允許合併。AI 產生的測試被放行，
+// 但它只抓到 5 個壞版本裡的 1 個。
+// 修正版：加上 mutation score：對每個改壞的版本跑一次測試，
+// 被抓到的比例（mutation score）要 ≥ 80% 才允許合併。
 //        AI 產生的測試（20%）被擋下；補強後的測試（100%）通過。
 package tw.harry.labs.solution.testing05aitesting
 
@@ -19,18 +25,22 @@ import tw.harry.labs.kit.Variant
 private fun scenario(log: LabLog, accepts: (T05Suite) -> Boolean) {
     for (suite in listOf(T05Suite.aiGenerated, T05Suite.strengthened)) {
         val allPass = suite.passes(T05Mutation.NONE)
-        log("${suite.name}：${if (allPass) "全部通過" else "有測試失敗"}，覆蓋率 ${(suite.coverage() * 100).toInt()}%")
+        log(
+            "${suite.name}：${if (allPass) "全部通過" else "有測試失敗"}，覆蓋率 ${(suite.coverage() * 100).toInt()}%",
+        )
         log("${suite.name}：審查結果：${if (accepts(suite)) "允許合併" else "擋下"}")
         val killed = suite.killedMutants()
         val total = T05Mutation.allMutants.size
-        log("${suite.name}：被改壞的版本抓到 $killed／$total（mutation score ${killed * 100 / total}%）")
+        log(
+            "${suite.name}：被改壞的版本抓到 $killed／$total（mutation score ${killed * 100 / total}%）",
+        )
     }
 }
 
 // MARK: - Bug 版
 private object L01Bug {
-    fun accepts(suite: T05Suite): Boolean =
-        suite.passes(T05Mutation.NONE) && suite.coverage() >= 0.8       // 測試全過、覆蓋率夠高，就允許合併
+    fun accepts(suite: T05Suite): Boolean = // 測試全過、覆蓋率夠高，就允許合併
+        suite.passes(T05Mutation.NONE) && suite.coverage() >= 0.8
 
     fun run(log: LabLog) = scenario(log, ::accepts)
 }
@@ -38,12 +48,15 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     fun accepts(suite: T05Suite): Boolean {
-        if (!suite.passes(T05Mutation.NONE)) return false               // 在正確的實作上也要全過
+        // 在正確的實作上也要全過
+        if (!suite.passes(T05Mutation.NONE)) return false
         var killed = 0
         for (mutant in T05Mutation.allMutants) {
-            if (!suite.passes(mutant)) killed++                          // 這個改壞的版本讓測試失敗：抓到了
+            // 這個改壞的版本讓測試失敗：抓到了
+            if (!suite.passes(mutant)) killed++
         }
-        return killed.toDouble() / T05Mutation.allMutants.size >= 0.8    // mutation score 要夠高
+        // mutation score 要夠高
+        return killed.toDouble() / T05Mutation.allMutants.size >= 0.8
     }
 
     fun run(log: LabLog) = scenario(log, ::accepts)

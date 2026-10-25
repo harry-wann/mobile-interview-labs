@@ -1,15 +1,22 @@
 // L01：離開詳細頁，列表上的價格就停了（訂閱沒有引用計數）
 // 對應複習站：Design02MarketData 第 3 題「一條連線、好幾個畫面，要怎麼共用？」
 //
-// 情境：整個 App 只開一條 WebSocket，訂閱管理者替所有畫面送 sub／unsub。兩個畫面需要的 topic 有重疊：
-//       行情列表：market.btcjpy.bbo、market.ethjpy.bbo；BTC 詳細頁：market.btcjpy.bbo、market.btcjpy.depth.step0。
-//       劇本：列表先出現 → 詳細頁出現 → 伺服器推送一次 market.btcjpy.bbo → 使用者按返回，詳細頁離開
-//       → 伺服器再推送一次 market.btcjpy.bbo（列表還開著，還在看 BTC 價格）→ 列表也離開。
-//       假伺服器的規則：同一個 topic 每被 sub 一次，每次推送就多送一份；unsub 會取消這個 topic 的全部訂閱。
+// 情境：整個 App 只開一條 WebSocket，訂閱管理者替所有畫面送 sub／unsub。
+// 兩個畫面需要的 topic 有重疊：
+//       行情列表：market.btcjpy.bbo、market.ethjpy.bbo；BTC 詳細頁：market.
+// btcjpy.bbo、market.btcjpy.depth.step0。
+//       劇本：列表先出現 → 詳細頁出現 → 伺服器推送一次 market.btcjpy.bbo →
+// 使用者按返回，詳細頁離開
+//       → 伺服器再推送一次 market.btcjpy.bbo（列表還開著，還在看 BTC 價格）→
+// 列表也離開。
+//       假伺服器的規則：同一個 topic 每被 sub 一次，每次推送就多送一份；unsub
+// 會取消這個 topic 的全部訂閱。
 //
 // 你要寫：
-//   ① Bug 版（L01Bug.Manager）：subscribe 每次都送 sub、unsubscribe 每次都送 unsub，不計數。
-//   ② 修正版（L01Fixed.Manager）：用 counts 記每個 topic 有幾個畫面在用，從 0 變 1 才送 sub，從 1 變 0 才送 unsub。
+//   ① Bug 版（L01Bug.Manager）：subscribe 每次都送 sub、unsubscribe 每次都送
+// unsub，不計數。
+//   ② 修正版（L01Fixed.Manager）：用 counts 記每個 topic 有幾個畫面在用，從 0
+// 變 1 才送 sub，從 1 變 0 才送 unsub。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：solution/design/design02-market-data/L01_RefCount.kt
 package tw.harry.labs.practice.design02marketdata
@@ -19,7 +26,8 @@ import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
 private val l01ListTopics = listOf("market.btcjpy.bbo", "market.ethjpy.bbo")
-private val l01DetailTopics = listOf("market.btcjpy.bbo", "market.btcjpy.depth.step0")
+private val l01DetailTopics =
+    listOf("market.btcjpy.bbo", "market.btcjpy.depth.step0")
 
 /** 訂閱管理者：畫面出現時呼叫 subscribe，離開時呼叫 unsubscribe */
 private interface L01TopicManager {
@@ -28,10 +36,19 @@ private interface L01TopicManager {
 }
 
 /** 演練流程（兩個版本共用） */
-private fun scenario(log: LabLog, makeManager: (D02FakeServer) -> L01TopicManager) {
+private fun scenario(
+    log: LabLog,
+    makeManager: (D02FakeServer) -> L01TopicManager,
+) {
     val server = D02FakeServer()
     val manager = makeManager(server)
-    fun topics() = if (server.activeTopics.isEmpty()) "（沒有）" else server.activeTopics.joinToString("、")
+    fun topics() = if (server.activeTopics.isEmpty()) {
+        "（沒有）"
+    } else {
+        server.activeTopics.joinToString(
+            "、",
+        )
+    }
 
     l01ListTopics.forEach(manager::subscribe)
     log("行情列表出現 → 伺服器上的訂閱：${topics()}（sub 累計 ${server.subCount} 則）")
@@ -45,18 +62,22 @@ private fun scenario(log: LabLog, makeManager: (D02FakeServer) -> L01TopicManage
     log("伺服器推送 market.btcjpy.bbo（只剩列表開著，列表還在看 BTC 價格）→ App 收到 $after 份")
     l01ListTopics.forEach(manager::unsubscribe)
     log("行情列表也離開 → 伺服器上的訂閱：${topics()}（unsub 累計 ${server.unsubCount} 則）")
-    log("最後：sub 一共送出 ${server.subCount} 則（不同的 topic 只有 3 個）；兩個畫面都開著時推送收到 $both 份，詳細頁離開後收到 $after 份；全部離開後伺服器上剩 ${server.activeTopics.size} 個訂閱")
+    log(
+        "最後：sub 一共送出 ${server.subCount} 則（不同的 topic 只有 3 個）；兩個畫面都開著時推送收到 $both 份，詳細頁離開後收到 $after 份；全部離開後伺服器上剩 ${server.activeTopics.size} 個訂閱",
+    )
 }
 
 // MARK: - Bug 版
 private object L01Bug {
     class Manager(private val server: D02FakeServer) : L01TopicManager {
         override fun subscribe(topic: String) {
-            // TODO ①-1：畫面要就送一次 sub（server.sendSub(topic)），不管別的畫面訂過沒有
+            // TODO ①-1：畫面要就送一次 sub（server.sendSub(topic)），
+            // 不管別的畫面訂過沒有
         }
 
         override fun unsubscribe(topic: String) {
-            // TODO ①-2：畫面離開就送一次 unsub（server.sendUnsub(topic)），不管別的畫面還在不在用
+            // TODO ①-2：畫面離開就送一次 unsub（server.sendUnsub(topic)），
+            // 不管別的畫面還在不在用
         }
     }
 
@@ -66,14 +87,17 @@ private object L01Bug {
 // MARK: - 修正版
 private object L01Fixed {
     class Manager(private val server: D02FakeServer) : L01TopicManager {
-        private val counts = mutableMapOf<String, Int>()        // topic → 目前有幾個畫面在用
+        // topic → 目前有幾個畫面在用
+        private val counts = mutableMapOf<String, Int>()
 
         override fun subscribe(topic: String) {
-            // TODO ②-1：counts[topic] 加 1；加完剛好是 1（第一個畫面要這個 topic）才送 sub
+            // TODO ②-1：counts[topic] 加 1；加完剛好是 1（第一個畫面要這個
+            // topic）才送 sub
         }
 
         override fun unsubscribe(topic: String) {
-            // TODO ②-2：counts[topic] 減 1；減到 0（最後一個畫面離開）才送 unsub，並把這個 topic 從 counts 移除。
+            // TODO ②-2：counts[topic] 減 1；減到 0（最後一個畫面離開）才送
+            // unsub，並把這個 topic 從 counts 移除。
             //           counts 裡沒有這個 topic 就什麼都不做
         }
     }
@@ -106,21 +130,45 @@ val l01 = Lab(
     checkBug = { lines ->
         val last = lines.lastOrNull { it.startsWith("最後") }
         when {
-            last == null -> "演練沒有跑完：要用 scenario(log, makeManager) 執行"
-            last.startsWith("最後：sub 一共送出 0 則") -> "subscribe 還沒送出 sub：Bug 版每次都 server.sendSub(topic)"
-            !last.startsWith("最後：sub 一共送出 4 則（不同的 topic 只有 3 個）；兩個畫面都開著時推送收到 2 份，詳細頁離開後收到 0 份") ->
+            last == null -> {
+                "演練沒有跑完：要用 scenario(log, makeManager) 執行"
+            }
+
+            last.startsWith("最後：sub 一共送出 0 則") -> {
+                "subscribe 還沒送出 sub：Bug 版每次都 server.sendSub(topic)"
+            }
+
+            !last.startsWith(
+                "最後：sub 一共送出 4 則（不同的 topic 只有 3 個）；兩個畫面都開著時推送收到 2 份，詳細頁離開後收到 0 份",
+            ) -> {
                 "Bug 還沒重現：subscribe 每次都送 sub、unsubscribe 每次都送 unsub（不計數），market.btcjpy.bbo 會被訂兩次，又被詳細頁整個退訂"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         val last = lines.lastOrNull { it.startsWith("最後") }
         when {
-            last == null -> "演練沒有跑完：要用 scenario(log, makeManager) 執行"
-            last.startsWith("最後：sub 一共送出 0 則") -> "subscribe 還沒送出 sub：counts[topic] 從 0 變 1 的時候要 server.sendSub(topic)"
-            !last.startsWith("最後：sub 一共送出 3 則（不同的 topic 只有 3 個）；兩個畫面都開著時推送收到 1 份，詳細頁離開後收到 1 份；全部離開後伺服器上剩 0 個訂閱") ->
+            last == null -> {
+                "演練沒有跑完：要用 scenario(log, makeManager) 執行"
+            }
+
+            last.startsWith("最後：sub 一共送出 0 則") -> {
+                "subscribe 還沒送出 sub：counts[topic] 從 0 變 1 的時候要 server.sendSub(topic)"
+            }
+
+            !last.startsWith(
+                "最後：sub 一共送出 3 則（不同的 topic 只有 3 個）；兩個畫面都開著時推送收到 1 份，詳細頁離開後收到 1 份；全部離開後伺服器上剩 0 個訂閱",
+            ) -> {
                 "用 counts[topic] 記有幾個畫面在用：從 0 變 1 才 sendSub，從 1 變 0 才 sendUnsub（並把 topic 從 counts 移除）"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

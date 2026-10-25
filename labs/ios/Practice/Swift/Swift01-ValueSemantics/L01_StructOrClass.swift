@@ -1,11 +1,15 @@
 // L01：按了「取消」，價格卻還是被改掉（struct 和 class 的差別）
-// 對應複習站：Swift01ValueSemantics 第 1 題「struct 和 class 差在哪？什麼時候用哪個？」
+// 對應複習站：Swift01ValueSemantics 第 1 題「struct 和 class
+// 差在哪？什麼時候用哪個？」
 //
-// 情境：價格提醒清單，點一筆打開編輯畫面，改了價格之後可以按「取消」或「儲存」。
+// 情境：價格提醒清單，點一筆打開編輯畫面，改了價格之後可以按「取消」
+// 或「儲存」。
 //
 // 你要寫：
-//   ① Bug 版：提醒用 class 寫（已經寫好），把清單上的一筆交給編輯畫面去改。跑起來會看到按了取消，清單還是被改掉。
-//   ② 修正版：想想 PriceAlert 要用什麼型別，取消才不會改到清單；按儲存時再寫回清單。
+//   ① Bug 版：提醒用 class 寫（已經寫好），把清單上的一筆交給編輯畫面去改。
+// 跑起來會看到按了取消，清單還是被改掉。
+//   ② 修正版：想想 PriceAlert 要用什麼型別，取消才不會改到清單；
+// 按儲存時再寫回清單。
 // 只改有 TODO 的地方。寫完在 App 選「練習」執行，自動檢查會告訴你寫對了沒有。
 // 解答：Solution/Swift/Swift01-ValueSemantics/L01_StructOrClass.swift
 import LabKit
@@ -28,7 +32,8 @@ private enum L01Bug {
         log("清單：\(alerts[0].symbol) 提醒價 \(alerts[0].price)")
 
         // 打開編輯畫面
-        // TODO ①：把清單上的這一筆 alerts[0] 交給編輯畫面當草稿（let draft = …），再把 draft.price 改成 16_000_000
+        // TODO ①：把清單上的這一筆 alerts[0] 交給編輯畫面當草稿（let draft =
+        // …），再把 draft.price 改成 16_000_000
 
         log("這時清單上的價格：\(alerts[0].price)")
         // 使用者按「取消」：編輯畫面把草稿丟掉，不寫回清單
@@ -38,7 +43,8 @@ private enum L01Bug {
 
 // MARK: - 修正版
 private enum L01Fixed {
-    // TODO ②-1：PriceAlert 要改成什麼型別，複製給 draft 之後兩邊才會各自獨立？改下面的宣告
+    // TODO ②-1：PriceAlert 要改成什麼型別，複製給 draft
+    // 之後兩邊才會各自獨立？改下面的宣告
     //          （改完之後，下面不需要的 init 可以刪掉）
     final class PriceAlert {
         let symbol: String
@@ -90,8 +96,12 @@ extension Swift01ValueSemantics {
                 ? nil : "取消後清單的價格沒有被改掉：Bug 還沒重現（draft 要和清單是同一個物件）"
         },
         checkFixed: { lines in
-            if !lines.contains("按下取消後，清單上的價格：15000000") { return "取消後清單的價格被改掉了：draft 要是自己的一份" }
-            if !lines.contains("（如果按儲存）清單上的價格：16000000") { return "按儲存後清單應該變成 16000000：要把 draft 寫回 alerts[0]" }
+            if !lines.contains("按下取消後，清單上的價格：15000000") {
+                return "取消後清單的價格被改掉了：draft 要是自己的一份"
+            }
+            if !lines.contains("（如果按儲存）清單上的價格：16000000") {
+                return "按儲存後清單應該變成 16000000：要把 draft 寫回 alerts[0]"
+            }
             return nil
         }
     )

@@ -6,6 +6,7 @@ enum Platform04SecureStorage {
         id: "platform-secure-storage-db",
         code: "Platform04SecureStorage",
         title: "安全儲存與資料庫",
-        labs: [l01, l02, l03, l05, l06, l07, l08]   // 新增演練時，把 l01、l02… 加進來
+        // 新增演練時，把 l01、l02… 加進來
+        labs: [l01, l02, l03, l05, l06, l07, l08]
     )
 }

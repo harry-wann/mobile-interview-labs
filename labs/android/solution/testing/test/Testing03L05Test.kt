@@ -24,16 +24,30 @@ import tw.harry.labs.solution.testing03androidtesting.T03OrderFormNeverError
 @Config(sdk = [34])
 @OptIn(ExperimentalTestApi::class)
 class Testing03L05Test {
-    private val implementations: List<Pair<String, @Composable (Int) -> Unit>> = listOf(
+    private val implementations: List<
+        Pair<
+            String,
+            @Composable (
+                Int,
+            ) -> Unit,
+        >,
+    > = listOf(
         "正確的實作" to { amount -> T03OrderFormCorrect(amount) },
         "一直顯示錯誤的實作" to { amount -> T03OrderFormAlwaysError(amount) },
         "從來不顯示錯誤的實作" to { amount -> T03OrderFormNeverError(amount) },
     )
 
-    /** 同一個測試對三個實作各跑一次：通過（true）或失敗（false）；同時記下表單被畫出來幾次 */
-    private fun matrix(test: (@Composable (Int) -> Unit) -> Unit): Pair<List<Boolean>, Int> {
+    /**
+     * 同一個測試對三個實作各跑一次：通過（true）或失敗（false）；
+     * 同時記下表單被畫出來幾次
+     */
+    private fun matrix(
+        test: (@Composable (Int) -> Unit) -> Unit,
+    ): Pair<List<Boolean>, Int> {
         T03ComposeProbe.compositions.set(0)
-        val results = implementations.map { (_, form) -> runCatching { test(form) }.isSuccess }
+        val results = implementations.map { (_, form) ->
+            runCatching { test(form) }.isSuccess
+        }
         return results to T03ComposeProbe.compositions.get()
     }
 
@@ -48,7 +62,13 @@ class Testing03L05Test {
             !bug[1] -> "Bug 還沒重現：標籤寫成 \"order.errorLabel\"（實際是 \"order.error\"），assertDoesNotExist() 永遠通過，一直顯示錯誤的實作也要通過"
             else -> null
         }
-        t03Report("L05", "Bug 版", bugReason, "正確的實作通過；一直顯示錯誤的實作也通過（沒抓到）", failures)
+        t03Report(
+            "L05",
+            "Bug 版",
+            bugReason,
+            "正確的實作通過；一直顯示錯誤的實作也通過（沒抓到）",
+            failures,
+        )
 
         val (fixed, _) = matrix(L05Fixed::test)
         val fixedReason = when {
@@ -57,7 +77,13 @@ class Testing03L05Test {
             fixed[2] -> "從來不顯示錯誤的實作也通過了：數量 9_999 時要檢查 order.error 存在、文字是「數量低於最小下單量」"
             else -> null
         }
-        t03Report("L05", "修正版", fixedReason, "正確的實作通過；一直顯示與從來不顯示錯誤的實作都失敗（抓到）", failures)
+        t03Report(
+            "L05",
+            "修正版",
+            fixedReason,
+            "正確的實作通過；一直顯示與從來不顯示錯誤的實作都失敗（抓到）",
+            failures,
+        )
 
         assertEquals(emptyList<String>(), failures)
     }
@@ -67,8 +93,10 @@ class Testing03L05Test {
 @OptIn(ExperimentalTestApi::class)
 internal object L05Bug {
     fun test(form: @Composable (Int) -> Unit) = runComposeUiTest {
-        setContent { form(50_000) }                                       // 數量足夠：不該顯示錯誤訊息
-        onNodeWithTag("order.errorLabel").assertDoesNotExist()            // 標籤寫錯了：永遠找不到，永遠通過
+        // 數量足夠：不該顯示錯誤訊息
+        setContent { form(50_000) }
+        // 標籤寫錯了：永遠找不到，永遠通過
+        onNodeWithTag("order.errorLabel").assertDoesNotExist()
     }
 }
 
@@ -78,11 +106,13 @@ internal object L05Fixed {
     fun test(form: @Composable (Int) -> Unit) {
         runComposeUiTest {
             setContent { form(50_000) }
-            onNodeWithTag("order.error").assertDoesNotExist()             // 數量足夠：不存在
+            // 數量足夠：不存在
+            onNodeWithTag("order.error").assertDoesNotExist()
         }
         runComposeUiTest {
             setContent { form(9_999) }
-            onNodeWithTag("order.error").assertTextEquals("數量低於最小下單量")   // 數量不足：同一個標籤找得到，文字也對
+            // 數量不足：同一個標籤找得到，文字也對
+            onNodeWithTag("order.error").assertTextEquals("數量低於最小下單量")
         }
     }
 }

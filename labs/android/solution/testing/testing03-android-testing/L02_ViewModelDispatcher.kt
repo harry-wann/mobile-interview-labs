@@ -1,15 +1,25 @@
-// L02：ViewModel 的測試要用 Thread.sleep 等結果，時過時不過（寫死 Dispatchers.IO、沒設定 Dispatchers.Main）
-// 對應複習站：Testing03AndroidTesting 第 2 題「ViewModel 用了 Dispatchers.IO 或 viewModelScope，測試時要怎麼處理？」
+// L02：ViewModel 的測試要用 Thread.sleep 等結果，時過時不過（寫死 Dispatchers.
+// IO、沒設定 Dispatchers.Main）
+// 對應複習站：Testing03AndroidTesting 第 2 題「ViewModel 用了 Dispatchers.IO
+// 或 viewModelScope，測試時要怎麼處理？」
 //
-// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在 solution/testing/test/Testing03L02Test.kt。
+// 這題在電腦上跑單元測試（JVM），不用模擬器，也沒有「執行」按鈕。測試在
+// solution/testing/test/Testing03L02Test.kt。
 //
-// 情境：PriceViewModel.load() 用 viewModelScope 啟動，切到背景載入價格，載入完把價格存進 price。
-//       假的伺服器 T03LatencyApi 每次要等一段時間（演練用 6 種：30、150、50、130、70、170 ms）。
-// Bug 版：load() 裡寫死 withContext(Dispatchers.IO)。單元測試沒有 Android 的主執行緒，也沒辦法控制時間，
-//        測試只好 Thread.sleep(100) 再檢查：伺服器比 100 ms 快的通過，比較慢的失敗，同樣的程式有時過有時不過。
-//        （新版的 viewModelScope 在沒有主執行緒時不會丟例外，而是悄悄改在背景執行緒跑，所以測試是真的在背景跑。）
-// 修正版：dispatcher 用建構子注入：PriceViewModel(api, io)，load() 用 withContext(io)。
-//        測試傳入 StandardTestDispatcher，並用 Dispatchers.setMain 換掉主執行緒的 dispatcher，
+// 情境：PriceViewModel.load() 用 viewModelScope 啟動，切到背景載入價格，
+// 載入完把價格存進 price。
+//       假的伺服器 T03LatencyApi 每次要等一段時間（演練用 6 種：30、150、50、
+// 130、70、170 ms）。
+// Bug 版：load() 裡寫死 withContext(Dispatchers.IO)。單元測試沒有 Android
+// 的主執行緒，也沒辦法控制時間，
+//        測試只好 Thread.sleep(100) 再檢查：伺服器比 100 ms 快的通過，
+// 比較慢的失敗，同樣的程式有時過有時不過。
+//        （新版的 viewModelScope 在沒有主執行緒時不會丟例外，
+// 而是悄悄改在背景執行緒跑，所以測試是真的在背景跑。）
+// 修正版：dispatcher 用建構子注入：PriceViewModel(api, io)，load() 用
+// withContext(io)。
+//        測試傳入 StandardTestDispatcher，並用 Dispatchers.setMain
+// 換掉主執行緒的 dispatcher，
 //        再用 advanceUntilIdle() 執行；6 種延遲都通過，而且不用真的等。
 package tw.harry.labs.solution.testing03androidtesting
 
@@ -38,7 +48,8 @@ internal object L02Bug {
 
         fun load() {
             viewModelScope.launch {
-                price.value = withContext(Dispatchers.IO) { api.fetchPrice() }   // 寫死 Dispatchers.IO：測試換不掉
+                // 寫死 Dispatchers.IO：測試換不掉
+                price.value = withContext(Dispatchers.IO) { api.fetchPrice() }
             }
         }
     }
@@ -46,12 +57,16 @@ internal object L02Bug {
 
 // MARK: - 修正版
 internal object L02Fixed {
-    class PriceViewModel(private val api: T03LatencyApi, private val io: CoroutineDispatcher) : ViewModel() {
+    class PriceViewModel(
+        private val api: T03LatencyApi,
+        private val io: CoroutineDispatcher,
+    ) : ViewModel() {
         val price = MutableStateFlow(0)
 
         fun load() {
             viewModelScope.launch {
-                price.value = withContext(io) { api.fetchPrice() }               // dispatcher 從建構子注入
+                // dispatcher 從建構子注入
+                price.value = withContext(io) { api.fetchPrice() }
             }
         }
     }

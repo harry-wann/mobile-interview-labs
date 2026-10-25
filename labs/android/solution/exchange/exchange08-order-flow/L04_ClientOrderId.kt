@@ -1,11 +1,19 @@
-// L04：使用者只按了一次「買入」，伺服器卻有三張訂單（自動重試時，每次都產生新的 client order id）
-// 對應複習站：Exchange08OrderFlow 第 3 題「client order id 是什麼？為什麼它能讓重送不會變成兩筆？」
+// L04：使用者只按了一次「買入」，伺服器卻有三張訂單（自動重試時，
+// 每次都產生新的 client order id）
+// 對應複習站：Exchange08OrderFlow 第 3 題「client order id
+// 是什麼？為什麼它能讓重送不會變成兩筆？」
 //
-// 情境：使用者按一次「買入」。網路層最多自動重試 3 次：第 1、2 次伺服器其實收到了、也記下了這張單，但回應在路上遺失（逾時）；第 3 次才收到回應。
-//        假伺服器的規則（和這套 API 的 `client-order-id` 一樣）：同一個編號只會記一張單；沒有帶編號（空字串）的請求會被拒絕。
-//        （逾時之後先用查詢確認再決定重不重送，Platform05 演練 5 練過；這個演練看的是：自動重試時，編號什麼時候產生。）
-// Bug 版：每一次網路嘗試都產生一個新的編號（UUID）。伺服器看到三個不同的編號，記成三張訂單。
-// 修正版：使用者按下「買入」的那一刻就產生編號，存在草稿裡；之後每一次重試都用同一個編號，伺服器只記一張單。
+// 情境：使用者按一次「買入」。網路層最多自動重試 3 次：第 1、2
+// 次伺服器其實收到了、也記下了這張單，但回應在路上遺失（逾時）；第 3
+// 次才收到回應。
+//        假伺服器的規則（和這套 API 的 `client-order-id` 一樣）：
+// 同一個編號只會記一張單；沒有帶編號（空字串）的請求會被拒絕。
+//        （逾時之後先用查詢確認再決定重不重送，Platform05 演練 5 練過；
+// 這個演練看的是：自動重試時，編號什麼時候產生。）
+// Bug 版：每一次網路嘗試都產生一個新的編號（UUID）。伺服器看到三個不同的編號，
+// 記成三張訂單。
+// 修正版：使用者按下「買入」的那一刻就產生編號，存在草稿裡；
+// 之後每一次重試都用同一個編號，伺服器只記一張單。
 package tw.harry.labs.solution.exchange08orderflow
 
 import java.util.UUID
@@ -43,10 +51,20 @@ private fun scenario(log: LabLog, sender: L04OrderSender) {
     for (attempt in 1..3) {
         val id = sender.clientOrderId(attempt)
         server.place(id)
-        val label = if (id.isEmpty()) "（沒有編號）" else labels.getOrPut(id) { "編號 ${listOf("A", "B", "C")[labels.size]}" }
-        log("第 $attempt 次嘗試：帶$label → ${if (attempt < 3) "伺服器收到並記下了，但回應逾時" else "收到回應"}")
+        val label = if (id.isEmpty()) {
+            "（沒有編號）"
+        } else {
+            labels.getOrPut(id) {
+                "編號 ${listOf("A", "B", "C")[labels.size]}"
+            }
+        }
+        log(
+            "第 $attempt 次嘗試：帶$label → ${if (attempt < 3) "伺服器收到並記下了，但回應逾時" else "收到回應"}",
+        )
     }
-    log("最後：伺服器上有 ${server.orderCount} 張訂單（使用者只按了一次），3 次嘗試用了 ${labels.size} 種不同的編號，沒帶編號而被拒絕 ${server.rejected} 次")
+    log(
+        "最後：伺服器上有 ${server.orderCount} 張訂單（使用者只按了一次），3 次嘗試用了 ${labels.size} 種不同的編號，沒帶編號而被拒絕 ${server.rejected} 次",
+    )
 }
 
 // MARK: - Bug 版
@@ -54,7 +72,9 @@ private object L04Bug {
     class Sender : L04OrderSender {
         override fun tapBuy() {}
 
-        override fun clientOrderId(attempt: Int): String = UUID.randomUUID().toString()     // 每一次嘗試都產生新的編號
+        // 每一次嘗試都產生新的編號
+        override fun clientOrderId(attempt: Int): String =
+            UUID.randomUUID().toString()
     }
 
     suspend fun run(log: LabLog) = scenario(log, Sender())
@@ -66,10 +86,12 @@ private object L04Fixed {
         private var draftId = ""
 
         override fun tapBuy() {
-            draftId = UUID.randomUUID().toString()          // 按下按鈕的那一刻就產生，存在草稿裡
+            // 按下按鈕的那一刻就產生，存在草稿裡
+            draftId = UUID.randomUUID().toString()
         }
 
-        override fun clientOrderId(attempt: Int): String = draftId      // 每一次重試都用同一個
+        // 每一次重試都用同一個
+        override fun clientOrderId(attempt: Int): String = draftId
     }
 
     suspend fun run(log: LabLog) = scenario(log, Sender())
@@ -98,18 +120,36 @@ val l04 = Lab(
     },
     checkBug = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, sender) 執行"
-            lines.none { it.startsWith("最後：伺服器上有 3 張訂單（使用者只按了一次），3 次嘗試用了 3 種不同的編號") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, sender) 執行"
+            }
+
+            lines.none {
+                it.startsWith("最後：伺服器上有 3 張訂單（使用者只按了一次），3 次嘗試用了 3 種不同的編號")
+            } -> {
                 "Bug 還沒重現：clientOrderId(attempt) 每次都回傳新的 UUID.randomUUID().toString()，伺服器會記成三張單"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
     checkFixed = { lines ->
         when {
-            lines.none { it.startsWith("最後") } -> "演練沒有跑完：要用 scenario(log, sender) 執行"
-            lines.none { it.startsWith("最後：伺服器上有 1 張訂單（使用者只按了一次），3 次嘗試用了 1 種不同的編號") } ->
+            lines.none { it.startsWith("最後") } -> {
+                "演練沒有跑完：要用 scenario(log, sender) 執行"
+            }
+
+            lines.none {
+                it.startsWith("最後：伺服器上有 1 張訂單（使用者只按了一次），3 次嘗試用了 1 種不同的編號")
+            } -> {
                 "tapBuy 時產生編號存進 draftId（UUID.randomUUID().toString()），clientOrderId(attempt) 每次都回傳 draftId"
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
     },
 )

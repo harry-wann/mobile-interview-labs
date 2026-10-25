@@ -1,11 +1,17 @@
-// L01：後台顯示啟動只要 20 毫秒，使用者卻等了將近半秒才看到行情（啟動時間要量到「看見行情」）
-// 對應複習站：Advanced01Startup 第 2 題「「打開 App 到看見行情」要量到哪一個時間點？」
+// L01：後台顯示啟動只要 20 毫秒，
+// 使用者卻等了將近半秒才看到行情（啟動時間要量到「看見行情」）
+// 對應複習站：Advanced01Startup 第 2 題「「打開 App 到看見行情」
+// 要量到哪一個時間點？」
 //
 // 情境：App 啟動後先在約 20 毫秒內畫出骨架畫面（首幀，系統自動記成 TTID），
-//        再向伺服器要行情（約 450 毫秒），行情畫出來，使用者才真的能看價格、下單。
-//        要告訴系統與後台「內容準備好了」（TTFD），得自己呼叫 reportFullyDrawn()；這裡用 LaunchTrace 模擬它。
-// Bug 版：在首幀畫出來時就呼叫 reportFullyDrawn()，回報約 20 毫秒。數字很漂亮，使用者卻還在看灰色骨架。
-// 修正版：行情第一次畫出來時才呼叫 reportFullyDrawn()，回報約 470 毫秒。（Compose 可以用 ReportDrawnWhen { prices.isNotEmpty() }）
+//        再向伺服器要行情（約 450 毫秒），行情畫出來，使用者才真的能看價格、
+// 下單。
+//        要告訴系統與後台「內容準備好了」（TTFD），得自己呼叫
+// reportFullyDrawn()；這裡用 LaunchTrace 模擬它。
+// Bug 版：在首幀畫出來時就呼叫 reportFullyDrawn()，回報約 20 毫秒。數字很漂亮，
+// 使用者卻還在看灰色骨架。
+// 修正版：行情第一次畫出來時才呼叫 reportFullyDrawn()，回報約 470 毫秒。
+// （Compose 可以用 ReportDrawnWhen { prices.isNotEmpty() }）
 package tw.harry.labs.solution.advanced01startup
 
 import kotlinx.coroutines.Dispatchers
@@ -14,7 +20,10 @@ import tw.harry.labs.kit.Lab
 import tw.harry.labs.kit.LabLog
 import tw.harry.labs.kit.Variant
 
-/** 啟動時間記錄：begin 放在啟動流程最前面，reportFullyDrawn 由呼叫端決定放在哪個時間點（兩個版本共用） */
+/**
+ * 啟動時間記錄：begin 放在啟動流程最前面，reportFullyDrawn
+ * 由呼叫端決定放在哪個時間點（兩個版本共用）
+ */
 private class LaunchTrace {
     private var startMs = 0.0
     var reportedMs: Double? = null
@@ -24,20 +33,32 @@ private class LaunchTrace {
         startMs = a01NowMs()
     }
 
-    /** 像 Activity.reportFullyDrawn()：告訴系統「畫面內容準備好了」，只有第一次呼叫有效 */
+    /**
+     * 像 Activity.reportFullyDrawn()：告訴系統「畫面內容準備好了」，
+     * 只有第一次呼叫有效
+     */
     fun reportFullyDrawn() {
         if (reportedMs == null) reportedMs = a01NowMs() - startMs
     }
 }
 
-/** 啟動流程（兩個版本共用）：骨架畫面 → 向伺服器要行情 → 行情畫出來。onFirstFrame、onPricesShown 是兩個該不該回報的時間點 */
-private fun simulateLaunch(log: LabLog, trace: LaunchTrace, onFirstFrame: () -> Unit, onPricesShown: () -> Unit) {
+/**
+ * 啟動流程（兩個版本共用）：骨架畫面 → 向伺服器要行情 → 行情畫出來。
+ * onFirstFrame、onPricesShown 是兩個該不該回報的時間點
+ */
+private fun simulateLaunch(
+    log: LabLog,
+    trace: LaunchTrace,
+    onFirstFrame: () -> Unit,
+    onPricesShown: () -> Unit,
+) {
     trace.begin()
     val t0 = a01NowMs()
-    a01Work(20)                                            // 建立骨架畫面
+    a01Work(20) // 建立骨架畫面
     log("首幀（骨架畫面）出現：${(a01NowMs() - t0).toInt()} ms")
     onFirstFrame()
-    a01Work(450)                                           // 向伺服器要行情（網路）
+    // 向伺服器要行情（網路）
+    a01Work(450)
     log("使用者看到行情：${(a01NowMs() - t0).toInt()} ms")
     onPricesShown()
     log("回報給後台的啟動時間：${(trace.reportedMs ?: -1.0).toInt()} ms")
@@ -48,8 +69,10 @@ private object L01Bug {
     suspend fun run(log: LabLog) = withContext(Dispatchers.Default) {
         val trace = LaunchTrace()
         simulateLaunch(
-            log, trace,
-            onFirstFrame = { trace.reportFullyDrawn() },    // 骨架畫面一出現就回報「畫完了」
+            log,
+            trace,
+            // 骨架畫面一出現就回報「畫完了」
+            onFirstFrame = { trace.reportFullyDrawn() },
             onPricesShown = { },
         )
     }
@@ -60,9 +83,12 @@ private object L01Fixed {
     suspend fun run(log: LabLog) = withContext(Dispatchers.Default) {
         val trace = LaunchTrace()
         simulateLaunch(
-            log, trace,
-            onFirstFrame = { },                             // 首幀只是中間的一個時間點（系統已自動記成 TTID）
-            onPricesShown = { trace.reportFullyDrawn() },   // 行情畫出來，使用者才真的能用，這一刻才回報
+            log,
+            trace,
+            // 首幀只是中間的一個時間點（系統已自動記成 TTID）
+            onFirstFrame = { },
+            // 行情畫出來，使用者才真的能用，這一刻才回報
+            onPricesShown = { trace.reportFullyDrawn() },
         )
     }
 }

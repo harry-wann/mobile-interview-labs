@@ -1,11 +1,17 @@
-// L02：按了「收到新報價」，清單明明變長了，畫面卻沒更新（原地修改 State 裡的物件）
-// 對應複習站：Kotlin06Recomposition 第 2 題「Compose 怎麼知道哪個 State 被誰讀過？」
+// L02：按了「收到新報價」，清單明明變長了，畫面卻沒更新（原地修改 State
+// 裡的物件）
+// 對應複習站：Kotlin06Recomposition 第 2 題「Compose 怎麼知道哪個 State
+// 被誰讀過？」
 //
-// 情境：行情畫面把收到的報價放進清單，並顯示「畫面顯示 N 筆」。按下「收到一筆新報價」模擬 WebSocket 推來一筆。
+// 情境：行情畫面把收到的報價放進清單，並顯示「畫面顯示 N 筆」。
+// 按下「收到一筆新報價」模擬 WebSocket 推來一筆。
 //        log 會印出清單裡真正有幾筆。
-// Bug 版：用 remember { mutableStateOf(mutableListOf()) }，按鈕裡 ticks.value.add(…)。
-//        State 裡存的還是同一個 list，Compose 只看得到「State 的值被換掉」，看不到你改了 list 的內容，所以不會重組。
-// 修正版：改用 mutableStateListOf()。它自己會在內容改變時通知 Compose。（也可以每次換成新的 list：ticks = ticks + tick）
+// Bug 版：用 remember { mutableStateOf(mutableListOf()) }，按鈕裡 ticks.value.
+// add(…)。
+//        State 裡存的還是同一個 list，Compose 只看得到「State 的值被換掉」，
+// 看不到你改了 list 的內容，所以不會重組。
+// 修正版：改用 mutableStateListOf()。它自己會在內容改變時通知 Compose。
+// （也可以每次換成新的 list：ticks = ticks + tick）
 package tw.harry.labs.solution.kotlin06recomposition
 
 import androidx.compose.foundation.layout.Arrangement
@@ -26,10 +32,12 @@ private class FeedTick(val symbol: String, val price: Long)
 // MARK: - Bug 版
 @Composable
 private fun L02BugScreen(log: LabLog) {
-    val ticks = remember { mutableStateOf(mutableListOf<FeedTick>()) }   // State 裡存一個會被原地修改的 list
+    // State 裡存一個會被原地修改的 list
+    val ticks = remember { mutableStateOf(mutableListOf<FeedTick>()) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
-            ticks.value.add(FeedTick("BTC_JPY", 10_000_000L + ticks.value.size))   // 原地修改：Compose 不知道
+            // 原地修改：Compose 不知道
+            ticks.value.add(FeedTick("BTC_JPY", 10_000_000L + ticks.value.size))
             log("收到一筆報價，list 裡現在有 ${ticks.value.size} 筆")
         }) { Text("收到一筆新報價") }
         Text("畫面顯示 ${ticks.value.size} 筆")
@@ -39,7 +47,8 @@ private fun L02BugScreen(log: LabLog) {
 // MARK: - 修正版
 @Composable
 private fun L02FixedScreen(log: LabLog) {
-    val ticks = remember { mutableStateListOf<FeedTick>() }              // 內容改變時會通知 Compose 的 list
+    // 內容改變時會通知 Compose 的 list
+    val ticks = remember { mutableStateListOf<FeedTick>() }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
             ticks.add(FeedTick("BTC_JPY", 10_000_000L + ticks.size))

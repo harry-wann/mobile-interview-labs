@@ -1,12 +1,18 @@
-// L04：價格每跳一次，連沒用到價格的表單也重組（staticCompositionLocalOf 放了會頻繁變動的值）
-// 對應複習站：Kotlin09ComposeArchitecture 第 4 題「CompositionLocal 是什麼？什麼時候不該用？」
+// L04：價格每跳一次，連沒用到價格的表單也重組（staticCompositionLocalOf
+// 放了會頻繁變動的值）
+// 對應複習站：Kotlin09ComposeArchitecture 第 4 題「CompositionLocal
+// 是什麼？什麼時候不該用？」
 //
-// 情境：畫面用 CompositionLocal 把「目前價格」提供給整棵樹。PriceBadge 會讀它，OrderForm 完全沒有讀。價格更新 10 次（每 30 ms 一次）。
+// 情境：畫面用 CompositionLocal 把「目前價格」提供給整棵樹。PriceBadge 會讀它，
+// OrderForm 完全沒有讀。價格更新 10 次（每 30 ms 一次）。
 //        演練計算 PriceBadge 與 OrderForm 各執行了幾次。
-//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose 在電腦上真的跑 Compose 的組合與重組。
-// Bug 版：val LocalPrice = staticCompositionLocalOf { … }。static 版本不追蹤誰讀了它，值一改變，提供範圍裡面全部重組，
+//        這個演練不需要手機的畫面：用 LabKit 的 withHeadlessCompose
+// 在電腦上真的跑 Compose 的組合與重組。
+// Bug 版：val LocalPrice = staticCompositionLocalOf { … }。static
+// 版本不追蹤誰讀了它，值一改變，提供範圍裡面全部重組，
 //        包含沒讀它的 OrderForm。
-// 修正版：compositionLocalOf。Compose 會追蹤讀取，值改變時，只有讀它的地方重組。
+// 修正版：compositionLocalOf。Compose 會追蹤讀取，值改變時，
+// 只有讀它的地方重組。
 //        （staticCompositionLocalOf 只適合幾乎不變的值，例如 App 設定。）
 package tw.harry.labs.solution.kotlin09composearchitecture
 
@@ -30,8 +36,15 @@ private class L04Counts {
     val form = AtomicInteger()
 }
 
-/** 演練流程（兩個版本共用）：組合畫面 → 價格每 30 ms 更新一次，共 10 次 → 看兩個 Composable 各執行了幾次 */
-private suspend fun scenario(log: LabLog, counts: L04Counts, screen: @Composable (price: Long) -> Unit) {
+/**
+ * 演練流程（兩個版本共用）：組合畫面 → 價格每 30 ms 更新一次，共 10 次 →
+ * 看兩個 Composable 各執行了幾次
+ */
+private suspend fun scenario(
+    log: LabLog,
+    counts: L04Counts,
+    screen: @Composable (price: Long) -> Unit,
+) {
     withHeadlessCompose {
         val price = mutableLongStateOf(100_000L)
         setContent { screen(price.longValue) }
@@ -48,7 +61,8 @@ private suspend fun scenario(log: LabLog, counts: L04Counts, screen: @Composable
 
 // MARK: - Bug 版
 private object L04Bug {
-    val LocalPrice = staticCompositionLocalOf { 0L }       // static：不追蹤讀取，值一變，範圍內全部重組
+    // static：不追蹤讀取，值一變，範圍內全部重組
+    val LocalPrice = staticCompositionLocalOf { 0L }
 
     @Composable
     fun TradeScreen(price: Long, counts: L04Counts) {
@@ -60,14 +74,14 @@ private object L04Bug {
 
     @Composable
     fun PriceBadge(counts: L04Counts) {
-        val price = LocalPrice.current                      // 只有它讀了價格
+        val price = LocalPrice.current // 只有它讀了價格
         SideEffect { counts.badge.incrementAndGet() }
         HeadlessText("價格 $price")
     }
 
     @Composable
     fun OrderForm(counts: L04Counts) {
-        SideEffect { counts.form.incrementAndGet() }        // 沒有讀價格
+        SideEffect { counts.form.incrementAndGet() } // 沒有讀價格
         HeadlessText("下單表單")
     }
 
@@ -79,7 +93,8 @@ private object L04Bug {
 
 // MARK: - 修正版
 private object L04Fixed {
-    val LocalPrice = compositionLocalOf { 0L }             // 追蹤讀取：值一變，只有讀它的地方重組
+    // 追蹤讀取：值一變，只有讀它的地方重組
+    val LocalPrice = compositionLocalOf { 0L }
 
     @Composable
     fun TradeScreen(price: Long, counts: L04Counts) {
@@ -110,7 +125,9 @@ private object L04Fixed {
 
 // MARK: - 演練設定
 private fun count(lines: List<String>, prefix: String): Int? =
-    lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
+    lines.firstOrNull {
+        it.startsWith(prefix)
+    }?.removePrefix(prefix)?.removeSuffix(" 次")?.toIntOrNull()
 
 private const val BADGE = "價格更新 10 次：PriceBadge 執行了 "
 private const val FORM = "價格更新 10 次：OrderForm 執行了 "

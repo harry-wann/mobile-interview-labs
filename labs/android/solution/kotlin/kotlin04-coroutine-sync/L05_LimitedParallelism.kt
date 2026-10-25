@@ -1,13 +1,21 @@
-// L05：用 limitedParallelism(1) 保護 Realm，卻丟出「不能跨執行緒存取」（limitedParallelism 不等於單執行緒）
-// 對應複習站：Kotlin04CoroutineSync 第 2 題「limitedParallelism(1) 是單執行緒嗎？可以拿來保護 Realm 嗎？」
+// L05：用 limitedParallelism(1) 保護 Realm，卻丟出「不能跨執行緒存取」
+// （limitedParallelism 不等於單執行緒）
+// 對應複習站：Kotlin04CoroutineSync 第 2 題「limitedParallelism(1)
+// 是單執行緒嗎？可以拿來保護 Realm 嗎？」
 //
-// 情境：本機資料庫（像 Realm）有 thread affinity：只能在「建立它的那條執行緒」上使用，換一條就丟例外。
-//        這裡用 ThreadBoundDb 模擬。每次寫入前先 delay(10)（模擬等網路），總共寫 5 次。
-//        共用的執行緒池用有 2 條執行緒的 pool 代表（Dispatchers.Default／IO 也是這樣的共用池，只是執行緒更多）。
+// 情境：本機資料庫（像 Realm）有 thread affinity：只能在「建立它的那條執行緒」
+// 上使用，換一條就丟例外。
+//        這裡用 ThreadBoundDb 模擬。每次寫入前先 delay(10)（模擬等網路），
+// 總共寫 5 次。
+//        共用的執行緒池用有 2 條執行緒的 pool 代表（Dispatchers.Default／IO
+// 也是這樣的共用池，只是執行緒更多）。
 // Bug 版：用 pool.limitedParallelism(1)。它只保證「同一時間最多一個任務在跑」，
-//        但 delay 之後恢復執行時，可能被池子裡另一條執行緒接手，ThreadBoundDb 就丟出跨執行緒的例外。
-// 修正版：用真正的單執行緒 dispatcher：Executors.newSingleThreadExecutor().asCoroutineDispatcher()，
-//        所有資料庫操作都在同一條執行緒；用完要 close()，否則那條執行緒不會被釋放。
+//        但 delay 之後恢復執行時，可能被池子裡另一條執行緒接手，ThreadBoundDb
+// 就丟出跨執行緒的例外。
+// 修正版：用真正的單執行緒 dispatcher：Executors.newSingleThreadExecutor().
+// asCoroutineDispatcher()，
+//        所有資料庫操作都在同一條執行緒；用完要 close()，
+// 否則那條執行緒不會被釋放。
 package tw.harry.labs.solution.kotlin04coroutinesync
 
 import java.util.concurrent.Executors
@@ -25,11 +33,16 @@ private class ThreadBoundDb {
     private val owner = Thread.currentThread()
 
     fun write(index: Int) {
-        check(Thread.currentThread() === owner) { "寫入 #$index 失敗：資料庫是在 ${owner.name} 建立的，不能在 ${Thread.currentThread().name} 使用" }
+        check(Thread.currentThread() === owner) {
+            "寫入 #$index 失敗：資料庫是在 ${owner.name} 建立的，不能在 ${Thread.currentThread().name} 使用"
+        }
     }
 }
 
-/** 演練流程（兩個版本共用）：在 dispatcher 上建立資料庫，每次 delay(10) 之後寫入，共 5 次 */
+/**
+ * 演練流程（兩個版本共用）：在 dispatcher 上建立資料庫，每次 delay(10)
+ * 之後寫入，共 5 次
+ */
 private suspend fun scenario(log: LabLog, dispatcher: CoroutineDispatcher) {
     var ok = 0
     var wrongThread = 0
@@ -52,9 +65,13 @@ private suspend fun scenario(log: LabLog, dispatcher: CoroutineDispatcher) {
 private object L05Bug {
     suspend fun run(log: LabLog) {
         val counter = AtomicInteger(0)
-        val pool = Executors.newFixedThreadPool(2) { Thread(it, "pool-${counter.incrementAndGet()}") }   // 共用的執行緒池，2 條
+        // 共用的執行緒池，2 條
+        val pool = Executors.newFixedThreadPool(2) {
+            Thread(it, "pool-${counter.incrementAndGet()}")
+        }
         try {
-            val serial = pool.asCoroutineDispatcher().limitedParallelism(1)   // 只保證互斥，不保證同一條執行緒
+            // 只保證互斥，不保證同一條執行緒
+            val serial = pool.asCoroutineDispatcher().limitedParallelism(1)
             scenario(log, serial)
         } finally {
             pool.shutdown()
@@ -65,18 +82,23 @@ private object L05Bug {
 // MARK: - 修正版
 private object L05Fixed {
     suspend fun run(log: LabLog) {
-        val dbDispatcher = Executors.newSingleThreadExecutor { Thread(it, "db-thread") }.asCoroutineDispatcher()   // 真正的單執行緒
+        // 真正的單執行緒
+        val dbDispatcher = Executors.newSingleThreadExecutor {
+            Thread(it, "db-thread")
+        }.asCoroutineDispatcher()
         try {
             scenario(log, dbDispatcher)
         } finally {
-            dbDispatcher.close()                            // 用完要關，否則那條執行緒不會釋放
+            // 用完要關，否則那條執行緒不會釋放
+            dbDispatcher.close()
         }
     }
 }
 
 // MARK: - 演練設定
-private fun failures(lines: List<String>): Int? =
-    lines.firstOrNull { it.startsWith("寫入成功 ") }?.substringAfter("跨執行緒失敗 ")?.removeSuffix(" 次")?.toIntOrNull()
+private fun failures(lines: List<String>): Int? = lines.firstOrNull {
+    it.startsWith("寫入成功 ")
+}?.substringAfter("跨執行緒失敗 ")?.removeSuffix(" 次")?.toIntOrNull()
 
 val l05 = Lab(
     id = "L05",
