@@ -45,6 +45,7 @@ public enum JdFocus {
                         JdFocusLab(
                             code: "Swift04StructuredConcurrency", labID: "L01"),
                         JdFocusLab(code: "Swift06AsyncStream", labID: "L04"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L01"),
                         JdFocusLab(
                             code: "Swift08SwiftUIIdentity", labID: "L06"),
                         JdFocusLab(code: "Swift09UIKitInterop", labID: "L02"),
@@ -194,6 +195,7 @@ public enum JdFocus {
                         JdFocusLab(code: "Swift07SwiftUIState", labID: "L03"),
                         JdFocusLab(code: "Exchange08OrderFlow", labID: "L01"),
                         JdFocusLab(code: "Exchange08OrderFlow", labID: "L03"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L03"),
                     ]),
                 JdFocusGroup(
                     title: "依賴方向、DI、模組邊界",
@@ -222,6 +224,8 @@ public enum JdFocus {
                         JdFocusLab(code: "Design02MarketData", labID: "L04"),
                         JdFocusLab(code: "Swift06AsyncStream", labID: "L03"),
                         JdFocusLab(code: "Swift06AsyncStream", labID: "L05"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L02"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L04"),
                     ]),
                 JdFocusGroup(
                     title: "架構演進與風險控制",
@@ -260,11 +264,13 @@ public enum JdFocus {
                             code: "Swift08SwiftUIIdentity", labID: "L02"),
                         JdFocusLab(code: "Platform01Lifecycle", labID: "L03"),
                         JdFocusLab(code: "Platform01Lifecycle", labID: "L04"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L06"),
                     ]),
                 JdFocusGroup(
                     title: "副作用放錯地方，畫面行為就怪", note: nil,
                     labs: [
-                        JdFocusLab(code: "Swift07SwiftUIState", labID: "L04")
+                        JdFocusLab(code: "Swift07SwiftUIState", labID: "L04"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L07"),
                     ]),
                 JdFocusGroup(
                     title: "交易畫面的體驗：不能讓人下錯單",
@@ -281,6 +287,7 @@ public enum JdFocus {
                         JdFocusLab(code: "Exchange05OrderBook", labID: "L07"),
                         JdFocusLab(code: "Coding02TimeStreams", labID: "L02"),
                         JdFocusLab(code: "Coding02TimeStreams", labID: "L03"),
+                        JdFocusLab(code: "Swift12Combine", labID: "L05"),
                     ]),
                 JdFocusGroup(
                     title: "數字與文字怎麼顯示、放大、唸出來",

@@ -15,4 +15,5 @@ public let section = LabSection(
         Swift09UIKitInterop.unit,
         Swift10LanguageFeatures.unit,
         Swift11ObjC.unit,
+        Swift12Combine.unit,
     ])

@@ -35,6 +35,7 @@ topics:
           - Swift02ARC L13
           - Swift04StructuredConcurrency L01
           - Swift06AsyncStream L04
+          - Swift12Combine L01
           - Swift08SwiftUIIdentity L06
           - Swift09UIKitInterop L02
           - Swift09UIKitInterop L04
@@ -188,6 +189,7 @@ topics:
       - swift-swiftui-state
       - swift-swiftui-uikit-interop
       - platform-modularization
+      - swift-combine-basics
       - sysdesign-framework
       - sysdesign-market
       - sysdesign-order
@@ -208,6 +210,7 @@ topics:
           - Exchange08OrderFlow L01
           - Exchange08OrderFlow L03
           - Kotlin11ComposeState L08
+          - Swift12Combine L03
       - title: 依賴方向、DI、模組邊界
         note: 誰可以 import 誰。依賴反了，測一個畫面要起整個 App。
         labs:
@@ -231,6 +234,8 @@ topics:
           - Kotlin05Flow L01
           - Swift06AsyncStream L03
           - Swift06AsyncStream L05
+          - Swift12Combine L02
+          - Swift12Combine L04
       - title: 架構演進與風險控制
         note: strangler 式替換、adapter 隔離舊 SDK、feature flag 的一致性、kill switch。
         labs:
@@ -284,6 +289,7 @@ topics:
           - Platform01Lifecycle L03
           - Platform01Lifecycle L04
           - Kotlin05Flow L03
+          - Swift12Combine L06
       - title: 副作用放錯地方，畫面行為就怪
         labs:
           - Kotlin07SideEffects L01
@@ -295,6 +301,7 @@ topics:
           - Kotlin07SideEffects L09
           - Kotlin07SideEffects L10
           - Swift07SwiftUIState L04
+          - Swift12Combine L07
       - title: 交易畫面的體驗：不能讓人下錯單
         note: 價格過期要說、成交一半要說「部分」、取消中不能說「已取消」、滑價要看得到。
         labs:
@@ -309,6 +316,7 @@ topics:
           - Exchange05OrderBook L07
           - Coding02TimeStreams L02
           - Coding02TimeStreams L03
+          - Swift12Combine L05
       - title: 數字與文字怎麼顯示、放大、唸出來
         note: 日圓沒有小數、万／億、全形輸入、科學記號、捨入方向，顯示錯了就是金額錯了；字體放大不能截斷，螢幕閱讀器要唸得出漲跌。
         labs:

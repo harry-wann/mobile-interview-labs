@@ -1,0 +1,231 @@
+- id: "swift-combine-basics-01"
+  type: "single"
+  level: 1
+  priority: "P0"
+  tags: [combine, rxswift, anycancellable]
+  prompt: |
+    行情畫面打開時這樣訂閱價格（`prices` 是 WebSocket 推送的 `AnyPublisher<Int, Never>`，價格在訂閱之後才陸續送來）。畫面開著的時候會發生什麼事？
+  codeLang: "swift"
+  code: |
+    func onAppear() {
+        _ = prices.sink { [weak self] price in
+            self?.lastPrice = price
+        }
+    }
+  options:
+    - "每一筆價格都收得到，而且畫面關閉後還會繼續收，造成洩漏，就像 RxSwift 忘了 `disposed(by:)`"
+    - "一筆都收不到：`sink` 回傳的 `AnyCancellable` 馬上被釋放，釋放時會自動取消訂閱"
+    - "編譯錯誤：`sink` 的回傳值一定要存起來"
+    - "只收得到第一筆，之後的才會被取消"
+  answer: 1
+  explain: |
+    `AnyCancellable` 在被釋放（`deinit`）時會呼叫 `cancel()`。`_ =` 讓回傳值在這一行結束就被釋放，訂閱當場取消；價格是之後才送來的，所以一筆都收不到。
+
+    其他選項錯在哪裡：
+    - 「繼續收、造成洩漏」是 RxSwift 的行為：`Disposable` 不 dispose 就一直訂閱下去。Combine 的方向剛好相反。
+    - 不是編譯錯誤：`sink` 沒有標 `@discardableResult`，不寫 `_ =` 會出**警告**；寫了 `_ =` 連警告都沒有。
+    - 「只收到第一筆」只會發生在訂閱當下就同步送值的來源（例如 `Just`、`CurrentValueSubject`），這題的價格是之後才送來的。
+
+    正確做法：`.store(in: &cancellables)`，存在畫面物件上，對應 RxSwift 的 `DisposeBag`。
+
+- id: "swift-combine-basics-02"
+  type: "predict"
+  level: 2
+  priority: "P0"
+  tags: [combine, future, deferred]
+  prompt: |
+    印出什麼？（依序，以空白分隔）
+  codeLang: "swift"
+  code: |
+    import Combine
+
+    var calls = 0
+    let future = Future<Int, Never> { promise in
+        calls += 1
+        promise(.success(42))
+    }
+    print(calls)
+
+    let a = future.sink { print("A", $0) }
+    let b = future.sink { print("B", $0) }
+    print(calls)
+  answer: |
+    1 A 42 B 42 1
+  explain: |
+    - `Future` 的 closure 在 **建立時** 就執行，還沒有人訂閱，`calls` 已經是 1。
+    - 結果會被 `Future` 記住，之後的每個訂閱者都直接拿到同一個 42，closure 不會再執行，所以最後 `calls` 還是 1。
+
+    RxSwift 的 `Single.create` 剛好相反：沒有人訂閱就不執行，每次訂閱都重新執行。要在 Combine 得到同樣的行為，要寫 `Deferred { Future { … } }`：上面的程式改成這樣，會印出 `0 A 42 B 42 2`。這也是為什麼 `Future` 加 `retry` 不會重新發請求。
+
+- id: "swift-combine-basics-03"
+  type: "predict"
+  level: 1
+  priority: "P0"
+  tags: [combine, subject, passthroughsubject, currentvaluesubject]
+  prompt: |
+    印出什麼？
+  codeLang: "swift"
+  code: |
+    import Combine
+
+    let event = PassthroughSubject<Int, Never>()
+    let state = CurrentValueSubject<Int, Never>(0)
+    event.send(1)
+    state.send(1)
+
+    var got: [String] = []
+    let c1 = event.sink { got.append("P\($0)") }
+    let c2 = state.sink { got.append("C\($0)") }
+    event.send(2)
+    state.send(2)
+    print(got.joined(separator: " "))
+  answer: |
+    C1 P2 C2
+  explain: |
+    - `PassthroughSubject`（對應 RxSwift 的 `PublishSubject`／`PublishRelay`）不保留目前的值：訂閱之前送出的 1 已經消失，所以 `c1` 只收到之後的 2。
+    - `CurrentValueSubject`（對應 `BehaviorSubject`／`BehaviorRelay`）保留目前的值：`c2` 一訂閱就先收到目前的 1，所以 `C1` 排在最前面，之後再收到 2。
+
+    代表「狀態」的資料（餘額、目前價格、登入狀態）用 `CurrentValueSubject` 或 `@Published`，晚到的畫面才拿得到目前值；代表「事件」的（按鈕點擊、Toast）用 `PassthroughSubject`。
+
+- id: "swift-combine-basics-04"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [combine, subject, completion, rxswift]
+  prompt: |
+    從 RxSwift 搬過來的程式：原本是 `api.snapshot().asObservable().bind(to: priceRelay)`，改寫成下面這樣。`snapshot()` 回傳 `Just(15_000_000)`。之後 WebSocket 呼叫 `priceSubject.send(…)` 推送新價格，訂閱 `priceSubject` 的畫面會怎樣？
+  codeLang: "swift"
+  code: |
+    let priceSubject = PassthroughSubject<Int, Never>()
+
+    api.snapshot()
+        .subscribe(priceSubject)
+        .store(in: &cancellables)
+  options:
+    - "收到快照和之後每一筆推送，和 `bind(to: priceRelay)` 一樣"
+    - "只收到快照那一筆：`subscribe(_:)` 把 `Just` 的結束事件也轉送給 subject，subject 結束後 `send` 都被忽略"
+    - "一筆都收不到：`subscribe(_:)` 的回傳值不能存進 `cancellables`"
+    - "第一次 `send` 時當掉，因為 subject 已經結束"
+  answer: 1
+  explain: |
+    `subscribe(_:)` 會把上游的值 **和結束事件** 都轉送給 subject。`Just` 送出一筆就 `.finished`，`priceSubject` 跟著結束；結束後的 `send` 會被默默忽略，不會當掉，也沒有錯誤訊息，所以畫面停在快照的價格。
+
+    其他選項錯在哪裡：
+    - RxSwift 的 Relay 不能被結束，所以 `bind(to: relay)` 不會有這個問題。Combine 沒有 Relay，`Failure == Never` 只保證不會送錯誤，subject 還是會被結束。
+    - `subscribe(_:)` 對 subject 的版本回傳 `AnyCancellable`，存進 `cancellables` 是正確的。
+    - 結束後的 `send` 不會當掉，只是被忽略，這也是它難查的原因。
+
+    正確做法：用 `sink { priceSubject.send($0) }` 只轉送值。
+
+- id: "swift-combine-basics-05"
+  type: "single"
+  level: 2
+  priority: "P0"
+  tags: [combine, withlatestfrom, combinelatest]
+  prompt: |
+    下單頁要寫 RxSwift 的 `buyTap.withLatestFrom(price)`：按下買進時，用當下的價格送出 **一筆** 訂單。`buyTap` 是 `PassthroughSubject<Void, Never>`，`price` 是 `CurrentValueSubject<Int, Never>`。哪個 Combine 寫法正確？
+  options:
+    - "`buyTap.combineLatest(price).map { $0.1 }`"
+    - "`buyTap.zip(price).map { $0.1 }`"
+    - "`buyTap.map { _ in price.value }`"
+    - "`price.map { _ in buyTap }.switchToLatest()`"
+  answer: 2
+  explain: |
+    Combine 沒有內建 `withLatestFrom`。價格存在 `CurrentValueSubject` 裡，按下時讀 `.value` 就是「取當下最新的價格」，而且只有按鈕會觸發輸出。
+
+    其他選項錯在哪裡：
+    - `combineLatest`：任何一邊有新值就輸出。按過一次之後，價格每跳一次又會輸出一次，等於多送一筆訂單。
+    - `zip`：把兩邊「依序配對」，第 1 次點擊配到 `price` 的第 1 個值（訂閱時的目前值），第 2 次點擊配到第 2 個價格，不是「當下最新」的價格。
+    - `price.map { _ in buyTap }.switchToLatest()`：輸出的是點擊事件本身（`Void`），拿不到價格；而且價格每變一次就重新訂閱 `buyTap`，寫法也繞。
+
+- id: "swift-combine-basics-06"
+  type: "fill"
+  level: 2
+  priority: "P0"
+  tags: [combine, error-handling, flatmap, catch]
+  prompt: |
+    每按一次刷新就重新抓委託列表。某一次請求失敗時，畫面要保留舊資料，之後再按刷新還要能更新。`api.fetchOrders()` 回傳 `AnyPublisher<[Order], Error>`。填入運算子名稱。
+  codeLang: "swift"
+  code: |
+    refreshTap
+        .____ { _ in
+            api.fetchOrders()
+                .____ { _ in Empty<[Order], Never>() }
+        }
+        .receive(on: DispatchQueue.main)
+        .assign(to: &$orders)
+  blanks:
+    - [flatMap]
+    - [catch]
+  explain: |
+    - 第一格 `flatMap`：每次點擊轉成一個請求，展開請求的結果（RxSwift 也是 `flatMap`；要「新的來就取消舊的」改用 `map` 加 `switchToLatest`）。
+    - 第二格 `catch`：錯誤時換成另一個 publisher。這裡回傳 `Empty`，不送任何值，畫面保留上一次的資料。
+
+    關鍵是 `catch` 放在 **`flatMap` 裡面的內層請求** 上：錯誤只結束這一次請求，外層的 `refreshTap` 串流繼續活著。如果在 `flatMap` 外面接 `.replaceError(with: [])`，第一次失敗就會送出 `[]`（清空列表）然後結束整條串流，之後再按刷新都沒反應。`assign(to:)` 要求 `Failure == Never`，內層的 `catch` 已經把錯誤型別變成 `Never`，所以型別也對得上。
+
+- id: "swift-combine-basics-07"
+  type: "multi"
+  level: 2
+  priority: "P1"
+  tags: [combine, rxswift, driver, receive-on, mapping]
+  prompt: |
+    關於 RxSwift 與 Combine 的對應，哪些敘述正確？（複選）
+  options:
+    - "`flatMapLatest` 在 Combine 寫成 `map { … }.switchToLatest()`"
+    - "`DisposeBag` 對應 `Set<AnyCancellable>`，擁有者釋放時裡面的訂閱一起取消"
+    - "Combine 的 `share()` 和 RxSwift 的 `share(replay: 1)` 一樣，晚到的訂閱者會先收到最新值"
+    - "Combine 沒有 `Driver`；值在背景執行緒送出時，要自己加 `receive(on: DispatchQueue.main)` 才會在主執行緒更新畫面"
+    - "`PassthroughSubject<Int, Never>` 等於 `PublishRelay`，因為 `Never` 保證它不會結束"
+  answer: [0, 1, 3]
+  explain: |
+    正確的三項：
+    - `map` 加 `switchToLatest`：新的內層 publisher 一出現，就取消前一個。
+    - `Set<AnyCancellable>` 加 `store(in:)` 就是 `DisposeBag` 的用法，擁有者釋放時 `AnyCancellable` 一起被釋放並取消。
+    - `Driver` 保證主執行緒、不會出錯、會重播最新值；Combine 這三件都要自己做，最常漏的是 `receive(on:)`。
+
+    錯誤的兩項：
+    - Combine 的 `share()` **不重播**，晚到的訂閱者只收到之後的值；要重播用 `CurrentValueSubject` 或 `@Published`。
+    - `Never` 只代表不會送 **錯誤**，subject 還是可以被 `send(completion: .finished)` 結束，例如被 `subscribe(_:)` 接上一個會結束的 publisher。Combine 沒有 Relay。
+
+- id: "swift-combine-basics-08"
+  type: "open"
+  level: 3
+  priority: "P1"
+  tags: [combine, rxswift, migration, interview]
+  prompt: |
+    你的履歷寫了 RxSwift。面試官問：「Combine 你熟嗎？如果現在的專案是 RxSwift，你會怎麼評估、怎麼導入 Combine？」
+  keyPoints:
+    - 型別對應：Publisher／Observable、AnyCancellable／Disposable、Set<AnyCancellable>／DisposeBag、PassthroughSubject／PublishRelay、CurrentValueSubject／BehaviorRelay
+    - 生命週期方向相反：Combine 忘了存 AnyCancellable 會立刻取消，Rx 忘了 dispose 會洩漏
+    - Future 一建立就執行並記住結果，要用 Deferred 包起來才等於 Single
+    - Combine 沒有 Relay、withLatestFrom、Driver、ReplaySubject，share() 不重播，要先想好替代寫法
+    - Failure 型別寫在泛型裡；catch 放在 flatMap 內層，避免第一次錯誤就結束整條串流
+    - 導入策略：在模組邊界（Repository）選定一種，橋接寫成一個函式，不在同一條資料流裡混用；新功能用 Combine 或 async/await
+    - 測試：RxTest 的 TestScheduler 沒有內建對應，改成注入 scheduler 或用 XCTestExpectation
+  modelAnswer: |
+    熟。概念上 Combine 和 RxSwift 幾乎一樣：Publisher 對應 Observable，AnyCancellable 對應 Disposable，Set<AnyCancellable> 對應 DisposeBag，PassthroughSubject 和 CurrentValueSubject 分別對應 PublishRelay 和 BehaviorRelay。
+
+    我比較在意的是「名字像、行為不同」的地方。第一，生命週期方向相反：Combine 的 AnyCancellable 被釋放就會取消，忘了 store 會一筆都收不到。第二，Future 一建立就執行、結果會被記住，所以 Single 要翻成 Deferred 包 Future，不然 retry 不會重發。第三，Combine 沒有 Relay，subject 還是會被結束，subscribe(_:) 會把上游的結束轉送過去。還有沒有 withLatestFrom、沒有 Driver、share() 不重播，這些我會先準備好替代寫法。
+
+    導入的話，我不會一次全部改。在 Repository 這種模組邊界選定對外的型別，新功能用 Combine 或 async/await，舊的 Rx 畫面改到的時候才換；兩者之間只透過一個轉換函式橋接，不在同一條資料流裡來回轉。測試方面，原本用 RxTest 的 TestScheduler，改成注入 scheduler 或用 XCTestExpectation 等待。
+  followUps:
+    - Combine 的 Demand（背壓）和 RxSwift 有什麼不同？實務上有影響嗎？
+    - Combine 轉 RxSwift 的橋接函式怎麼寫？取消要怎麼接？
+    - iOS 17 有了 Observation，還需要 @Published 嗎？
+  factsToConfirm:
+    - 你實際維護過的專案裡，RxSwift 和 Combine 各用在哪些地方？
+  timeLimitSec: 150
+
+- id: "swift-combine-basics-09"
+  type: "flash"
+  level: 1
+  priority: "P1"
+  tags: [combine, rxswift, mapping]
+  front: |
+    RxSwift → Combine：`Single.create`、`BehaviorRelay`、`observe(on:)`、`distinctUntilChanged`、`do(onNext:)` 各對應什麼？
+  back: |
+    - `Single.create` → `Deferred { Future { … } }`（只有 `Future` 的話，一建立就執行）
+    - `BehaviorRelay` → `CurrentValueSubject`（`ObservableObject` 裡常用 `@Published`）
+    - `observe(on:)` → `receive(on:)`
+    - `distinctUntilChanged` → `removeDuplicates`
+    - `do(onNext:)` → `handleEvents(receiveOutput:)`
