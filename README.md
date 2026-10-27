@@ -105,7 +105,7 @@ claude -p --output-format json --tools "" --no-session-persistence --model ${GRA
 ```
 content/                 內容（內容作者維護）；content/plan/days.yaml 是選填的每日計畫（.env 設 VITE_INTERVIEW_DATE 會顯示倒數）
 labs/                    iOS／Android 實際演練（見 labs/README.md）
-TECH_STACK.md            三個專案（網站、iOS、Android）的 UI 架構、網路、儲存、測試工具一覽
+TECH_STACK.md            三個專案（網站、iOS、Android）的 UI 架構、網路、儲存、測試工具一覽（TECH_STACK.html 是同內容的網頁版）
 scripts/build-content.ts 內容建置 CLI；scripts/content/ 為 schema（zod）、markdown、shiki、建置邏輯
 scripts/make-artifact.mjs 靜態版後處理
 runner/                  run-code.mjs（編譯執行）、prelude.*、server-plugin.ts（/api）、content-plugin.ts（虛擬模組＋監看）

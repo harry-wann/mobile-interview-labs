@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mobile Labs 技術總覽</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 版面：頂部一條固定的章節列，底下是「一覽表 → 三個專案（各四格） → 共用 → 刻意不用」。
+   色彩走偏藍的灰階，三個專案各有一個識別色，只用在章節標記與表頭。 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --fg: #1c2430;
+  --muted: #5d6b7c;
+  --line: #d9dee6;
+  --line-strong: #b9c2cf;
+  --code-bg: #eef1f5;
+  --accent: #0f6e8c;
+  --web: #0f6e8c;
+  --ios: #5a4bb8;
+  --android: #2e7d4f;
+  --web-soft: #e3f1f6;
+  --ios-soft: #ebe8f8;
+  --android-soft: #e4f3ea;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-display: "Noto Serif TC", "PingFang TC", "Songti TC", serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c;
+    --surface: #171e27;
+    --fg: #e4e9f0;
+    --muted: #97a3b3;
+    --line: #2a3440;
+    --line-strong: #3b4858;
+    --code-bg: #212b37;
+    --accent: #5bb8d6;
+    --web: #5bb8d6;
+    --ios: #a89cf0;
+    --android: #6fc693;
+    --web-soft: #15303a;
+    --ios-soft: #262042;
+    --android-soft: #17301f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c;
+  --surface: #171e27;
+  --fg: #e4e9f0;
+  --muted: #97a3b3;
+  --line: #2a3440;
+  --line-strong: #3b4858;
+  --code-bg: #212b37;
+  --accent: #5bb8d6;
+  --web: #5bb8d6;
+  --ios: #a89cf0;
+  --android: #6fc693;
+  --web-soft: #15303a;
+  --ios-soft: #262042;
+  --android-soft: #17301f;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: var(--surface);
+}
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  padding: 0.08em 0.4em;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.25; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; line-height: 1.3; }
+h3 { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; }
+ul { margin: 0; padding-left: 1.2em; }
+li + li { margin-top: 0.35em; }
+strong { font-weight: 700; }
+
+/* 固定章節列 */
+.nav {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.nav-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-inner::-webkit-scrollbar { display: none; }
+.nav a {
+  flex: none;
+  padding: 12px 10px;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.nav a:hover { color: var(--fg); }
+.nav a[data-p="web"]:hover { border-color: var(--web); }
+.nav a[data-p="ios"]:hover { border-color: var(--ios); }
+.nav a[data-p="android"]:hover { border-color: var(--android); }
+.nav a[data-p="all"]:hover { border-color: var(--accent); }
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: grid;
+  gap: 56px;
+}
+
+/* 開頭 */
+.intro { display: grid; gap: 14px; max-width: 68ch; }
+.intro p { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.86rem; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.web { background: var(--web); }
+.dot.ios { background: var(--ios); }
+.dot.android { background: var(--android); }
+
+section { display: grid; gap: 18px; scroll-margin-top: 64px; }
+.sec-head { display: grid; gap: 6px; }
+.sec-head p { color: var(--muted); max-width: 68ch; }
+.sec-head .path { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+
+/* 一覽表 */
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+thead th { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line-strong); }
+thead th.web { color: var(--web); background: var(--web-soft); }
+thead th.ios { color: var(--ios); background: var(--ios-soft); }
+thead th.android { color: var(--android); background: var(--android-soft); }
+tbody th { font-weight: 700; white-space: nowrap; color: var(--fg); width: 7.5em; }
+.compare td { width: 30%; }
+.none { color: var(--muted); }
+
+/* 三個專案：四格 */
+.grid4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px 18px 18px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.card h3 { display: flex; align-items: center; gap: 8px; }
+.card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.web .card h3::before { background: var(--web); }
+.ios .card h3::before { background: var(--ios); }
+.android .card h3::before { background: var(--android); }
+.card ul { font-size: 0.92rem; }
+.card ul ul { margin-top: 0.3em; }
+.web h2 { color: var(--web); }
+.ios h2 { color: var(--ios); }
+.android h2 { color: var(--android); }
+
+/* 共用與刻意不用 */
+.plain { font-size: 0.95rem; max-width: 72ch; }
+.avoid thead th:first-child { width: 9em; }
+
+@media (max-width: 720px) {
+  .grid4 { grid-template-columns: 1fr; }
+  body { font-size: 14.5px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="章節">
+  <div class="nav-inner">
+    <a href="#overview" data-p="all">一覽表</a>
+    <a href="#web" data-p="web">複習站</a>
+    <a href="#ios" data-p="ios">iOS App</a>
+    <a href="#android" data-p="android">Android App</a>
+    <a href="#shared" data-p="all">共用</a>
+    <a href="#avoid" data-p="all">刻意不用</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<header class="intro">
+  <h1>技術總覽：三個專案各用什麼</h1>
+  <p>這個 repo 有三個可以執行的專案：<strong>複習站</strong>（網站）、<strong>iOS 演練 App</strong>、<strong>Android 演練 App</strong>。這份文件統整每個專案的 UI 架構、網路、資料儲存、測試與建置工具，方便一眼對照。</p>
+  <p>版本號以各專案的設定檔為準（<code>package.json</code>、<code>labs/ios/project.yml</code>、<code>labs/android/buildSrc/src/main/kotlin/Versions.kt</code>），這裡只寫主要版本。</p>
+  <div class="legend">
+    <span><i class="dot web"></i>複習站（根目錄）</span>
+    <span><i class="dot ios"></i>iOS（<code>labs/ios/</code>）</span>
+    <span><i class="dot android"></i>Android（<code>labs/android/</code>）</span>
+  </div>
+</header>
+
+<section id="overview">
+  <div class="sec-head">
+    <h2>一覽表</h2>
+    <p>先看這張表。三個專案共同的特色是：沒有第三方網路框架、沒有資料庫、沒有 DI 框架，重點都放在平台原生 API 的行為上。</p>
+  </div>
+  <div class="scroll">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="web">複習站（網站）</th>
+          <th class="ios">iOS 演練 App</th>
+          <th class="android">Android 演練 App</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th>位置</th><td>根目錄（<code>src/</code>、<code>runner/</code>、<code>scripts/</code>）</td><td><code>labs/ios/</code></td><td><code>labs/android/</code></td></tr>
+        <tr><th>語言</th><td>TypeScript</td><td>Swift（語言模式 5，工具鏈 6）</td><td>Kotlin 2.2</td></tr>
+        <tr><th>UI 框架</th><td>React 19</td><td>SwiftUI（部分演練用 UIKit 對照）</td><td>Jetpack Compose（Material 3；一個演練用 RecyclerView 對照）</td></tr>
+        <tr><th>UI 架構</th><td>單頁 App、hash router、外部 store + <code>useSyncExternalStore</code></td><td>單一 <code>NavigationStack</code>、<code>Lab</code> 資料驅動畫面</td><td>單一 Activity、<code>rememberSaveable</code> 的字串 route、<code>Lab</code> 資料驅動畫面</td></tr>
+        <tr><th>模組切分</th><td>依功能分 <code>lib/</code>、<code>pages/</code>、<code>components/</code></td><td>3 個 Swift Package：<code>LabKit</code>、<code>Practice</code>、<code>Solution</code>，每一區一個 target</td><td><code>:app</code>、<code>:labkit</code>、每一區一個 <code>:practice-&lt;區&gt;</code>／<code>:solution-&lt;區&gt;</code> module</td></tr>
+        <tr><th>網路</th><td>瀏覽器 <code>fetch</code> 打本機 <code>/api/*</code></td><td><code>URLSession</code>（系統內建，沒有第三方套件）</td><td>OkHttp 4（HTTP 與 WebSocket）</td></tr>
+        <tr><th>JSON</th><td>原生 <code>JSON</code> ＋ zod（內容驗證）</td><td><code>Codable</code>／<code>JSONSerialization</code></td><td>Gson</td></tr>
+        <tr><th>資料儲存</th><td><code>localStorage</code> ＋ 本機 JSON 檔（<code>data/*.json</code>）；靜態版另有 claude.ai 雲端 db</td><td><code>UserDefaults</code>、Keychain、<code>FileManager</code>、Core Data（只在安全儲存單元示範）</td><td><code>SharedPreferences</code>、DataStore Preferences、Tink 加密（只在安全儲存單元示範）</td></tr>
+        <tr><th>本機資料庫</th><td><span class="none">無</span>（JSON 檔即資料）</td><td>Core Data（示範用，App 本身不存資料）</td><td><span class="none">無</span>（Room 只在筆記中對照）</td></tr>
+        <tr><th>非同步</th><td>Promise／async-await</td><td>Swift Concurrency（async/await、actor）、Combine</td><td>kotlinx.coroutines、Flow／StateFlow</td></tr>
+        <tr><th>相依注入</th><td><span class="none">無</span></td><td><span class="none">無</span>（演練裡以建構子注入示範）</td><td><span class="none">無</span>（演練裡以建構子注入示範，Hilt 只在筆記提及）</td></tr>
+        <tr><th>測試</th><td><code>scripts/regress-data.ts</code>（資料層回歸）、<code>tsc --noEmit</code></td><td>App 內自動檢查＋ <code>check.sh</code>（模擬器 selftest）</td><td>JUnit 4 ＋ coroutines-test、Turbine、MockK、Robolectric、MockWebServer</td></tr>
+        <tr><th>建置</th><td>Vite 8</td><td>XcodeGen 產生 <code>.xcodeproj</code>、Swift Package Manager</td><td>Gradle（AGP 8.13，<code>buildSrc</code> 共用設定），Compose BOM</td></tr>
+        <tr><th>最低版本</th><td>現代瀏覽器（ES2020）</td><td>iOS 17</td><td>minSdk 26、compileSdk 36</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="web" class="web">
+  <div class="sec-head">
+    <h2>複習站（網站）</h2>
+    <p class="path">src/ · runner/ · scripts/</p>
+  </div>
+  <div class="grid4">
+    <div class="card">
+      <h3>UI 架構</h3>
+      <ul>
+        <li><strong>React 19 + TypeScript</strong>，Vite 建置。進入點 <code>src/main.tsx</code>，根元件 <code>src/App.tsx</code>。</li>
+        <li><strong>路由</strong>：<code>src/lib/router.ts</code> 是極簡 hash router，網址只用不含斜線的純錨點（<code>#home</code>、<code>#practice</code>、<code>#&lt;unitId&gt;</code>…），以 <code>useSyncExternalStore</code> 訂閱。沒有用 react-router。</li>
+        <li><strong>狀態</strong>：<code>src/lib/store.ts</code> 是自製的外部 store（進度、我的口徑），元件用 <code>useStore</code> 訂閱；純函式的合併規則在 <code>src/lib/data.ts</code>，前端與本機 server 共用。沒有 Redux／Zustand 之類的套件。</li>
+        <li><strong>內容</strong>：<code>content/</code> 的 YAML 在建置時經 zod 驗證、markdown-it 轉 HTML、shiki 上色，產出 <code>src/generated/content.json</code>；前端只負責顯示。</li>
+        <li><strong>編輯器</strong>：程式題用 CodeMirror 6（<code>@uiw/react-codemirror</code>）。</li>
+        <li><strong>樣式</strong>：純 CSS，<code>src/styles/</code> 依 tokens／base／layout／content／exercise／pages 分檔；沒有 CSS 框架。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>網路</h3>
+      <ul>
+        <li>前端用瀏覽器內建的 <code>fetch</code>（<code>src/lib/api.ts</code>），只打同站的 <code>/api/*</code>，沒有第三方 HTTP 套件。</li>
+        <li><code>/api/*</code> 掛在 Vite dev／preview server 上（<code>runner/server-plugin.ts</code>），不另開 server：
+          <ul>
+            <li><code>POST /api/run</code>：編譯執行 Swift／Kotlin 程式題（<code>runner/run-code.mjs</code> 以子程序呼叫 <code>swiftc</code>、<code>kotlinc</code>），只限 localhost。</li>
+            <li><code>POST /api/grade</code>：呼叫本機 <code>claude</code> CLI 做 AI 面試官評分，只限 localhost。</li>
+            <li><code>GET/PUT /api/answers</code>、<code>/api/progress</code>：讀寫 <code>data/*.json</code>，區網需帶 <code>X-Prep-Token</code>。</li>
+          </ul>
+        </li>
+        <li>靜態版（claude.ai Artifact）沒有 server：AI 評分改走 <code>sample</code> capability。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>資料儲存</h3>
+      <ul>
+        <li><strong>瀏覽器</strong>：<code>localStorage</code>（<code>src/lib/storage.ts</code> 一律包 try/catch，失敗退回記憶體）。存進度、口徑、還沒送出的 dirty 欄位。</li>
+        <li><strong>本機版</strong>：<code>data/progress.json</code>、<code>data/my-answers.json</code>，server 原子寫入、跨行程檔案鎖（<code>runner/file-lock.ts</code>），壞檔改名備份不覆寫。時間戳記以 server 為準。</li>
+        <li><strong>靜態版</strong>：claude.ai 的 <code>db</code> capability（<code>src/lib/cloud.ts</code>），每位使用者存在私有路徑底下，每題一份文件、每份 &lt; 256 KiB。</li>
+        <li>三者之間都是<strong>欄位級合併＋歷史版本</strong>，規則見 <code>README.md</code>「口徑不會遺失」。沒有 SQL 資料庫。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>測試與工具</h3>
+      <ul>
+        <li><code>npm run typecheck</code>（tsc）、<code>npm run test:data</code>（資料層回歸＋ store 整合測試，用 vm 模擬多台裝置）。</li>
+        <li><code>npm run content:check</code>（zod 嚴格驗證）、<code>npm run tasks:verify</code>（程式題的 solution／starter 都真的編譯執行）。</li>
+        <li>沒有用 Vitest／Jest；測試腳本直接用 <code>tsx</code> 跑。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="ios" class="ios">
+  <div class="sec-head">
+    <h2>iOS 演練 App</h2>
+    <p class="path">labs/ios/</p>
+  </div>
+  <div class="grid4">
+    <div class="card">
+      <h3>UI 架構</h3>
+      <ul>
+        <li><strong>SwiftUI</strong>，iOS 17 以上。進入點 <code>App/MobileLabsApp.swift</code> 只有一個 <code>WindowGroup</code>，放 <code>LabKit</code> 的 <code>LabRootView</code>。</li>
+        <li><strong>導覽</strong>：單一 <code>NavigationStack(path:)</code>，路徑是 <code>LabRoute</code> enum（單元、演練兩層）。沒有 TabView、沒有 coordinator。</li>
+        <li><strong>資料驅動</strong>：每個演練是一個 <code>Lab</code> struct（<code>LabKit/Sources/LabKit/Lab.swift</code>），帶 <code>run</code>／<code>demo</code>／<code>checkBug</code>／<code>checkFixed</code> closure；畫面由 <code>LabKit</code> 統一繪製，演練只提供資料與行為。</li>
+        <li><strong>狀態</strong>：<code>@State</code>、<code>@AppStorage</code>（首頁排法）；演練內依題目示範 <code>ObservableObject</code> 與 <code>@Observable</code>。</li>
+        <li><strong>UIKit</strong>：只在需要對照的單元出現（<code>UIViewRepresentable</code>、<code>UIViewController</code> 生命週期、<code>UITableView</code> 捲動效能）。</li>
+        <li><strong>模組</strong>：<code>LabKit</code>（共用畫面、log、自動檢查）、<code>Practice</code>、<code>Solution</code> 三個 Swift Package；Practice／Solution 內每一區一個 target（<code>PracticeSwift</code>、<code>PracticeExchange</code>…），結構一模一樣。另有 <code>SwiftObjC</code> target 放 Objective-C 對照。</li>
+        <li>專案檔由 <strong>XcodeGen</strong>（<code>project.yml</code>）產生，演練檔案直接放進資料夾即可，不用重新產生。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>網路</h3>
+      <ul>
+        <li>只用系統的 <strong><code>URLSession</code></strong>（逾時、憑證釘選、401 刷新、重試 jitter 等在 <code>Platform05-Networking</code> 示範），沒有 Alamofire 之類的套件。</li>
+        <li>WebSocket 相關單元（<code>Exchange03</code>、<code>Exchange04</code>…）<strong>不連真的伺服器</strong>：用程式內的假伺服器或準備好的訊息，示範 Huobi 相容公開協定的 gzip frame、心跳、重連、重新訂閱。</li>
+        <li>JSON 用 <code>Codable</code>／<code>JSONSerialization</code>；gzip 用 <code>Compression</code>；簽名用 <code>CryptoKit</code>。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>資料儲存</h3>
+      <ul>
+        <li>App 本身只存一個 <code>@AppStorage</code> 偏好，沒有資料庫。</li>
+        <li><code>Platform04-SecureStorage</code> 單元示範各種儲存的正確用法：<code>UserDefaults</code>、Keychain（<code>Security</code>）、<code>FileManager</code> 檔案保護等級、<code>LocalAuthentication</code>（Face ID）、<strong>Core Data</strong>（context 過期、migration）；筆記中對照 SwiftData、Room、Realm 的選型。</li>
+        <li>其他單元用到 <code>UserDefaults</code> 的只是演練情境（深連結、release 設定、觀測）。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>測試與工具</h3>
+      <ul>
+        <li>每個演練內建自動檢查（<code>checkBug</code>／<code>checkFixed</code> 讀 log 判斷）。</li>
+        <li><code>check.sh</code>：不開 Xcode 在模擬器 <code>MobileLabs-Main</code> 上跑 <code>practice</code>／<code>selftest</code>／<code>run</code>／<code>open</code>，會自動排隊。</li>
+        <li>沒有 XCTest target；<code>Testing</code> 區的演練在 App 內示範測試策略。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="android" class="android">
+  <div class="sec-head">
+    <h2>Android 演練 App</h2>
+    <p class="path">labs/android/</p>
+  </div>
+  <div class="grid4">
+    <div class="card">
+      <h3>UI 架構</h3>
+      <ul>
+        <li><strong>Jetpack Compose + Material 3</strong>（Compose BOM），Kotlin 2.2，minSdk 26。</li>
+        <li><strong>單一 Activity</strong>：<code>MainActivity</code> 繼承 <code>labkit</code> 的 <code>LabRootActivity</code>，<code>setContent</code> 放 <code>LabRoot</code>。</li>
+        <li><strong>導覽</strong>：沒有 navigation-compose。<code>LabRoot</code> 用一個 <code>rememberSaveable</code> 的字串 route（<code>""</code>、<code>Kotlin03Coroutines</code>、<code>Kotlin03Coroutines/L05</code>）決定畫面，<code>BackHandler</code> 往回切；可用 <code>adb shell am start … --es open &lt;代號&gt;/&lt;L編號&gt;</code> 直接開某個演練。</li>
+        <li><strong>資料驅動</strong>：每個演練是一個 <code>Lab</code> class（<code>labkit/.../Lab.kt</code>），帶 <code>run</code>（suspend）、<code>demo</code>（<code>@Composable</code>）、<code>checkBug</code>／<code>checkFixed</code>；另有 <code>needsDevice</code> 標記 JVM 測試跑不了的演練。</li>
+        <li><strong>狀態</strong>：Compose state（<code>mutableStateOf</code>、<code>rememberSaveable</code>）；演練內示範 <code>ViewModel</code> + <code>StateFlow</code>、<code>collectAsStateWithLifecycle</code>。</li>
+        <li><strong>View 系統</strong>：只在 <code>Advanced02-Jank</code> 用 RecyclerView 對照。</li>
+        <li><strong>模組</strong>：<code>:app</code>、<code>:labkit</code>，加上每一區各一個 <code>:practice-&lt;區&gt;</code>、<code>:solution-&lt;區&gt;</code>（<code>settings.gradle.kts</code> 自動掃描）；共用設定在 <code>buildSrc/src/main/kotlin/lab-section.gradle.kts</code>，版本集中在 <code>Versions.kt</code>。每一區的 <code>build.gradle.kts</code> 只列該區用到的套件，practice 與 solution 要一樣。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>網路</h3>
+      <ul>
+        <li><strong>OkHttp 4</strong>（<code>platform</code>、<code>exchange</code>、<code>advanced</code>、<code>testing</code> 區）：HTTP 逾時、TLS、WebSocket。</li>
+        <li>WebSocket 單元同樣<strong>不連真的伺服器</strong>，用假伺服器或 <code>MockWebServer</code>。</li>
+        <li>JSON 用 <strong>Gson</strong>（Android 內建的 <code>org.json</code> 在 JVM 單元測試裡是空殼，Gson 在電腦和手機上行為一樣）。</li>
+        <li>Retrofit、Ktor、kotlinx.serialization 都沒有用，只在筆記中提及。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>資料儲存</h3>
+      <ul>
+        <li>App 本身沒有資料庫，也沒有 Room。</li>
+        <li><code>Platform04-SecureStorage</code> 單元示範 <code>SharedPreferences</code>、<strong>DataStore Preferences</strong>、<strong>Tink</strong> 加密、生物辨識；其他單元提到的「本機儲存」都是演練裡的假物件。</li>
+        <li>背景工作用 <strong>WorkManager</strong>（<code>Platform03-BackgroundPush</code> 真的排程；其他單元只在筆記對照）。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>測試與工具</h3>
+      <ul>
+        <li>每一區的 <code>test/</code> 是 JVM 單元測試：JUnit 4、<code>kotlinx-coroutines-test</code>（<code>runTest</code> 虛擬時間）、Turbine（Flow）、MockK、Robolectric（在電腦上跑 Compose 畫面測試）、MockWebServer、<code>okhttp-tls</code>。</li>
+        <li><code>./gradlew :solution-&lt;區&gt;:testDebugUnitTest</code> 跑解答的自動檢查；要畫面或 Android 系統的演練標 <code>needsDevice</code>，在 JVM 上顯示 SKIP。</li>
+        <li>debug 版自動帶 <strong>LeakCanary</strong>（<code>Advanced03-Memory</code> 的演練會用到）。</li>
+        <li><code>platform</code> 區的測試用 R8 驗證混淆規則。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="shared">
+  <div class="sec-head">
+    <h2>三個專案共用的東西</h2>
+  </div>
+  <ul class="plain">
+    <li><code>labs/topics.yaml</code> 是「四大主題」（記憶體 → 效能 → 架構 → UI/UX）的單一來源，<code>npm run topics:gen</code> 產生 iOS <code>JdFocus.swift</code> 與 Android <code>JdFocus.kt</code>。</li>
+    <li>單元代號（<code>Swift02ARC</code>、<code>Kotlin03Coroutines</code>、<code>Exchange05OrderBook</code>）在複習站、iOS、Android 三邊一致；雙平台的單元用同一個代號。</li>
+    <li>交易所協定一律寫「Huobi 相容的公開協定」，所有演練都用假伺服器，不打真的交易所。</li>
+  </ul>
+</section>
+
+<section id="avoid">
+  <div class="sec-head">
+    <h2>刻意不用的套件</h2>
+    <p>面試被問「為什麼不用 X」時可以直接回答的理由。</p>
+  </div>
+  <div class="scroll">
+    <table class="avoid">
+      <thead>
+        <tr><th>類別</th><th>沒用</th><th>原因</th></tr>
+      </thead>
+      <tbody>
+        <tr><th>iOS 網路</th><td>Alamofire、Starscream</td><td>演練的重點是 <code>URLSession</code> 本身的行為（兩種逾時、憑證釘選、重試）</td></tr>
+        <tr><th>Android 網路</th><td>Retrofit、Ktor</td><td>演練停在 OkHttp 層，看得到逾時、連線池、WebSocket frame</td></tr>
+        <tr><th>資料庫</th><td>Room、Realm、SwiftData（App 本身）</td><td>App 不需要持久化；資料庫只在安全儲存單元用 Core Data 示範</td></tr>
+        <tr><th>相依注入</th><td>Hilt、Koin</td><td>演練用建構子注入就看得到依賴方向，不想讓框架遮住重點</td></tr>
+        <tr><th>導覽</th><td>navigation-compose、coordinator</td><td>只有兩層畫面，一個 route 字串或 <code>NavigationStack</code> path 就夠</td></tr>
+        <tr><th>網站狀態</th><td>Redux、Zustand、react-router</td><td>store 的合併規則要前後端共用純函式，自製比套件直接</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+</body>
+</html>
