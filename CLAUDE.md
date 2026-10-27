@@ -21,6 +21,7 @@ Mobile 面試複習站（交易所 App）＋ iOS／Android 實際演練。**這�
 | 寫或改單元、練習題 | `content/SCHEMA.md`（照 `swift/01`、`swift/02`、`kotlin/03` 的範本） |
 | 寫或改演練 | `labs/README.md`、`labs/AUTHORING.md` |
 | 指令、網站結構 | `README.md` |
+| 各專案用了什麼技術（UI、網路、儲存） | `TECH_STACK.md` |
 
 ## 演練（`labs/`）
 
