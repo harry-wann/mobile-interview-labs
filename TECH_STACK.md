@@ -1,136 +1,277 @@
-# 技術總覽：三個專案各用什麼
+# 兩個演練 App 用的技術
 
-這個 repo 有三個可以執行的專案：**複習站**（網站）、**iOS 演練 App**、**Android 演練 App**。
-這份文件統整每個專案的 UI 架構、網路、資料儲存、測試與建置工具，方便一眼對照。
-版本號以各專案的設定檔為準（`package.json`、`labs/ios/project.yml`、`labs/android/buildSrc/src/main/kotlin/Versions.kt`），這裡只寫主要版本。
+只講 `labs/ios/` 與 `labs/android/` 兩個 App，三個主題：UI 架構、網路套件、資料庫。
+範例程式碼都從演練的 Solution 精簡而來，用來快速回想。
 
-## 一覽表
-
-| | 複習站（網站） | iOS 演練 App | Android 演練 App |
-|---|---|---|---|
-| 位置 | 根目錄（`src/`、`runner/`、`scripts/`） | `labs/ios/` | `labs/android/` |
-| 語言 | TypeScript | Swift（語言模式 5，工具鏈 6） | Kotlin 2.2 |
-| UI 框架 | React 19 | SwiftUI（部分演練用 UIKit 對照） | Jetpack Compose（Material 3；一個演練用 RecyclerView 對照） |
-| UI 架構 | 單頁 App、hash router、外部 store + `useSyncExternalStore` | 單一 `NavigationStack`、`Lab` 資料驅動畫面 | 單一 Activity、`rememberSaveable` 的字串 route、`Lab` 資料驅動畫面 |
-| 模組切分 | 依功能分 `lib/`、`pages/`、`components/` | 3 個 Swift Package：`LabKit`、`Practice`、`Solution`，每一區一個 target | `:app`、`:labkit`、每一區一個 `:practice-<區>`／`:solution-<區>` module |
-| 網路 | 瀏覽器 `fetch` 打本機 `/api/*` | `URLSession`（系統內建，沒有第三方套件） | OkHttp 4（HTTP 與 WebSocket） |
-| JSON | 原生 `JSON` ＋ zod（內容驗證） | `Codable`／`JSONSerialization` | Gson |
-| 資料儲存 | `localStorage` ＋ 本機 JSON 檔（`data/*.json`）；靜態版另有 claude.ai 雲端 db | `UserDefaults`、Keychain、`FileManager`、Core Data（只在安全儲存單元示範） | `SharedPreferences`、DataStore Preferences、Tink 加密（只在安全儲存單元示範） |
-| 本機資料庫 | 無（JSON 檔即資料） | Core Data（示範用，App 本身不存資料） | 無（Room 只在筆記中對照） |
-| 非同步 | Promise／async-await | Swift Concurrency（async/await、actor）、Combine | kotlinx.coroutines、Flow／StateFlow |
-| 相依注入 | 無 | 無（演練裡以建構子注入示範） | 無（演練裡以建構子注入示範，Hilt 只在筆記提及） |
-| 測試 | `scripts/regress-data.ts`（資料層回歸）、`tsc --noEmit` | App 內自動檢查＋ `check.sh`（模擬器 selftest） | JUnit 4 ＋ coroutines-test、Turbine、MockK、Robolectric、MockWebServer |
-| 建置 | Vite 8 | XcodeGen 產生 `.xcodeproj`、Swift Package Manager | Gradle（AGP 8.13，`buildSrc` 共用設定），Compose BOM |
-| 最低版本 | 現代瀏覽器（ES2020） | iOS 17 | minSdk 26、compileSdk 36 |
-
-## 複習站（網站）
-
-### UI 架構
-
-- **React 19 + TypeScript**，Vite 建置。進入點 `src/main.tsx`，根元件 `src/App.tsx`。
-- **路由**：`src/lib/router.ts` 是極簡 hash router，網址只用不含斜線的純錨點（`#home`、`#practice`、`#<unitId>`…），以 `useSyncExternalStore` 訂閱。沒有用 react-router。
-- **狀態**：`src/lib/store.ts` 是自製的外部 store（進度、我的口徑），元件用 `useStore` 訂閱；純函式的合併規則在 `src/lib/data.ts`，前端與本機 server 共用。沒有 Redux／Zustand 之類的套件。
-- **內容**：`content/` 的 YAML 在建置時經 zod 驗證、markdown-it 轉 HTML、shiki 上色，產出 `src/generated/content.json`；前端只負責顯示。
-- **編輯器**：程式題用 CodeMirror 6（`@uiw/react-codemirror`）。
-- **樣式**：純 CSS，`src/styles/` 依 tokens／base／layout／content／exercise／pages 分檔；沒有 CSS 框架。
-
-### 網路
-
-- 前端用瀏覽器內建的 `fetch`（`src/lib/api.ts`），只打同站的 `/api/*`，沒有第三方 HTTP 套件。
-- `/api/*` 掛在 Vite dev／preview server 上（`runner/server-plugin.ts`），不另開 server：
-  - `POST /api/run`：編譯執行 Swift／Kotlin 程式題（`runner/run-code.mjs` 以子程序呼叫 `swiftc`、`kotlinc`），只限 localhost。
-  - `POST /api/grade`：呼叫本機 `claude` CLI 做 AI 面試官評分，只限 localhost。
-  - `GET/PUT /api/answers`、`/api/progress`：讀寫 `data/*.json`，區網需帶 `X-Prep-Token`。
-- 靜態版（claude.ai Artifact）沒有 server：AI 評分改走 `sample` capability。
-
-### 資料儲存
-
-- **瀏覽器**：`localStorage`（`src/lib/storage.ts` 一律包 try/catch，失敗退回記憶體）。存進度、口徑、還沒送出的 dirty 欄位。
-- **本機版**：`data/progress.json`、`data/my-answers.json`，server 原子寫入、跨行程檔案鎖（`runner/file-lock.ts`），壞檔改名備份不覆寫。時間戳記以 server 為準。
-- **靜態版**：claude.ai 的 `db` capability（`src/lib/cloud.ts`），每位使用者存在私有路徑底下，每題一份文件、每份 < 256 KiB。
-- 三者之間都是**欄位級合併＋歷史版本**，規則見 `README.md`「口徑不會遺失」。沒有 SQL 資料庫。
-
-### 測試與工具
-
-- `npm run typecheck`（tsc）、`npm run test:data`（資料層回歸＋ store 整合測試，用 vm 模擬多台裝置）。
-- `npm run content:check`（zod 嚴格驗證）、`npm run tasks:verify`（程式題的 solution／starter 都真的編譯執行）。
-- 沒有用 Vitest／Jest；測試腳本直接用 `tsx` 跑。
-
-## iOS 演練 App（`labs/ios/`）
-
-### UI 架構
-
-- **SwiftUI**，iOS 17 以上。進入點 `App/MobileLabsApp.swift` 只有一個 `WindowGroup`，放 `LabKit` 的 `LabRootView`。
-- **導覽**：單一 `NavigationStack(path:)`，路徑是 `LabRoute` enum（單元、演練兩層）。沒有 TabView、沒有 coordinator。
-- **資料驅動**：每個演練是一個 `Lab` struct（`LabKit/Sources/LabKit/Lab.swift`），帶 `run`／`demo`／`checkBug`／`checkFixed` closure；畫面由 `LabKit` 統一繪製，演練只提供資料與行為。
-- **狀態**：`@State`、`@AppStorage`（首頁排法）；演練內依題目示範 `ObservableObject` 與 `@Observable`。
-- **UIKit**：只在需要對照的單元出現（`UIViewRepresentable`、`UIViewController` 生命週期、`UITableView` 捲動效能）。
-- **模組**：`LabKit`（共用畫面、log、自動檢查）、`Practice`、`Solution` 三個 Swift Package；Practice／Solution 內每一區一個 target（`PracticeSwift`、`PracticeExchange`…），結構一模一樣。另有 `SwiftObjC` target 放 Objective-C 對照。
-- 專案檔由 **XcodeGen**（`project.yml`）產生，演練檔案直接放進資料夾即可，不用重新產生。
-
-### 網路
-
-- 只用系統的 **`URLSession`**（逾時、憑證釘選、401 刷新、重試 jitter 等在 `Platform05-Networking` 示範），沒有 Alamofire 之類的套件。
-- WebSocket 相關單元（`Exchange03`、`Exchange04`…）**不連真的伺服器**：用程式內的假伺服器或準備好的訊息，示範 Huobi 相容公開協定的 gzip frame、心跳、重連、重新訂閱。
-- JSON 用 `Codable`／`JSONSerialization`；gzip 用 `Compression`；簽名用 `CryptoKit`。
-
-### 資料儲存
-
-- App 本身只存一個 `@AppStorage` 偏好，沒有資料庫。
-- `Platform04-SecureStorage` 單元示範各種儲存的正確用法：`UserDefaults`、Keychain（`Security`）、`FileManager` 檔案保護等級、`LocalAuthentication`（Face ID）、**Core Data**（context 過期、migration）；筆記中對照 SwiftData、Room、Realm 的選型。
-- 其他單元用到 `UserDefaults` 的只是演練情境（深連結、release 設定、觀測）。
-
-### 測試與工具
-
-- 每個演練內建自動檢查（`checkBug`／`checkFixed` 讀 log 判斷）。
-- `check.sh`：不開 Xcode 在模擬器 `MobileLabs-Main` 上跑 `practice`／`selftest`／`run`／`open`，會自動排隊。
-- 沒有 XCTest target；`Testing` 區的演練在 App 內示範測試策略。
-
-## Android 演練 App（`labs/android/`）
-
-### UI 架構
-
-- **Jetpack Compose + Material 3**（Compose BOM），Kotlin 2.2，minSdk 26。
-- **單一 Activity**：`MainActivity` 繼承 `labkit` 的 `LabRootActivity`，`setContent` 放 `LabRoot`。
-- **導覽**：沒有 navigation-compose。`LabRoot` 用一個 `rememberSaveable` 的字串 route（`""`、`Kotlin03Coroutines`、`Kotlin03Coroutines/L05`）決定畫面，`BackHandler` 往回切；可用 `adb shell am start … --es open <代號>/<L編號>` 直接開某個演練。
-- **資料驅動**：每個演練是一個 `Lab` class（`labkit/.../Lab.kt`），帶 `run`（suspend）、`demo`（`@Composable`）、`checkBug`／`checkFixed`；另有 `needsDevice` 標記 JVM 測試跑不了的演練。
-- **狀態**：Compose state（`mutableStateOf`、`rememberSaveable`）；演練內示範 `ViewModel` + `StateFlow`、`collectAsStateWithLifecycle`。
-- **View 系統**：只在 `Advanced02-Jank` 用 RecyclerView 對照。
-- **模組**：`:app`、`:labkit`，加上每一區各一個 `:practice-<區>`、`:solution-<區>`（`settings.gradle.kts` 自動掃描）；共用設定在 `buildSrc/src/main/kotlin/lab-section.gradle.kts`，版本集中在 `Versions.kt`。每一區的 `build.gradle.kts` 只列該區用到的套件，practice 與 solution 要一樣。
-
-### 網路
-
-- **OkHttp 4**（`platform`、`exchange`、`advanced`、`testing` 區）：HTTP 逾時、TLS、WebSocket。
-- WebSocket 單元同樣**不連真的伺服器**，用假伺服器或 `MockWebServer`。
-- JSON 用 **Gson**（Android 內建的 `org.json` 在 JVM 單元測試裡是空殼，Gson 在電腦和手機上行為一樣）。
-- Retrofit、Ktor、kotlinx.serialization 都沒有用，只在筆記中提及。
-
-### 資料儲存
-
-- App 本身沒有資料庫，也沒有 Room。
-- `Platform04-SecureStorage` 單元示範 `SharedPreferences`、**DataStore Preferences**、**Tink** 加密、生物辨識；其他單元提到的「本機儲存」都是演練裡的假物件。
-- 背景工作用 **WorkManager**（`Platform03-BackgroundPush` 真的排程；其他單元只在筆記對照）。
-
-### 測試與工具
-
-- 每一區的 `test/` 是 JVM 單元測試：JUnit 4、`kotlinx-coroutines-test`（`runTest` 虛擬時間）、Turbine（Flow）、MockK、Robolectric（在電腦上跑 Compose 畫面測試）、MockWebServer、`okhttp-tls`。
-- `./gradlew :solution-<區>:testDebugUnitTest` 跑解答的自動檢查；要畫面或 Android 系統的演練標 `needsDevice`，在 JVM 上顯示 SKIP。
-- debug 版自動帶 **LeakCanary**（`Advanced03-Memory` 的演練會用到）。
-- `platform` 區的測試用 R8 驗證混淆規則。
-
-## 三個專案共用的東西
-
-- `labs/topics.yaml` 是「四大主題」（記憶體 → 效能 → 架構 → UI/UX）的單一來源，`npm run topics:gen` 產生 iOS `JdFocus.swift` 與 Android `JdFocus.kt`。
-- 單元代號（`Swift02ARC`、`Kotlin03Coroutines`、`Exchange05OrderBook`）在複習站、iOS、Android 三邊一致；雙平台的單元用同一個代號。
-- 交易所協定一律寫「Huobi 相容的公開協定」，所有演練都用假伺服器，不打真的交易所。
-
-## 刻意不用的套件
-
-| 類別 | 沒用 | 原因 |
+| | iOS App | Android App |
 |---|---|---|
-| iOS 網路 | Alamofire、Starscream | 演練的重點是 `URLSession` 本身的行為（兩種逾時、憑證釘選、重試） |
-| Android 網路 | Retrofit、Ktor | 演練停在 OkHttp 層，看得到逾時、連線池、WebSocket frame |
-| 資料庫 | Room、Realm、SwiftData（App 本身） | App 不需要持久化；資料庫只在安全儲存單元用 Core Data 示範 |
-| 相依注入 | Hilt、Koin | 演練用建構子注入就看得到依賴方向，不想讓框架遮住重點 |
-| 導覽 | navigation-compose、coordinator | 只有兩層畫面，一個 route 字串或 `NavigationStack` path 就夠 |
-| 網站狀態 | Redux、Zustand、react-router | store 的合併規則要前後端共用純函式，自製比套件直接 |
+| UI 架構 | SwiftUI、單一 `NavigationStack`、`ObservableObject`／`@Observable` ViewModel、建構子注入 | Jetpack Compose（Material 3）、單一 Activity、`ViewModel` + `StateFlow`、建構子注入 |
+| 網路套件 | 系統 `URLSession`（沒有第三方） | OkHttp 4（HTTP 與 WebSocket）、Gson |
+| 資料庫 | 沒有常駐資料庫。Keychain 存 token，Core Data 只在示範單元 | 沒有 Room。DataStore Preferences + Tink 加密存 token |
+
+## iOS App
+
+### 1. UI 架構：SwiftUI + ViewModel
+
+- 進入點一個 `WindowGroup`，首頁是單一 `NavigationStack(path:)`，路徑用 enum，沒有 TabView、沒有 coordinator。
+- ViewModel 是 `ObservableObject`（iOS 17 的單元示範 `@Observable`）。誰建立誰擁有：view 自己建的用 `@StateObject`。
+- 模組之間用「小介面 + 建構子注入」，沒有 DI 框架。
+
+```swift
+// 誰建立，誰擁有：view 自己建的 ViewModel 用 @StateObject（@State 不會觀察 @Published）
+final class TickerViewModel: ObservableObject {
+    @Published var price: Decimal = 0
+}
+
+struct TickerScreen: View {
+    @StateObject private var vm = TickerViewModel()
+    var body: some View {
+        Text("BTC/JPY \(vm.price)")
+            .task { await vm.feed() }
+    }
+}
+
+// 依賴方向：下單模組自己宣告需要什麼，行情模組去實作，從外面注入
+protocol PriceProviding { var lastPrice: Decimal { get } }
+
+final class OrderPreview {
+    private let prices: PriceProviding
+    init(prices: PriceProviding) { self.prices = prices }
+    func estimate(quantity: Decimal) -> Decimal { quantity * prices.lastPrice }
+}
+```
+
+### 2. 網路套件：URLSession
+
+- 只用 `URLSession` + async/await，沒有 Alamofire。
+- 兩種逾時要分清楚：`timeoutIntervalForRequest` 是「兩次收到資料之間的空檔」，`timeoutIntervalForResource` 才是整個請求的總時限。
+- WebSocket 的演練用程式內的假伺服器示範 gzip frame、心跳、重連。
+
+```swift
+let config = URLSessionConfiguration.ephemeral
+config.timeoutIntervalForRequest = 1    // 兩次收到資料之間最多等 1 秒
+config.timeoutIntervalForResource = 1   // 整個請求總共最多 1 秒
+let session = URLSession(configuration: config)
+
+do {
+    let (data, _) = try await session.data(from: url)
+    let order = try JSONDecoder().decode(Order.self, from: data)
+} catch let error as URLError where error.code == .timedOut {
+    // 逾時
+}
+```
+
+### 3. 資料庫：Keychain、Core Data
+
+- App 本身沒有資料庫。Token 這類機密存 Keychain，不存 `UserDefaults`。
+- Core Data 只在安全儲存單元示範：每個 context 有自己的物件，畫面不要直接拿 `NSManagedObject`；資料庫存取包在 actor 裡，對外只傳獨立的 struct。
+
+```swift
+// Keychain：存、讀、刪
+let base: [String: Any] = [
+    kSecClass as String: kSecClassGenericPassword,
+    kSecAttrService as String: "tw.harry.labs",
+    kSecAttrAccount as String: "accessToken",
+]
+
+func save(_ token: String) {
+    SecItemDelete(base as CFDictionary)           // 先刪舊的，避免重複
+    var add = base
+    add[kSecValueData as String] = Data(token.utf8)
+    add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    SecItemAdd(add as CFDictionary, nil)
+}
+
+func load() -> String? {
+    var query = base
+    query[kSecReturnData as String] = true
+    var item: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+          let data = item as? Data else { return nil }
+    return String(data: data, encoding: .utf8)
+}
+```
+
+```swift
+// Core Data：存取包在 actor 裡，對外只回傳獨立的 struct
+struct OrderModel { let symbol: String; let status: String }
+
+actor OrderStore {
+    private let context: NSManagedObjectContext
+    init(container: NSPersistentContainer) {
+        context = container.newBackgroundContext()
+    }
+
+    func markFilled() async {
+        await context.perform { [context] in
+            let req = NSFetchRequest<NSManagedObject>(entityName: "Order")
+            (try? context.fetch(req))?.first?.setValue("Filled", forKey: "status")
+            try? context.save()
+        }
+    }
+
+    func all() async -> [OrderModel] {
+        await context.perform { [context] in
+            let req = NSFetchRequest<NSManagedObject>(entityName: "Order")
+            return ((try? context.fetch(req)) ?? []).map {
+                OrderModel(symbol: $0.value(forKey: "symbol") as? String ?? "",
+                           status: $0.value(forKey: "status") as? String ?? "")
+            }
+        }
+    }
+}
+```
+
+## Android App
+
+### 1. UI 架構：Compose + ViewModel
+
+- 單一 Activity，`setContent` 放一個 root composable；畫面由一個 `rememberSaveable` 的 route 字串決定，`BackHandler` 往回，沒有 navigation-compose。
+- ViewModel 用 `StateFlow` 對外，畫面用 `collectAsStateWithLifecycle()` 收。
+- 一樣是「小 interface + 建構子注入」，沒有 Hilt。
+
+```kotlin
+// 單一 Activity，route 用字串
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { MaterialTheme { Root() } }
+    }
+}
+
+@Composable
+fun Root() {
+    var route by rememberSaveable { mutableStateOf("") }   // "" 首頁、"Kotlin03/L05" 演練
+    BackHandler(enabled = route.isNotEmpty()) { route = route.substringBeforeLast('/', "") }
+    when {
+        route.isEmpty() -> Home(onOpen = { route = it })
+        else -> LabScreen(route)
+    }
+}
+
+// ViewModel + StateFlow
+class OrderViewModel(private val prices: PriceProvider) : ViewModel() {
+    private val _state = MutableStateFlow(OrderUiState())
+    val state: StateFlow<OrderUiState> = _state.asStateFlow()
+
+    fun setQty(qty: String) = _state.update { it.copy(qty = qty) }
+}
+
+@Composable
+fun OrderScreen(vm: OrderViewModel) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    Text("成本 ${state.qty}")
+}
+
+// 依賴方向：下單模組自己宣告 interface，從外面注入
+interface PriceProvider { val lastPrice: BigDecimal }
+class OrderPreview(private val prices: PriceProvider) {
+    fun estimate(quantity: BigDecimal) = quantity * prices.lastPrice
+}
+```
+
+### 2. 網路套件：OkHttp + Gson
+
+- 沒有 Retrofit、Ktor。直接用 OkHttp，看得到逾時、連線池、WebSocket frame。
+- `readTimeout` 是「兩次讀取之間最久等多久」，`callTimeout` 才是整個呼叫的總時限。
+- JSON 用 Gson（Android 內建的 `org.json` 在 JVM 單元測試是空殼）。
+
+```kotlin
+val client = OkHttpClient.Builder()
+    .readTimeout(1, TimeUnit.SECONDS)   // 兩次讀取之間最多等 1 秒
+    .callTimeout(1, TimeUnit.SECONDS)   // 整個呼叫總共最多 1 秒
+    .build()
+
+// HTTP
+val request = Request.Builder().url(url).build()
+client.newCall(request).execute().use { response ->
+    val order = Gson().fromJson(response.body!!.string(), Order::class.java)
+}
+
+// WebSocket（交易所行情：每則訊息是 gzip 的 binary frame）
+val ws = client.newWebSocket(
+    Request.Builder().url(wsUrl).build(),
+    object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            webSocket.send("""{"sub":"market.btcjpy.depth.step0"}""")
+        }
+        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            val json = gunzip(bytes.toByteArray())          // onMessage 在背景執行緒
+            val obj = JsonParser.parseString(json).asJsonObject
+            if (obj.has("ping")) webSocket.send("""{"pong":${obj["ping"]}}""")
+        }
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            // 重連：退避 + jitter，連上後重新訂閱
+        }
+    },
+)
+```
+
+### 3. 資料庫：DataStore + Tink
+
+- App 本身沒有 Room。偏好與 token 用 DataStore Preferences。
+- Token 不能明文存：用 Tink 的 `Aead` 加密後只存密文，associated data 綁定用途。
+
+```kotlin
+private val tokenKey = stringPreferencesKey("accessToken")
+
+fun newAead(): Aead {
+    AeadConfig.register()
+    val keyset = KeysetHandle.generateNew(KeyTemplates.get("AES256_GCM"))
+    return keyset.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
+}
+
+class TokenStore(
+    private val dataStore: DataStore<Preferences>,
+    private val aead: Aead,
+) {
+    private val associatedData = "access_token".toByteArray()
+
+    suspend fun save(token: String) {
+        val cipherText = aead.encrypt(token.toByteArray(), associatedData)
+        dataStore.edit { it[tokenKey] = Base64.getEncoder().encodeToString(cipherText) }
+    }
+
+    suspend fun load(): String? {
+        val stored = dataStore.data.first()[tokenKey] ?: return null
+        return String(aead.decrypt(Base64.getDecoder().decode(stored), associatedData))
+    }
+}
+```
+
+## 面試常問的五題（兩個 App 的回答）
+
+### 1. iOS 用了哪些語言、框架、架構
+
+- **語言**：Swift（語言模式 5，Swift 6 工具鏈），少量 Objective-C 做對照。
+- **框架**：SwiftUI 為主，UIKit 只在對照單元（`UIViewRepresentable`、`UITableView`）。Swift Concurrency（async/await、actor）、Combine、`URLSession`、Keychain（`Security`）、Core Data、`CryptoKit`、`BackgroundTasks`。
+- **架構**：MVVM。View 擁有 ViewModel（`@StateObject`／`@Observable`），ViewModel 透過 protocol 依賴資料層，建構子注入，不用 DI 框架。單一 `NavigationStack`，路徑是 enum。
+
+### 2. Android 用了哪些語言、框架、架構
+
+- **語言**：Kotlin 2.2。
+- **框架**：Jetpack Compose（Material 3）、`ViewModel`、`lifecycle-runtime-compose`、kotlinx.coroutines／Flow、OkHttp、Gson、DataStore Preferences、Tink、WorkManager、`BiometricPrompt`。測試用 JUnit 4、Turbine、MockK、Robolectric、MockWebServer。
+- **架構**：MVVM + 單向資料流。ViewModel 對外只露 `StateFlow<UiState>`，畫面用 `collectAsStateWithLifecycle()` 收。單一 Activity，route 字串 + `BackHandler`。建構子注入，不用 Hilt。
+
+### 3. 兩個平台怎麼設計頁面、管理狀態、處理網路
+
+| | iOS | Android |
+|---|---|---|
+| 頁面 | SwiftUI 宣告式，`body` 只依賴 state；列表用 `List`／`LazyVStack`，`id` 要穩定 | Compose 宣告式，`LazyColumn` 加 `key`；重組範圍要小，state 往下傳、事件往上傳 |
+| 狀態 | 畫面內 `@State`；跨畫面 `ObservableObject` + `@Published`；只在需要的欄位上觀察，行情高頻更新要合併（conflation）再推給畫面 | `mutableStateOf` 給畫面內；`ViewModel` 的 `MutableStateFlow` 用 `update { copy() }`；大 UiState 拆小，避免一個價格變動重組整頁 |
+| 網路 | `URLSession` + async/await；逾時分 request／resource；401 只刷新一次；重試加 jitter；下單帶 `clientOrderId` 避免重送變兩張單 | OkHttp；逾時分 `readTimeout`／`callTimeout`；WebSocket 用 `WebSocketListener`，解壓與解析在背景執行緒；重試與去重規則同 iOS |
+
+### 4. 生命週期、背景切換、異常恢復
+
+- **生命週期**：iOS `scenePhase` 的 `.inactive`（下拉通知中心）不是進背景，不要斷線；Android `onStop` 是單一 Activity 的事件，App 是否進背景要看 `ProcessLifecycleOwner`。訂閱放在 `.task`／`repeatOnLifecycle(STARTED)`，離開畫面自動取消。
+- **背景切換**：進背景先存草稿、斷 WebSocket；回前景「先抓快照、再重新訂閱」，補上背景期間漏掉的 K 線。背景更新 iOS 用 `BGAppRefreshTask`（每次要先排下一次），Android 用 WorkManager（週期最短 15 分鐘）；靜默推播在 Doze／低電量不保證到。
+- **程序被殺**：iOS 用 state restoration 存表單，Android 用 `SavedStateHandle`。回來後不要盲目重送：先用 `clientOrderId` 查詢訂單狀態，再決定要不要重下。
+- **重連**：連線狀態機（背景時不准重連），指數退避 + jitter，連上後不要立刻把失敗次數歸零；心跳偵測半開連線；一個 App 只有一條連線，各畫面共用，避免重複訂閱。
+- **當機**：不強制解包／`!!`，欄位缺了就降級；只掛一個 uncaught exception handler 並串接前一個；取消（`CancellationError`／`CancellationException`）不是錯誤，不要回報；主執行緒卡住偵測放在別的執行緒；背景被系統回收不算 OOM。
+
+### 5. 怎麼保證兩個平台的功能表現一致
+
+- **同一份規格**：每個單元在複習站、iOS、Android 用同一個代號（`Exchange04Reconnect`），同一題的 Bug 版與修正版兩邊各寫一次，`labs/topics.yaml` 是單一來源。
+- **邏輯層平台無關**：重連狀態機、逾時與重試規則、`clientOrderId` 去重、價格精度（`Decimal`／`BigDecimal`）、簽名演算法，兩邊用同樣的純函式設計，只換語言。
+- **自動檢查**：每個演練有 `checkBug`／`checkFixed`，iOS 用 `check.sh selftest` 在模擬器跑，Android 用 `testDebugUnitTest` 在 JVM 跑，兩邊的預期結果寫成同一段文字。
+- **差異寫明**：平台真的不同的地方（JVM 的 GC 不會因循環參考洩漏、`org.json` 在 JVM 是空殼、WorkManager 最短 15 分鐘）在對照單元裡直接標出來，不假裝一樣。
