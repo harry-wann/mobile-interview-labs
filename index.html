@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>技術面試強化學習手冊｜面試強化手冊</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17616e">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --paper:#f7f5f0; --card:#fffdf8; --ink:#2b2a26; --muted:#6f6a5e;
+  --accent:#17616e; --accent-soft:#e3eef0; --line:#e2ddd2; --mark:#b4530a;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:16px;line-height:1.85}
+.topbar{position:sticky;top:0;z-index:10;display:flex;gap:1.5rem;align-items:center;
+  background:var(--card);border-bottom:1px solid var(--line);padding:.7rem 1.4rem}
+.brand{font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.05em}
+.topbar nav{display:flex;gap:.2rem;flex-wrap:wrap}
+.topbar nav a{color:var(--muted);text-decoration:none;padding:.3rem .7rem;border-radius:6px;font-size:.92rem}
+.topbar nav a:hover{background:var(--accent-soft);color:var(--accent)}
+.topbar nav a.active{background:var(--accent);color:#fff}
+.layout{display:flex;max-width:1200px;margin:0 auto;align-items:flex-start}
+.sidebar{position:sticky;top:3.6rem;width:230px;flex:none;padding:1.6rem 1rem;
+  max-height:calc(100vh - 4rem);overflow:auto}
+.sidebar-title{font-size:.78rem;letter-spacing:.15em;color:var(--muted);margin-bottom:.5rem}
+.sidebar ul{list-style:none;margin:0 0 1.2rem;padding:0}
+.sidebar li{margin:.15rem 0}
+.sidebar a{color:var(--muted);text-decoration:none;font-size:.88rem;display:block;
+  padding:.22rem .5rem;border-left:2px solid transparent;border-radius:0 6px 6px 0}
+.sidebar a:hover{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+.content{flex:1;min-width:0;padding:2rem 2.4rem 4rem}
+article{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:2.4rem 2.8rem;box-shadow:0 1px 3px rgba(60,50,30,.05)}
+h1{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.75rem;line-height:1.4;
+  border-bottom:3px double var(--line);padding-bottom:.7rem;margin-top:0}
+h2{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.32rem;margin-top:2.6em;
+  padding-left:.65rem;border-left:4px solid var(--accent)}
+h3{font-size:1.08rem;margin-top:2em;color:var(--accent)}
+a{color:var(--accent)}
+blockquote{margin:1.2em 0;padding:.8em 1.2em;background:var(--accent-soft);
+  border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3c4b4e}
+blockquote p{margin:.3em 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:.92rem}
+th,td{border:1px solid var(--line);padding:.5em .8em;text-align:left;vertical-align:top}
+th{background:#efece3}
+tr:nth-child(even) td{background:#fbf9f3}
+code{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:.86em;
+  background:#eeeae0;padding:.12em .4em;border-radius:4px}
+.hl{background:#2d2a24;border-radius:10px;padding:1em 1.2em;overflow-x:auto;
+  margin:1.2em 0;font-size:.85rem;line-height:1.65}
+.hl code{background:none;padding:0;color:#e8e3d8}
+.hl pre{margin:0}
+details.exercise{margin:1.4em 0;border:1px solid #d8b98f;border-radius:10px;
+  background:#fdf6ea;overflow:hidden}
+details.exercise summary{cursor:pointer;padding:.75em 1.1em;font-weight:600;
+  color:var(--mark);list-style:none;user-select:none}
+details.exercise summary::before{content:"▸ ";transition:.15s}
+details.exercise[open] summary::before{content:"▾ "}
+details.exercise summary:hover{background:#f8edda}
+.exercise-body{padding:.2em 1.3em 1em;border-top:1px dashed #e4cfa8}
+figure.diagram{margin:1.6em 0;padding:1.2em;background:#fff;border:1px solid var(--line);
+  border-radius:10px;text-align:center;overflow-x:auto}
+li.check{list-style:none;margin-left:-1.2em}
+li.check label{display:flex;gap:.6em;align-items:baseline;cursor:pointer;
+  padding:.3em .6em;border-radius:8px}
+li.check label:hover{background:var(--accent-soft)}
+li.check input{accent-color:var(--accent);transform:translateY(2px) scale(1.15)}
+li.check input:checked + *{}
+li.check:has(input:checked) label{color:var(--muted);text-decoration:line-through}
+.pager{display:flex;justify-content:space-between;margin-top:1.6rem;gap:1rem}
+.pager a{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.8rem 1.1rem;text-decoration:none;color:var(--ink)}
+.pager a:hover{border-color:var(--accent)}
+.pager .dir{display:block;font-size:.75rem;color:var(--muted);letter-spacing:.1em}
+.pager .next{text-align:right}
+.progress-track{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
+.progress-text{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+@media(max-width:900px){
+  .sidebar{display:none}
+  .content{padding:1rem}
+  article{padding:1.4rem 1.2rem}
+}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ebdbb2 }
+.hl { background: #282828; color: #DDD }
+.hl .c { color: #928374; font-style: italic } /* Comment */
+.hl .err { color: #282828; background-color: #FB4934 } /* Error */
+.hl .esc { color: #DDD } /* Escape */
+.hl .g { color: #DDD } /* Generic */
+.hl .k { color: #FB4934 } /* Keyword */
+.hl .l { color: #DDD } /* Literal */
+.hl .n { color: #DDD } /* Name */
+.hl .o { color: #DDD } /* Operator */
+.hl .x { color: #DDD } /* Other */
+.hl .p { color: #DDD } /* Punctuation */
+.hl .ch { color: #928374; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #928374; font-style: italic } /* Comment.Multiline */
+.hl .c-PreProc { color: #8EC07C; font-style: italic } /* Comment.PreProc */
+.hl .cp { color: #928374; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #928374; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #928374; font-style: italic } /* Comment.Single */
+.hl .cs { color: #EBDBB2; font-weight: bold; font-style: italic } /* Comment.Special */
+.hl .gd { color: #282828; background-color: #FB4934 } /* Generic.Deleted */
+.hl .ge { color: #DDD; font-style: italic } /* Generic.Emph */
+.hl .ges { color: #DDD; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.hl .gr { color: #FB4934 } /* Generic.Error */
+.hl .gh { color: #EBDBB2; font-weight: bold } /* Generic.Heading */
+.hl .gi { color: #282828; background-color: #B8BB26 } /* Generic.Inserted */
+.hl .go { color: #F2E5BC } /* Generic.Output */
+.hl .gp { color: #A89984 } /* Generic.Prompt */
+.hl .gs { color: #DDD; font-weight: bold } /* Generic.Strong */
+.hl .gu { color: #EBDBB2; text-decoration: underline } /* Generic.Subheading */
+.hl .gt { color: #FB4934 } /* Generic.Traceback */
+.hl .kc { color: #FB4934 } /* Keyword.Constant */
+.hl .kd { color: #FB4934 } /* Keyword.Declaration */
+.hl .kn { color: #FB4934 } /* Keyword.Namespace */
+.hl .kp { color: #FB4934 } /* Keyword.Pseudo */
+.hl .kr { color: #FB4934 } /* Keyword.Reserved */
+.hl .kt { color: #FB4934 } /* Keyword.Type */
+.hl .ld { color: #DDD } /* Literal.Date */
+.hl .m { color: #D3869B } /* Literal.Number */
+.hl .s { color: #B8BB26 } /* Literal.String */
+.hl .na { color: #FABD2F } /* Name.Attribute */
+.hl .nb { color: #FE8019 } /* Name.Builtin */
+.hl .nc { color: #8EC07C } /* Name.Class */
+.hl .no { color: #D3869B } /* Name.Constant */
+.hl .nd { color: #FB4934 } /* Name.Decorator */
+.hl .ni { color: #DDD } /* Name.Entity */
+.hl .ne { color: #FB4934 } /* Name.Exception */
+.hl .nf { color: #8EC07C } /* Name.Function */
+.hl .nl { color: #DDD } /* Name.Label */
+.hl .nn { color: #8EC07C } /* Name.Namespace */
+.hl .nx { color: #DDD } /* Name.Other */
+.hl .py { color: #DDD } /* Name.Property */
+.hl .nt { color: #8EC07C } /* Name.Tag */
+.hl .nv { color: #83A598 } /* Name.Variable */
+.hl .ow { color: #FB4934 } /* Operator.Word */
+.hl .pm { color: #DDD } /* Punctuation.Marker */
+.hl .w { color: #DDD } /* Text.Whitespace */
+.hl .mb { color: #D3869B } /* Literal.Number.Bin */
+.hl .mf { color: #D3869B } /* Literal.Number.Float */
+.hl .mh { color: #D3869B } /* Literal.Number.Hex */
+.hl .mi { color: #D3869B } /* Literal.Number.Integer */
+.hl .mo { color: #D3869B } /* Literal.Number.Oct */
+.hl .sa { color: #B8BB26 } /* Literal.String.Affix */
+.hl .sb { color: #B8BB26 } /* Literal.String.Backtick */
+.hl .sc { color: #B8BB26 } /* Literal.String.Char */
+.hl .dl { color: #B8BB26 } /* Literal.String.Delimiter */
+.hl .sd { color: #B8BB26 } /* Literal.String.Doc */
+.hl .s2 { color: #B8BB26 } /* Literal.String.Double */
+.hl .se { color: #FE8019 } /* Literal.String.Escape */
+.hl .sh { color: #B8BB26 } /* Literal.String.Heredoc */
+.hl .si { color: #B8BB26 } /* Literal.String.Interpol */
+.hl .sx { color: #B8BB26 } /* Literal.String.Other */
+.hl .sr { color: #B8BB26 } /* Literal.String.Regex */
+.hl .s1 { color: #B8BB26 } /* Literal.String.Single */
+.hl .ss { color: #B8BB26 } /* Literal.String.Symbol */
+.hl .bp { color: #FE8019 } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8EC07C } /* Name.Function.Magic */
+.hl .vc { color: #83A598 } /* Name.Variable.Class */
+.hl .vg { color: #83A598 } /* Name.Variable.Global */
+.hl .vi { color: #83A598 } /* Name.Variable.Instance */
+.hl .vm { color: #83A598 } /* Name.Variable.Magic */
+.hl .il { color: #D3869B } /* Literal.Number.Integer.Long */</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">面試強化手冊</a>
+  <nav><a href="index.html" class="active">首頁</a><a href="java.html" class="">Java</a><a href="objc.html" class="">Objective-C</a><a href="architecture.html" class="">架構設計</a><a href="ds.html" class="">資料結構</a><a href="concurrency.html" class="">多執行緒</a></nav>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">本章目錄</div>
+    <ul><li><a href="#_2">五個章節</a></li><li><a href="#_3">建議讀法</a></li></ul>
+    <div class="progress-box" id="progressBox" hidden>
+      <div class="sidebar-title">檢核進度</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+  </aside>
+  <main class="content">
+    <article><h1 id="_1">技術面試強化學習手冊</h1>
+<p>這份手冊把交易所 Mobile 工程師面試的重點方向,整理成可互動的學習教材:每章都有<strong>語法/概念講解、使用情境、隨堂練習(點擊展開解答)</strong>,以及章末的<strong>自我檢核清單</strong>(可勾選,進度會記在瀏覽器裡)。</p>
+<h2 id="_2">五個章節</h2>
+<ol>
+<li><strong><a href="java.html">Java 基礎到進階</a></strong> — 型別系統、物件導向、集合框架、泛型、例外、Lambda/Stream、並發、JVM。每個主題都附「什麼情境用它」與高頻面試題。</li>
+<li><strong><a href="objc.html">Objective-C 完整教學</a></strong> — 從心智模型到進階語法,每節對照 Swift;最後用一個小 App「CoinTracker」把所有語法實際用一遍,並附概念對照表。</li>
+<li><strong><a href="architecture.html">交易所 App 架構設計</a></strong> — 從需求特性推導分層架構,行情資料流、下單正確性、安全設計、模組化,附架構圖與一分鐘總結版。</li>
+<li><strong><a href="ds.html">資料結構基礎到進階</a></strong> — 複雜度、九大結構的「長相/速度/時機」、排序,與交易所情境的綜合面試題組。</li>
+<li><strong><a href="concurrency.html">多執行緒安全:四語言對照</a></strong> — 原子性/可見性/死結的原理,Swift、Objective-C、Java、Kotlin 各自的工具箱,並用同一個「行情快取」場景以四種語言實作對照,附實務事故案例分析。</li>
+</ol>
+<h2 id="_3">建議讀法</h2>
+<ul>
+<li><strong>第一輪(理解)</strong>:照章節順序讀,每個隨堂練習先自己想過再點開解答。</li>
+<li><strong>第二輪(動手)</strong>:Java 章的綜合實作、Objective-C 的 CoinTracker 實際在 IDE/Xcode 做出來。</li>
+<li><strong>面試前一天</strong>:只看各章的「自我檢核清單」與速查表,沒把握的條目回去重讀該節。</li>
+</ul>
+<blockquote>
+<p>小提醒:面試回答的通用結構是「<strong>結論 → 原因 → 取捨 → 實例</strong>」。例如被問 HashMap:先說是什麼、再講原理、然後說什麼情況不該用它、最後舉一個你用過的場景。</p>
+</blockquote></article>
+    <nav class="pager"><a class="next" href="java.html"><span class="dir">下一章 →</span>Java 基礎到進階</a></nav>
+  </main>
+</div>
+<script>
+(function(){
+  var store = {get:function(k){try{return localStorage.getItem(k)}catch(e){return this._m&&this._m[k]||null}},
+               set:function(k,v){try{localStorage.setItem(k,v)}catch(e){this._m=this._m||{};this._m[k]=v}}};
+  var boxes = document.querySelectorAll('li.check input');
+  function refresh(){
+    if(!boxes.length) return;
+    var done = 0;
+    boxes.forEach(function(b){ if(b.checked) done++; });
+    var pb = document.getElementById('progressBox');
+    if(pb){ pb.hidden = false;
+      document.getElementById('progressFill').style.width = Math.round(done/boxes.length*100)+'%';
+      document.getElementById('progressText').textContent = '已完成 '+done+' / '+boxes.length+' 項';
+    }
+  }
+  boxes.forEach(function(b){
+    if(store.get('chk-'+b.dataset.key)==='1') b.checked = true;
+    b.addEventListener('change',function(){
+      store.set('chk-'+b.dataset.key, b.checked?'1':'0'); refresh();
+    });
+  });
+  refresh();
+  // PWA:支援的環境(如 GitHub Pages)註冊 service worker;不支援時靜默略過
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

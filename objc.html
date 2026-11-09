@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objective-C 完整教學｜面試強化手冊</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17616e">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --paper:#f7f5f0; --card:#fffdf8; --ink:#2b2a26; --muted:#6f6a5e;
+  --accent:#17616e; --accent-soft:#e3eef0; --line:#e2ddd2; --mark:#b4530a;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:16px;line-height:1.85}
+.topbar{position:sticky;top:0;z-index:10;display:flex;gap:1.5rem;align-items:center;
+  background:var(--card);border-bottom:1px solid var(--line);padding:.7rem 1.4rem}
+.brand{font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.05em}
+.topbar nav{display:flex;gap:.2rem;flex-wrap:wrap}
+.topbar nav a{color:var(--muted);text-decoration:none;padding:.3rem .7rem;border-radius:6px;font-size:.92rem}
+.topbar nav a:hover{background:var(--accent-soft);color:var(--accent)}
+.topbar nav a.active{background:var(--accent);color:#fff}
+.layout{display:flex;max-width:1200px;margin:0 auto;align-items:flex-start}
+.sidebar{position:sticky;top:3.6rem;width:230px;flex:none;padding:1.6rem 1rem;
+  max-height:calc(100vh - 4rem);overflow:auto}
+.sidebar-title{font-size:.78rem;letter-spacing:.15em;color:var(--muted);margin-bottom:.5rem}
+.sidebar ul{list-style:none;margin:0 0 1.2rem;padding:0}
+.sidebar li{margin:.15rem 0}
+.sidebar a{color:var(--muted);text-decoration:none;font-size:.88rem;display:block;
+  padding:.22rem .5rem;border-left:2px solid transparent;border-radius:0 6px 6px 0}
+.sidebar a:hover{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+.content{flex:1;min-width:0;padding:2rem 2.4rem 4rem}
+article{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:2.4rem 2.8rem;box-shadow:0 1px 3px rgba(60,50,30,.05)}
+h1{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.75rem;line-height:1.4;
+  border-bottom:3px double var(--line);padding-bottom:.7rem;margin-top:0}
+h2{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.32rem;margin-top:2.6em;
+  padding-left:.65rem;border-left:4px solid var(--accent)}
+h3{font-size:1.08rem;margin-top:2em;color:var(--accent)}
+a{color:var(--accent)}
+blockquote{margin:1.2em 0;padding:.8em 1.2em;background:var(--accent-soft);
+  border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3c4b4e}
+blockquote p{margin:.3em 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:.92rem}
+th,td{border:1px solid var(--line);padding:.5em .8em;text-align:left;vertical-align:top}
+th{background:#efece3}
+tr:nth-child(even) td{background:#fbf9f3}
+code{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:.86em;
+  background:#eeeae0;padding:.12em .4em;border-radius:4px}
+.hl{background:#2d2a24;border-radius:10px;padding:1em 1.2em;overflow-x:auto;
+  margin:1.2em 0;font-size:.85rem;line-height:1.65}
+.hl code{background:none;padding:0;color:#e8e3d8}
+.hl pre{margin:0}
+details.exercise{margin:1.4em 0;border:1px solid #d8b98f;border-radius:10px;
+  background:#fdf6ea;overflow:hidden}
+details.exercise summary{cursor:pointer;padding:.75em 1.1em;font-weight:600;
+  color:var(--mark);list-style:none;user-select:none}
+details.exercise summary::before{content:"▸ ";transition:.15s}
+details.exercise[open] summary::before{content:"▾ "}
+details.exercise summary:hover{background:#f8edda}
+.exercise-body{padding:.2em 1.3em 1em;border-top:1px dashed #e4cfa8}
+figure.diagram{margin:1.6em 0;padding:1.2em;background:#fff;border:1px solid var(--line);
+  border-radius:10px;text-align:center;overflow-x:auto}
+li.check{list-style:none;margin-left:-1.2em}
+li.check label{display:flex;gap:.6em;align-items:baseline;cursor:pointer;
+  padding:.3em .6em;border-radius:8px}
+li.check label:hover{background:var(--accent-soft)}
+li.check input{accent-color:var(--accent);transform:translateY(2px) scale(1.15)}
+li.check input:checked + *{}
+li.check:has(input:checked) label{color:var(--muted);text-decoration:line-through}
+.pager{display:flex;justify-content:space-between;margin-top:1.6rem;gap:1rem}
+.pager a{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.8rem 1.1rem;text-decoration:none;color:var(--ink)}
+.pager a:hover{border-color:var(--accent)}
+.pager .dir{display:block;font-size:.75rem;color:var(--muted);letter-spacing:.1em}
+.pager .next{text-align:right}
+.progress-track{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
+.progress-text{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+@media(max-width:900px){
+  .sidebar{display:none}
+  .content{padding:1rem}
+  article{padding:1.4rem 1.2rem}
+}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ebdbb2 }
+.hl { background: #282828; color: #DDD }
+.hl .c { color: #928374; font-style: italic } /* Comment */
+.hl .err { color: #282828; background-color: #FB4934 } /* Error */
+.hl .esc { color: #DDD } /* Escape */
+.hl .g { color: #DDD } /* Generic */
+.hl .k { color: #FB4934 } /* Keyword */
+.hl .l { color: #DDD } /* Literal */
+.hl .n { color: #DDD } /* Name */
+.hl .o { color: #DDD } /* Operator */
+.hl .x { color: #DDD } /* Other */
+.hl .p { color: #DDD } /* Punctuation */
+.hl .ch { color: #928374; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #928374; font-style: italic } /* Comment.Multiline */
+.hl .c-PreProc { color: #8EC07C; font-style: italic } /* Comment.PreProc */
+.hl .cp { color: #928374; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #928374; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #928374; font-style: italic } /* Comment.Single */
+.hl .cs { color: #EBDBB2; font-weight: bold; font-style: italic } /* Comment.Special */
+.hl .gd { color: #282828; background-color: #FB4934 } /* Generic.Deleted */
+.hl .ge { color: #DDD; font-style: italic } /* Generic.Emph */
+.hl .ges { color: #DDD; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.hl .gr { color: #FB4934 } /* Generic.Error */
+.hl .gh { color: #EBDBB2; font-weight: bold } /* Generic.Heading */
+.hl .gi { color: #282828; background-color: #B8BB26 } /* Generic.Inserted */
+.hl .go { color: #F2E5BC } /* Generic.Output */
+.hl .gp { color: #A89984 } /* Generic.Prompt */
+.hl .gs { color: #DDD; font-weight: bold } /* Generic.Strong */
+.hl .gu { color: #EBDBB2; text-decoration: underline } /* Generic.Subheading */
+.hl .gt { color: #FB4934 } /* Generic.Traceback */
+.hl .kc { color: #FB4934 } /* Keyword.Constant */
+.hl .kd { color: #FB4934 } /* Keyword.Declaration */
+.hl .kn { color: #FB4934 } /* Keyword.Namespace */
+.hl .kp { color: #FB4934 } /* Keyword.Pseudo */
+.hl .kr { color: #FB4934 } /* Keyword.Reserved */
+.hl .kt { color: #FB4934 } /* Keyword.Type */
+.hl .ld { color: #DDD } /* Literal.Date */
+.hl .m { color: #D3869B } /* Literal.Number */
+.hl .s { color: #B8BB26 } /* Literal.String */
+.hl .na { color: #FABD2F } /* Name.Attribute */
+.hl .nb { color: #FE8019 } /* Name.Builtin */
+.hl .nc { color: #8EC07C } /* Name.Class */
+.hl .no { color: #D3869B } /* Name.Constant */
+.hl .nd { color: #FB4934 } /* Name.Decorator */
+.hl .ni { color: #DDD } /* Name.Entity */
+.hl .ne { color: #FB4934 } /* Name.Exception */
+.hl .nf { color: #8EC07C } /* Name.Function */
+.hl .nl { color: #DDD } /* Name.Label */
+.hl .nn { color: #8EC07C } /* Name.Namespace */
+.hl .nx { color: #DDD } /* Name.Other */
+.hl .py { color: #DDD } /* Name.Property */
+.hl .nt { color: #8EC07C } /* Name.Tag */
+.hl .nv { color: #83A598 } /* Name.Variable */
+.hl .ow { color: #FB4934 } /* Operator.Word */
+.hl .pm { color: #DDD } /* Punctuation.Marker */
+.hl .w { color: #DDD } /* Text.Whitespace */
+.hl .mb { color: #D3869B } /* Literal.Number.Bin */
+.hl .mf { color: #D3869B } /* Literal.Number.Float */
+.hl .mh { color: #D3869B } /* Literal.Number.Hex */
+.hl .mi { color: #D3869B } /* Literal.Number.Integer */
+.hl .mo { color: #D3869B } /* Literal.Number.Oct */
+.hl .sa { color: #B8BB26 } /* Literal.String.Affix */
+.hl .sb { color: #B8BB26 } /* Literal.String.Backtick */
+.hl .sc { color: #B8BB26 } /* Literal.String.Char */
+.hl .dl { color: #B8BB26 } /* Literal.String.Delimiter */
+.hl .sd { color: #B8BB26 } /* Literal.String.Doc */
+.hl .s2 { color: #B8BB26 } /* Literal.String.Double */
+.hl .se { color: #FE8019 } /* Literal.String.Escape */
+.hl .sh { color: #B8BB26 } /* Literal.String.Heredoc */
+.hl .si { color: #B8BB26 } /* Literal.String.Interpol */
+.hl .sx { color: #B8BB26 } /* Literal.String.Other */
+.hl .sr { color: #B8BB26 } /* Literal.String.Regex */
+.hl .s1 { color: #B8BB26 } /* Literal.String.Single */
+.hl .ss { color: #B8BB26 } /* Literal.String.Symbol */
+.hl .bp { color: #FE8019 } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8EC07C } /* Name.Function.Magic */
+.hl .vc { color: #83A598 } /* Name.Variable.Class */
+.hl .vg { color: #83A598 } /* Name.Variable.Global */
+.hl .vi { color: #83A598 } /* Name.Variable.Instance */
+.hl .vm { color: #83A598 } /* Name.Variable.Magic */
+.hl .il { color: #D3869B } /* Literal.Number.Integer.Long */</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">面試強化手冊</a>
+  <nav><a href="index.html" class="">首頁</a><a href="java.html" class="">Java</a><a href="objc.html" class="active">Objective-C</a><a href="architecture.html" class="">架構設計</a><a href="ds.html" class="">資料結構</a><a href="concurrency.html" class="">多執行緒</a></nav>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">本章目錄</div>
+    <ul><li><a href="#1-objective-c">1. 心智模型:Objective-C 是什麼</a></li><li><a href="#2">2. 從零開始:變數、印出、流程控制、方法呼叫</a></li><li><a href="#3-nsarray-nsdictionary-nsset">3. 集合:NSArray / NSDictionary / NSSet</a></li><li><a href="#4">4. 類別完整寫法:屬性、初始化、方法</a></li><li><a href="#5-arc">5. 記憶體管理:ARC 與循環參考</a></li><li><a href="#6-protocol-delegate">6. 協定(Protocol)與 Delegate 模式</a></li><li><a href="#7-blockobjective-c">7. Block(Objective-C 的閉包)</a></li><li><a href="#8-categoryextension">8. 分類(Category)與擴展(Extension)</a></li><li><a href="#9-kvc-kvo-nsnotificationcenter">9. KVC / KVO 與 NSNotificationCenter</a></li><li><a href="#10-gcd">10. GCD:多執行緒</a></li><li><a href="#11">11. 其他必知語法速查</a></li><li><a href="#121-modelcoinns_enum">12.1 Model:Coin(用到:屬性修飾詞、初始化器、類別方法、NS_ENUM)</a></li><li><a href="#122-category-nsstring-category">12.2 Category:幫 NSString 加驗證(用到:Category)</a></li><li><a href="#123-servicedelegateblockgcdextensionnstimer">12.3 Service:模擬行情推送(用到:協定+delegate、block、GCD、extension、NSTimer)</a></li><li><a href="#124-viewcontrollerdelegate-kvonotification">12.4 ViewController(用到:delegate 實作、KVO、Notification、集合操作)</a></li><li><a href="#125-app">12.5 概念對照表:這個 App 練到了什麼</a></li><li><a href="#126">12.6 延伸挑戰(自行練習)</a></li><li><a href="#_1">自我檢核清單</a></li></ul>
+    <div class="progress-box" id="progressBox" hidden>
+      <div class="sidebar-title">檢核進度</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+  </aside>
+  <main class="content">
+    <article><h1 id="objective-c-app">Objective-C 完整教學:從零到寫出一個小 App</h1>
+<blockquote>
+<p>本章目標:<strong>從零開始</strong>學 Objective-C——從變數宣告、印出、流程控制一步步來,不假設你會 Swift(會一點 Java 或 JavaScript 就夠)。前半是語法教學,後半用一個小 App「<strong>CoinTracker 幣價追蹤器</strong>」把所有語法實際用一遍。
+各節附的「Swift 對照」是給之後學 Swift 時回頭看的,第一次讀跳過也完全不影響。
+為什麼要學:成立較久的交易所,App 裡幾乎一定有 Objective-C 舊程式碼,看懂並能維護它是行動工程師的實際需求。</p>
+</blockquote>
+<hr />
+<h2 id="1-objective-c">1. 心智模型:Objective-C 是什麼</h2>
+<p>(這一節先建立大方向,範例裡的語法第 2 節會從頭一個一個教——第一次看不懂很正常,讀完第 2 節回頭看就通了。)</p>
+<ul>
+<li>Objective-C = <strong>C 語言 + 物件系統</strong>。變數、if、for 這些基本語法和 Java 幾乎一樣(都源自 C)。</li>
+<li>物件方法的呼叫寫成<strong>中括號</strong>:<code>[obj doSomething]</code>,意思是「對 obj 送出 doSomething 這個訊息」——程式<strong>執行到那一刻</strong>才去找這個方法的實作(術語叫動態派發 dynamic dispatch)。</li>
+<li>一個類別拆成兩個檔案:<code>.h</code>(標頭檔 header,對外公開「我有哪些方法」)+ <code>.m</code>(實作檔 implementation,方法的內容)。Java 一個 class 一個檔案就好,這個分離是新手最先撞到的差異。</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="c1">// Greeter.h —— 對外公開的介面</span>
+<span class="cp">#import &lt;Foundation/Foundation.h&gt;</span>
+
+<span class="k">@interface</span> <span class="nc">Greeter</span> : <span class="bp">NSObject</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">greet:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">name</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="c1">// Greeter.m —— 實作</span>
+<span class="cp">#import "Greeter.h"</span>
+
+<span class="k">@implementation</span> <span class="nc">Greeter</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">greet:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">name</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[</span><span class="bp">NSString</span><span class="w"> </span><span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@"你好, %@!"</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">];</span>
+<span class="p">}</span>
+<span class="k">@end</span>
+
+<span class="c1">// 使用</span>
+<span class="n">Greeter</span><span class="w"> </span><span class="o">*</span><span class="n">g</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="n">Greeter</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">init</span><span class="p">];</span><span class="w">    </span><span class="c1">// 配置記憶體 + 初始化</span>
+<span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">message</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">g</span><span class="w"> </span><span class="n">greet</span><span class="o">:</span><span class="s">@"Harry"</span><span class="p">];</span><span class="w"> </span><span class="c1">// 送訊息</span>
+<span class="n">NSLog</span><span class="p">(</span><span class="s">@"%@"</span><span class="p">,</span><span class="w"> </span><span class="n">message</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>對照 Swift</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Swift</th>
+<th>Objective-C</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>let g = Greeter()</code></td>
+<td><code>Greeter *g = [[Greeter alloc] init];</code></td>
+</tr>
+<tr>
+<td><code>g.greet(name: "Harry")</code></td>
+<td><code>[g greet:@"Harry"]</code></td>
+</tr>
+<tr>
+<td><code>"你好 \(name)"</code></td>
+<td><code>[NSString stringWithFormat:@"你好 %@", name]</code></td>
+</tr>
+<tr>
+<td><code>print(x)</code></td>
+<td><code>NSLog(@"%@", x);</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>注意:物件變數<strong>一定是指標</strong>(<code>NSString *</code>),<code>@</code> 開頭的都是 Objective-C 的擴充(<code>@"字串"</code>、<code>@interface</code>、<code>@[]</code>…)。</p>
+</blockquote>
+<hr />
+<h2 id="2">2. 從零開始:變數、印出、流程控制、方法呼叫</h2>
+<h3 id="21">2.1 變數宣告與常數</h3>
+<p>格式和 Java 一樣:<strong>型別 名字 = 初始值;</strong>(每行結尾要分號)</p>
+<div class="hl"><pre><span></span><code><span class="c1">// --- 基本型別:值直接存在變數裡 ---</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">age</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">25</span><span class="p">;</span><span class="w">                </span><span class="c1">// 整數</span>
+<span class="kt">double</span><span class="w"> </span><span class="n">ratio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.75</span><span class="p">;</span><span class="w">         </span><span class="c1">// 小數</span>
+<span class="kt">BOOL</span><span class="w"> </span><span class="n">isOpen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">YES</span><span class="p">;</span><span class="w">           </span><span class="c1">// 布林值,寫 YES / NO(不是 true/false)</span>
+
+<span class="c1">// 實務上更常用這兩個(功能一樣,只是依平台自動選最佳大小):</span>
+<span class="n">NSInteger</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span><span class="w">        </span><span class="c1">// 取代 int</span>
+<span class="n">CGFloat</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">10.5</span><span class="p">;</span><span class="w">            </span><span class="c1">// 取代 double,UI 座標慣用</span>
+
+<span class="c1">// --- 常數:前面加 const,之後不能再改 ---</span>
+<span class="k">const</span><span class="w"> </span><span class="n">NSInteger</span><span class="w"> </span><span class="n">maxRetry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span>
+<span class="c1">// maxRetry = 5;   // ← 編譯錯誤</span>
+
+<span class="c1">// --- 字串:字串是「物件」,寫法有兩個新記號 ---</span>
+<span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">@"Harry"</span><span class="p">;</span>
+</code></pre></div>
+
+<p>字串那行拆開看,兩個新記號:</p>
+<ul>
+<li><strong><code>@"..."</code></strong>:Objective-C 的字串字面值。凡是 <code>@</code> 開頭的都是 Objective-C 對 C 的擴充(之後會看到 <code>@[]</code> 陣列、<code>@interface</code> 類別……)。</li>
+<li><strong><code>*</code>(指標)</strong>:基本型別的變數直接裝「值」;<strong>物件的變數裝的是「物件在記憶體裡的位址」</strong>,這種變數叫指標(pointer),宣告時名字前面加 <code>*</code>。</li>
+</ul>
+<p>先背兩條規則就能動手寫,原理後面章節慢慢懂:
+1. <strong>物件型別(大寫 NS 開頭的幾乎都是)→ 變數加 <code>*</code></strong>
+2. <strong>字串、陣列等字面值 → 前面加 <code>@</code></strong></p>
+<h3 id="22-nslog">2.2 印出:NSLog</h3>
+<div class="hl"><pre><span></span><code><span class="n">NSLog</span><span class="p">(</span><span class="s">@"Hello!"</span><span class="p">);</span><span class="w">                              </span><span class="c1">// 印固定文字</span>
+<span class="n">NSLog</span><span class="p">(</span><span class="s">@"你好, %@!"</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">);</span><span class="w">                     </span><span class="c1">// %@ = 這裡放一個「物件」(字串、陣列…)</span>
+<span class="n">NSLog</span><span class="p">(</span><span class="s">@"年齡 %ld、比率 %.2f"</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">long</span><span class="p">)</span><span class="n">age</span><span class="p">,</span><span class="w"> </span><span class="n">ratio</span><span class="p">);</span><span class="w"> </span><span class="c1">// %ld = 整數、%.2f = 小數取兩位</span>
+</code></pre></div>
+
+<p>和 Java 的 <code>System.out.printf</code> 同一套邏輯:字串裡放<strong>格式符(format specifier)</strong>當佔位,後面依序補值。最常用三個:<code>%@</code> 物件、<code>%ld</code> 整數(NSInteger 慣例轉 <code>(long)</code>)、<code>%f</code> 小數。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:宣告幣種名稱(字串)、價格(CGFloat)、是否為最愛(BOOL),用一行 NSLog 印出「BTC 價格 16500000.00,最愛:1」。(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">symbol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">@"BTC"</span><span class="p">;</span>
+<span class="n">CGFloat</span><span class="w"> </span><span class="n">price</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">16500000</span><span class="p">;</span>
+<span class="kt">BOOL</span><span class="w"> </span><span class="n">favorite</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">YES</span><span class="p">;</span>
+<span class="n">NSLog</span><span class="p">(</span><span class="s">@"%@ 價格 %.2f,最愛:%d"</span><span class="p">,</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">,</span><span class="w"> </span><span class="n">favorite</span><span class="p">);</span><span class="w">  </span><span class="c1">// BOOL 用 %d 印,YES=1 NO=0</span>
+</code></pre></div>
+
+<p>檢查點:<code>symbol</code> 是物件所以有 <code>*</code>、字面值有 <code>@</code>;<code>price</code>、<code>favorite</code> 是基本型別,都沒有。</p></div></details>
+<h3 id="23-java">2.3 流程控制:和 Java 幾乎一樣</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// if / else</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">price</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1000000</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"高價幣"</span><span class="p">);</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">price</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1000</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"中價幣"</span><span class="p">);</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"低價幣"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// for 迴圈</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"第 %d 次"</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// while</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">isOpen</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+
+<span class="c1">// switch(只能用整數/enum,不能 switch 字串——這點比 Java 舊)</span>
+<span class="k">switch</span><span class="w"> </span><span class="p">(</span><span class="n">age</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="mi">18</span><span class="p">:</span><span class="w"> </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"剛成年"</span><span class="p">);</span><span class="w"> </span><span class="k">break</span><span class="p">;</span>
+<span class="w">    </span><span class="k">default</span><span class="o">:</span><span class="w"> </span><span class="k">break</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>這一段沒有新東西——<strong>C 家族的流程控制你已經會了</strong>(Java、JavaScript 都一樣)。</p>
+<h3 id="24">2.4 方法呼叫:中括號怎麼讀</h3>
+<p>這是 Objective-C 長相最不一樣的地方,學會讀就不可怕:</p>
+<div class="hl"><pre><span></span><code><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">upper</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">name</span><span class="w"> </span><span class="n">uppercaseString</span><span class="p">];</span>
+<span class="c1">// 讀法:「對 name 這個物件,呼叫 uppercaseString 方法,結果存進 upper」</span>
+<span class="c1">// Java 的同一句:String upper = name.toUpperCase();</span>
+
+<span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">msg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSString</span><span class="w"> </span><span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@"你好 %@"</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">];</span>
+<span class="c1">// 「對 NSString 這個類別,呼叫 stringWithFormat: 方法」(類別方法,類似 Java 的 static 方法)</span>
+</code></pre></div>
+
+<p><strong>帶參數的方法,參數寫在冒號後面;多個參數時,方法名被拆成好幾段</strong>:</p>
+<div class="hl"><pre><span></span><code><span class="p">[</span><span class="n">service</span><span class="w"> </span><span class="n">fetchPrice</span><span class="o">:</span><span class="s">@"BTC"</span><span class="w"> </span><span class="n">currency</span><span class="o">:</span><span class="s">@"JPY"</span><span class="p">];</span>
+<span class="c1">//       └─────┬────┘      └───┬────┘</span>
+<span class="c1">//        第一段:參數1      第二段:參數2</span>
+<span class="c1">// 這個方法的全名是「fetchPrice:currency:」——每一段都是名字的一部分</span>
+<span class="c1">// Java 的同一句:service.fetchPrice("BTC", "JPY");</span>
+</code></pre></div>
+
+<p>好處:讀起來像句子,每個參數前面都有說明它是什麼。呼叫可以巢狀:</p>
+<div class="hl"><pre><span></span><code><span class="n">Greeter</span><span class="w"> </span><span class="o">*</span><span class="n">g</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="n">Greeter</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">init</span><span class="p">];</span>
+<span class="c1">// 由內往外讀:先 [Greeter alloc](跟類別要一塊記憶體),再對結果呼叫 init(初始化)</span>
+<span class="c1">// Java 的同一句:Greeter g = new Greeter();  ← new 做掉的兩件事,Objective-C 拆成 alloc + init</span>
+</code></pre></div>
+
+<h3 id="25">2.5 基本型別與字串的常用操作</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 可變字串:NSMutableString(Mutable = 可變的;不可變/可變是兩個不同類別)</span>
+<span class="bp">NSMutableString</span><span class="w"> </span><span class="o">*</span><span class="n">log</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSMutableString</span><span class="w"> </span><span class="n">string</span><span class="p">];</span>
+<span class="p">[</span><span class="n">log</span><span class="w"> </span><span class="n">appendString</span><span class="o">:</span><span class="s">@"開始..."</span><span class="p">];</span>
+
+<span class="c1">// NSNumber:把基本型別「包成物件」(之後會看到:集合只能放物件,不能放 int!)</span>
+<span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">n1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">@42</span><span class="p">;</span><span class="w">                  </span><span class="c1">// @ 字面值語法:int → NSNumber</span>
+<span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">n2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@(</span><span class="n">count</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="l">)</span><span class="p">;</span><span class="w">         </span><span class="c1">// 表達式要加括號</span>
+<span class="n">NSInteger</span><span class="w"> </span><span class="n">back</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">n1</span><span class="w"> </span><span class="n">integerValue</span><span class="p">];</span><span class="w">  </span><span class="c1">// 拆回基本型別</span>
+
+<span class="c1">// 字串常用操作</span>
+<span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">symbol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">@"BTC/JPY"</span><span class="p">;</span>
+<span class="n">NSUInteger</span><span class="w"> </span><span class="n">len</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">symbol</span><span class="p">.</span><span class="n">length</span><span class="p">;</span><span class="w">                       </span><span class="c1">// 長度</span>
+<span class="kt">BOOL</span><span class="w"> </span><span class="n">has</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">symbol</span><span class="w"> </span><span class="n">containsString</span><span class="o">:</span><span class="s">@"BTC"</span><span class="p">];</span><span class="w">            </span><span class="c1">// 包含?</span>
+<span class="bp">NSArray</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">parts</span><span class="w"> </span><span class="o">=</span>
+<span class="w">    </span><span class="p">[</span><span class="n">symbol</span><span class="w"> </span><span class="n">componentsSeparatedByString</span><span class="o">:</span><span class="s">@"/"</span><span class="p">];</span><span class="w">        </span><span class="c1">// 切割 → ["BTC", "JPY"]</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:<code>NSArray</code>/<code>NSDictionary</code> 不能放 <code>int</code>,所以常看到 <code>@42</code>、<code>@YES</code> 這種包裝;從集合拿出來要手動拆箱(Java 會自動裝箱拆箱,Objective-C 要自己來)。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:宣告一個可變字串,迴圈 append 三個幣種名稱,用「、」分隔。(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="bp">NSArray</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">coins</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@[</span><span class="s">@"BTC"</span><span class="p">,</span><span class="w"> </span><span class="s">@"ETH"</span><span class="p">,</span><span class="w"> </span><span class="s">@"XRP"</span><span class="l">]</span><span class="p">;</span>
+<span class="bp">NSMutableString</span><span class="w"> </span><span class="o">*</span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSMutableString</span><span class="w"> </span><span class="n">string</span><span class="p">];</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">NSUInteger</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">coins</span><span class="p">.</span><span class="n">count</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">[</span><span class="n">result</span><span class="w"> </span><span class="n">appendString</span><span class="o">:</span><span class="s">@"、"</span><span class="p">];</span>
+<span class="w">    </span><span class="p">[</span><span class="n">result</span><span class="w"> </span><span class="n">appendString</span><span class="o">:</span><span class="n">coins</span><span class="p">[</span><span class="n">i</span><span class="p">]];</span>
+<span class="p">}</span>
+<span class="n">NSLog</span><span class="p">(</span><span class="s">@"%@"</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="p">);</span><span class="w">   </span><span class="c1">// BTC、ETH、XRP</span>
+
+<span class="c1">// 其實一行也行:</span>
+<span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">joined</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">coins</span><span class="w"> </span><span class="n">componentsJoinedByString</span><span class="o">:</span><span class="s">@"、"</span><span class="p">];</span>
+</code></pre></div></div></details>
+<hr />
+<h2 id="3-nsarray-nsdictionary-nsset">3. 集合:NSArray / NSDictionary / NSSet</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// 不可變 vs 可變是「不同類別」(Swift 是用 let/var 區分)</span>
+<span class="bp">NSArray</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">symbols</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@[</span><span class="s">@"BTC"</span><span class="p">,</span><span class="w"> </span><span class="s">@"ETH"</span><span class="l">]</span><span class="p">;</span><span class="w">          </span><span class="c1">// 字面值</span>
+<span class="bp">NSMutableArray</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">watchlist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">symbols</span><span class="w"> </span><span class="n">mutableCopy</span><span class="p">];</span>
+<span class="p">[</span><span class="n">watchlist</span><span class="w"> </span><span class="n">addObject</span><span class="o">:</span><span class="s">@"SOL"</span><span class="p">];</span>
+<span class="p">[</span><span class="n">watchlist</span><span class="w"> </span><span class="n">removeObjectAtIndex</span><span class="o">:</span><span class="mi">0</span><span class="p">];</span>
+
+<span class="bp">NSDictionary</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">prices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@{</span>
+<span class="w">    </span><span class="s">@"BTC"</span><span class="o">:</span><span class="w"> </span><span class="mi">@16500000</span><span class="p">,</span>
+<span class="w">    </span><span class="s">@"ETH"</span><span class="o">:</span><span class="w"> </span><span class="mi">@580000</span><span class="p">,</span>
+<span class="l">}</span><span class="p">;</span>
+<span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">btc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">prices</span><span class="p">[</span><span class="s">@"BTC"</span><span class="p">];</span><span class="w">          </span><span class="c1">// 下標語法</span>
+<span class="bp">NSMutableDictionary</span><span class="w"> </span><span class="o">*</span><span class="n">mdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">prices</span><span class="w"> </span><span class="n">mutableCopy</span><span class="p">];</span>
+<span class="n">mdict</span><span class="p">[</span><span class="s">@"SOL"</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">@32000</span><span class="p">;</span>
+
+<span class="c1">// 遍歷</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">key</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">prices</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"%@ = %@"</span><span class="p">,</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">prices</span><span class="p">[</span><span class="n">key</span><span class="p">]);</span>
+<span class="p">}</span>
+<span class="p">[</span><span class="n">prices</span><span class="w"> </span><span class="n">enumerateKeysAndObjectsUsingBlock</span><span class="o">:^</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">val</span><span class="p">,</span><span class="w"> </span><span class="kt">BOOL</span><span class="w"> </span><span class="o">*</span><span class="n">stop</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">([</span><span class="n">key</span><span class="w"> </span><span class="n">isEqualToString</span><span class="o">:</span><span class="s">@"ETH"</span><span class="p">])</span><span class="w"> </span><span class="o">*</span><span class="n">stop</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">YES</span><span class="p">;</span><span class="w">   </span><span class="c1">// 可中途停止</span>
+<span class="p">}];</span>
+</code></pre></div>
+
+<p><strong>重點</strong>:</p>
+<ul>
+<li><code>&lt;NSString *&gt;</code> 是「輕量泛型」,只有編譯期提示,執行期不檢查(放錯型別不會立刻爆)。</li>
+<li>查無 key 回傳 <code>nil</code>,不會當掉——<strong>對 nil 送訊息是合法的,什麼都不做並回傳 0/nil</strong>。這是 Objective-C 和 Java/Swift 最大的行為差異,好處是少掉很多判空,壞處是錯誤被默默吞掉。</li>
+</ul>
+<hr />
+<h2 id="4">4. 類別完整寫法:屬性、初始化、方法</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// Coin.h</span>
+<span class="cp">#import &lt;Foundation/Foundation.h&gt;</span>
+
+<span class="n">NS_ASSUME_NONNULL_BEGIN</span><span class="w">   </span><span class="c1">// 這個範圍內的指標預設 nonnull(給 Swift 混編看的)</span>
+
+<span class="k">@interface</span> <span class="nc">Coin</span> : <span class="bp">NSObject</span>
+
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">copy</span><span class="p">)</span><span class="w">   </span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">symbol</span><span class="p">;</span><span class="w">     </span><span class="c1">// 字串用 copy</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">price</span><span class="p">;</span><span class="w">      </span><span class="c1">// 物件用 strong</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">assign</span><span class="p">)</span><span class="w"> </span><span class="n">NSInteger</span><span class="w"> </span><span class="n">rank</span><span class="p">;</span><span class="w">       </span><span class="c1">// 基本型別用 assign</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">assign</span><span class="p">,</span><span class="w"> </span><span class="k">getter</span><span class="o">=</span><span class="n">isFavorite</span><span class="p">)</span><span class="w"> </span><span class="kt">BOOL</span><span class="w"> </span><span class="n">favorite</span><span class="p">;</span>
+
+<span class="c1">// 指定初始化器</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">initWithSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="nf">price:</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">price</span><span class="p">;</span>
+
+<span class="c1">// 類別方法(等同 Swift 的 static/class func),+ 開頭</span>
+<span class="p">+</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">coinWithSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="p">;</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">displayText</span><span class="p">;</span>
+
+<span class="k">@end</span>
+
+<span class="n">NS_ASSUME_NONNULL_END</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// Coin.m</span>
+<span class="cp">#import "Coin.h"</span>
+
+<span class="k">@implementation</span> <span class="nc">Coin</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">initWithSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="nf">price:</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">price</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">self</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nb">super</span><span class="w"> </span><span class="n">init</span><span class="p">];</span><span class="w">            </span><span class="c1">// 固定寫法:先呼叫父類,再檢查</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">_symbol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">symbol</span><span class="w"> </span><span class="k">copy</span><span class="p">];</span><span class="w">    </span><span class="c1">// init 裡直接碰底層變數 _symbol,不走 setter</span>
+<span class="w">        </span><span class="n">_price</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">price</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">+</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">coinWithSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[[</span><span class="nb">self</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">initWithSymbol</span><span class="o">:</span><span class="n">symbol</span><span class="w"> </span><span class="n">price</span><span class="o">:</span><span class="mi">@0</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">displayText</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[</span><span class="bp">NSString</span><span class="w"> </span><span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@"%@ ¥%@"</span><span class="p">,</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">price</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">@end</span>
+</code></pre></div>
+
+<p><strong><code>@property</code> 的修飾詞(面試必考)</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>修飾詞</th>
+<th>意義</th>
+<th>用在</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>strong</code></td>
+<td>強參考,持有物件(預設)</td>
+<td>一般物件</td>
+</tr>
+<tr>
+<td><code>weak</code></td>
+<td>弱參考,不持有;物件釋放後自動變 nil</td>
+<td>delegate、避免循環參考</td>
+</tr>
+<tr>
+<td><code>copy</code></td>
+<td>設值時複製一份</td>
+<td><code>NSString</code>、block(防止外部可變物件偷改)</td>
+</tr>
+<tr>
+<td><code>assign</code></td>
+<td>直接賦值,不管記憶體</td>
+<td>基本型別(int、BOOL…)</td>
+</tr>
+<tr>
+<td><code>nonatomic</code></td>
+<td>不加鎖,快(幾乎都用這個)</td>
+<td>幾乎所有屬性</td>
+</tr>
+<tr>
+<td><code>atomic</code></td>
+<td>getter/setter 加鎖(預設但少用)</td>
+<td>極少</td>
+</tr>
+</tbody>
+</table>
+<p><code>@property</code> 會自動產生:底層實例變數 <code>_symbol</code> + getter <code>symbol</code> + setter <code>setSymbol:</code>。<code>self.symbol = x</code> 走 setter;<code>_symbol = x</code> 直接改變數。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:為什麼 NSString 屬性建議用 copy 而不是 strong?(點擊看解答)</summary><div class="exercise-body"><p>因為 <code>NSMutableString</code> 是 <code>NSString</code> 的子類別,外部可以傳一個可變字串進來。若用 <code>strong</code>,外部之後修改那個可變字串,你的屬性內容會跟著變(資料被偷改);用 <code>copy</code> 會在設值當下複製一份不可變版本,之後外部怎麼改都影響不到你。</p></div></details>
+<hr />
+<h2 id="5-arc">5. 記憶體管理:ARC 與循環參考</h2>
+<p>Objective-C 用<strong>參考計數</strong>:每個物件有 retainCount,歸零就釋放。ARC(Automatic Reference Counting)讓編譯器自動插入 retain/release,你不用手寫,但<strong>循環參考仍要自己打破</strong>(和 Swift 完全相同的概念)。</p>
+<div class="hl"><pre><span></span><code><span class="c1">// 經典循環:A 強參考 B,B 強參考 A → 誰都死不了(記憶體洩漏)</span>
+<span class="k">@interface</span> <span class="nc">Downloader</span> : <span class="bp">NSObject</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">copy</span><span class="p">)</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">^</span><span class="n">completion</span><span class="p">)(</span><span class="bp">NSData</span><span class="w"> </span><span class="o">*</span><span class="n">data</span><span class="p">);</span>
+<span class="k">@end</span>
+
+<span class="c1">// ❌ self 持有 downloader,block 又捕獲了 self → 循環</span>
+<span class="nb">self</span><span class="p">.</span><span class="n">downloader</span><span class="p">.</span><span class="n">completion</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">^</span><span class="p">(</span><span class="bp">NSData</span><span class="w"> </span><span class="o">*</span><span class="n">data</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="w"> </span><span class="n">handleData</span><span class="o">:</span><span class="n">data</span><span class="p">];</span><span class="w">        </span><span class="c1">// block 強捕獲 self</span>
+<span class="p">};</span>
+
+<span class="c1">// ✅ weak-strong dance</span>
+<span class="k">__weak</span><span class="w"> </span><span class="nf">typeof</span><span class="p">(</span><span class="nb">self</span><span class="p">)</span><span class="w"> </span><span class="n">weakSelf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+<span class="nb">self</span><span class="p">.</span><span class="n">downloader</span><span class="p">.</span><span class="n">completion</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">^</span><span class="p">(</span><span class="bp">NSData</span><span class="w"> </span><span class="o">*</span><span class="n">data</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">__strong</span><span class="w"> </span><span class="nf">typeof</span><span class="p">(</span><span class="n">weakSelf</span><span class="p">)</span><span class="w"> </span><span class="n">strongSelf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">weakSelf</span><span class="p">;</span><span class="w">  </span><span class="c1">// 進 block 先變回強參考</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">strongSelf</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w">                           </span><span class="c1">// self 可能已被釋放</span>
+<span class="w">    </span><span class="p">[</span><span class="n">strongSelf</span><span class="w"> </span><span class="n">handleData</span><span class="o">:</span><span class="n">data</span><span class="p">];</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><strong>面試常問</strong>:</p>
+<ul>
+<li>delegate 為什麼宣告成 <code>weak</code>?→ 通常「子物件的 delegate 指回父物件」,若用 strong 就形成循環參考。</li>
+<li>MRC(Manual Reference Counting,手動管理記憶體的舊時代)的 retain/release/autorelease?→ 知道概念即可:ARC 出現之前,工程師要<strong>自己手寫</strong>「retain(計數 +1)/ release(計數 −1)」而且必須成對,漏寫就洩漏或崩潰;<code>@autoreleasepool</code> 是那個時代留下來、現在仍有用的工具——迴圈內大量產生暫時物件時,用它讓物件即時釋放,不會堆到迴圈結束。</li>
+</ul>
+<hr />
+<h2 id="6-protocol-delegate">6. 協定(Protocol)與 Delegate 模式</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// 定義協定(等同 Swift protocol)</span>
+<span class="k">@protocol</span> <span class="nc">PriceServiceDelegate</span> <span class="o">&lt;</span><span class="bp">NSObject</span><span class="o">&gt;</span>
+<span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">priceService</span><span class="o">:</span><span class="p">(</span><span class="kt">id</span><span class="p">)</span><span class="n">service</span><span class="w"> </span><span class="n">didUpdatePrice</span><span class="o">:</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">price</span><span class="w"> </span><span class="n">forSymbol</span><span class="o">:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">symbol</span><span class="p">;</span>
+<span class="k">@optional</span><span class="w">                                      </span><span class="c1">// Objective-C 特有:可選方法</span>
+<span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">priceServiceDidDisconnect</span><span class="o">:</span><span class="p">(</span><span class="kt">id</span><span class="p">)</span><span class="n">service</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="k">@interface</span> <span class="nc">PriceService</span> : <span class="bp">NSObject</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">weak</span><span class="p">)</span><span class="w"> </span><span class="kt">id</span><span class="o">&lt;</span><span class="n">PriceServiceDelegate</span><span class="o">&gt;</span><span class="w"> </span><span class="n">delegate</span><span class="p">;</span><span class="w">   </span><span class="c1">// 注意 weak!</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">startStreaming</span><span class="p">;</span>
+<span class="k">@end</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// PriceService.m 內部通知 delegate</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">onNewTick:</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">price</span><span class="w"> </span><span class="nf">symbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="n">priceService</span><span class="o">:</span><span class="nb">self</span><span class="w"> </span><span class="n">didUpdatePrice</span><span class="o">:</span><span class="n">price</span><span class="w"> </span><span class="n">forSymbol</span><span class="o">:</span><span class="n">symbol</span><span class="p">];</span>
+
+<span class="w">    </span><span class="c1">// @optional 的方法呼叫前必須檢查有沒有實作:</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">([</span><span class="nb">self</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="n">respondsToSelector</span><span class="o">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">priceServiceDidDisconnect</span><span class="o">:</span><span class="p">)])</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="n">priceServiceDidDisconnect</span><span class="o">:</span><span class="nb">self</span><span class="p">];</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:整個 UIKit 都是這個模式(<code>UITableViewDelegate</code>、<code>UITextFieldDelegate</code>)。「服務不認識畫面,只透過協定回呼」——和 Java 的介面注入是同一個解耦思想。</p>
+<hr />
+<h2 id="7-blockobjective-c">7. Block(Objective-C 的閉包)</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// 宣告語法(最難記的部分):回傳型別 (^名字)(參數)</span>
+<span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">^</span><span class="n">simpleBlock</span><span class="p">)(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">^</span><span class="p">{</span><span class="w"> </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"hi"</span><span class="p">);</span><span class="w"> </span><span class="p">};</span>
+<span class="n">NSInteger</span><span class="w"> </span><span class="p">(</span><span class="o">^</span><span class="n">add</span><span class="p">)(</span><span class="n">NSInteger</span><span class="p">,</span><span class="w"> </span><span class="n">NSInteger</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">^</span><span class="n">NSInteger</span><span class="p">(</span><span class="n">NSInteger</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">NSInteger</span><span class="w"> </span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="p">;</span>
+<span class="p">};</span>
+<span class="n">add</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span><span class="w">   </span><span class="c1">// 5</span>
+
+<span class="c1">// 當方法參數(最常見用法:完成回呼)</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">fetchPriceForSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span>
+<span class="w">                 </span><span class="nl">completion</span><span class="p">:(</span><span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">^</span><span class="p">)(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">_Nullable</span><span class="w"> </span><span class="n">price</span><span class="p">,</span><span class="w"> </span><span class="bp">NSError</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">_Nullable</span><span class="w"> </span><span class="n">error</span><span class="p">))</span><span class="nv">completion</span><span class="p">;</span>
+
+<span class="c1">// 呼叫</span>
+<span class="p">[</span><span class="n">service</span><span class="w"> </span><span class="n">fetchPriceForSymbol</span><span class="o">:</span><span class="s">@"BTC"</span><span class="w"> </span><span class="n">completion</span><span class="o">:^</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">price</span><span class="p">,</span><span class="w"> </span><span class="bp">NSError</span><span class="w"> </span><span class="o">*</span><span class="n">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"失敗: %@"</span><span class="p">,</span><span class="w"> </span><span class="n">error</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"價格: %@"</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">);</span>
+<span class="p">}];</span>
+
+<span class="c1">// 捕獲外部變數:預設捕獲「值」,要修改需加 __block</span>
+<span class="k">__block</span><span class="w"> </span><span class="n">NSInteger</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">^</span><span class="n">accumulate</span><span class="p">)(</span><span class="n">NSInteger</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">^</span><span class="p">(</span><span class="n">NSInteger</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">x</span><span class="p">;</span><span class="w"> </span><span class="p">};</span>
+<span class="n">accumulate</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span><span class="w">   </span><span class="c1">// total == 10</span>
+</code></pre></div>
+
+<p><strong>記法</strong>:宣告 <code>回傳 (^名)(參數)</code>、實作 <code>^回傳(參數){...}</code>。背不起來很正常,工程師都在查 [goshdarnblocksyntax 這類速查表]——面試能手寫出「completion handler 模式」就夠了。</p>
+<p><strong>block 屬性要用 <code>copy</code></strong>:block 建立在堆疊上,<code>copy</code> 把它搬到堆積,否則離開作用域就失效(ARC 下多數情境會自動 copy,但宣告 copy 是明確的慣例)。</p>
+<hr />
+<h2 id="8-categoryextension">8. 分類(Category)與擴展(Extension)</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// Category:幫「別人的類別」加方法(不能加實例變數)</span>
+<span class="c1">// NSString+Trading.h</span>
+<span class="k">@interface</span> <span class="bp">NSString</span> <span class="nl">(Trading)</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">BOOL</span><span class="p">)</span><span class="nf">isValidSymbol</span><span class="p">;</span><span class="w">        </span><span class="c1">// "BTC/JPY" 這種格式才合法</span>
+<span class="k">@end</span>
+
+<span class="c1">// NSString+Trading.m</span>
+<span class="k">@implementation</span> <span class="bp">NSString</span> <span class="nl">(Trading)</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">BOOL</span><span class="p">)</span><span class="nf">isValidSymbol</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[</span><span class="nb">self</span><span class="w"> </span><span class="n">componentsSeparatedByString</span><span class="o">:</span><span class="s">@"/"</span><span class="p">].</span><span class="n">count</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">@end</span>
+
+<span class="c1">// 之後所有 NSString 都有這個方法:</span>
+<span class="p">[</span><span class="s">@"BTC/JPY"</span><span class="w"> </span><span class="n">isValidSymbol</span><span class="p">];</span><span class="w">   </span><span class="c1">// YES</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// Class Extension(匿名分類):寫在 .m 開頭,存放「私有屬性/方法」</span>
+<span class="c1">// PriceService.m</span>
+<span class="k">@interface</span> <span class="nc">PriceService</span><span class="w"> </span><span class="p">()</span><span class="w">                 </span><span class="c1">// 括號空白 = extension</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSTimer</span><span class="w"> </span><span class="o">*</span><span class="n">timer</span><span class="p">;</span><span class="w">   </span><span class="c1">// 外部看不到</span>
+<span class="k">@end</span>
+</code></pre></div>
+
+<p><strong>對照 Swift</strong>:Category ≒ <code>extension</code>;Class Extension 的用途(藏私有成員)在 Swift 由 <code>private</code> 直接解決。</p>
+<hr />
+<h2 id="9-kvc-kvo-nsnotificationcenter">9. KVC / KVO 與 NSNotificationCenter</h2>
+<p>先把兩個縮寫說清楚:</p>
+<ul>
+<li><strong>KVC = Key-Value Coding(鍵值存取)</strong>:不呼叫 getter/setter,改用「屬性名字的字串」存取屬性——<code>[coin setValue:x forKey:@"price"]</code> 等於 <code>coin.price = x</code>,但名字是執行期才給的字串。</li>
+<li><strong>KVO = Key-Value Observing(鍵值觀察)</strong>:訂閱「某個物件的某個屬性」,屬性一變就收到通知。</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="c1">// KVC:用字串名字存取屬性(動態特性的展現)</span>
+<span class="p">[</span><span class="n">coin</span><span class="w"> </span><span class="n">setValue</span><span class="o">:</span><span class="mi">@16500000</span><span class="w"> </span><span class="n">forKey</span><span class="o">:</span><span class="s">@"price"</span><span class="p">];</span>
+<span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">coin</span><span class="w"> </span><span class="n">valueForKey</span><span class="o">:</span><span class="s">@"price"</span><span class="p">];</span>
+
+<span class="c1">// KVO:觀察屬性變化</span>
+<span class="p">[</span><span class="n">coin</span><span class="w"> </span><span class="n">addObserver</span><span class="o">:</span><span class="nb">self</span><span class="w"> </span><span class="n">forKeyPath</span><span class="o">:</span><span class="s">@"price"</span><span class="w"> </span><span class="n">options</span><span class="o">:</span><span class="n">NSKeyValueObservingOptionNew</span><span class="w"> </span><span class="n">context</span><span class="o">:</span><span class="nb">nil</span><span class="p">];</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">observeValueForKeyPath:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">keyPath</span><span class="w"> </span><span class="nf">ofObject:</span><span class="p">(</span><span class="kt">id</span><span class="p">)</span><span class="nv">object</span>
+<span class="w">                        </span><span class="nl">change</span><span class="p">:(</span><span class="bp">NSDictionary</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">change</span><span class="w"> </span><span class="nf">context:</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">context</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">([</span><span class="n">keyPath</span><span class="w"> </span><span class="n">isEqualToString</span><span class="o">:</span><span class="s">@"price"</span><span class="p">])</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"價格變了: %@"</span><span class="p">,</span><span class="w"> </span><span class="n">change</span><span class="p">[</span><span class="n">NSKeyValueChangeNewKey</span><span class="p">]);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+<span class="c1">// ⚠️ dealloc 前必須 removeObserver,否則崩潰(經典事故題)</span>
+
+<span class="c1">// NSNotificationCenter:一對多廣播</span>
+<span class="p">[[</span><span class="bp">NSNotificationCenter</span><span class="w"> </span><span class="n">defaultCenter</span><span class="p">]</span><span class="w"> </span><span class="n">postNotificationName</span><span class="o">:</span><span class="s">@"PriceDidUpdate"</span>
+<span class="w">                                                    </span><span class="nl">object</span><span class="p">:</span><span class="nb">nil</span>
+<span class="w">                                                  </span><span class="nl">userInfo</span><span class="p">:</span><span class="l">@{</span><span class="s">@"symbol"</span><span class="o">:</span><span class="w"> </span><span class="s">@"BTC"</span><span class="p">,</span><span class="w"> </span><span class="s">@"price"</span><span class="o">:</span><span class="w"> </span><span class="mi">@16500000</span><span class="l">}</span><span class="p">];</span>
+<span class="p">[[</span><span class="bp">NSNotificationCenter</span><span class="w"> </span><span class="n">defaultCenter</span><span class="p">]</span><span class="w"> </span><span class="n">addObserver</span><span class="o">:</span><span class="nb">self</span>
+<span class="w">                                         </span><span class="nl">selector</span><span class="p">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">onPriceUpdate</span><span class="o">:</span><span class="p">)</span>
+<span class="w">                                             </span><span class="nl">name</span><span class="p">:</span><span class="s">@"PriceDidUpdate"</span><span class="w"> </span><span class="n">object</span><span class="o">:</span><span class="nb">nil</span><span class="p">];</span>
+</code></pre></div>
+
+<p><strong>三種溝通方式選擇</strong>(面試常問):</p>
+<table>
+<thead>
+<tr>
+<th>方式</th>
+<th>關係</th>
+<th>情境</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Delegate</td>
+<td>一對一、需要回傳值/互動</td>
+<td>TableView 要資料</td>
+</tr>
+<tr>
+<td>Block callback</td>
+<td>一對一、一次性非同步結果</td>
+<td>網路請求完成</td>
+</tr>
+<tr>
+<td>Notification</td>
+<td>一對多、鬆散廣播</td>
+<td>登入狀態改變,全 App 都要知道</td>
+</tr>
+<tr>
+<td>KVO</td>
+<td>觀察「屬性」本身</td>
+<td>進度條綁 <code>progress</code> 屬性</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-gcd">10. GCD:多執行緒</h2>
+<p>GCD = Grand Central Dispatch,Apple 的工作佇列框架。心智模型:你不直接操作執行緒,而是<strong>把工作(block)丟進佇列(queue)</strong>,系統負責分配執行緒去執行。佇列分兩種:串列(serial,一次做一件、照順序)與並發(concurrent,多件同時做);另外有一條特殊的<strong>主佇列(main queue)= 主執行緒</strong>,所有 UI 更新都必須回到這裡。</p>
+<div class="hl"><pre><span></span><code><span class="c1">// 背景做事,完成後回主執行緒更新 UI(最重要的模板,背起來)</span>
+<span class="n">dispatch_async</span><span class="p">(</span><span class="n">dispatch_get_global_queue</span><span class="p">(</span><span class="n">QOS_CLASS_USER_INITIATED</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">),</span><span class="w"> </span><span class="o">^</span><span class="p">{</span>
+<span class="w">    </span><span class="bp">NSData</span><span class="w"> </span><span class="o">*</span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nb">self</span><span class="w"> </span><span class="n">downloadPrices</span><span class="p">];</span><span class="w">        </span><span class="c1">// 背景執行緒</span>
+<span class="w">    </span><span class="n">dispatch_async</span><span class="p">(</span><span class="n">dispatch_get_main_queue</span><span class="p">(),</span><span class="w"> </span><span class="o">^</span><span class="p">{</span>
+<span class="w">        </span><span class="p">[</span><span class="nb">self</span><span class="w"> </span><span class="n">refreshUIWithData</span><span class="o">:</span><span class="n">data</span><span class="p">];</span><span class="w">           </span><span class="c1">// 主執行緒(UI 只能在這裡動!)</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="p">});</span>
+
+<span class="c1">// 串列佇列:保護共享資料(同一時間只有一件事在跑)</span>
+<span class="n">dispatch_queue_t</span><span class="w"> </span><span class="n">serialQueue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dispatch_queue_create</span><span class="p">(</span><span class="s">"com.app.orders"</span><span class="p">,</span><span class="w"> </span><span class="n">DISPATCH_QUEUE_SERIAL</span><span class="p">);</span>
+<span class="n">dispatch_async</span><span class="p">(</span><span class="n">serialQueue</span><span class="p">,</span><span class="w"> </span><span class="o">^</span><span class="p">{</span><span class="w"> </span><span class="cm">/* 安全地修改訂單陣列 */</span><span class="w"> </span><span class="p">});</span>
+
+<span class="c1">// dispatch_group:等多個非同步工作全部完成</span>
+<span class="n">dispatch_group_t</span><span class="w"> </span><span class="n">group</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dispatch_group_create</span><span class="p">();</span>
+<span class="n">dispatch_group_enter</span><span class="p">(</span><span class="n">group</span><span class="p">);</span>
+<span class="p">[</span><span class="nb">self</span><span class="w"> </span><span class="n">fetchBTC</span><span class="o">:^</span><span class="p">{</span><span class="w"> </span><span class="n">dispatch_group_leave</span><span class="p">(</span><span class="n">group</span><span class="p">);</span><span class="w"> </span><span class="p">}];</span>
+<span class="n">dispatch_group_enter</span><span class="p">(</span><span class="n">group</span><span class="p">);</span>
+<span class="p">[</span><span class="nb">self</span><span class="w"> </span><span class="n">fetchETH</span><span class="o">:^</span><span class="p">{</span><span class="w"> </span><span class="n">dispatch_group_leave</span><span class="p">(</span><span class="n">group</span><span class="p">);</span><span class="w"> </span><span class="p">}];</span>
+<span class="n">dispatch_group_notify</span><span class="p">(</span><span class="n">group</span><span class="p">,</span><span class="w"> </span><span class="n">dispatch_get_main_queue</span><span class="p">(),</span><span class="w"> </span><span class="o">^</span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"全部完成,更新畫面"</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<hr />
+<h2 id="11">11. 其他必知語法速查</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// enum 的正確寫法</span>
+<span class="k">typedef</span><span class="w"> </span><span class="n">NS_ENUM</span><span class="p">(</span><span class="n">NSInteger</span><span class="p">,</span><span class="w"> </span><span class="n">OrderSide</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">OrderSideBuy</span><span class="p">,</span>
+<span class="w">    </span><span class="n">OrderSideSell</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="c1">// 錯誤處理:NSError 出參模式(不是 try-catch!)</span>
+<span class="bp">NSError</span><span class="w"> </span><span class="o">*</span><span class="n">error</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nil</span><span class="p">;</span>
+<span class="bp">NSData</span><span class="w"> </span><span class="o">*</span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSData</span><span class="w"> </span><span class="n">dataWithContentsOfFile</span><span class="o">:</span><span class="n">path</span><span class="w"> </span><span class="n">options</span><span class="o">:</span><span class="mi">0</span><span class="w"> </span><span class="n">error</span><span class="o">:&amp;</span><span class="n">error</span><span class="p">];</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">data</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"讀檔失敗: %@"</span><span class="p">,</span><span class="w"> </span><span class="n">error</span><span class="p">.</span><span class="n">localizedDescription</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+
+<span class="c1">// id 與 instancetype</span>
+<span class="kt">id</span><span class="w"> </span><span class="n">anything</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">@"可以放任何物件"</span><span class="p">;</span><span class="w">              </span><span class="c1">// 動態型別,沒有編譯期檢查</span>
+<span class="c1">// instancetype 用在回傳值,表示「回傳本類別型別」,比 id 安全</span>
+
+<span class="c1">// nullability 標註(混編 Swift 重要)</span>
+<span class="p">-</span> <span class="p">(</span><span class="n">nullable</span><span class="w"> </span><span class="n">Coin</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">coinForSymbol:</span><span class="p">(</span><span class="n">nonnull</span><span class="w"> </span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="p">;</span>
+
+<span class="c1">// Swift 互通</span>
+<span class="c1">// Swift 呼叫 OC:透過 Bridging-Header.h;OC 呼叫 Swift:#import "ModuleName-Swift.h"</span>
+</code></pre></div>
+
+<hr />
+<h1 id="12-appcointracker">12. 實作小 App:CoinTracker 幣價追蹤器</h1>
+<blockquote>
+<p>一個單畫面 iPhone App:顯示幣價列表、可加入最愛、模擬即時價格更新。<strong>刻意把前面每一節的語法都用上</strong>,每段程式碼標注用到的概念。
+開 Xcode → Create New Project → App → Interface 選 <strong>Storyboard</strong>、Language 選 <strong>Objective-C</strong> 就能照做。</p>
+</blockquote>
+<h2 id="121-modelcoinns_enum">12.1 Model:Coin(用到:屬性修飾詞、初始化器、類別方法、NS_ENUM)</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// Coin.h</span>
+<span class="cp">#import &lt;Foundation/Foundation.h&gt;</span>
+<span class="n">NS_ASSUME_NONNULL_BEGIN</span>
+
+<span class="k">typedef</span><span class="w"> </span><span class="n">NS_ENUM</span><span class="p">(</span><span class="n">NSInteger</span><span class="p">,</span><span class="w"> </span><span class="n">PriceTrend</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PriceTrendFlat</span><span class="p">,</span><span class="w"> </span><span class="n">PriceTrendUp</span><span class="p">,</span><span class="w"> </span><span class="n">PriceTrendDown</span><span class="w"> </span><span class="p">};</span>
+
+<span class="k">@interface</span> <span class="nc">Coin</span> : <span class="bp">NSObject</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">copy</span><span class="p">)</span><span class="w">   </span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">symbol</span><span class="p">;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="n">price</span><span class="p">;</span><span class="w">       </span><span class="c1">// KVO 會觀察這個</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">assign</span><span class="p">)</span><span class="w"> </span><span class="n">PriceTrend</span><span class="w"> </span><span class="n">trend</span><span class="p">;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">assign</span><span class="p">,</span><span class="w"> </span><span class="k">getter</span><span class="o">=</span><span class="n">isFavorite</span><span class="p">)</span><span class="w"> </span><span class="kt">BOOL</span><span class="w"> </span><span class="n">favorite</span><span class="p">;</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">initWithSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="nf">price:</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">price</span><span class="p">;</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">displayPrice</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="n">NS_ASSUME_NONNULL_END</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// Coin.m</span>
+<span class="cp">#import "Coin.h"</span>
+
+<span class="k">@implementation</span> <span class="nc">Coin</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">initWithSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="nf">price:</span><span class="p">(</span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">price</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">self</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nb">super</span><span class="w"> </span><span class="n">init</span><span class="p">];</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">_symbol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">symbol</span><span class="w"> </span><span class="k">copy</span><span class="p">];</span><span class="w"> </span><span class="n">_price</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">price</span><span class="p">;</span><span class="w"> </span><span class="n">_trend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PriceTrendFlat</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">displayPrice</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="bp">NSNumberFormatter</span><span class="w"> </span><span class="o">*</span><span class="n">f</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="bp">NSNumberFormatter</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">init</span><span class="p">];</span>
+<span class="w">    </span><span class="n">f</span><span class="p">.</span><span class="n">numberStyle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">NSNumberFormatterDecimalStyle</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[</span><span class="bp">NSString</span><span class="w"> </span><span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@"¥%@"</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">f</span><span class="w"> </span><span class="n">stringFromNumber</span><span class="o">:</span><span class="nb">self</span><span class="p">.</span><span class="n">price</span><span class="p">]];</span>
+<span class="p">}</span>
+<span class="k">@end</span>
+</code></pre></div>
+
+<h2 id="122-category-nsstring-category">12.2 Category:幫 NSString 加驗證(用到:Category)</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// NSString+CoinTracker.h</span>
+<span class="k">@interface</span> <span class="bp">NSString</span> <span class="nl">(CoinTracker)</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">trendArrowForTrend:</span><span class="p">(</span><span class="n">NSInteger</span><span class="p">)</span><span class="nv">trend</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="c1">// NSString+CoinTracker.m</span>
+<span class="k">@implementation</span> <span class="bp">NSString</span> <span class="nl">(CoinTracker)</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">trendArrowForTrend:</span><span class="p">(</span><span class="n">NSInteger</span><span class="p">)</span><span class="nv">trend</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="bp">NSArray</span><span class="w"> </span><span class="o">*</span><span class="n">arrows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@[</span><span class="s">@"→"</span><span class="p">,</span><span class="w"> </span><span class="s">@"↑"</span><span class="p">,</span><span class="w"> </span><span class="s">@"↓"</span><span class="l">]</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">[</span><span class="bp">NSString</span><span class="w"> </span><span class="n">stringWithFormat</span><span class="o">:</span><span class="s">@"%@ %@"</span><span class="p">,</span><span class="w"> </span><span class="nb">self</span><span class="p">,</span><span class="w"> </span><span class="n">arrows</span><span class="p">[</span><span class="n">trend</span><span class="p">]];</span>
+<span class="p">}</span>
+<span class="k">@end</span>
+</code></pre></div>
+
+<h2 id="123-servicedelegateblockgcdextensionnstimer">12.3 Service:模擬行情推送(用到:協定+delegate、block、GCD、extension、NSTimer)</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// PriceFeedService.h</span>
+<span class="cp">#import &lt;Foundation/Foundation.h&gt;</span>
+<span class="cp">#import "Coin.h"</span>
+<span class="n">NS_ASSUME_NONNULL_BEGIN</span>
+
+<span class="k">@class</span> <span class="nc">PriceFeedService</span>;<span class="w">   </span><span class="c1">// 前向宣告</span>
+
+<span class="k">@protocol</span> <span class="nc">PriceFeedServiceDelegate</span> <span class="o">&lt;</span><span class="bp">NSObject</span><span class="o">&gt;</span>
+<span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">priceFeed</span><span class="o">:</span><span class="p">(</span><span class="n">PriceFeedService</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">service</span><span class="w"> </span><span class="n">didUpdateCoin</span><span class="o">:</span><span class="p">(</span><span class="n">Coin</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">coin</span><span class="p">;</span>
+<span class="k">@optional</span>
+<span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">priceFeedDidStart</span><span class="o">:</span><span class="p">(</span><span class="n">PriceFeedService</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">service</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="k">typedef</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="p">(</span><span class="o">^</span><span class="n">CoinsLoadedBlock</span><span class="p">)(</span><span class="bp">NSArray</span><span class="o">&lt;</span><span class="n">Coin</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">coins</span><span class="p">);</span><span class="w">   </span><span class="c1">// block 型別取別名</span>
+
+<span class="k">@interface</span> <span class="nc">PriceFeedService</span> : <span class="bp">NSObject</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">weak</span><span class="p">)</span><span class="w"> </span><span class="kt">id</span><span class="o">&lt;</span><span class="n">PriceFeedServiceDelegate</span><span class="o">&gt;</span><span class="w"> </span><span class="n">delegate</span><span class="p">;</span><span class="w">   </span><span class="c1">// weak 防循環!</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">loadInitialCoinsWithCompletion:</span><span class="p">(</span><span class="n">CoinsLoadedBlock</span><span class="p">)</span><span class="nv">completion</span><span class="p">;</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">startStreaming</span><span class="p">;</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">stopStreaming</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="n">NS_ASSUME_NONNULL_END</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// PriceFeedService.m</span>
+<span class="cp">#import "PriceFeedService.h"</span>
+
+<span class="k">@interface</span> <span class="nc">PriceFeedService</span><span class="w"> </span><span class="p">()</span><span class="w">                 </span><span class="c1">// Class Extension:私有成員</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSTimer</span><span class="w"> </span><span class="o">*</span><span class="n">timer</span><span class="p">;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSMutableArray</span><span class="o">&lt;</span><span class="n">Coin</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">coins</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="k">@implementation</span> <span class="nc">PriceFeedService</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">loadInitialCoinsWithCompletion:</span><span class="p">(</span><span class="n">CoinsLoadedBlock</span><span class="p">)</span><span class="nv">completion</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// GCD:模擬網路請求 —— 背景組資料、回主執行緒回呼</span>
+<span class="w">    </span><span class="n">dispatch_async</span><span class="p">(</span><span class="n">dispatch_get_global_queue</span><span class="p">(</span><span class="n">QOS_CLASS_USER_INITIATED</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">),</span><span class="w"> </span><span class="o">^</span><span class="p">{</span>
+<span class="w">        </span><span class="bp">NSMutableArray</span><span class="o">&lt;</span><span class="n">Coin</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSMutableArray</span><span class="w"> </span><span class="n">array</span><span class="p">];</span>
+<span class="w">        </span><span class="bp">NSDictionary</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="bp">NSNumber</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">seed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@{</span>
+<span class="w">            </span><span class="s">@"BTC/JPY"</span><span class="o">:</span><span class="w"> </span><span class="mi">@16500000</span><span class="p">,</span><span class="w"> </span><span class="s">@"ETH/JPY"</span><span class="o">:</span><span class="w"> </span><span class="mi">@580000</span><span class="p">,</span><span class="w"> </span><span class="s">@"XRP/JPY"</span><span class="o">:</span><span class="w"> </span><span class="mi">@350</span><span class="p">,</span>
+<span class="w">        </span><span class="l">}</span><span class="p">;</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">symbol</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">seed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="p">[</span><span class="n">list</span><span class="w"> </span><span class="n">addObject</span><span class="o">:</span><span class="p">[[</span><span class="n">Coin</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">initWithSymbol</span><span class="o">:</span><span class="n">symbol</span><span class="w"> </span><span class="n">price</span><span class="o">:</span><span class="n">seed</span><span class="p">[</span><span class="n">symbol</span><span class="p">]]];</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="p">[</span><span class="bp">NSThread</span><span class="w"> </span><span class="n">sleepForTimeInterval</span><span class="o">:</span><span class="mf">0.5</span><span class="p">];</span><span class="w">   </span><span class="c1">// 假裝有網路延遲</span>
+<span class="w">        </span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">list</span><span class="p">;</span>
+<span class="w">        </span><span class="n">dispatch_async</span><span class="p">(</span><span class="n">dispatch_get_main_queue</span><span class="p">(),</span><span class="w"> </span><span class="o">^</span><span class="p">{</span>
+<span class="w">            </span><span class="n">completion</span><span class="p">([</span><span class="n">list</span><span class="w"> </span><span class="k">copy</span><span class="p">]);</span><span class="w">           </span><span class="c1">// 回傳不可變副本(防禦性複製)</span>
+<span class="w">        </span><span class="p">});</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="p">}</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">startStreaming</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">__weak</span><span class="w"> </span><span class="k">typeof</span><span class="p">(</span><span class="nb">self</span><span class="p">)</span><span class="w"> </span><span class="n">weakSelf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span><span class="w">       </span><span class="c1">// weak-strong dance 防循環</span>
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSTimer</span><span class="w"> </span><span class="n">scheduledTimerWithTimeInterval</span><span class="o">:</span><span class="mf">1.0</span><span class="w"> </span><span class="n">repeats</span><span class="o">:</span><span class="nb">YES</span><span class="w"> </span><span class="n">block</span><span class="o">:^</span><span class="p">(</span><span class="bp">NSTimer</span><span class="w"> </span><span class="o">*</span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">__strong</span><span class="w"> </span><span class="k">typeof</span><span class="p">(</span><span class="n">weakSelf</span><span class="p">)</span><span class="w"> </span><span class="n">strongSelf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">weakSelf</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">strongSelf</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<span class="w">        </span><span class="p">[</span><span class="n">strongSelf</span><span class="w"> </span><span class="n">tick</span><span class="p">];</span>
+<span class="w">    </span><span class="p">}];</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">([</span><span class="nb">self</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="n">respondsToSelector</span><span class="o">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">priceFeedDidStart</span><span class="o">:</span><span class="p">)])</span><span class="w"> </span><span class="p">{</span><span class="w">   </span><span class="c1">// @optional 檢查</span>
+<span class="w">        </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="n">priceFeedDidStart</span><span class="o">:</span><span class="nb">self</span><span class="p">];</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">tick</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">.</span><span class="n">count</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="n">Coin</span><span class="w"> </span><span class="o">*</span><span class="n">coin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">[</span><span class="n">arc4random_uniform</span><span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">.</span><span class="n">count</span><span class="p">)];</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">delta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">((</span><span class="kt">double</span><span class="p">)</span><span class="n">arc4random_uniform</span><span class="p">(</span><span class="mi">200</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">100.0</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1000.0</span><span class="p">;</span><span class="w">   </span><span class="c1">// ±10%</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">newPrice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">coin</span><span class="p">.</span><span class="n">price</span><span class="p">.</span><span class="n">doubleValue</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mf">1.0</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">delta</span><span class="p">);</span>
+<span class="w">    </span><span class="n">coin</span><span class="p">.</span><span class="n">trend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">delta</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">PriceTrendUp</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="n">delta</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">PriceTrendDown</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">PriceTrendFlat</span><span class="p">);</span>
+<span class="w">    </span><span class="n">coin</span><span class="p">.</span><span class="n">price</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="l">@(</span><span class="n">newPrice</span><span class="l">)</span><span class="p">;</span><span class="w">                  </span><span class="c1">// 觸發 KVO!</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="n">priceFeed</span><span class="o">:</span><span class="nb">self</span><span class="w"> </span><span class="n">didUpdateCoin</span><span class="o">:</span><span class="n">coin</span><span class="p">];</span><span class="w">   </span><span class="c1">// 通知 delegate</span>
+<span class="p">}</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">stopStreaming</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">timer</span><span class="w"> </span><span class="n">invalidate</span><span class="p">];</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nil</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+
+<span class="k">@end</span>
+</code></pre></div>
+
+<h2 id="124-viewcontrollerdelegate-kvonotification">12.4 ViewController(用到:delegate 實作、KVO、Notification、集合操作)</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// ViewController.m</span>
+<span class="cp">#import "ViewController.h"</span>
+<span class="cp">#import "PriceFeedService.h"</span>
+<span class="cp">#import "NSString+CoinTracker.h"</span>
+
+<span class="k">static</span><span class="w"> </span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">kFavoriteChangedNote</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">@"FavoriteChanged"</span><span class="p">;</span>
+
+<span class="k">@interface</span> <span class="nc">ViewController</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">&lt;</span><span class="bp">UITableViewDataSource</span><span class="p">,</span><span class="w"> </span><span class="bp">UITableViewDelegate</span><span class="p">,</span><span class="w"> </span><span class="n">PriceFeedServiceDelegate</span><span class="o">&gt;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">UITableView</span><span class="w"> </span><span class="o">*</span><span class="n">tableView</span><span class="p">;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="n">PriceFeedService</span><span class="w"> </span><span class="o">*</span><span class="n">service</span><span class="p">;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSArray</span><span class="o">&lt;</span><span class="n">Coin</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">coins</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="k">@implementation</span> <span class="nc">ViewController</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">viewDidLoad</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">super</span><span class="w"> </span><span class="n">viewDidLoad</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">@"CoinTracker"</span><span class="p">;</span>
+
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">tableView</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="bp">UITableView</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">initWithFrame</span><span class="o">:</span><span class="nb">self</span><span class="p">.</span><span class="n">view</span><span class="p">.</span><span class="n">bounds</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">tableView</span><span class="p">.</span><span class="n">dataSource</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span><span class="w">     </span><span class="c1">// UIKit 自己就是 delegate 模式</span>
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">tableView</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">view</span><span class="w"> </span><span class="n">addSubview</span><span class="o">:</span><span class="nb">self</span><span class="p">.</span><span class="n">tableView</span><span class="p">];</span>
+
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">service</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="n">PriceFeedService</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">init</span><span class="p">];</span>
+<span class="w">    </span><span class="nb">self</span><span class="p">.</span><span class="n">service</span><span class="p">.</span><span class="n">delegate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1">// block 回呼拿初始資料</span>
+<span class="w">    </span><span class="k">__weak</span><span class="w"> </span><span class="k">typeof</span><span class="p">(</span><span class="nb">self</span><span class="p">)</span><span class="w"> </span><span class="n">weakSelf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">service</span><span class="w"> </span><span class="n">loadInitialCoinsWithCompletion</span><span class="o">:^</span><span class="p">(</span><span class="bp">NSArray</span><span class="o">&lt;</span><span class="n">Coin</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">coins</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">weakSelf</span><span class="p">.</span><span class="n">coins</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">coins</span><span class="p">;</span>
+<span class="w">        </span><span class="p">[</span><span class="n">weakSelf</span><span class="p">.</span><span class="n">tableView</span><span class="w"> </span><span class="n">reloadData</span><span class="p">];</span>
+<span class="w">        </span><span class="p">[</span><span class="n">weakSelf</span><span class="p">.</span><span class="n">service</span><span class="w"> </span><span class="n">startStreaming</span><span class="p">];</span>
+<span class="w">        </span><span class="c1">// 示範 KVO:觀察第一個幣的價格</span>
+<span class="w">        </span><span class="p">[</span><span class="n">coins</span><span class="p">.</span><span class="n">firstObject</span><span class="w"> </span><span class="n">addObserver</span><span class="o">:</span><span class="n">weakSelf</span><span class="w"> </span><span class="n">forKeyPath</span><span class="o">:</span><span class="s">@"price"</span>
+<span class="w">                               </span><span class="nl">options</span><span class="p">:</span><span class="n">NSKeyValueObservingOptionNew</span><span class="w"> </span><span class="n">context</span><span class="o">:</span><span class="nb">nil</span><span class="p">];</span>
+<span class="w">    </span><span class="p">}];</span>
+
+<span class="w">    </span><span class="c1">// Notification:聽「加入最愛」廣播</span>
+<span class="w">    </span><span class="p">[[</span><span class="bp">NSNotificationCenter</span><span class="w"> </span><span class="n">defaultCenter</span><span class="p">]</span><span class="w"> </span><span class="n">addObserver</span><span class="o">:</span><span class="nb">self</span><span class="w"> </span><span class="n">selector</span><span class="o">:</span><span class="k">@selector</span><span class="p">(</span><span class="n">onFavoriteChanged</span><span class="o">:</span><span class="p">)</span>
+<span class="w">                                                 </span><span class="nl">name</span><span class="p">:</span><span class="n">kFavoriteChangedNote</span><span class="w"> </span><span class="n">object</span><span class="o">:</span><span class="nb">nil</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="c1">// --- PriceFeedServiceDelegate ---</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">priceFeed:</span><span class="p">(</span><span class="n">PriceFeedService</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">service</span><span class="w"> </span><span class="nf">didUpdateCoin:</span><span class="p">(</span><span class="n">Coin</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">coin</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSUInteger</span><span class="w"> </span><span class="n">idx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="w"> </span><span class="n">indexOfObject</span><span class="o">:</span><span class="n">coin</span><span class="p">];</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">idx</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">NSNotFound</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="bp">NSIndexPath</span><span class="w"> </span><span class="o">*</span><span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSIndexPath</span><span class="w"> </span><span class="n">indexPathForRow</span><span class="o">:</span><span class="n">idx</span><span class="w"> </span><span class="n">inSection</span><span class="o">:</span><span class="mi">0</span><span class="p">];</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">tableView</span><span class="w"> </span><span class="n">reloadRowsAtIndexPaths</span><span class="o">:</span><span class="l">@[</span><span class="n">path</span><span class="l">]</span><span class="w"> </span><span class="n">withRowAnimation</span><span class="o">:</span><span class="n">UITableViewRowAnimationNone</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="c1">// --- KVO 回呼 ---</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">observeValueForKeyPath:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">keyPath</span><span class="w"> </span><span class="nf">ofObject:</span><span class="p">(</span><span class="kt">id</span><span class="p">)</span><span class="nv">object</span>
+<span class="w">                        </span><span class="nl">change</span><span class="p">:(</span><span class="bp">NSDictionary</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">change</span><span class="w"> </span><span class="nf">context:</span><span class="p">(</span><span class="kt">void</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">context</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">([</span><span class="n">keyPath</span><span class="w"> </span><span class="n">isEqualToString</span><span class="o">:</span><span class="s">@"price"</span><span class="p">])</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"[KVO] 價格更新: %@"</span><span class="p">,</span><span class="w"> </span><span class="n">change</span><span class="p">[</span><span class="n">NSKeyValueChangeNewKey</span><span class="p">]);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// --- Notification 回呼 ---</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">onFavoriteChanged:</span><span class="p">(</span><span class="bp">NSNotification</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">note</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">NSLog</span><span class="p">(</span><span class="s">@"[Notification] 最愛清單變更: %@"</span><span class="p">,</span><span class="w"> </span><span class="n">note</span><span class="p">.</span><span class="n">userInfo</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// --- UITableViewDataSource ---</span>
+<span class="p">-</span> <span class="p">(</span><span class="n">NSInteger</span><span class="p">)</span><span class="nf">tableView:</span><span class="p">(</span><span class="bp">UITableView</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">tv</span><span class="w"> </span><span class="nf">numberOfRowsInSection:</span><span class="p">(</span><span class="n">NSInteger</span><span class="p">)</span><span class="nv">section</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">.</span><span class="n">count</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="bp">UITableViewCell</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">tableView:</span><span class="p">(</span><span class="bp">UITableView</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">tv</span><span class="w"> </span><span class="nf">cellForRowAtIndexPath:</span><span class="p">(</span><span class="bp">NSIndexPath</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">indexPath</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="bp">UITableViewCell</span><span class="w"> </span><span class="o">*</span><span class="n">cell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">tv</span><span class="w"> </span><span class="n">dequeueReusableCellWithIdentifier</span><span class="o">:</span><span class="s">@"cell"</span><span class="p">];</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">cell</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">cell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[[</span><span class="bp">UITableViewCell</span><span class="w"> </span><span class="n">alloc</span><span class="p">]</span><span class="w"> </span><span class="n">initWithStyle</span><span class="o">:</span><span class="n">UITableViewCellStyleValue1</span><span class="w"> </span><span class="n">reuseIdentifier</span><span class="o">:</span><span class="s">@"cell"</span><span class="p">];</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">Coin</span><span class="w"> </span><span class="o">*</span><span class="n">coin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">[</span><span class="n">indexPath</span><span class="p">.</span><span class="n">row</span><span class="p">];</span>
+<span class="w">    </span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">coin</span><span class="p">.</span><span class="n">isFavorite</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="p">[</span><span class="s">@"★ "</span><span class="w"> </span><span class="n">stringByAppendingString</span><span class="o">:</span><span class="n">coin</span><span class="p">.</span><span class="n">symbol</span><span class="p">]</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">coin</span><span class="p">.</span><span class="n">symbol</span><span class="p">;</span>
+<span class="w">    </span><span class="n">cell</span><span class="p">.</span><span class="n">textLabel</span><span class="p">.</span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">name</span><span class="w"> </span><span class="n">trendArrowForTrend</span><span class="o">:</span><span class="n">coin</span><span class="p">.</span><span class="n">trend</span><span class="p">];</span><span class="w">     </span><span class="c1">// 用到 Category</span>
+<span class="w">    </span><span class="n">cell</span><span class="p">.</span><span class="n">detailTextLabel</span><span class="p">.</span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="n">coin</span><span class="w"> </span><span class="n">displayPrice</span><span class="p">];</span>
+<span class="w">    </span><span class="n">cell</span><span class="p">.</span><span class="n">detailTextLabel</span><span class="p">.</span><span class="n">textColor</span><span class="w"> </span><span class="o">=</span>
+<span class="w">        </span><span class="n">coin</span><span class="p">.</span><span class="n">trend</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">PriceTrendUp</span><span class="w">   </span><span class="o">?</span><span class="w"> </span><span class="bp">UIColor</span><span class="p">.</span><span class="n">systemGreenColor</span><span class="w"> </span><span class="o">:</span>
+<span class="w">        </span><span class="n">coin</span><span class="p">.</span><span class="n">trend</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">PriceTrendDown</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="bp">UIColor</span><span class="p">.</span><span class="n">systemRedColor</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="bp">UIColor</span><span class="p">.</span><span class="n">labelColor</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">cell</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// --- 點一列 = 切換最愛 ---</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">tableView:</span><span class="p">(</span><span class="bp">UITableView</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">tv</span><span class="w"> </span><span class="nf">didSelectRowAtIndexPath:</span><span class="p">(</span><span class="bp">NSIndexPath</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">indexPath</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Coin</span><span class="w"> </span><span class="o">*</span><span class="n">coin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">[</span><span class="n">indexPath</span><span class="p">.</span><span class="n">row</span><span class="p">];</span>
+<span class="w">    </span><span class="n">coin</span><span class="p">.</span><span class="n">favorite</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">!</span><span class="n">coin</span><span class="p">.</span><span class="n">isFavorite</span><span class="p">;</span>
+<span class="w">    </span><span class="p">[[</span><span class="bp">NSNotificationCenter</span><span class="w"> </span><span class="n">defaultCenter</span><span class="p">]</span><span class="w"> </span><span class="n">postNotificationName</span><span class="o">:</span><span class="n">kFavoriteChangedNote</span>
+<span class="w">        </span><span class="nl">object</span><span class="p">:</span><span class="nb">nil</span><span class="w"> </span><span class="n">userInfo</span><span class="o">:</span><span class="l">@{</span><span class="s">@"symbol"</span><span class="o">:</span><span class="w"> </span><span class="n">coin</span><span class="p">.</span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="s">@"favorite"</span><span class="o">:</span><span class="w"> </span><span class="l">@(</span><span class="n">coin</span><span class="p">.</span><span class="n">isFavorite</span><span class="l">)}</span><span class="p">];</span>
+<span class="w">    </span><span class="p">[</span><span class="n">tv</span><span class="w"> </span><span class="n">reloadRowsAtIndexPaths</span><span class="o">:</span><span class="l">@[</span><span class="n">indexPath</span><span class="l">]</span><span class="w"> </span><span class="n">withRowAnimation</span><span class="o">:</span><span class="n">UITableViewRowAnimationAutomatic</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="c1">// --- 清理(KVO / Notification 都要解除!)---</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">dealloc</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">coins</span><span class="p">.</span><span class="n">firstObject</span><span class="w"> </span><span class="n">removeObserver</span><span class="o">:</span><span class="nb">self</span><span class="w"> </span><span class="n">forKeyPath</span><span class="o">:</span><span class="s">@"price"</span><span class="p">];</span>
+<span class="w">    </span><span class="p">[[</span><span class="bp">NSNotificationCenter</span><span class="w"> </span><span class="n">defaultCenter</span><span class="p">]</span><span class="w"> </span><span class="n">removeObserver</span><span class="o">:</span><span class="nb">self</span><span class="p">];</span>
+<span class="w">    </span><span class="p">[</span><span class="nb">self</span><span class="p">.</span><span class="n">service</span><span class="w"> </span><span class="n">stopStreaming</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">@end</span>
+</code></pre></div>
+
+<h2 id="125-app">12.5 概念對照表:這個 App 練到了什麼</h2>
+<table>
+<thead>
+<tr>
+<th>章節概念</th>
+<th>在 App 哪裡</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.h</code>/<code>.m</code> 分離、@interface/@implementation</td>
+<td>全部檔案</td>
+</tr>
+<tr>
+<td>@property 修飾詞(copy/strong/weak/assign)</td>
+<td><code>Coin</code>、<code>PriceFeedService.delegate</code></td>
+</tr>
+<tr>
+<td>指定初始化器、類別方法</td>
+<td><code>Coin</code></td>
+</tr>
+<tr>
+<td>NS_ENUM</td>
+<td><code>PriceTrend</code></td>
+</tr>
+<tr>
+<td>NSArray/NSDictionary/NSMutable*、字面值</td>
+<td>seed 資料、coins 列表</td>
+</tr>
+<tr>
+<td>Category</td>
+<td><code>NSString+CoinTracker</code></td>
+</tr>
+<tr>
+<td>Class Extension(私有成員)</td>
+<td><code>PriceFeedService.m</code> 的 <code>()</code> 區塊</td>
+</tr>
+<tr>
+<td>Protocol + @optional + respondsToSelector</td>
+<td><code>PriceFeedServiceDelegate</code></td>
+</tr>
+<tr>
+<td>Block(宣告、typedef、回呼)</td>
+<td><code>CoinsLoadedBlock</code></td>
+</tr>
+<tr>
+<td>weak-strong dance 防循環參考</td>
+<td>NSTimer block、loadInitialCoins</td>
+</tr>
+<tr>
+<td>GCD(背景→主執行緒)</td>
+<td><code>loadInitialCoinsWithCompletion:</code></td>
+</tr>
+<tr>
+<td>KVO(加觀察、回呼、移除)</td>
+<td>ViewController 觀察 <code>price</code></td>
+</tr>
+<tr>
+<td>NSNotificationCenter</td>
+<td>最愛變更廣播</td>
+</tr>
+<tr>
+<td>對 nil 容忍、NSNotFound 檢查</td>
+<td><code>didUpdateCoin:</code></td>
+</tr>
+<tr>
+<td>dealloc 清理</td>
+<td>ViewController</td>
+</tr>
+</tbody>
+</table>
+<h2 id="126">12.6 延伸挑戰(自行練習)</h2>
+<ol>
+<li>把 <code>coins</code> 改成依價格排序顯示(提示:<code>sortedArrayUsingComparator:</code> 吃一個 block)。</li>
+<li>加一個 <code>UISearchBar</code>,用 <code>NSPredicate</code> 過濾:<code>[NSPredicate predicateWithFormat:@"symbol CONTAINS[c] %@", text]</code>。</li>
+<li>把最愛清單用 <code>NSUserDefaults</code> 存起來,重開 App 還在。</li>
+<li>把 <code>PriceFeedService</code> 改寫成 Swift,體驗混編:在 Swift 檔案加 <code>@objc</code> 與繼承 <code>NSObject</code>,並從 Objective-C <code>#import "專案名-Swift.h"</code> 呼叫它。</li>
+</ol>
+<hr />
+<h2 id="_1">自我檢核清單</h2>
+<ul>
+<li class="check"><label><input type="checkbox" data-key="objc-0"> 能解釋 <code>.h</code>/<code>.m</code> 的分工,手寫一個類別的完整宣告與實作</label></li>
+<li class="check"><label><input type="checkbox" data-key="objc-1"> 能背出 @property 六個修飾詞的意義,並說明 NSString 為何用 copy、delegate 為何用 weak</label></li>
+<li class="check"><label><input type="checkbox" data-key="objc-2"> 能手寫 block 的宣告與 completion handler 模式,會 weak-strong dance</label></li>
+<li class="check"><label><input type="checkbox" data-key="objc-3"> 能說明 delegate / block / notification / KVO 的選擇時機</label></li>
+<li class="check"><label><input type="checkbox" data-key="objc-4"> 會 GCD 的「背景做事、主執行緒更新 UI」模板</label></li>
+<li class="check"><label><input type="checkbox" data-key="objc-5"> 知道「對 nil 送訊息不會當掉」與訊息傳遞(動態派發)的概念</label></li>
+<li class="check"><label><input type="checkbox" data-key="objc-6"> 做完 CoinTracker 並至少完成一個延伸挑戰</label></li>
+</ul></article>
+    <nav class="pager"><a href="java.html"><span class="dir">← 上一章</span>Java 基礎到進階</a><a class="next" href="architecture.html"><span class="dir">下一章 →</span>交易所 App 架構設計</a></nav>
+  </main>
+</div>
+<script>
+(function(){
+  var store = {get:function(k){try{return localStorage.getItem(k)}catch(e){return this._m&&this._m[k]||null}},
+               set:function(k,v){try{localStorage.setItem(k,v)}catch(e){this._m=this._m||{};this._m[k]=v}}};
+  var boxes = document.querySelectorAll('li.check input');
+  function refresh(){
+    if(!boxes.length) return;
+    var done = 0;
+    boxes.forEach(function(b){ if(b.checked) done++; });
+    var pb = document.getElementById('progressBox');
+    if(pb){ pb.hidden = false;
+      document.getElementById('progressFill').style.width = Math.round(done/boxes.length*100)+'%';
+      document.getElementById('progressText').textContent = '已完成 '+done+' / '+boxes.length+' 項';
+    }
+  }
+  boxes.forEach(function(b){
+    if(store.get('chk-'+b.dataset.key)==='1') b.checked = true;
+    b.addEventListener('change',function(){
+      store.set('chk-'+b.dataset.key, b.checked?'1':'0'); refresh();
+    });
+  });
+  refresh();
+  // PWA:支援的環境(如 GitHub Pages)註冊 service worker;不支援時靜默略過
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

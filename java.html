@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Java 基礎到進階｜面試強化手冊</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17616e">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --paper:#f7f5f0; --card:#fffdf8; --ink:#2b2a26; --muted:#6f6a5e;
+  --accent:#17616e; --accent-soft:#e3eef0; --line:#e2ddd2; --mark:#b4530a;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:16px;line-height:1.85}
+.topbar{position:sticky;top:0;z-index:10;display:flex;gap:1.5rem;align-items:center;
+  background:var(--card);border-bottom:1px solid var(--line);padding:.7rem 1.4rem}
+.brand{font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.05em}
+.topbar nav{display:flex;gap:.2rem;flex-wrap:wrap}
+.topbar nav a{color:var(--muted);text-decoration:none;padding:.3rem .7rem;border-radius:6px;font-size:.92rem}
+.topbar nav a:hover{background:var(--accent-soft);color:var(--accent)}
+.topbar nav a.active{background:var(--accent);color:#fff}
+.layout{display:flex;max-width:1200px;margin:0 auto;align-items:flex-start}
+.sidebar{position:sticky;top:3.6rem;width:230px;flex:none;padding:1.6rem 1rem;
+  max-height:calc(100vh - 4rem);overflow:auto}
+.sidebar-title{font-size:.78rem;letter-spacing:.15em;color:var(--muted);margin-bottom:.5rem}
+.sidebar ul{list-style:none;margin:0 0 1.2rem;padding:0}
+.sidebar li{margin:.15rem 0}
+.sidebar a{color:var(--muted);text-decoration:none;font-size:.88rem;display:block;
+  padding:.22rem .5rem;border-left:2px solid transparent;border-radius:0 6px 6px 0}
+.sidebar a:hover{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+.content{flex:1;min-width:0;padding:2rem 2.4rem 4rem}
+article{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:2.4rem 2.8rem;box-shadow:0 1px 3px rgba(60,50,30,.05)}
+h1{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.75rem;line-height:1.4;
+  border-bottom:3px double var(--line);padding-bottom:.7rem;margin-top:0}
+h2{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.32rem;margin-top:2.6em;
+  padding-left:.65rem;border-left:4px solid var(--accent)}
+h3{font-size:1.08rem;margin-top:2em;color:var(--accent)}
+a{color:var(--accent)}
+blockquote{margin:1.2em 0;padding:.8em 1.2em;background:var(--accent-soft);
+  border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3c4b4e}
+blockquote p{margin:.3em 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:.92rem}
+th,td{border:1px solid var(--line);padding:.5em .8em;text-align:left;vertical-align:top}
+th{background:#efece3}
+tr:nth-child(even) td{background:#fbf9f3}
+code{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:.86em;
+  background:#eeeae0;padding:.12em .4em;border-radius:4px}
+.hl{background:#2d2a24;border-radius:10px;padding:1em 1.2em;overflow-x:auto;
+  margin:1.2em 0;font-size:.85rem;line-height:1.65}
+.hl code{background:none;padding:0;color:#e8e3d8}
+.hl pre{margin:0}
+details.exercise{margin:1.4em 0;border:1px solid #d8b98f;border-radius:10px;
+  background:#fdf6ea;overflow:hidden}
+details.exercise summary{cursor:pointer;padding:.75em 1.1em;font-weight:600;
+  color:var(--mark);list-style:none;user-select:none}
+details.exercise summary::before{content:"▸ ";transition:.15s}
+details.exercise[open] summary::before{content:"▾ "}
+details.exercise summary:hover{background:#f8edda}
+.exercise-body{padding:.2em 1.3em 1em;border-top:1px dashed #e4cfa8}
+figure.diagram{margin:1.6em 0;padding:1.2em;background:#fff;border:1px solid var(--line);
+  border-radius:10px;text-align:center;overflow-x:auto}
+li.check{list-style:none;margin-left:-1.2em}
+li.check label{display:flex;gap:.6em;align-items:baseline;cursor:pointer;
+  padding:.3em .6em;border-radius:8px}
+li.check label:hover{background:var(--accent-soft)}
+li.check input{accent-color:var(--accent);transform:translateY(2px) scale(1.15)}
+li.check input:checked + *{}
+li.check:has(input:checked) label{color:var(--muted);text-decoration:line-through}
+.pager{display:flex;justify-content:space-between;margin-top:1.6rem;gap:1rem}
+.pager a{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.8rem 1.1rem;text-decoration:none;color:var(--ink)}
+.pager a:hover{border-color:var(--accent)}
+.pager .dir{display:block;font-size:.75rem;color:var(--muted);letter-spacing:.1em}
+.pager .next{text-align:right}
+.progress-track{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
+.progress-text{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+@media(max-width:900px){
+  .sidebar{display:none}
+  .content{padding:1rem}
+  article{padding:1.4rem 1.2rem}
+}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ebdbb2 }
+.hl { background: #282828; color: #DDD }
+.hl .c { color: #928374; font-style: italic } /* Comment */
+.hl .err { color: #282828; background-color: #FB4934 } /* Error */
+.hl .esc { color: #DDD } /* Escape */
+.hl .g { color: #DDD } /* Generic */
+.hl .k { color: #FB4934 } /* Keyword */
+.hl .l { color: #DDD } /* Literal */
+.hl .n { color: #DDD } /* Name */
+.hl .o { color: #DDD } /* Operator */
+.hl .x { color: #DDD } /* Other */
+.hl .p { color: #DDD } /* Punctuation */
+.hl .ch { color: #928374; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #928374; font-style: italic } /* Comment.Multiline */
+.hl .c-PreProc { color: #8EC07C; font-style: italic } /* Comment.PreProc */
+.hl .cp { color: #928374; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #928374; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #928374; font-style: italic } /* Comment.Single */
+.hl .cs { color: #EBDBB2; font-weight: bold; font-style: italic } /* Comment.Special */
+.hl .gd { color: #282828; background-color: #FB4934 } /* Generic.Deleted */
+.hl .ge { color: #DDD; font-style: italic } /* Generic.Emph */
+.hl .ges { color: #DDD; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.hl .gr { color: #FB4934 } /* Generic.Error */
+.hl .gh { color: #EBDBB2; font-weight: bold } /* Generic.Heading */
+.hl .gi { color: #282828; background-color: #B8BB26 } /* Generic.Inserted */
+.hl .go { color: #F2E5BC } /* Generic.Output */
+.hl .gp { color: #A89984 } /* Generic.Prompt */
+.hl .gs { color: #DDD; font-weight: bold } /* Generic.Strong */
+.hl .gu { color: #EBDBB2; text-decoration: underline } /* Generic.Subheading */
+.hl .gt { color: #FB4934 } /* Generic.Traceback */
+.hl .kc { color: #FB4934 } /* Keyword.Constant */
+.hl .kd { color: #FB4934 } /* Keyword.Declaration */
+.hl .kn { color: #FB4934 } /* Keyword.Namespace */
+.hl .kp { color: #FB4934 } /* Keyword.Pseudo */
+.hl .kr { color: #FB4934 } /* Keyword.Reserved */
+.hl .kt { color: #FB4934 } /* Keyword.Type */
+.hl .ld { color: #DDD } /* Literal.Date */
+.hl .m { color: #D3869B } /* Literal.Number */
+.hl .s { color: #B8BB26 } /* Literal.String */
+.hl .na { color: #FABD2F } /* Name.Attribute */
+.hl .nb { color: #FE8019 } /* Name.Builtin */
+.hl .nc { color: #8EC07C } /* Name.Class */
+.hl .no { color: #D3869B } /* Name.Constant */
+.hl .nd { color: #FB4934 } /* Name.Decorator */
+.hl .ni { color: #DDD } /* Name.Entity */
+.hl .ne { color: #FB4934 } /* Name.Exception */
+.hl .nf { color: #8EC07C } /* Name.Function */
+.hl .nl { color: #DDD } /* Name.Label */
+.hl .nn { color: #8EC07C } /* Name.Namespace */
+.hl .nx { color: #DDD } /* Name.Other */
+.hl .py { color: #DDD } /* Name.Property */
+.hl .nt { color: #8EC07C } /* Name.Tag */
+.hl .nv { color: #83A598 } /* Name.Variable */
+.hl .ow { color: #FB4934 } /* Operator.Word */
+.hl .pm { color: #DDD } /* Punctuation.Marker */
+.hl .w { color: #DDD } /* Text.Whitespace */
+.hl .mb { color: #D3869B } /* Literal.Number.Bin */
+.hl .mf { color: #D3869B } /* Literal.Number.Float */
+.hl .mh { color: #D3869B } /* Literal.Number.Hex */
+.hl .mi { color: #D3869B } /* Literal.Number.Integer */
+.hl .mo { color: #D3869B } /* Literal.Number.Oct */
+.hl .sa { color: #B8BB26 } /* Literal.String.Affix */
+.hl .sb { color: #B8BB26 } /* Literal.String.Backtick */
+.hl .sc { color: #B8BB26 } /* Literal.String.Char */
+.hl .dl { color: #B8BB26 } /* Literal.String.Delimiter */
+.hl .sd { color: #B8BB26 } /* Literal.String.Doc */
+.hl .s2 { color: #B8BB26 } /* Literal.String.Double */
+.hl .se { color: #FE8019 } /* Literal.String.Escape */
+.hl .sh { color: #B8BB26 } /* Literal.String.Heredoc */
+.hl .si { color: #B8BB26 } /* Literal.String.Interpol */
+.hl .sx { color: #B8BB26 } /* Literal.String.Other */
+.hl .sr { color: #B8BB26 } /* Literal.String.Regex */
+.hl .s1 { color: #B8BB26 } /* Literal.String.Single */
+.hl .ss { color: #B8BB26 } /* Literal.String.Symbol */
+.hl .bp { color: #FE8019 } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8EC07C } /* Name.Function.Magic */
+.hl .vc { color: #83A598 } /* Name.Variable.Class */
+.hl .vg { color: #83A598 } /* Name.Variable.Global */
+.hl .vi { color: #83A598 } /* Name.Variable.Instance */
+.hl .vm { color: #83A598 } /* Name.Variable.Magic */
+.hl .il { color: #D3869B } /* Literal.Number.Integer.Long */</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">面試強化手冊</a>
+  <nav><a href="index.html" class="">首頁</a><a href="java.html" class="active">Java</a><a href="objc.html" class="">Objective-C</a><a href="architecture.html" class="">架構設計</a><a href="ds.html" class="">資料結構</a><a href="concurrency.html" class="">多執行緒</a></nav>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">本章目錄</div>
+    <ul><li><a href="#1">1. 基礎複習:型別系統</a></li><li><a href="#2">2. 物件導向三大支柱與使用情境</a></li><li><a href="#3-collections">3. 集合框架(Collections)——選對容器</a></li><li><a href="#4-generics">4. 泛型(Generics)</a></li><li><a href="#5-exception">5. 例外處理(Exception)</a></li><li><a href="#6-lambda-streamjava-8">6. Lambda 與 Stream(Java 8+ 核心)</a></li><li><a href="#7">7. 多執行緒與並發(進階重點)</a></li><li><a href="#8-jvm">8. JVM 基礎(進階加分題)</a></li><li><a href="#9">9. 其他高頻面試題速查</a></li><li><a href="#10">10. 綜合實作練習</a></li><li><a href="#_1">自我檢核清單</a></li></ul>
+    <div class="progress-box" id="progressBox" hidden>
+      <div class="sidebar-title">檢核進度</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+  </aside>
+  <main class="content">
+    <article><h1 id="java">Java 基礎到進階:語法與使用情境</h1>
+<blockquote>
+<p>本章目標:把 Java 從「會寫」提升到「知道為什麼這樣寫」。每個主題都包含三部分:<strong>語法 → 使用情境 → 面試會怎麼問</strong>。
+建議搭配 IDE(IntelliJ IDEA)實際敲過每段程式碼,再做章末練習。</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 基礎複習:型別系統</h2>
+<h3 id="11-vs">1.1 基本型別 vs 參考型別</h3>
+<div class="hl"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span><span class="w">          </span><span class="c1">// 基本型別(primitive):值直接存在變數裡</span>
+<span class="n">Integer</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span><span class="w">      </span><span class="c1">// 參考型別(reference):變數存的是物件的位址</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>基本型別</th>
+<th>參考型別</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>例子</td>
+<td><code>int</code>, <code>double</code>, <code>boolean</code>, <code>char</code></td>
+<td><code>Integer</code>, <code>String</code>, 自訂類別, 陣列</td>
+</tr>
+<tr>
+<td>存放內容</td>
+<td>值本身</td>
+<td>物件的參考(位址)</td>
+</tr>
+<tr>
+<td>可否為 <code>null</code></td>
+<td>不行</td>
+<td>可以</td>
+</tr>
+<tr>
+<td>預設值</td>
+<td><code>0</code> / <code>false</code></td>
+<td><code>null</code></td>
+</tr>
+<tr>
+<td>放進集合</td>
+<td>不行(需自動裝箱)</td>
+<td>可以</td>
+</tr>
+</tbody>
+</table>
+<p><strong>使用情境</strong>:</p>
+<ul>
+<li>計算、迴圈計數 → 用基本型別,效能好、不會有 <code>null</code>。</li>
+<li>放進 <code>List</code>、<code>Map</code>,或資料庫欄位「可能沒有值」 → 用參考型別(<code>Integer</code> 可以是 <code>null</code>,代表「未填」)。</li>
+</ul>
+<p><strong>詳解:<code>==</code> 和 <code>equals()</code> 的差別</strong></p>
+<div class="hl"><pre><span></span><code><span class="n">String</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="p">(</span><span class="s">"BTC"</span><span class="p">);</span>
+<span class="n">String</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="p">(</span><span class="s">"BTC"</span><span class="p">);</span>
+
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">b</span><span class="p">);</span><span class="w">        </span><span class="c1">// false</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="n">b</span><span class="p">));</span><span class="w">   </span><span class="c1">// true</span>
+</code></pre></div>
+
+<ul>
+<li><code>==</code> 問的是:「<strong>兩個變數指向同一個物件嗎?</strong>」(比較記憶體位址)。<code>a</code> 和 <code>b</code> 是兩次 <code>new</code>,兩個不同的物件 → <code>false</code>。</li>
+<li><code>equals()</code> 問的是:「<strong>內容一樣嗎?</strong>」——前提是該類別有覆寫 equals(String 有)。兩個物件裡裝的都是 "BTC" → <code>true</code>。</li>
+<li>基本型別(int、double…)只能用 <code>==</code>,比的就是值本身。</li>
+<li>自訂類別如果<strong>沒覆寫</strong> equals,預設行為繼承自 Object——跟 <code>==</code> 一模一樣(比位址)。所以自己的類別要「比內容」,必須覆寫 equals(連同 hashCode,見第 3 章)。</li>
+</ul>
+<p><strong>詳解:Integer 的 127/128 陷阱</strong></p>
+<div class="hl"><pre><span></span><code><span class="n">Integer</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">127</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">127</span><span class="p">;</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">b</span><span class="p">);</span><span class="w">   </span><span class="c1">// true ←?!</span>
+<span class="n">Integer</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">128</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">128</span><span class="p">;</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">c</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">d</span><span class="p">);</span><span class="w">   </span><span class="c1">// false</span>
+</code></pre></div>
+
+<p>原因:Java 把 <strong>-128~127</strong> 的 Integer 物件預先做成快取(IntegerCache)。寫 <code>Integer a = 127</code> 時,拿到的是快取裡<strong>同一個物件</strong>,所以 <code>==</code>(比位址)是 true;128 超出快取範圍,每次都建立新物件 → 位址不同 → false。
+<strong>教訓</strong>:包裝型別(Integer、Long…)比較<strong>永遠用 <code>equals()</code></strong>,用 <code>==</code> 是埋地雷——測試時數字小都對,上線遇到大數字就錯。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:下面程式印出什麼?(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="n">String</span><span class="w"> </span><span class="n">s1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">"hello"</span><span class="p">;</span>
+<span class="n">String</span><span class="w"> </span><span class="n">s2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">"hello"</span><span class="p">;</span>
+<span class="n">String</span><span class="w"> </span><span class="n">s3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="p">(</span><span class="s">"hello"</span><span class="p">);</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">s1</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">s2</span><span class="p">);</span><span class="w">        </span><span class="c1">// ?</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">s1</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">s3</span><span class="p">);</span><span class="w">        </span><span class="c1">// ?</span>
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">s1</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="n">s3</span><span class="p">));</span><span class="w">   </span><span class="c1">// ?</span>
+</code></pre></div>
+
+<p><strong>解答</strong>:<code>true</code> / <code>false</code> / <code>true</code>。
+字串字面值放在「字串常量池」,<code>s1</code> 和 <code>s2</code> 指向同一個物件;<code>new String()</code> 一定建立新物件,所以 <code>==</code> 為 <code>false</code>;<code>equals()</code> 比內容,為 <code>true</code>。</p></div></details>
+<h3 id="12-stringstringbuilderstringbuffer">1.2 String、StringBuilder、StringBuffer</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// ❌ 迴圈裡用 + 串接:每次都建立新 String 物件</span>
+<span class="n">String</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">""</span><span class="p">;</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">1000</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+
+<span class="c1">// ✅ 用 StringBuilder:在同一個緩衝區上修改</span>
+<span class="n">StringBuilder</span><span class="w"> </span><span class="n">sb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">StringBuilder</span><span class="p">();</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">1000</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="n">sb</span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+<span class="n">String</span><span class="w"> </span><span class="n">result2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sb</span><span class="p">.</span><span class="na">toString</span><span class="p">();</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:</p>
+<ul>
+<li><code>String</code>:不可變(immutable),適合當 Map 的 key、多執行緒共享。</li>
+<li><code>StringBuilder</code>:單執行緒下大量串接(組 SQL、組 JSON)。</li>
+<li><code>StringBuffer</code>:同 StringBuilder 但方法有 <code>synchronized</code>,多執行緒安全(實務上少用,通常用其他並發手段)。</li>
+</ul>
+<hr />
+<h2 id="2">2. 物件導向三大支柱與使用情境</h2>
+<h3 id="21-encapsulation">2.1 封裝(Encapsulation)</h3>
+<div class="hl"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Account</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">balance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">.</span><span class="na">ZERO</span><span class="p">;</span><span class="w">   </span><span class="c1">// 欄位藏起來</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">deposit</span><span class="p">(</span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">amount</span><span class="p">.</span><span class="na">signum</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">IllegalArgumentException</span><span class="p">(</span><span class="s">"金額需為正數"</span><span class="p">);</span>
+<span class="w">        </span><span class="n">balance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">balance</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="n">amount</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">getBalance</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">balance</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:保護不變條件(invariant)。例如「餘額不能被外部直接改成負數」——所有修改都必須經過 <code>deposit</code>/<code>withdraw</code>,規則寫在方法裡,外部繞不過去。交易所的錢包餘額就是典型例子。</p>
+<blockquote>
+<p>💡 注意這裡用 <code>BigDecimal</code> 而不是 <code>double</code>:<strong>金額運算絕對不用浮點數</strong>,因為 <code>0.1 + 0.2 != 0.3</code>(二進位無法精確表示十進位小數)。這在金融業面試是必考題。</p>
+</blockquote>
+<h3 id="22-inheritancepolymorphism">2.2 繼承(Inheritance)與多型(Polymorphism)</h3>
+<div class="hl"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">abstract</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Order</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">;</span><span class="w">      </span><span class="c1">// 交易對,例如 "BTC/JPY"</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">amount</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">abstract</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">estimateCost</span><span class="p">();</span><span class="w">   </span><span class="c1">// 子類別各自實作</span>
+<span class="p">}</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">MarketOrder</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Order</span><span class="w"> </span><span class="p">{</span><span class="w">        </span><span class="c1">// 市價單</span>
+<span class="w">    </span><span class="nd">@Override</span><span class="w"> </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">estimateCost</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">amount</span><span class="p">.</span><span class="na">multiply</span><span class="p">(</span><span class="n">currentPrice</span><span class="p">());</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">currentPrice</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* 查詢即時價 */</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">.</span><span class="na">ONE</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">LimitOrder</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Order</span><span class="w"> </span><span class="p">{</span><span class="w">         </span><span class="c1">// 限價單</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">limitPrice</span><span class="p">;</span>
+<span class="w">    </span><span class="nd">@Override</span><span class="w"> </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">estimateCost</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">amount</span><span class="p">.</span><span class="na">multiply</span><span class="p">(</span><span class="n">limitPrice</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// 多型:同一個變數,執行期才決定呼叫誰的方法</span>
+<span class="n">List</span><span class="o">&lt;</span><span class="n">Order</span><span class="o">&gt;</span><span class="w"> </span><span class="n">orders</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">MarketOrder</span><span class="p">(),</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">LimitOrder</span><span class="p">());</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">Order</span><span class="w"> </span><span class="n">o</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">orders</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">o</span><span class="p">.</span><span class="na">estimateCost</span><span class="p">());</span><span class="w">   </span><span class="c1">// 各自跑自己的實作</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:同一類東西有共同行為、但做法不同。呼叫端只依賴抽象(<code>Order</code>),新增「停損單」時不用改呼叫端——這就是<strong>開閉原則</strong>(對擴充開放、對修改封閉)。</p>
+<p><strong>詳解:覆寫(Override)vs 多載(Overload)</strong></p>
+<p>名字像,其實是兩件完全不同的事:</p>
+<div class="hl"><pre><span></span><code><span class="kd">class</span> <span class="nc">Animal</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="nf">speak</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">"..."</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">class</span> <span class="nc">Dog</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Animal</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="nf">speak</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">"汪!"</span><span class="p">);</span><span class="w"> </span><span class="p">}</span><span class="w">      </span><span class="c1">// 覆寫 Override:</span>
+<span class="w">                                                      </span><span class="c1">// 同名「同參數」,把父類別的實作換掉</span>
+
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="nf">speak</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">mood</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">                         </span><span class="c1">// 多載 Overload:</span>
+<span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">"("</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">mood</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">") 汪!"</span><span class="p">);</span><span class="w">     </span><span class="c1">// 同名「不同參數」,其實是另一個新方法</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="n">Animal</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Dog</span><span class="p">();</span><span class="w">   </span><span class="c1">// 變數型別是 Animal,實際物件是 Dog</span>
+<span class="n">a</span><span class="p">.</span><span class="na">speak</span><span class="p">();</span><span class="w">              </span><span class="c1">// 印出「汪!」</span>
+</code></pre></div>
+
+<ul>
+<li><strong>Override 在執行期(runtime)決定</strong>:呼叫 <code>a.speak()</code> 時,JVM 看的是「a 實際上是什麼物件」(是 Dog)→ 跑 Dog 的版本。這叫動態繫結(dynamic binding),多型就是靠它。</li>
+<li><strong>Overload 在編譯期(compile time)決定</strong>:編譯器看你傳的參數型別,直接選定呼叫哪個方法,跟執行期無關。</li>
+</ul>
+<p><strong>詳解:抽象類別(abstract class)vs 介面(interface)</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>抽象類別</th>
+<th>介面</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>表達的概念</td>
+<td>「是一種…」(is-a):MarketOrder <strong>是一種</strong> Order</td>
+<td>「會做…」(can-do):這個類別<strong>會</strong>通知人(Notifier)</td>
+</tr>
+<tr>
+<td>能有欄位/建構子?</td>
+<td>✅ 可以,所以能共享狀態與部分實作</td>
+<td>❌ 不行(只能常數);Java 8 後可有 <code>default</code> 方法帶預設實作</td>
+</tr>
+<tr>
+<td>一個類別能接幾個?</td>
+<td>只能繼承 <strong>1</strong> 個</td>
+<td>可以實作<strong>多</strong>個</td>
+</tr>
+</tbody>
+</table>
+<p><strong>經驗法則:先想介面</strong>——呼叫端依賴介面最靈活(見 2.3 的依賴反轉);真的有一批子類別要<strong>共享欄位或部分程式碼</strong>(例如 Order 的 symbol、amount),才升級成抽象類別。本章 2.2 的 <code>Order</code> 用抽象類別,正是因為子類別共享 <code>symbol</code>、<code>amount</code> 兩個欄位。</p>
+<h3 id="23">2.3 介面的現代用法</h3>
+<div class="hl"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">interface</span> <span class="nc">PriceSource</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">latestPrice</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// default 方法:介面也能帶預設實作(Java 8+)</span>
+<span class="w">    </span><span class="k">default</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">isStale</span><span class="p">(</span><span class="n">Instant</span><span class="w"> </span><span class="n">lastUpdate</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">Duration</span><span class="p">.</span><span class="na">between</span><span class="p">(</span><span class="n">lastUpdate</span><span class="p">,</span><span class="w"> </span><span class="n">Instant</span><span class="p">.</span><span class="na">now</span><span class="p">()).</span><span class="na">getSeconds</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:依賴反轉。Service 依賴 <code>PriceSource</code> 介面,正式環境注入「WebSocket 實作」,單元測試注入「假資料實作」——不用連網路就能測。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:設計一個 <code>Notifier</code> 介面,讓系統可以用 Email 或 App 推播通知使用者,寫出介面與兩個實作的骨架。(點擊看參考解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">interface</span> <span class="nc">Notifier</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="nf">notify</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">userId</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">message</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">EmailNotifier</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">Notifier</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span><span class="w"> </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">notify</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">userId</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">message</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 查 email、寄信</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">PushNotifier</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">Notifier</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nd">@Override</span><span class="w"> </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">notify</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">userId</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">message</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 發 App 推播</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// 呼叫端只認識介面:</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">AlertService</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">Notifier</span><span class="w"> </span><span class="n">notifier</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="nf">AlertService</span><span class="p">(</span><span class="n">Notifier</span><span class="w"> </span><span class="n">notifier</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">notifier</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">notifier</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w">  </span><span class="c1">// 建構子注入</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">priceAlert</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">userId</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">notifier</span><span class="p">.</span><span class="na">notify</span><span class="p">(</span><span class="n">userId</span><span class="p">,</span><span class="w"> </span><span class="n">symbol</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">" 已到達 "</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">price</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>重點:<code>AlertService</code> 完全不知道通知是怎麼送出去的,之後要加「LINE 通知」只要新增一個實作類別。</p></div></details>
+<hr />
+<h2 id="3-collections">3. 集合框架(Collections)——選對容器</h2>
+<h3 id="31">3.1 全景圖</h3>
+<div class="hl"><pre><span></span><code>Collection
+ ├─ List(有序、可重複)    → ArrayList, LinkedList
+ ├─ Set (不重複)           → HashSet, LinkedHashSet, TreeSet
+ └─ Queue(佇列)           → ArrayDeque, PriorityQueue
+Map(key-value,不屬於 Collection)→ HashMap, LinkedHashMap, TreeMap, ConcurrentHashMap
+</code></pre></div>
+
+<h3 id="32">3.2 怎麼選?</h3>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>選擇</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>依索引快速讀取、尾端新增</td>
+<td><code>ArrayList</code></td>
+<td>底層是陣列,<code>get(i)</code> 為 O(1)</td>
+</tr>
+<tr>
+<td>頻繁在頭尾插入/刪除</td>
+<td><code>ArrayDeque</code></td>
+<td>環狀陣列,兩端 O(1)</td>
+</tr>
+<tr>
+<td>去除重複、快速查「有沒有」</td>
+<td><code>HashSet</code></td>
+<td>雜湊查找平均 O(1)</td>
+</tr>
+<tr>
+<td>需要排序的不重複集合</td>
+<td><code>TreeSet</code></td>
+<td>紅黑樹,自動排序,O(log n)</td>
+</tr>
+<tr>
+<td>key→value 查詢</td>
+<td><code>HashMap</code></td>
+<td>平均 O(1)</td>
+</tr>
+<tr>
+<td>需要依 key 排序或範圍查詢</td>
+<td><code>TreeMap</code></td>
+<td>紅黑樹,<code>subMap()</code> 可取範圍</td>
+</tr>
+<tr>
+<td>多執行緒共用的 Map</td>
+<td><code>ConcurrentHashMap</code></td>
+<td>只鎖單一桶 + 無鎖更新,執行緒安全(原理見 §7.2)</td>
+</tr>
+<tr>
+<td>每次都取「最大/最小」</td>
+<td><code>PriorityQueue</code></td>
+<td>堆積(heap),取頂 O(1)、插入 O(log n)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>實務情境舉例</strong>:</p>
+<ul>
+<li>撮合引擎的買賣掛單簿(order book):買單要照價格由高到低 → <code>TreeMap&lt;BigDecimal, List&lt;Order&gt;&gt;</code>。</li>
+<li>「這個 userId 今天查過價了嗎」 → <code>HashSet&lt;String&gt;</code>。</li>
+<li>快取最新成交價 <code>symbol → price</code>,多執行緒讀寫 → <code>ConcurrentHashMap</code>。</li>
+</ul>
+<h3 id="33-hashmap">3.3 HashMap 面試必考:運作原理</h3>
+<ol>
+<li>對 key 呼叫 <code>hashCode()</code> 算出雜湊值,決定放進哪個「桶(bucket)」。</li>
+<li>同一桶發生碰撞 → 以鏈結串列串起來;Java 8 之後鏈長超過 8 會<strong>轉成紅黑樹</strong>(避免退化成 O(n))。</li>
+<li>元素數量超過 <code>容量 × 負載因子(預設 0.75)</code> → <strong>擴容</strong>為兩倍並重新分配。</li>
+</ol>
+<p><strong>因此</strong>:自訂類別要當 HashMap 的 key,必須<strong>同時覆寫 <code>hashCode()</code> 和 <code>equals()</code></strong>,而且兩者邏輯要一致(equals 相等 → hashCode 必相等)。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:為什麼只覆寫 <code>equals()</code> 不覆寫 <code>hashCode()</code>,物件放進 HashSet 後會「找不到」?(點擊看解答)</summary><div class="exercise-body"><p>HashSet 找元素時<strong>先用 hashCode 定位桶</strong>,再用 equals 比對。若沒覆寫 hashCode,兩個內容相同的物件會算出不同雜湊值、落在不同桶——根本走不到 equals 那一步,所以 <code>contains()</code> 回傳 <code>false</code>。</p></div></details>
+<h3 id="34-xx">3.4 集合底層結構快問快答(「XX 的資料結構是什麼?」系列)</h3>
+<p>被問「某集合的底層資料結構」時,答案格式:<strong>底層結構 → 關鍵機制(擴容/碰撞/排序)→ 一個適用情境</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>問題</th>
+<th>標準答案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HashMap 的資料結構?</td>
+<td><strong>陣列 + 鏈結串列 + 紅黑樹</strong>:雜湊定位到陣列的桶;碰撞串成鏈;Java 8 起鏈長 &gt; 8(且桶陣列 ≥ 64)轉紅黑樹;超過容量 × 0.75 擴容兩倍</td>
+</tr>
+<tr>
+<td>為什麼 HashMap 容量是 2 的次方?</td>
+<td>定位桶用 <code>hash &amp; (容量-1)</code> 取代取餘數(位元運算快),容量是 2 的次方時這兩者等價且雜湊分布均勻</td>
+</tr>
+<tr>
+<td>Java 7 和 8 的 HashMap 差異?</td>
+<td>7:陣列+鏈結串列、頭插法(並發擴容會成環死迴圈);8:加入紅黑樹、改尾插法、擴容時不重算雜湊只分高低位</td>
+</tr>
+<tr>
+<td>HashSet 的資料結構?</td>
+<td><strong>內部就是一個 HashMap</strong>:元素當 key,value 放一個共用的假物件(<code>PRESENT</code>)。所以特性與 HashMap 完全相同</td>
+</tr>
+<tr>
+<td>LinkedHashMap?</td>
+<td>HashMap + <strong>雙向鏈結串列</strong>串起所有節點:保留插入順序(或存取順序)。開存取順序模式 + 覆寫 <code>removeEldestEntry</code> = 現成的 <strong>LRU 快取</strong>(LRU = Least Recently Used,滿了就淘汰「最久沒被用到」的那筆;高頻考)</td>
+</tr>
+<tr>
+<td>TreeMap / TreeSet?</td>
+<td><strong>紅黑樹</strong>(自平衡 BST):key 有序,增刪查 O(log n),支援範圍查詢(<code>firstKey</code>/<code>tailMap</code>)</td>
+</tr>
+<tr>
+<td>ArrayList?</td>
+<td><strong>動態陣列</strong>:預設容量 10,滿了擴容 <strong>1.5 倍</strong>(<code>oldCapacity + (oldCapacity &gt;&gt; 1)</code>),用 <code>Arrays.copyOf</code> 搬移;所以已知大小時用 <code>new ArrayList&lt;&gt;(n)</code> 預先給容量</td>
+</tr>
+<tr>
+<td>LinkedList?</td>
+<td><strong>雙向鏈結串列</strong>:同時實作 List 和 Deque;按索引存取 O(n),實務上幾乎都被 ArrayList / ArrayDeque 取代</td>
+</tr>
+<tr>
+<td>ArrayDeque?</td>
+<td><strong>環形陣列</strong>(頭尾指標繞圈):兩端增刪 O(1),當 Stack 和 Queue 都比 LinkedList 快</td>
+</tr>
+<tr>
+<td>PriorityQueue?</td>
+<td><strong>二元堆積</strong>,用陣列存完全二元樹(父 i → 子 2i+1、2i+2):取頂 O(1)、增刪 O(log n)</td>
+</tr>
+<tr>
+<td>Hashtable 和 HashMap 差異?</td>
+<td>Hashtable 全方法 <code>synchronized</code>、不允許 null key/value,是遠古類別;要執行緒安全用 <strong>ConcurrentHashMap</strong>(鎖粒度小得多)</td>
+</tr>
+<tr>
+<td>ConcurrentHashMap?</td>
+<td>Java 8 起:<strong>陣列 + 鏈結串列/紅黑樹</strong>,寫入只對單一桶的頭節點加鎖(用 CAS 或 synchronized;CAS 是什麼見 §7.2),讀不加鎖(volatile 讀)——所以併發度高</td>
+</tr>
+<tr>
+<td>String 底層?</td>
+<td>Java 9 起內部是 <strong>byte[]</strong>(之前 char[])+ 編碼標記(Latin-1/UTF-16 壓縮記憶體);不可變,所以能進字串常量池、安全當 key</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 行動端對照(被問到可以帶一句):Swift 的 <code>Dictionary</code>/<code>Set</code> 也是雜湊表(開放定址法),<code>Array</code> 是動態陣列(copy-on-write);Objective-C 的 <code>NSDictionary</code>/<code>NSArray</code> 是類簇(class cluster),依大小自動換內部實作。原理相通,面試講得出「跨語言都是同一套資料結構」是加分項。</p>
+</blockquote>
+<p><strong>白話走一遍:<code>map.put("BTC", price)</code> 到底發生什麼事?</strong>(表格看不懂時讀這段)</p>
+<div class="hl"><pre><span></span><code><span class="n">HashMap</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;</span><span class="w"> </span><span class="n">map</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span><span class="w">   </span><span class="c1">// 內部:一個長度 16 的陣列(預設)</span>
+<span class="n">map</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"BTC"</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">);</span>
+</code></pre></div>
+
+<ol>
+<li><strong>算雜湊(hash)</strong>:對 key 呼叫 <code>"BTC".hashCode()</code>,得到一個整數,假設是 <code>66086</code>。</li>
+<li><strong>定位格子(bucket/桶)</strong>:陣列長度 16,要把 66086 塞進 0~15 其中一格。怎麼算?<code>66086 &amp; 15 = 6</code> → 放進第 6 格。<ul>
+<li>這裡 <code>&amp; 15</code> 就是表格裡說的 <code>hash &amp; (容量-1)</code>:當容量是 2 的次方(16 = 2⁴)時,<code>&amp; (容量-1)</code> 的結果和 <code>% 容量</code> 取餘數<strong>完全相同</strong>,但位元運算(bitwise AND)比除法快很多——這就是「容量為什麼一定是 2 的次方」的答案。</li>
+</ul>
+</li>
+<li><strong>放進去</strong>:第 6 格是空的 → 直接放。第 6 格已經有東西(<strong>碰撞 collision</strong>,別的 key 也算到 6)→ 先用 <code>equals</code> 檢查是不是同一個 key(是就覆蓋 value),不是就<strong>掛在那格的鏈結串列(linked list)尾端</strong>。</li>
+<li><strong>鏈太長就變樹</strong>:同一格掛超過 8 個(且整個陣列已 ≥ 64 格),鏈結串列轉成<strong>紅黑樹(red-black tree)</strong>——因為在 8 個節點的鏈上找東西要逐個比(O(n)),樹只要 O(log n)。</li>
+<li><strong>太滿就搬家(擴容 resize)</strong>:元素總數超過 <code>16 × 0.75 = 12</code> 時,開一個 32 格的新陣列,所有元素重新分配位置。0.75 這個比例叫<strong>負載因子(load factor)</strong>——太滿碰撞變多、太空浪費記憶體,0.75 是折衷。</li>
+</ol>
+<p>讀取 <code>map.get("BTC")</code> 就是前兩步再走一次:算 hash → 定位到第 6 格 → 在那格的鏈/樹裡用 <code>equals</code> 找。所以<strong>平均 O(1)</strong>(直接命中格子),最壞 O(log n)(全部擠在同一格的樹裡)。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:用 LinkedHashMap 實作一個容量 3 的 LRU 快取,並說明原理。(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="kd">class</span> <span class="nc">LruCache</span><span class="o">&lt;</span><span class="n">K</span><span class="p">,</span><span class="w"> </span><span class="n">V</span><span class="o">&gt;</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">LinkedHashMap</span><span class="o">&lt;</span><span class="n">K</span><span class="p">,</span><span class="w"> </span><span class="n">V</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">capacity</span><span class="p">;</span>
+<span class="w">    </span><span class="n">LruCache</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">capacity</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">super</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="mf">0.75f</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span><span class="w">   </span><span class="c1">// 第三個參數 true = 依「存取順序」排序</span>
+<span class="w">        </span><span class="k">this</span><span class="p">.</span><span class="na">capacity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">capacity</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">removeEldestEntry</span><span class="p">(</span><span class="n">Map</span><span class="p">.</span><span class="na">Entry</span><span class="o">&lt;</span><span class="n">K</span><span class="p">,</span><span class="w"> </span><span class="n">V</span><span class="o">&gt;</span><span class="w"> </span><span class="n">eldest</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">capacity</span><span class="p">;</span><span class="w">   </span><span class="c1">// 超過容量時,自動移除最久未使用的</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>原理</strong>:LinkedHashMap 在 HashMap 之上用雙向鏈結串列維護順序;存取順序模式下,每次 <code>get</code> 會把節點移到串列尾端,串列頭就是「最久未使用」。<code>put</code> 後會呼叫 <code>removeEldestEntry</code> 決定要不要淘汰頭節點。
+手寫版(面試常要求不用 LinkedHashMap):HashMap + 自己維護雙向鏈結串列——正是資料結構章綜合題 1 說的「組合兩個結構各取所長」。</p></div></details>
+<hr />
+<h2 id="4-generics">4. 泛型(Generics)</h2>
+<h3 id="41">4.1 基礎:型別參數</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 沒有泛型:拿出來要轉型,錯了執行期才爆炸</span>
+<span class="n">List</span><span class="w"> </span><span class="n">list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayList</span><span class="p">();</span>
+<span class="n">list</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="s">"hello"</span><span class="p">);</span>
+<span class="n">Integer</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">Integer</span><span class="p">)</span><span class="w"> </span><span class="n">list</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span><span class="w">   </span><span class="c1">// 執行期 ClassCastException!</span>
+
+<span class="c1">// 有泛型:編譯期就擋下來</span>
+<span class="n">List</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">safe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayList</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="n">safe</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="s">"hello"</span><span class="p">);</span>
+<span class="c1">// safe.add(123);  // ← 編譯錯誤</span>
+</code></pre></div>
+
+<h3 id="42">4.2 自訂泛型類別與方法</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 通用的 API 回應包裝:任何資料型別都能裝</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">ApiResponse</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">code</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">message</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">data</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="nf">getData</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">data</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// 泛型方法:&lt;T&gt; 寫在回傳型別前面</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="nf">firstOrNull</span><span class="p">(</span><span class="n">List</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="n">list</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">list</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">()</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="kc">null</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">list</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:後端 API 統一回傳格式 <code>ApiResponse&lt;UserDto&gt;</code>、<code>ApiResponse&lt;List&lt;OrderDto&gt;&gt;</code>——寫一次包裝類別,所有 API 共用。</p>
+<h3 id="43">4.3 萬用字元(進階)</h3>
+<div class="hl"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="nf">printAll</span><span class="p">(</span><span class="n">List</span><span class="o">&lt;?</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Number</span><span class="o">&gt;</span><span class="w"> </span><span class="n">nums</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w">  </span><span class="c1">// 只讀:接受 List&lt;Integer&gt;、List&lt;Double&gt;</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">addNumbers</span><span class="p">(</span><span class="n">List</span><span class="o">&lt;?</span><span class="w"> </span><span class="kd">super</span><span class="w"> </span><span class="n">Integer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">list</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="c1">// 只寫:接受 List&lt;Integer&gt;、List&lt;Number&gt;、List&lt;Object&gt;</span>
+</code></pre></div>
+
+<p>記法 <strong>PECS</strong>:Producer Extends, Consumer Super——資料「生產者」用 <code>extends</code>(從裡面讀),「消費者」用 <code>super</code>(往裡面寫)。</p>
+<p><strong>詳解:型別抹除(type erasure)</strong></p>
+<p>泛型是<strong>編譯器的檢查工具</strong>,檢查完就被「擦掉」——編譯出來的 bytecode 裡沒有 <code>&lt;String&gt;</code> 這種資訊:</p>
+<div class="hl"><pre><span></span><code><span class="n">List</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayList</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="n">List</span><span class="o">&lt;</span><span class="n">Integer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayList</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+
+<span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="na">getClass</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">b</span><span class="p">.</span><span class="na">getClass</span><span class="p">());</span><span class="w">   </span><span class="c1">// true!</span>
+<span class="c1">// 執行期兩個都只是 ArrayList,&lt;String&gt;/&lt;Integer&gt; 已經不存在</span>
+</code></pre></div>
+
+<p>為什麼這樣設計?為了<strong>向下相容</strong>:Java 5 才加入泛型,抹除式設計讓新舊程式碼可以混用。</p>
+<p>後果(面試常追問「所以泛型不能做什麼?」):</p>
+<ul>
+<li>不能 <code>new T()</code>——執行期根本不知道 T 是誰,JVM 無從建立。</li>
+<li>不能 <code>T[] arr = new T[10]</code>——同理。</li>
+<li>不能 <code>obj instanceof List&lt;String&gt;</code>——執行期沒有 <code>&lt;String&gt;</code> 可以檢查,只能 <code>instanceof List</code>。</li>
+</ul>
+<hr />
+<h2 id="5-exception">5. 例外處理(Exception)</h2>
+<h3 id="51">5.1 體系與分類</h3>
+<div class="hl"><pre><span></span><code>Throwable
+ ├─ Error(JVM 層級,不該接:OutOfMemoryError…)
+ └─ Exception
+     ├─ Checked(受檢):IOException, SQLException → 編譯器強迫處理
+     └─ RuntimeException(非受檢):NullPointerException, IllegalArgumentException
+</code></pre></div>
+
+<h3 id="52">5.2 實務寫法</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// try-with-resources:自動關閉資源(實作 AutoCloseable 的都行)</span>
+<span class="k">try</span><span class="w"> </span><span class="p">(</span><span class="n">Connection</span><span class="w"> </span><span class="n">conn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dataSource</span><span class="p">.</span><span class="na">getConnection</span><span class="p">();</span>
+<span class="w">     </span><span class="n">PreparedStatement</span><span class="w"> </span><span class="n">ps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">conn</span><span class="p">.</span><span class="na">prepareStatement</span><span class="p">(</span><span class="n">SQL</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">ps</span><span class="p">.</span><span class="na">setString</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">symbol</span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">ps</span><span class="p">.</span><span class="na">executeQuery</span><span class="p">();</span>
+<span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">throw</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">DataAccessException</span><span class="p">(</span><span class="s">"查詢報價失敗: "</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">);</span><span class="w">  </span><span class="c1">// 轉成自訂例外,保留 cause</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>原則</strong>:</p>
+<ul>
+<li>業務規則違反(餘額不足、參數錯誤)→ 丟<strong>自訂的 RuntimeException</strong>,讓全域例外處理器統一轉成 API 錯誤回應。</li>
+<li>不要 <code>catch (Exception e) {}</code> 空吞例外——問題被藏起來,是實務大忌。</li>
+<li>包裝例外時<strong>永遠把原始例外當 cause 傳入</strong>,否則 stack trace 斷掉查不到根因。</li>
+</ul>
+<hr />
+<h2 id="6-lambda-streamjava-8">6. Lambda 與 Stream(Java 8+ 核心)</h2>
+<h3 id="61-lambda">6.1 Lambda 與函式介面</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 函式介面:只有一個抽象方法的介面</span>
+<span class="nd">@FunctionalInterface</span>
+<span class="kd">interface</span> <span class="nc">PriceFilter</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">test</span><span class="p">(</span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+
+<span class="n">PriceFilter</span><span class="w"> </span><span class="n">above</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="na">compareTo</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">(</span><span class="s">"1000000"</span><span class="p">))</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="c1">// 內建四大函式介面(面試常問):</span>
+<span class="n">Predicate</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w">  </span><span class="n">isEmpty</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">();</span><span class="w">      </span><span class="c1">// T -&gt; boolean(判斷)</span>
+<span class="n">Function</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="n">Integer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">len</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="na">length</span><span class="p">();</span><span class="w">      </span><span class="c1">// T -&gt; R(轉換)</span>
+<span class="n">Consumer</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w">   </span><span class="n">print</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">s</span><span class="p">);</span><span class="w"> </span><span class="c1">// T -&gt; void(消費)</span>
+<span class="n">Supplier</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w">   </span><span class="n">now</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">LocalTime</span><span class="p">.</span><span class="na">now</span><span class="p">().</span><span class="na">toString</span><span class="p">();</span><span class="w"> </span><span class="c1">// () -&gt; T(供應)</span>
+</code></pre></div>
+
+<h3 id="62-stream">6.2 Stream 實戰</h3>
+<div class="hl"><pre><span></span><code><span class="n">List</span><span class="o">&lt;</span><span class="n">Trade</span><span class="o">&gt;</span><span class="w"> </span><span class="n">trades</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fetchTodayTrades</span><span class="p">();</span>
+
+<span class="c1">// 1) 過濾 + 轉換 + 收集</span>
+<span class="n">List</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">bigTradeSymbols</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">trades</span><span class="p">.</span><span class="na">stream</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">filter</span><span class="p">(</span><span class="n">t</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="na">getAmount</span><span class="p">().</span><span class="na">compareTo</span><span class="p">(</span><span class="n">BigDecimal</span><span class="p">.</span><span class="na">TEN</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">map</span><span class="p">(</span><span class="n">Trade</span><span class="p">::</span><span class="n">getSymbol</span><span class="p">)</span><span class="w">            </span><span class="c1">// 方法參考,等同 t -&gt; t.getSymbol()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">distinct</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">sorted</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">collect</span><span class="p">(</span><span class="n">Collectors</span><span class="p">.</span><span class="na">toList</span><span class="p">());</span>
+
+<span class="c1">// 2) 分組統計:每個交易對的成交筆數</span>
+<span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Long</span><span class="o">&gt;</span><span class="w"> </span><span class="n">countBySymbol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">trades</span><span class="p">.</span><span class="na">stream</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">collect</span><span class="p">(</span><span class="n">Collectors</span><span class="p">.</span><span class="na">groupingBy</span><span class="p">(</span><span class="n">Trade</span><span class="p">::</span><span class="n">getSymbol</span><span class="p">,</span><span class="w"> </span><span class="n">Collectors</span><span class="p">.</span><span class="na">counting</span><span class="p">()));</span>
+
+<span class="c1">// 3) 加總:今日 BTC 總成交量</span>
+<span class="n">BigDecimal</span><span class="w"> </span><span class="n">btcVolume</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">trades</span><span class="p">.</span><span class="na">stream</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">filter</span><span class="p">(</span><span class="n">t</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="na">getSymbol</span><span class="p">().</span><span class="na">equals</span><span class="p">(</span><span class="s">"BTC/JPY"</span><span class="p">))</span>
+<span class="w">    </span><span class="p">.</span><span class="na">map</span><span class="p">(</span><span class="n">Trade</span><span class="p">::</span><span class="n">getAmount</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">reduce</span><span class="p">(</span><span class="n">BigDecimal</span><span class="p">.</span><span class="na">ZERO</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">::</span><span class="n">add</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:取代「for 迴圈 + if + 暫存 List」的樣板碼,宣告式寫法可讀性高。
+<strong>注意</strong>:</p>
+<ul>
+<li>Stream 是<strong>惰性</strong>的:中間操作(filter/map)不會執行,直到遇到終端操作(collect/reduce/forEach)。</li>
+<li>Stream 只能用一次,用完要重新建立。</li>
+<li>簡單迴圈、或極度要求效能的熱點,傳統 for 迴圈仍然合理。</li>
+</ul>
+<h3 id="63-optional">6.3 Optional:優雅處理「可能沒有」</h3>
+<div class="hl"><pre><span></span><code><span class="n">Optional</span><span class="o">&lt;</span><span class="n">User</span><span class="o">&gt;</span><span class="w"> </span><span class="n">user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">userRepository</span><span class="p">.</span><span class="na">findByEmail</span><span class="p">(</span><span class="n">email</span><span class="p">);</span>
+
+<span class="n">String</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">user</span><span class="p">.</span><span class="na">map</span><span class="p">(</span><span class="n">User</span><span class="p">::</span><span class="n">getName</span><span class="p">).</span><span class="na">orElse</span><span class="p">(</span><span class="s">"訪客"</span><span class="p">);</span>
+<span class="n">user</span><span class="p">.</span><span class="na">ifPresent</span><span class="p">(</span><span class="n">u</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">log</span><span class="p">.</span><span class="na">info</span><span class="p">(</span><span class="s">"登入: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">u</span><span class="p">.</span><span class="na">getId</span><span class="p">()));</span>
+<span class="n">User</span><span class="w"> </span><span class="n">u</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">user</span><span class="p">.</span><span class="na">orElseThrow</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">NotFoundException</span><span class="p">(</span><span class="s">"使用者不存在"</span><span class="p">));</span>
+</code></pre></div>
+
+<p><strong>原則</strong>:Optional 用於<strong>回傳值</strong>,表達「可能查無資料」;不要用在欄位或方法參數(反而複雜)。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:用 Stream 從 <code>List&lt;Order&gt;</code> 找出每個交易對「金額最大的一筆訂單」,回傳 <code>Map&lt;String, Order&gt;</code>。(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Order</span><span class="o">&gt;</span><span class="w"> </span><span class="n">maxBySymbol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">orders</span><span class="p">.</span><span class="na">stream</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">collect</span><span class="p">(</span><span class="n">Collectors</span><span class="p">.</span><span class="na">toMap</span><span class="p">(</span>
+<span class="w">        </span><span class="n">Order</span><span class="p">::</span><span class="n">getSymbol</span><span class="p">,</span><span class="w">                    </span><span class="c1">// key</span>
+<span class="w">        </span><span class="n">o</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">o</span><span class="p">,</span><span class="w">                              </span><span class="c1">// value</span>
+<span class="w">        </span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="na">getAmount</span><span class="p">().</span><span class="na">compareTo</span><span class="p">(</span><span class="n">b</span><span class="p">.</span><span class="na">getAmount</span><span class="p">())</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">b</span><span class="w">  </span><span class="c1">// 撞 key 時留金額大的</span>
+<span class="w">    </span><span class="p">));</span>
+
+<span class="c1">// 另一解:groupingBy + maxBy(回傳 Map&lt;String, Optional&lt;Order&gt;&gt;)</span>
+<span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Optional</span><span class="o">&lt;</span><span class="n">Order</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">alt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">orders</span><span class="p">.</span><span class="na">stream</span><span class="p">()</span>
+<span class="w">    </span><span class="p">.</span><span class="na">collect</span><span class="p">(</span><span class="n">Collectors</span><span class="p">.</span><span class="na">groupingBy</span><span class="p">(</span><span class="n">Order</span><span class="p">::</span><span class="n">getSymbol</span><span class="p">,</span>
+<span class="w">             </span><span class="n">Collectors</span><span class="p">.</span><span class="na">maxBy</span><span class="p">(</span><span class="n">Comparator</span><span class="p">.</span><span class="na">comparing</span><span class="p">(</span><span class="n">Order</span><span class="p">::</span><span class="n">getAmount</span><span class="p">))));</span>
+</code></pre></div></div></details>
+<hr />
+<h2 id="7">7. 多執行緒與並發(進階重點)</h2>
+<h3 id="71">7.1 建立執行緒的正確姿勢</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// ❌ 面試會被扣分:手動 new Thread,無法管理數量與重用</span>
+<span class="k">new</span><span class="w"> </span><span class="n">Thread</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">doWork</span><span class="p">()).</span><span class="na">start</span><span class="p">();</span>
+
+<span class="c1">// ✅ 用執行緒池</span>
+<span class="n">ExecutorService</span><span class="w"> </span><span class="n">pool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Executors</span><span class="p">.</span><span class="na">newFixedThreadPool</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
+<span class="n">pool</span><span class="p">.</span><span class="na">submit</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">doWork</span><span class="p">());</span>
+
+<span class="c1">// ✅ 需要回傳值:Future / CompletableFuture</span>
+<span class="n">Future</span><span class="o">&lt;</span><span class="n">BigDecimal</span><span class="o">&gt;</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">pool</span><span class="p">.</span><span class="na">submit</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">queryPrice</span><span class="p">(</span><span class="s">"BTC/JPY"</span><span class="p">));</span>
+<span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="na">get</span><span class="p">();</span><span class="w">   </span><span class="c1">// 阻塞等結果</span>
+
+<span class="c1">// ✅ 非同步組合(Java 8+)</span>
+<span class="n">CompletableFuture</span>
+<span class="w">    </span><span class="p">.</span><span class="na">supplyAsync</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">queryPrice</span><span class="p">(</span><span class="s">"BTC/JPY"</span><span class="p">),</span><span class="w"> </span><span class="n">pool</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="na">thenApply</span><span class="p">(</span><span class="n">p</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="na">multiply</span><span class="p">(</span><span class="n">amount</span><span class="p">))</span>
+<span class="w">    </span><span class="p">.</span><span class="na">thenAccept</span><span class="p">(</span><span class="n">cost</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">"預估成本: "</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">cost</span><span class="p">));</span>
+</code></pre></div>
+
+<h3 id="72">7.2 共享狀態的三種保護手段</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 1) synchronized:最基本的互斥鎖</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">synchronized</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">transfer</span><span class="p">(</span><span class="n">Account</span><span class="w"> </span><span class="kd">to</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">amt</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span>
+
+<span class="c1">// 2) 原子類別:無鎖更新,適合計數器</span>
+<span class="c1">//    底層是 CAS(Compare-And-Swap,比較並交換):CPU 的原子指令</span>
+<span class="c1">//    「值還等於我預期的舊值,才換成新值;否則失敗重試」——不用鎖也不會蓋掉別人的更新</span>
+<span class="c1">//    (完整解釋見多執行緒章 §3.5)</span>
+<span class="n">AtomicLong</span><span class="w"> </span><span class="n">orderCounter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AtomicLong</span><span class="p">();</span>
+<span class="kt">long</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">orderCounter</span><span class="p">.</span><span class="na">incrementAndGet</span><span class="p">();</span>
+
+<span class="c1">// 3) 並發容器</span>
+<span class="n">ConcurrentHashMap</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;</span><span class="w"> </span><span class="n">latestPrices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConcurrentHashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="n">latestPrices</span><span class="p">.</span><span class="na">compute</span><span class="p">(</span><span class="s">"BTC/JPY"</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">newPrice</span><span class="p">);</span><span class="w">   </span><span class="c1">// 原子更新</span>
+</code></pre></div>
+
+<h3 id="73-volatile-vs-synchronized">7.3 詳解:<code>volatile</code> vs <code>synchronized</code></h3>
+<p>兩者解決的是<strong>不同的問題</strong>,先看 <code>volatile</code> 能解決什麼:</p>
+<div class="hl"><pre><span></span><code><span class="c1">// 情境:主執行緒想叫工作執行緒停下來</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Worker</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="n">running</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w">          </span><span class="c1">// ❌ 沒加 volatile</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">work</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">                     </span><span class="c1">// 工作執行緒跑這個</span>
+<span class="w">        </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">running</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">// 做事...</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">stop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">running</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w">  </span><span class="c1">// 主執行緒呼叫這個</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>直覺上 <code>stop()</code> 之後迴圈就會停,但實際上<strong>可能永遠停不下來</strong>:每個執行緒有自己的 CPU 快取(cache),工作執行緒可能一直讀自己快取裡的舊值 <code>true</code>,看不到主執行緒寫的 <code>false</code>。這就是<strong>可見性問題(visibility problem)</strong>。</p>
+<div class="hl"><pre><span></span><code><span class="kd">private</span><span class="w"> </span><span class="kd">volatile</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="n">running</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w">   </span><span class="c1">// ✅ 加 volatile</span>
+</code></pre></div>
+
+<p><code>volatile</code> 的意思是:「這個變數<strong>每次都去主記憶體(main memory)讀最新值,寫完立刻同步回去</strong>」——改了馬上被所有執行緒看見。適合「開關/旗標(flag)」這種單純的讀和寫。</p>
+<p><strong>但 <code>volatile</code> 救不了 <code>count++</code></strong>:</p>
+<div class="hl"><pre><span></span><code><span class="kd">private</span><span class="w"> </span><span class="kd">volatile</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="n">count</span><span class="o">++</span><span class="p">;</span><span class="w">   </span><span class="c1">// 看起來一行,其實是三步:</span>
+<span class="w">           </span><span class="c1">// ① 讀出 count(例如讀到 5)</span>
+<span class="w">           </span><span class="c1">// ② 加 1(算出 6)</span>
+<span class="w">           </span><span class="c1">// ③ 寫回 count</span>
+<span class="c1">// 執行緒 A 和 B 可能「同時」做 ①,都讀到 5,最後都寫回 6 → 加了兩次只多 1</span>
+<span class="c1">// volatile 只保證「每一步讀寫是最新的」,擋不住「三步中間被插隊」(原子性問題)</span>
+</code></pre></div>
+
+<p>要讓「讀→改→寫」整組不被打斷,得用會<strong>互斥</strong>的工具:<code>synchronized</code>(排隊)或 <code>AtomicInteger.incrementAndGet()</code>(硬體層級的原子指令 CAS)。</p>
+<p>一張表總結:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>可見性 visibility</th>
+<th>原子性 atomicity</th>
+<th>代價</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>volatile</code></td>
+<td>✅</td>
+<td>❌</td>
+<td>極小</td>
+</tr>
+<tr>
+<td><code>synchronized</code></td>
+<td>✅</td>
+<td>✅(整段互斥)</td>
+<td>要排隊,較慢</td>
+</tr>
+<tr>
+<td><code>AtomicInteger</code> 等</td>
+<td>✅</td>
+<td>✅(單一變數)</td>
+<td>小(無鎖 CAS)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>面試一句話版</strong>:volatile 只管「看得到最新值」,不管「中間不被插隊」;synchronized 兩個都管。所以旗標用 volatile、計數用 Atomic、複雜的複合操作用 synchronized。</p>
+<h3 id="74-deadlock">7.4 詳解:死結(Deadlock)</h3>
+<p><strong>死結 = 兩條(以上)執行緒互相等對方手上的鎖,全部卡死</strong>。最小重現:</p>
+<div class="hl"><pre><span></span><code><span class="n">Object</span><span class="w"> </span><span class="n">lockA</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="p">();</span>
+<span class="n">Object</span><span class="w"> </span><span class="n">lockB</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="p">();</span>
+
+<span class="c1">// 執行緒 1:先拿 A,再拿 B</span>
+<span class="k">new</span><span class="w"> </span><span class="n">Thread</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">lockA</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">sleep</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span><span class="w">                    </span><span class="c1">// 故意停一下,讓兩邊都拿到第一把鎖</span>
+<span class="w">        </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">lockB</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// ← 卡在這裡等 B</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}).</span><span class="na">start</span><span class="p">();</span>
+
+<span class="c1">// 執行緒 2:先拿 B,再拿 A(順序相反!)</span>
+<span class="k">new</span><span class="w"> </span><span class="n">Thread</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">lockB</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">sleep</span><span class="p">(</span><span class="mi">100</span><span class="p">);</span>
+<span class="w">        </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">lockA</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// ← 卡在這裡等 A</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}).</span><span class="na">start</span><span class="p">();</span>
+<span class="c1">// 結果:執行緒 1 抱著 A 等 B,執行緒 2 抱著 B 等 A → 永遠互等</span>
+</code></pre></div>
+
+<p>死結成立需要<strong>四個條件同時滿足</strong>(面試常要求背,背的時候想上面的例子就不會忘):
+1. <strong>互斥(mutual exclusion)</strong>:鎖一次只能一人拿。
+2. <strong>持有並等待(hold and wait)</strong>:抱著一把鎖,還去等另一把。
+3. <strong>不可剝奪(no preemption)</strong>:不能從別人手上搶鎖。
+4. <strong>循環等待(circular wait)</strong>:你等我、我等你,成一個圈。</p>
+<p><strong>破解 = 打破其中任何一個條件</strong>,實務上最常用兩招:</p>
+<ul>
+<li><strong>固定加鎖順序</strong>(打破循環等待):規定全系統「永遠先拿 A 再拿 B」。經典的「兩帳戶互轉帳」題,標準答案是<strong>依帳戶 id 排序後加鎖</strong>(永遠先鎖 id 小的)。</li>
+<li><strong><code>tryLock(逾時)</code></strong>(打破持有並等待):拿不到就放掉手上的鎖、稍後重試,不要死等。</li>
+</ul>
+<p>診斷工具:<code>jstack &lt;pid&gt;</code> 印出 thread dump,死結會直接標 <code>Found one Java-level deadlock</code>。</p>
+<h3 id="75-thread-pool">7.5 詳解:執行緒池(Thread Pool)的參數</h3>
+<p>把執行緒池想成一間餐廳:</p>
+<div class="hl"><pre><span></span><code><span class="n">ThreadPoolExecutor</span><span class="w"> </span><span class="n">pool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+<span class="w">    </span><span class="mi">4</span><span class="p">,</span><span class="w">                            </span><span class="c1">// corePoolSize:正職員工 4 人(常駐)</span>
+<span class="w">    </span><span class="mi">8</span><span class="p">,</span><span class="w">                            </span><span class="c1">// maximumPoolSize:忙不過來最多加到 8 人(含臨時工)</span>
+<span class="w">    </span><span class="mi">60</span><span class="p">,</span><span class="w"> </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">SECONDS</span><span class="p">,</span><span class="w">         </span><span class="c1">// keepAliveTime:臨時工閒 60 秒就下班</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayBlockingQueue</span><span class="o">&lt;&gt;</span><span class="p">(</span><span class="mi">100</span><span class="p">),</span><span class="c1">// workQueue:候位區,最多排 100 個任務</span>
+<span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">ThreadPoolExecutor</span><span class="p">.</span><span class="na">AbortPolicy</span><span class="p">()</span><span class="w">  </span><span class="c1">// 拒絕策略:連候位區都滿了怎麼辦</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>任務(task)進來時的決策順序(面試必考,照這個順序講):
+1. 正職(core)還有空 → 直接開新執行緒做。
+2. 正職全忙 → 任務進<strong>候位區(queue)</strong>排隊。
+3. 候位區也滿了 → 加開<strong>臨時工</strong>(擴到 maximumPoolSize)。
+4. 臨時工也滿了 → 觸發<strong>拒絕策略(rejection policy)</strong>:丟例外(Abort,預設)/ 叫提交者自己做(CallerRuns)/ 默默丟棄(Discard)。</p>
+<p>為什麼不用 <code>Executors.newFixedThreadPool()</code> 就好?→ 它的候位區是<strong>無上限</strong>的 LinkedBlockingQueue,任務堆積時記憶體會被吃光(OOM,Out of Memory:記憶體耗盡,程式直接掛掉)。所以阿里巴巴 Java 規約等實務規範都要求<strong>手動 new ThreadPoolExecutor、明確給佇列上限</strong>——面試講出這點很加分。</p>
+<p><strong>使用情境</strong>:行情推播服務要同時處理「WebSocket 收價」與「多個使用者查詢」——收價執行緒寫 <code>ConcurrentHashMap</code>,查詢執行緒讀,不需要全域鎖。</p>
+<hr />
+<h2 id="8-jvm">8. JVM 基礎(進階加分題)</h2>
+<p>JVM(Java Virtual Machine,Java 虛擬機器):執行 Java 程式的那個程式。你寫的 <code>.java</code> 被編譯成 <code>.class</code> 位元組碼(bytecode),由 JVM 載入、執行、管理記憶體——所以「JVM 題」問的其實是「你的程式跑起來之後,底下發生什麼事」。本節三個主題:記憶體怎麼分區、GC(Garbage Collection,垃圾回收:自動找出沒人在用的物件並釋放記憶體)、類別怎麼被載入。</p>
+<h3 id="81">8.1 記憶體區域</h3>
+<div class="hl"><pre><span></span><code>┌───────────────────────────────┐
+│ 方法區/Metaspace:類別資訊、常量   │ ← 所有執行緒共享
+│ 堆(Heap):所有 new 出來的物件     │ ← 所有執行緒共享,GC 主戰場
+├───────────────────────────────┤
+│ 虛擬機器堆疊(Stack):區域變數、呼叫框 │ ← 每條執行緒一份
+│ 程式計數器 PC                    │ ← 每條執行緒一份
+└───────────────────────────────┘
+</code></pre></div>
+
+<h3 id="82-gcgarbage-collection">8.2 垃圾回收(GC,Garbage Collection)白話版</h3>
+<p><strong>問題一:怎麼知道哪些物件是垃圾?</strong>
+從「一定還活著的起點」出發沿著參考走。這些起點叫 <strong>GC Roots</strong>(正在執行的方法裡的區域變數、static 欄位等)。從它們出發,<strong>沿著參考走得到的物件 = 還有人在用;走不到的 = 垃圾</strong>。這招叫可達性分析(reachability analysis)。</p>
+<p>為什麼不用更直覺的「引用計數」(每個物件記錄有幾個人參考我,歸零就回收)?因為它處理不了<strong>循環參考</strong>:A 參考 B、B 參考 A,但已經沒有任何外人參考它們——兩個計數都是 1,永遠不歸零,實際上卻全是垃圾。(對照:Objective-C/Swift 用的就是引用計數,所以那邊要自己處理循環參考——見多執行緒章與 Obj-C 章的 weak。)</p>
+<p><strong>問題二:為什麼堆要「分代」(generational)?</strong>
+觀察發現:<strong>大多數物件活不久</strong>——方法裡 new 的暫時物件,方法一結束就沒人用了。所以把堆分成兩區,用不同策略:</p>
+<ul>
+<li><strong>年輕代(Young Generation)</strong>:新物件的出生地(Eden 區 + 2 個 Survivor 區)。這裡垃圾比例極高,用「<strong>把少數活著的搬走,整區直接清空</strong>」的複製演算法,很快——這就是 Minor GC。</li>
+<li><strong>老年代(Old Generation)</strong>:在年輕代活過好幾輪的「長壽物件」搬到這裡。垃圾比例低、空間大,收一次比較慢(Major/Full GC)——所以 Full GC 頻繁是效能警訊。</li>
+</ul>
+<p><strong>問題三:面試要知道的收集器名字</strong>:G1(JDK 9+ 預設:把堆切成小區域逐批收,停頓時間可預測)、ZGC(超低停頓,幾毫秒內)。知道名字和一句話特色即可。</p>
+<h3 id="83">8.3 類別載入與雙親委派(白話版)</h3>
+<p>類別第一次被用到時才載入,流程:載入 → 驗證 → 準備 → 解析 → 初始化(背順序即可,面試重點在下面)。</p>
+<p><strong>雙親委派模型(parent delegation)</strong>:類別載入器(class loader)收到「幫我載入 <code>java.lang.String</code>」的請求時,<strong>不會自己動手,先問上層的父載入器「你能載嗎?」</strong>——一層一層往上問到最頂層(Bootstrap,負責核心類別庫);上層能載就用上層的,全都說不行才輪到自己。</p>
+<p>為什麼要這麼麻煩?<strong>安全</strong>:就算有人在你的專案裡偷放一個惡意的 <code>java.lang.String</code>,請求還是會先委派到頂層——頂層早就載入了 JDK 的正牌 String,偽造的那個永遠沒機會被載入。</p>
+<hr />
+<h2 id="9">9. 其他高頻面試題速查</h2>
+<p>(這張表是面試前掃一眼用的壓縮版,看不懂的條目讀表格下方的白話補充)</p>
+<table>
+<thead>
+<tr>
+<th>問題</th>
+<th>關鍵回答</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>final</code> 的三種用法</td>
+<td>變數:不可重新指派;方法:不可覆寫;類別:不可繼承</td>
+</tr>
+<tr>
+<td><code>static</code> 的意義</td>
+<td>屬於類別而非實例;靜態方法不能用 <code>this</code>、不能直接存取實例欄位</td>
+</tr>
+<tr>
+<td>不可變物件怎麼做</td>
+<td>類別 <code>final</code>、欄位 <code>private final</code>、不提供 setter、可變欄位做防禦性複製</td>
+</tr>
+<tr>
+<td><code>equals</code> 合約</td>
+<td>自反、對稱、遞移、一致、對 null 回 false;覆寫必須連 <code>hashCode</code> 一起</td>
+</tr>
+<tr>
+<td>深拷貝 vs 淺拷貝</td>
+<td>淺拷貝只複製參考;深拷貝連內部物件一起複製(序列化或手動複製)</td>
+</tr>
+<tr>
+<td>介面 vs 抽象類別(再問一次,必背)</td>
+<td>介面=能力/多實作;抽象類別=部分實作/單繼承</td>
+</tr>
+<tr>
+<td>record(Java 16+)</td>
+<td>不可變資料載體,自動產生建構子/equals/hashCode/toString:<code>record Point(int x, int y) {}</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>白話補充</strong>:</p>
+<ul>
+<li><strong>防禦性複製(defensive copy)</strong>:不可變物件裡若有可變欄位(例如 <code>List</code>),getter 不能直接把它交出去——外部拿到後一改,你的「不可變」就破功了。正確做法是交出<strong>副本</strong>:<code>return new ArrayList&lt;&gt;(items);</code>,或建構時就複製一份存起來。</li>
+<li><strong>深拷貝 vs 淺拷貝</strong>,用例子看:</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="kd">class</span> <span class="nc">Order</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">tags</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+
+<span class="n">Order</span><span class="w"> </span><span class="n">copy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">shallowCopy</span><span class="p">(</span><span class="n">original</span><span class="p">);</span><span class="w">   </span><span class="c1">// 淺拷貝(shallow copy):</span>
+<span class="n">copy</span><span class="p">.</span><span class="na">tags</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="s">"urgent"</span><span class="p">);</span><span class="w">              </span><span class="c1">// 兩個 Order 共用「同一個」tags List</span>
+<span class="w">                                      </span><span class="c1">// → original.tags 也多了 "urgent"!</span>
+
+<span class="n">Order</span><span class="w"> </span><span class="n">deep</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deepCopy</span><span class="p">(</span><span class="n">original</span><span class="p">);</span><span class="w">      </span><span class="c1">// 深拷貝(deep copy):連裡面的 List 也複製一份</span>
+<span class="n">deep</span><span class="p">.</span><span class="na">tags</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="s">"urgent"</span><span class="p">);</span><span class="w">              </span><span class="c1">// → original 完全不受影響</span>
+</code></pre></div>
+
+<ul>
+<li><strong>equals 合約</strong>那五個詞的白話:自反(自己等於自己)、對稱(a 等於 b,b 就要等於 a)、遞移(a=b 且 b=c → a=c)、一致(沒改內容,比幾次結果都一樣)、對 null 回 false。違反合約的 equals 放進 HashSet/HashMap 會出現「放得進去、找不到」之類的詭異行為。</li>
+</ul>
+<hr />
+<h2 id="10">10. 綜合實作練習</h2>
+<p><strong>題目</strong>:寫一個簡化的「價格警報服務」,綜合本章所有概念。</p>
+<p>需求:
+1. <code>PriceSource</code> 介面:<code>BigDecimal latestPrice(String symbol)</code>(泛型不需要,但注入要用介面)。
+2. <code>AlertRule</code> record:<code>(String symbol, BigDecimal threshold, Direction direction)</code>,<code>Direction</code> 是 enum(<code>ABOVE</code>/<code>BELOW</code>)。
+3. <code>AlertService</code>:
+    - 用 <code>ConcurrentHashMap&lt;String, List&lt;AlertRule&gt;&gt;</code> 保存規則(key = symbol)。
+    - <code>check()</code> 方法用 Stream 找出所有被觸發的規則。
+    - 金額一律 <code>BigDecimal</code>。
+4. 用 <code>ScheduledExecutorService</code> 每 3 秒跑一次 <code>check()</code>。</p>
+<details class="exercise"><summary>✏️ 點擊看參考解答</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">java.math.BigDecimal</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.*</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.concurrent.*</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.stream.Collectors</span><span class="p">;</span>
+
+<span class="kd">enum</span><span class="w"> </span><span class="n">Direction</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ABOVE</span><span class="p">,</span><span class="w"> </span><span class="n">BELOW</span><span class="w"> </span><span class="p">}</span>
+
+<span class="kd">record</span> <span class="nc">AlertRule</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">threshold</span><span class="p">,</span><span class="w"> </span><span class="n">Direction</span><span class="w"> </span><span class="n">direction</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">isTriggered</span><span class="p">(</span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">cmp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">price</span><span class="p">.</span><span class="na">compareTo</span><span class="p">(</span><span class="n">threshold</span><span class="p">);</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">direction</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">Direction</span><span class="p">.</span><span class="na">ABOVE</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">cmp</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">cmp</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">interface</span> <span class="nc">PriceSource</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">latestPrice</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">class</span> <span class="nc">AlertService</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">PriceSource</span><span class="w"> </span><span class="n">priceSource</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">ConcurrentHashMap</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">AlertRule</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">rules</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConcurrentHashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+
+<span class="w">    </span><span class="n">AlertService</span><span class="p">(</span><span class="n">PriceSource</span><span class="w"> </span><span class="n">priceSource</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">priceSource</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">priceSource</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="nf">addRule</span><span class="p">(</span><span class="n">AlertRule</span><span class="w"> </span><span class="n">rule</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">rules</span><span class="p">.</span><span class="na">computeIfAbsent</span><span class="p">(</span><span class="n">rule</span><span class="p">.</span><span class="na">symbol</span><span class="p">(),</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">CopyOnWriteArrayList</span><span class="o">&lt;&gt;</span><span class="p">()).</span><span class="na">add</span><span class="p">(</span><span class="n">rule</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">AlertRule</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">check</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">rules</span><span class="p">.</span><span class="na">entrySet</span><span class="p">().</span><span class="na">stream</span><span class="p">()</span>
+<span class="w">            </span><span class="p">.</span><span class="na">flatMap</span><span class="p">(</span><span class="n">e</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">priceSource</span><span class="p">.</span><span class="na">latestPrice</span><span class="p">(</span><span class="n">e</span><span class="p">.</span><span class="na">getKey</span><span class="p">());</span>
+<span class="w">                </span><span class="k">return</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="na">getValue</span><span class="p">().</span><span class="na">stream</span><span class="p">().</span><span class="na">filter</span><span class="p">(</span><span class="n">r</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="na">isTriggered</span><span class="p">(</span><span class="n">price</span><span class="p">));</span>
+<span class="w">            </span><span class="p">})</span>
+<span class="w">            </span><span class="p">.</span><span class="na">collect</span><span class="p">(</span><span class="n">Collectors</span><span class="p">.</span><span class="na">toList</span><span class="p">());</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Main</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">PriceSource</span><span class="w"> </span><span class="n">fake</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">symbol</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">(</span><span class="s">"1050000"</span><span class="p">);</span><span class="w">  </span><span class="c1">// Lambda 實作介面(測試用假資料)</span>
+<span class="w">        </span><span class="n">AlertService</span><span class="w"> </span><span class="n">service</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AlertService</span><span class="p">(</span><span class="n">fake</span><span class="p">);</span>
+<span class="w">        </span><span class="n">service</span><span class="p">.</span><span class="na">addRule</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">AlertRule</span><span class="p">(</span><span class="s">"BTC/JPY"</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">(</span><span class="s">"1000000"</span><span class="p">),</span><span class="w"> </span><span class="n">Direction</span><span class="p">.</span><span class="na">ABOVE</span><span class="p">));</span>
+
+<span class="w">        </span><span class="n">ScheduledExecutorService</span><span class="w"> </span><span class="n">scheduler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Executors</span><span class="p">.</span><span class="na">newSingleThreadScheduledExecutor</span><span class="p">();</span>
+<span class="w">        </span><span class="n">scheduler</span><span class="p">.</span><span class="na">scheduleAtFixedRate</span><span class="p">(</span>
+<span class="w">            </span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">service</span><span class="p">.</span><span class="na">check</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">r</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">"🔔 觸發警報: "</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">r</span><span class="p">)),</span>
+<span class="w">            </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">SECONDS</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>對照需求檢查:介面注入 ✅、record + enum ✅、ConcurrentHashMap ✅、Stream ✅、BigDecimal ✅、ScheduledExecutorService ✅。</p></div></details>
+<hr />
+<h2 id="_1">自我檢核清單</h2>
+<ul>
+<li class="check"><label><input type="checkbox" data-key="java-0"> 能解釋 <code>==</code> vs <code>equals()</code>、<code>hashCode</code> 與 <code>equals</code> 的關係</label></li>
+<li class="check"><label><input type="checkbox" data-key="java-1"> 能說出 ArrayList / LinkedList / HashMap / TreeMap / ConcurrentHashMap 的底層結構與適用情境</label></li>
+<li class="check"><label><input type="checkbox" data-key="java-2"> 能手寫泛型類別與泛型方法,解釋型別抹除</label></li>
+<li class="check"><label><input type="checkbox" data-key="java-3"> 能用 Stream 完成 filter / map / groupingBy / reduce</label></li>
+<li class="check"><label><input type="checkbox" data-key="java-4"> 能解釋 volatile vs synchronized、執行緒池參數、死結條件</label></li>
+<li class="check"><label><input type="checkbox" data-key="java-5"> 知道金額要用 BigDecimal,並能說出原因</label></li>
+<li class="check"><label><input type="checkbox" data-key="java-6"> 能大致畫出 JVM 記憶體區域、講出分代 GC 的概念</label></li>
+</ul></article>
+    <nav class="pager"><a href="index.html"><span class="dir">← 上一章</span>技術面試強化學習手冊</a><a class="next" href="objc.html"><span class="dir">下一章 →</span>Objective-C 完整教學</a></nav>
+  </main>
+</div>
+<script>
+(function(){
+  var store = {get:function(k){try{return localStorage.getItem(k)}catch(e){return this._m&&this._m[k]||null}},
+               set:function(k,v){try{localStorage.setItem(k,v)}catch(e){this._m=this._m||{};this._m[k]=v}}};
+  var boxes = document.querySelectorAll('li.check input');
+  function refresh(){
+    if(!boxes.length) return;
+    var done = 0;
+    boxes.forEach(function(b){ if(b.checked) done++; });
+    var pb = document.getElementById('progressBox');
+    if(pb){ pb.hidden = false;
+      document.getElementById('progressFill').style.width = Math.round(done/boxes.length*100)+'%';
+      document.getElementById('progressText').textContent = '已完成 '+done+' / '+boxes.length+' 項';
+    }
+  }
+  boxes.forEach(function(b){
+    if(store.get('chk-'+b.dataset.key)==='1') b.checked = true;
+    b.addEventListener('change',function(){
+      store.set('chk-'+b.dataset.key, b.checked?'1':'0'); refresh();
+    });
+  });
+  refresh();
+  // PWA:支援的環境(如 GitHub Pages)註冊 service worker;不支援時靜默略過
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

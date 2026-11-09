@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>資料結構基礎到進階｜面試強化手冊</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17616e">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --paper:#f7f5f0; --card:#fffdf8; --ink:#2b2a26; --muted:#6f6a5e;
+  --accent:#17616e; --accent-soft:#e3eef0; --line:#e2ddd2; --mark:#b4530a;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:16px;line-height:1.85}
+.topbar{position:sticky;top:0;z-index:10;display:flex;gap:1.5rem;align-items:center;
+  background:var(--card);border-bottom:1px solid var(--line);padding:.7rem 1.4rem}
+.brand{font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.05em}
+.topbar nav{display:flex;gap:.2rem;flex-wrap:wrap}
+.topbar nav a{color:var(--muted);text-decoration:none;padding:.3rem .7rem;border-radius:6px;font-size:.92rem}
+.topbar nav a:hover{background:var(--accent-soft);color:var(--accent)}
+.topbar nav a.active{background:var(--accent);color:#fff}
+.layout{display:flex;max-width:1200px;margin:0 auto;align-items:flex-start}
+.sidebar{position:sticky;top:3.6rem;width:230px;flex:none;padding:1.6rem 1rem;
+  max-height:calc(100vh - 4rem);overflow:auto}
+.sidebar-title{font-size:.78rem;letter-spacing:.15em;color:var(--muted);margin-bottom:.5rem}
+.sidebar ul{list-style:none;margin:0 0 1.2rem;padding:0}
+.sidebar li{margin:.15rem 0}
+.sidebar a{color:var(--muted);text-decoration:none;font-size:.88rem;display:block;
+  padding:.22rem .5rem;border-left:2px solid transparent;border-radius:0 6px 6px 0}
+.sidebar a:hover{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+.content{flex:1;min-width:0;padding:2rem 2.4rem 4rem}
+article{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:2.4rem 2.8rem;box-shadow:0 1px 3px rgba(60,50,30,.05)}
+h1{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.75rem;line-height:1.4;
+  border-bottom:3px double var(--line);padding-bottom:.7rem;margin-top:0}
+h2{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.32rem;margin-top:2.6em;
+  padding-left:.65rem;border-left:4px solid var(--accent)}
+h3{font-size:1.08rem;margin-top:2em;color:var(--accent)}
+a{color:var(--accent)}
+blockquote{margin:1.2em 0;padding:.8em 1.2em;background:var(--accent-soft);
+  border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3c4b4e}
+blockquote p{margin:.3em 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:.92rem}
+th,td{border:1px solid var(--line);padding:.5em .8em;text-align:left;vertical-align:top}
+th{background:#efece3}
+tr:nth-child(even) td{background:#fbf9f3}
+code{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:.86em;
+  background:#eeeae0;padding:.12em .4em;border-radius:4px}
+.hl{background:#2d2a24;border-radius:10px;padding:1em 1.2em;overflow-x:auto;
+  margin:1.2em 0;font-size:.85rem;line-height:1.65}
+.hl code{background:none;padding:0;color:#e8e3d8}
+.hl pre{margin:0}
+details.exercise{margin:1.4em 0;border:1px solid #d8b98f;border-radius:10px;
+  background:#fdf6ea;overflow:hidden}
+details.exercise summary{cursor:pointer;padding:.75em 1.1em;font-weight:600;
+  color:var(--mark);list-style:none;user-select:none}
+details.exercise summary::before{content:"▸ ";transition:.15s}
+details.exercise[open] summary::before{content:"▾ "}
+details.exercise summary:hover{background:#f8edda}
+.exercise-body{padding:.2em 1.3em 1em;border-top:1px dashed #e4cfa8}
+figure.diagram{margin:1.6em 0;padding:1.2em;background:#fff;border:1px solid var(--line);
+  border-radius:10px;text-align:center;overflow-x:auto}
+li.check{list-style:none;margin-left:-1.2em}
+li.check label{display:flex;gap:.6em;align-items:baseline;cursor:pointer;
+  padding:.3em .6em;border-radius:8px}
+li.check label:hover{background:var(--accent-soft)}
+li.check input{accent-color:var(--accent);transform:translateY(2px) scale(1.15)}
+li.check input:checked + *{}
+li.check:has(input:checked) label{color:var(--muted);text-decoration:line-through}
+.pager{display:flex;justify-content:space-between;margin-top:1.6rem;gap:1rem}
+.pager a{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.8rem 1.1rem;text-decoration:none;color:var(--ink)}
+.pager a:hover{border-color:var(--accent)}
+.pager .dir{display:block;font-size:.75rem;color:var(--muted);letter-spacing:.1em}
+.pager .next{text-align:right}
+.progress-track{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
+.progress-text{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+@media(max-width:900px){
+  .sidebar{display:none}
+  .content{padding:1rem}
+  article{padding:1.4rem 1.2rem}
+}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ebdbb2 }
+.hl { background: #282828; color: #DDD }
+.hl .c { color: #928374; font-style: italic } /* Comment */
+.hl .err { color: #282828; background-color: #FB4934 } /* Error */
+.hl .esc { color: #DDD } /* Escape */
+.hl .g { color: #DDD } /* Generic */
+.hl .k { color: #FB4934 } /* Keyword */
+.hl .l { color: #DDD } /* Literal */
+.hl .n { color: #DDD } /* Name */
+.hl .o { color: #DDD } /* Operator */
+.hl .x { color: #DDD } /* Other */
+.hl .p { color: #DDD } /* Punctuation */
+.hl .ch { color: #928374; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #928374; font-style: italic } /* Comment.Multiline */
+.hl .c-PreProc { color: #8EC07C; font-style: italic } /* Comment.PreProc */
+.hl .cp { color: #928374; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #928374; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #928374; font-style: italic } /* Comment.Single */
+.hl .cs { color: #EBDBB2; font-weight: bold; font-style: italic } /* Comment.Special */
+.hl .gd { color: #282828; background-color: #FB4934 } /* Generic.Deleted */
+.hl .ge { color: #DDD; font-style: italic } /* Generic.Emph */
+.hl .ges { color: #DDD; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.hl .gr { color: #FB4934 } /* Generic.Error */
+.hl .gh { color: #EBDBB2; font-weight: bold } /* Generic.Heading */
+.hl .gi { color: #282828; background-color: #B8BB26 } /* Generic.Inserted */
+.hl .go { color: #F2E5BC } /* Generic.Output */
+.hl .gp { color: #A89984 } /* Generic.Prompt */
+.hl .gs { color: #DDD; font-weight: bold } /* Generic.Strong */
+.hl .gu { color: #EBDBB2; text-decoration: underline } /* Generic.Subheading */
+.hl .gt { color: #FB4934 } /* Generic.Traceback */
+.hl .kc { color: #FB4934 } /* Keyword.Constant */
+.hl .kd { color: #FB4934 } /* Keyword.Declaration */
+.hl .kn { color: #FB4934 } /* Keyword.Namespace */
+.hl .kp { color: #FB4934 } /* Keyword.Pseudo */
+.hl .kr { color: #FB4934 } /* Keyword.Reserved */
+.hl .kt { color: #FB4934 } /* Keyword.Type */
+.hl .ld { color: #DDD } /* Literal.Date */
+.hl .m { color: #D3869B } /* Literal.Number */
+.hl .s { color: #B8BB26 } /* Literal.String */
+.hl .na { color: #FABD2F } /* Name.Attribute */
+.hl .nb { color: #FE8019 } /* Name.Builtin */
+.hl .nc { color: #8EC07C } /* Name.Class */
+.hl .no { color: #D3869B } /* Name.Constant */
+.hl .nd { color: #FB4934 } /* Name.Decorator */
+.hl .ni { color: #DDD } /* Name.Entity */
+.hl .ne { color: #FB4934 } /* Name.Exception */
+.hl .nf { color: #8EC07C } /* Name.Function */
+.hl .nl { color: #DDD } /* Name.Label */
+.hl .nn { color: #8EC07C } /* Name.Namespace */
+.hl .nx { color: #DDD } /* Name.Other */
+.hl .py { color: #DDD } /* Name.Property */
+.hl .nt { color: #8EC07C } /* Name.Tag */
+.hl .nv { color: #83A598 } /* Name.Variable */
+.hl .ow { color: #FB4934 } /* Operator.Word */
+.hl .pm { color: #DDD } /* Punctuation.Marker */
+.hl .w { color: #DDD } /* Text.Whitespace */
+.hl .mb { color: #D3869B } /* Literal.Number.Bin */
+.hl .mf { color: #D3869B } /* Literal.Number.Float */
+.hl .mh { color: #D3869B } /* Literal.Number.Hex */
+.hl .mi { color: #D3869B } /* Literal.Number.Integer */
+.hl .mo { color: #D3869B } /* Literal.Number.Oct */
+.hl .sa { color: #B8BB26 } /* Literal.String.Affix */
+.hl .sb { color: #B8BB26 } /* Literal.String.Backtick */
+.hl .sc { color: #B8BB26 } /* Literal.String.Char */
+.hl .dl { color: #B8BB26 } /* Literal.String.Delimiter */
+.hl .sd { color: #B8BB26 } /* Literal.String.Doc */
+.hl .s2 { color: #B8BB26 } /* Literal.String.Double */
+.hl .se { color: #FE8019 } /* Literal.String.Escape */
+.hl .sh { color: #B8BB26 } /* Literal.String.Heredoc */
+.hl .si { color: #B8BB26 } /* Literal.String.Interpol */
+.hl .sx { color: #B8BB26 } /* Literal.String.Other */
+.hl .sr { color: #B8BB26 } /* Literal.String.Regex */
+.hl .s1 { color: #B8BB26 } /* Literal.String.Single */
+.hl .ss { color: #B8BB26 } /* Literal.String.Symbol */
+.hl .bp { color: #FE8019 } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8EC07C } /* Name.Function.Magic */
+.hl .vc { color: #83A598 } /* Name.Variable.Class */
+.hl .vg { color: #83A598 } /* Name.Variable.Global */
+.hl .vi { color: #83A598 } /* Name.Variable.Instance */
+.hl .vm { color: #83A598 } /* Name.Variable.Magic */
+.hl .il { color: #D3869B } /* Literal.Number.Integer.Long */</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">面試強化手冊</a>
+  <nav><a href="index.html" class="">首頁</a><a href="java.html" class="">Java</a><a href="objc.html" class="">Objective-C</a><a href="architecture.html" class="">架構設計</a><a href="ds.html" class="active">資料結構</a><a href="concurrency.html" class="">多執行緒</a></nav>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">本章目錄</div>
+    <ul><li><a href="#0-big-o">0. 先懂複雜度:Big-O</a></li><li><a href="#1-array">1. 陣列(Array)與動態陣列</a></li><li><a href="#2-linked-list">2. 鏈結串列(Linked List)</a></li><li><a href="#3-stackqueue">3. 堆疊(Stack)與佇列(Queue)</a></li><li><a href="#4-hash-table">4. 雜湊表(Hash Table)——最重要的一個</a></li><li><a href="#5-tree">5. 樹(Tree)</a></li><li><a href="#6-heap">6. 堆積(Heap)與優先佇列</a></li><li><a href="#7-graph">7. 圖(Graph)</a></li><li><a href="#8">8. 排序:至少會講這三個</a></li><li><a href="#9">9. 選型總表(面試前最後看這張)</a></li><li><a href="#10">10. 綜合面試題組</a></li><li><a href="#_3">自我檢核清單</a></li></ul>
+    <div class="progress-box" id="progressBox" hidden>
+      <div class="sidebar-title">檢核進度</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+  </aside>
+  <main class="content">
+    <article><h1 id="_1">資料結構:基礎到進階</h1>
+<blockquote>
+<p>本章目標:每個資料結構都回答三個問題——<strong>長什麼樣?各操作多快?什麼時候用它?</strong>
+範例以 Java 為主(對應你的課程),並標注 iOS/Swift 的對應型別。章末附面試題組。</p>
+</blockquote>
+<hr />
+<h2 id="0-big-o">0. 先懂複雜度:Big-O</h2>
+<p>衡量「資料量 n 變大時,時間/空間怎麼長」。只看最高次項、忽略常數。</p>
+<table>
+<thead>
+<tr>
+<th>複雜度</th>
+<th>名稱</th>
+<th>直覺</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O(1)</td>
+<td>常數</td>
+<td>跟 n 無關</td>
+<td>陣列按索引取值、HashMap 查找(平均)</td>
+</tr>
+<tr>
+<td>O(log n)</td>
+<td>對數</td>
+<td>每步砍一半</td>
+<td>二分搜尋、平衡樹操作</td>
+</tr>
+<tr>
+<td>O(n)</td>
+<td>線性</td>
+<td>全部看一遍</td>
+<td>走訪陣列、鏈結串列查找</td>
+</tr>
+<tr>
+<td>O(n log n)</td>
+<td>線性對數</td>
+<td>好的排序</td>
+<td>合併排序、快速排序(平均)</td>
+</tr>
+<tr>
+<td>O(n²)</td>
+<td>平方</td>
+<td>雙層迴圈</td>
+<td>氣泡排序、暴力找重複</td>
+</tr>
+<tr>
+<td>O(2ⁿ)</td>
+<td>指數</td>
+<td>爆炸</td>
+<td>暴力解費氏數列、子集枚舉</td>
+</tr>
+</tbody>
+</table>
+<p><strong>面試表達方式</strong>:「這個解法是 O(n²),因為外層迴圈 n 次、內層最多 n 次;用 HashSet 可以把內層查找降到 O(1),整體變 O(n),代價是 O(n) 的額外空間。」——<strong>能講出時間換空間的取捨</strong>,比背答案重要。</p>
+<details class="exercise"><summary>✏️ 熱身:以下程式的時間複雜度?(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">      </span><span class="c1">// ①</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">j</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// ②</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>①每次 i 翻倍,跑 log n 次;②每次跑 n 次 → <strong>O(n log n)</strong>。</p></div></details>
+<hr />
+<h2 id="1-array">1. 陣列(Array)與動態陣列</h2>
+<div class="hl"><pre><span></span><code>索引:  0    1    2    3
+      ┌────┬────┬────┬────┐
+      │ 10 │ 25 │ 37 │ 42 │   ← 記憶體連續
+      └────┴────┴────┴────┘
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>複雜度</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>按索引讀寫 <code>a[i]</code></td>
+<td>O(1)</td>
+<td>位址 = 起點 + i × 元素大小,直接算</td>
+</tr>
+<tr>
+<td>尾端新增(動態陣列)</td>
+<td>均攤 O(1)(見下)</td>
+<td>滿了才擴容(複製到 2 倍大的新陣列)</td>
+</tr>
+<tr>
+<td>中間插入/刪除</td>
+<td>O(n)</td>
+<td>後面全部要搬</td>
+</tr>
+<tr>
+<td>搜尋(未排序)</td>
+<td>O(n)</td>
+<td>只能逐個看</td>
+</tr>
+<tr>
+<td>搜尋(已排序)</td>
+<td>O(log n)</td>
+<td>二分搜尋</td>
+</tr>
+</tbody>
+</table>
+<p><strong>「均攤 O(1)」(amortized O(1))是什麼意思?</strong> 大部分的尾端新增就是放進下一格,O(1);偶爾一次「滿了要搬家」是 O(n)(整批複製到更大的新陣列)。但因為每次擴容都是加倍,搬家的頻率越來越低——把那次 O(n) 的成本「分攤」到之前的每次新增上,<strong>平均每次還是 O(1)</strong>。這就是「均攤」:偶爾貴一次,平均起來便宜。</p>
+<ul>
+<li>Java:<code>int[]</code> / <code>ArrayList</code>;Swift:<code>Array</code>(本身就是動態陣列)。</li>
+<li><strong>使用情境</strong>:讀多寫少、需要隨機存取。90% 的「清單」場景就用它:行情列表、聊天訊息。</li>
+<li><strong>快取友善</strong>:記憶體連續,CPU 快取命中率高——所以即使複雜度相同,陣列實務上常比鏈結串列快。</li>
+</ul>
+<h3 id="_2">二分搜尋(必會手寫)</h3>
+<div class="hl"><pre><span></span><code><span class="kt">int</span><span class="w"> </span><span class="nf">binarySearch</span><span class="p">(</span><span class="kt">int</span><span class="o">[]</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">target</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">lo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">hi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="na">length</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">lo</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">hi</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">mid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">lo</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">hi</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">lo</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w">      </span><span class="c1">// 防溢位寫法(面試加分)</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="o">[</span><span class="n">mid</span><span class="o">]</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">target</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">mid</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="o">[</span><span class="n">mid</span><span class="o">]</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">target</span><span class="p">)</span><span class="w"> </span><span class="n">lo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mid</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">        </span><span class="k">else</span><span class="w"> </span><span class="n">hi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mid</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<hr />
+<h2 id="2-linked-list">2. 鏈結串列(Linked List)</h2>
+<div class="hl"><pre><span></span><code>head → ┌────┬───┐   ┌────┬───┐   ┌────┬───┐
+       │ 10 │ ●─┼──→│ 25 │ ●─┼──→│ 37 │ ╳ │
+       └────┴───┘   └────┴───┘   └────┴───┘
+        值   next     (節點分散在記憶體各處)
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>複雜度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>已知節點處插入/刪除</td>
+<td>O(1)(改指標就好)</td>
+</tr>
+<tr>
+<td>按索引存取</td>
+<td>O(n)(只能從頭走)</td>
+</tr>
+<tr>
+<td>搜尋</td>
+<td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>使用情境</strong>:頻繁在頭尾增刪、不需要隨機存取。例如 LRU 快取(LRU = Least Recently Used,滿了就淘汰「最久沒被用到」的那筆;搭配 HashMap 實作)、作業系統的工作佇列。實務上直接用鏈結串列的機會少,<strong>但面試手寫題極多</strong>(反轉、找環、合併)。</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="kd">class</span> <span class="nc">ListNode</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">val</span><span class="p">;</span><span class="w"> </span><span class="n">ListNode</span><span class="w"> </span><span class="n">next</span><span class="p">;</span><span class="w"> </span><span class="n">ListNode</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">val</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+
+<span class="c1">// 必背:反轉鏈結串列(迭代版)</span>
+<span class="n">ListNode</span><span class="w"> </span><span class="nf">reverse</span><span class="p">(</span><span class="n">ListNode</span><span class="w"> </span><span class="n">head</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">ListNode</span><span class="w"> </span><span class="n">prev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="n">curr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">head</span><span class="p">;</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">curr</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">ListNode</span><span class="w"> </span><span class="n">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">curr</span><span class="p">.</span><span class="na">next</span><span class="p">;</span><span class="w">  </span><span class="c1">// 先存下一個</span>
+<span class="w">        </span><span class="n">curr</span><span class="p">.</span><span class="na">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">prev</span><span class="p">;</span><span class="w">           </span><span class="c1">// 反轉指標</span>
+<span class="w">        </span><span class="n">prev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">curr</span><span class="p">;</span><span class="w">                </span><span class="c1">// 兩個指標往前走</span>
+<span class="w">        </span><span class="n">curr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">next</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">prev</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<details class="exercise"><summary>✏️ 經典題:怎麼判斷鏈結串列有沒有「環」?(點擊看解答)</summary><div class="exercise-body"><p><strong>快慢指標(Floyd 判圈)</strong>:慢指標一次走 1 步、快指標一次走 2 步;有環必相遇,無環快指標先到 null。時間 O(n)、空間 O(1)。</p>
+<div class="hl"><pre><span></span><code><span class="kt">boolean</span><span class="w"> </span><span class="nf">hasCycle</span><span class="p">(</span><span class="n">ListNode</span><span class="w"> </span><span class="n">head</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">ListNode</span><span class="w"> </span><span class="n">slow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">head</span><span class="p">,</span><span class="w"> </span><span class="n">fast</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">head</span><span class="p">;</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">fast</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">fast</span><span class="p">.</span><span class="na">next</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">slow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">slow</span><span class="p">.</span><span class="na">next</span><span class="p">;</span>
+<span class="w">        </span><span class="n">fast</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fast</span><span class="p">.</span><span class="na">next</span><span class="p">.</span><span class="na">next</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">slow</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">fast</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>另一解:走過的節點丟 HashSet,看過就有環——時間 O(n) 但空間 O(n)。講出兩解與取捨是加分點。</p></div></details>
+<hr />
+<h2 id="3-stackqueue">3. 堆疊(Stack)與佇列(Queue)</h2>
+<div class="hl"><pre><span></span><code>Stack(LIFO 後進先出)          Queue(FIFO 先進先出)
+      │ 30 │ ← push/pop         出 ←─ 10 │ 25 │ 30 ─← 入
+      │ 25 │    都在頂端
+      │ 10 │
+      └────┘
+</code></pre></div>
+
+<ul>
+<li>Java:兩者都建議用 <code>ArrayDeque</code>(<code>push/pop</code> 當 Stack,<code>offer/poll</code> 當 Queue)。</li>
+<li><strong>Stack 使用情境</strong>:復原(Undo)、瀏覽器上一頁、函式呼叫堆疊、<strong>括號配對</strong>、運算式求值、DFS(Depth-First Search,深度優先搜尋:一條路走到底再回頭,詳見 §7)。</li>
+<li><strong>Queue 使用情境</strong>:任務排隊、BFS(Breadth-First Search,廣度優先搜尋:一圈一圈往外擴,詳見 §7)、訊息緩衝(行情 tick 先進先出處理)。</li>
+<li>變形:<strong>雙端佇列 Deque</strong>(兩端都能進出)、<strong>環形緩衝區</strong>(固定容量,行情串流常用)。</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="c1">// 必背:括號配對</span>
+<span class="kt">boolean</span><span class="w"> </span><span class="nf">isValid</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">s</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Deque</span><span class="o">&lt;</span><span class="n">Character</span><span class="o">&gt;</span><span class="w"> </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayDeque</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">Character</span><span class="p">,</span><span class="w"> </span><span class="n">Character</span><span class="o">&gt;</span><span class="w"> </span><span class="n">pairs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="sc">')'</span><span class="p">,</span><span class="w"> </span><span class="sc">'('</span><span class="p">,</span><span class="w"> </span><span class="sc">']'</span><span class="p">,</span><span class="w"> </span><span class="sc">'['</span><span class="p">,</span><span class="w"> </span><span class="sc">'}'</span><span class="p">,</span><span class="w"> </span><span class="sc">'{'</span><span class="p">);</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">char</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="na">toCharArray</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pairs</span><span class="p">.</span><span class="na">containsValue</span><span class="p">(</span><span class="n">c</span><span class="p">))</span><span class="w"> </span><span class="n">stack</span><span class="p">.</span><span class="na">push</span><span class="p">(</span><span class="n">c</span><span class="p">);</span><span class="w">              </span><span class="c1">// 左括號入堆疊</span>
+<span class="w">        </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">()</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">stack</span><span class="p">.</span><span class="na">pop</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">pairs</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">c</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">stack</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<hr />
+<h2 id="4-hash-table">4. 雜湊表(Hash Table)——最重要的一個</h2>
+<div class="hl"><pre><span></span><code>key "BTC" ──hash()──→ 雜湊值 ──% 桶數──→ 桶索引 3
+                                          │
+桶: [0] [1] [2] [3] [4] ...
+              ↓
+            ("BTC",1650萬) → ("XYZ",42)   ← 碰撞時串成鏈(Java 8+ 過長轉紅黑樹)
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>平均</th>
+<th>最壞</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>插入/查找/刪除</td>
+<td>O(1)</td>
+<td>O(n)(全部撞同一桶)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Java:<code>HashMap</code> / <code>HashSet</code>;Swift:<code>Dictionary</code> / <code>Set</code>。</li>
+<li><strong>三個必懂機制</strong>(Java 章 3.3 詳述,這裡複習):
+  1. hashCode 定桶 → equals 比對;<strong>兩者必須一起覆寫</strong>。
+  2. 碰撞處理:鏈結法(Java)或開放定址法。
+  3. 負載因子 0.75 觸發擴容 rehash。</li>
+<li><strong>使用情境</strong>:只要題目出現「找出現過沒有」「計數」「配對」,第一反應就是雜湊表。它是用 O(n) 空間買 O(1) 查找的標準交易。</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="c1">// 必背:Two Sum(雜湊表思維的代表題)</span>
+<span class="kt">int</span><span class="o">[]</span><span class="w"> </span><span class="nf">twoSum</span><span class="p">(</span><span class="kt">int</span><span class="o">[]</span><span class="w"> </span><span class="n">nums</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">target</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">Integer</span><span class="p">,</span><span class="w"> </span><span class="n">Integer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">seen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span><span class="w">   </span><span class="c1">// 值 → 索引</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">nums</span><span class="p">.</span><span class="na">length</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Integer</span><span class="w"> </span><span class="n">j</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">seen</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">target</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">nums</span><span class="o">[</span><span class="n">i</span><span class="o">]</span><span class="p">);</span><span class="w">     </span><span class="c1">// 需要的「另一半」出現過嗎?</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">j</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="kt">int</span><span class="o">[]</span><span class="p">{</span><span class="n">j</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">};</span>
+<span class="w">        </span><span class="n">seen</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">nums</span><span class="o">[</span><span class="n">i</span><span class="o">]</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="kt">int</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span><span class="p">;</span>
+<span class="p">}</span><span class="w">   </span><span class="c1">// O(n) 時間、O(n) 空間;暴力雙迴圈是 O(n²)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="5-tree">5. 樹(Tree)</h2>
+<h3 id="51-bst">5.1 二元搜尋樹(BST)</h3>
+<div class="hl"><pre><span></span><code>        50              規則:左子樹 &lt; 節點 &lt; 右子樹
+       /  \
+     30    70           中序走訪(左→根→右)= 由小到大排序
+    /  \   /  \
+  20   40 60   80
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>平衡時</th>
+<th>退化時(插入已排序資料)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查找/插入/刪除</td>
+<td>O(log n)</td>
+<td>O(n)(變成一條鏈)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>退化問題 → 自平衡樹</strong>:AVL 樹(嚴格平衡,查多改少)、<strong>紅黑樹</strong>(近似平衡,改動成本低——Java 的 <code>TreeMap</code>/<code>TreeSet</code>、HashMap 的桶都用它)。面試講到「紅黑樹」通常只要:知道它是自平衡 BST、操作 O(log n)、TreeMap 底層是它,<strong>不需要背旋轉細節</strong>。</p>
+<p><strong>使用情境</strong>:需要「排序 + 範圍查詢」。例:掛單簿用 <code>TreeMap&lt;價格, 訂單列表&gt;</code>,隨時取最高買價 <code>lastKey()</code>、找「價格 ≥ x 的所有單」<code>tailMap(x)</code>。這是 HashMap 做不到的。</p>
+<h3 id="52">5.2 走訪(必會)</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 中序走訪(遞迴)—— BST 會得到排序結果</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">inorder</span><span class="p">(</span><span class="n">TreeNode</span><span class="w"> </span><span class="n">node</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">node</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<span class="w">    </span><span class="n">inorder</span><span class="p">(</span><span class="n">node</span><span class="p">.</span><span class="na">left</span><span class="p">);</span>
+<span class="w">    </span><span class="n">visit</span><span class="p">(</span><span class="n">node</span><span class="p">);</span>
+<span class="w">    </span><span class="n">inorder</span><span class="p">(</span><span class="n">node</span><span class="p">.</span><span class="na">right</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// 層序走訪(BFS,用 Queue)</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">levelOrder</span><span class="p">(</span><span class="n">TreeNode</span><span class="w"> </span><span class="n">root</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Queue</span><span class="o">&lt;</span><span class="n">TreeNode</span><span class="o">&gt;</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayDeque</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">root</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="na">offer</span><span class="p">(</span><span class="n">root</span><span class="p">);</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">q</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">TreeNode</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="na">poll</span><span class="p">();</span>
+<span class="w">        </span><span class="n">visit</span><span class="p">(</span><span class="n">n</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="p">.</span><span class="na">left</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="na">offer</span><span class="p">(</span><span class="n">n</span><span class="p">.</span><span class="na">left</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="p">.</span><span class="na">right</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="na">offer</span><span class="p">(</span><span class="n">n</span><span class="p">.</span><span class="na">right</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>前序=根左右(複製樹)、中序=左根右(BST 排序)、後序=左右根(先處理子再處理根,如刪除)、層序=一層層(最短路徑類)。</p>
+<h3 id="53">5.3 其他樹(知道概念即可)</h3>
+<ul>
+<li><strong>Trie(字典樹)</strong>:按字元一層層存字串;自動完成、搜尋提示(輸入 "BT" 提示 "BTC")。查找 O(字串長度)。</li>
+<li><strong>B+ 樹</strong>:多路平衡樹,節點大、樹矮,適合磁碟;<strong>資料庫索引</strong>用它(MySQL InnoDB)。面試連結:「為什麼資料庫索引不用雜湊?因為要支援範圍查詢與排序。」</li>
+</ul>
+<hr />
+<h2 id="6-heap">6. 堆積(Heap)與優先佇列</h2>
+<div class="hl"><pre><span></span><code>最小堆積(min-heap):每個節點 ≤ 子節點        用「陣列」存完全二元樹:
+        10                                   [10, 25, 15, 40, 30]
+       /  \                                  父 i → 子 2i+1, 2i+2
+     25    15
+    /  \
+  40    30
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>複雜度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>取最小(頂)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>插入 / 刪頂</td>
+<td>O(log n)</td>
+</tr>
+<tr>
+<td>建堆</td>
+<td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<p>(插入=新元素放在陣列最後,再一路「跟父節點比,比它小就交換」往上換到正確位置,術語叫上浮 sift-up;刪頂=把最後一個元素搬到頂端,再一路往下換,叫下沉 sift-down。每次交換上/下一層,樹高 log n,所以是 O(log n)。)</p>
+<ul>
+<li>Java:<code>PriorityQueue</code>(預設最小堆積);Swift 無內建,面試時可說「用 Heap 套件或自己實作」。</li>
+<li><strong>使用情境</strong>:「不斷有新元素進來,每次都要拿最大/最小」。<ul>
+<li><strong>Top-K 問題</strong>(必考):從百萬筆成交找金額最大的 10 筆 → 維護<strong>大小為 K 的最小堆積</strong>,新元素比堆頂大就換掉,O(n log K),不用全排序。</li>
+<li>任務排程(最早到期先做)、合併 K 個已排序串流(行情多來源合併)。</li>
+</ul>
+</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="c1">// Top-K:金額最大的 k 筆</span>
+<span class="n">PriorityQueue</span><span class="o">&lt;</span><span class="n">Trade</span><span class="o">&gt;</span><span class="w"> </span><span class="n">minHeap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PriorityQueue</span><span class="o">&lt;&gt;</span><span class="p">(</span><span class="n">Comparator</span><span class="p">.</span><span class="na">comparing</span><span class="p">(</span><span class="n">Trade</span><span class="p">::</span><span class="n">getAmount</span><span class="p">));</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">Trade</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">trades</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">minHeap</span><span class="p">.</span><span class="na">offer</span><span class="p">(</span><span class="n">t</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">minHeap</span><span class="p">.</span><span class="na">size</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">k</span><span class="p">)</span><span class="w"> </span><span class="n">minHeap</span><span class="p">.</span><span class="na">poll</span><span class="p">();</span><span class="w">   </span><span class="c1">// 擠掉目前最小的</span>
+<span class="p">}</span>
+<span class="c1">// 堆裡剩下的就是最大的 k 筆</span>
+</code></pre></div>
+
+<hr />
+<h2 id="7-graph">7. 圖(Graph)</h2>
+<div class="hl"><pre><span></span><code>鄰接串列表示法:                  A ──── B
+A: [B, C]                        │      │
+B: [A, D]                        C ──── D
+C: [A, D]
+D: [B, C]
+</code></pre></div>
+
+<ul>
+<li>表示法:<strong>鄰接串列</strong> <code>Map&lt;節點, List&lt;鄰居&gt;&gt;</code>(稀疏圖,最常用)vs 鄰接矩陣(稠密圖、查邊 O(1))。</li>
+<li><strong>BFS(佇列)</strong>:一圈圈擴散 → <strong>無權圖最短路徑</strong>、社交距離。</li>
+<li><strong>DFS(遞迴/堆疊)</strong>:一路走到底 → 連通塊、走迷宮、<strong>拓撲排序</strong>(課程先修關係、建置相依性)。</li>
+<li>進階名詞(知道用途即可):Dijkstra(帶權最短路徑)、拓撲排序(有向無環圖排先後)。</li>
+</ul>
+<div class="hl"><pre><span></span><code><span class="c1">// BFS 模板(必背)</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">bfs</span><span class="p">(</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">graph</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">start</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Set</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">visited</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashSet</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="n">Queue</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ArrayDeque</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="n">q</span><span class="p">.</span><span class="na">offer</span><span class="p">(</span><span class="n">start</span><span class="p">);</span><span class="w"> </span><span class="n">visited</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="n">start</span><span class="p">);</span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">q</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="na">poll</span><span class="p">();</span>
+<span class="w">        </span><span class="n">visit</span><span class="p">(</span><span class="n">node</span><span class="p">);</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">next</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">graph</span><span class="p">.</span><span class="na">getOrDefault</span><span class="p">(</span><span class="n">node</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">()))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">visited</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="n">next</span><span class="p">))</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="na">offer</span><span class="p">(</span><span class="n">next</span><span class="p">);</span><span class="w">   </span><span class="c1">// add 回傳 false = 已看過</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>使用情境</strong>:幣種兌換路徑(BTC→ETH→JPY 怎麼換最划算=帶權圖最短路徑)、推薦關係、相依解析。</p>
+<hr />
+<h2 id="8">8. 排序:至少會講這三個</h2>
+<table>
+<thead>
+<tr>
+<th>排序</th>
+<th>平均</th>
+<th>最壞</th>
+<th>空間</th>
+<th>穩定</th>
+<th>一句話</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>快速排序</td>
+<td>O(n log n)</td>
+<td>O(n²)</td>
+<td>O(log n)</td>
+<td>✗</td>
+<td>選一個基準值(pivot),比它小的放左、大的放右,兩半各自遞迴;最壞=每次都選到最大/最小值,分不成兩半</td>
+</tr>
+<tr>
+<td>合併排序</td>
+<td>O(n log n)</td>
+<td>O(n log n)</td>
+<td>O(n)</td>
+<td>✓</td>
+<td>切半、各自排、合併;穩定但要額外空間</td>
+</tr>
+<tr>
+<td>堆積排序</td>
+<td>O(n log n)</td>
+<td>O(n log n)</td>
+<td>O(1)</td>
+<td>✗</td>
+<td>建堆後反覆取頂</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>穩定</strong>=相同 key 保持原相對順序(多欄位排序時重要:先按時間排、再按價格排,價格相同時間序不亂)。</li>
+<li>Java 實際用:物件排序 <code>Timsort</code>(合併排序改良,穩定)、基本型別 <code>雙軸快排</code>。</li>
+<li>小抄:<code>Collections.sort(list, Comparator.comparing(Trade::getPrice).thenComparing(Trade::getTime))</code>。</li>
+</ul>
+<hr />
+<h2 id="9">9. 選型總表(面試前最後看這張)</h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>資料結構</th>
+<th>代表複雜度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>按位置隨機存取</td>
+<td>陣列 / ArrayList</td>
+<td>O(1) 存取</td>
+</tr>
+<tr>
+<td>頭尾頻繁增刪</td>
+<td>Deque(ArrayDeque)</td>
+<td>O(1) 兩端</td>
+</tr>
+<tr>
+<td>「出現過嗎」「計數」「配對」</td>
+<td>HashMap / HashSet</td>
+<td>O(1) 平均</td>
+</tr>
+<tr>
+<td>排序 + 範圍查詢 + 最大最小</td>
+<td>TreeMap / TreeSet(紅黑樹)</td>
+<td>O(log n)</td>
+</tr>
+<tr>
+<td>不斷取最大/最小、Top-K</td>
+<td>PriorityQueue(堆積)</td>
+<td>O(log n) 插入</td>
+</tr>
+<tr>
+<td>先進先出處理</td>
+<td>Queue</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>復原、配對、遞迴改迭代</td>
+<td>Stack</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>字串前綴搜尋/自動完成</td>
+<td>Trie</td>
+<td>O(字長)</td>
+</tr>
+<tr>
+<td>關係、路徑、相依</td>
+<td>圖 + BFS/DFS</td>
+<td>O(V+E)(V=節點數、E=邊數:每個節點和每條邊各看一次)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10">10. 綜合面試題組</h2>
+<details class="exercise"><summary>✏️ 題 1:設計資料結構,支援 O(1) 的 insert、delete、getRandom(隨機取一個元素)。(點擊看解答)</summary><div class="exercise-body"><p><strong>組合技:動態陣列 + HashMap</strong>。
+- 陣列存元素(getRandom:隨機索引 O(1))。
+- HashMap 存「元素 → 它在陣列的索引」(insert/delete 定位 O(1))。
+- delete 的技巧:把要刪的元素和<strong>陣列最後一個交換</strong>,再刪尾端(避免中間刪除的 O(n) 搬移)。</p>
+<p>這題考的是「單一結構不夠時,組合兩個結構各取所長」——LRU 快取(HashMap+雙向鏈結串列)也是同一思想。</p></div></details>
+<details class="exercise"><summary>✏️ 題 2:即時成交流中,隨時要查「目前中位數價格」。用什麼結構?(點擊看解答)</summary><div class="exercise-body"><p><strong>雙堆積</strong>:一個最大堆積存較小的一半,一個最小堆積存較大的一半,維持兩堆大小差 ≤ 1。
+- 中位數 = 兩個堆頂(或其平均),查詢 O(1)。
+- 每筆新成交插入 O(log n)。
+排序陣列每次插入要 O(n) 搬移;單一堆積只能拿最值拿不到中位數——雙堆積正是為這種「串流 + 中位數」設計的。</p></div></details>
+<details class="exercise"><summary>✏️ 題 3:掛單簿要支援:加掛單、撤單(用訂單 ID)、查最高買價、查「價格 ≥ x 的所有賣單」。設計資料結構。(點擊看解答)</summary><div class="exercise-body"><p>組合:
+- <code>TreeMap&lt;BigDecimal, Deque&lt;Order&gt;&gt; buyBook</code>(買簿,價格→該價位訂單佇列;同價位先到先成交 = FIFO)。
+- 賣簿同理一個 TreeMap。
+- <code>HashMap&lt;String, Order&gt; ordersById</code>:撤單 O(1) 定位(Order 內記住自己的價位,從對應 Deque 移除)。
+- 最高買價:<code>buyBook.lastKey()</code> O(log n);範圍查詢:<code>sellBook.tailMap(x)</code>。</p>
+<p>考點:TreeMap(排序+範圍)與 HashMap(ID 直查)<strong>各司其職</strong>;以及想到同價位內要保序(FIFO)。</p></div></details>
+<details class="exercise"><summary>✏️ 題 4:百萬筆歷史成交已按時間排序,找出某個時間區間 [t1, t2] 內的成交筆數,要快。(點擊看解答)</summary><div class="exercise-body"><p><strong>二分搜尋兩次</strong>:找 t1 的「第一個 ≥ t1 的位置」(lower bound)與 t2 的「第一個 &gt; t2 的位置」(upper bound),兩索引相減即筆數。O(log n),不用掃描。
+Java:<code>Collections.binarySearch</code> 或手寫 lower/upper bound(手寫更保險,面試官常要求)。
+考點:<strong>「已排序」三個字就是在暗示二分</strong>。</p></div></details>
+<hr />
+<h2 id="_3">自我檢核清單</h2>
+<ul>
+<li class="check"><label><input type="checkbox" data-key="ds-0"> 能不假思索說出表 9 每一列(需求 → 結構 → 複雜度)</label></li>
+<li class="check"><label><input type="checkbox" data-key="ds-1"> 能手寫:二分搜尋、反轉鏈結串列、括號配對、Two Sum、BFS 模板</label></li>
+<li class="check"><label><input type="checkbox" data-key="ds-2"> 能解釋 HashMap 原理(定桶、碰撞、擴容)與 hashCode/equals 合約</label></li>
+<li class="check"><label><input type="checkbox" data-key="ds-3"> 能說明 BST 退化問題與紅黑樹解法、TreeMap 的適用情境</label></li>
+<li class="check"><label><input type="checkbox" data-key="ds-4"> 能用堆積解 Top-K,並解釋為什麼不用全排序</label></li>
+<li class="check"><label><input type="checkbox" data-key="ds-5"> 能講出快排/合併/堆積排序的複雜度與穩定性差異</label></li>
+<li class="check"><label><input type="checkbox" data-key="ds-6"> 遇到新題目,會先問自己:「查找模式是什麼?要不要排序?要不要保序?」再選結構</label></li>
+</ul></article>
+    <nav class="pager"><a href="architecture.html"><span class="dir">← 上一章</span>交易所 App 架構設計</a><a class="next" href="concurrency.html"><span class="dir">下一章 →</span>多執行緒安全:四語言對照</a></nav>
+  </main>
+</div>
+<script>
+(function(){
+  var store = {get:function(k){try{return localStorage.getItem(k)}catch(e){return this._m&&this._m[k]||null}},
+               set:function(k,v){try{localStorage.setItem(k,v)}catch(e){this._m=this._m||{};this._m[k]=v}}};
+  var boxes = document.querySelectorAll('li.check input');
+  function refresh(){
+    if(!boxes.length) return;
+    var done = 0;
+    boxes.forEach(function(b){ if(b.checked) done++; });
+    var pb = document.getElementById('progressBox');
+    if(pb){ pb.hidden = false;
+      document.getElementById('progressFill').style.width = Math.round(done/boxes.length*100)+'%';
+      document.getElementById('progressText').textContent = '已完成 '+done+' / '+boxes.length+' 項';
+    }
+  }
+  boxes.forEach(function(b){
+    if(store.get('chk-'+b.dataset.key)==='1') b.checked = true;
+    b.addEventListener('change',function(){
+      store.set('chk-'+b.dataset.key, b.checked?'1':'0'); refresh();
+    });
+  });
+  refresh();
+  // PWA:支援的環境(如 GitHub Pages)註冊 service worker;不支援時靜默略過
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

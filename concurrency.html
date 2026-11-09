@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多執行緒安全:四語言對照｜面試強化手冊</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17616e">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --paper:#f7f5f0; --card:#fffdf8; --ink:#2b2a26; --muted:#6f6a5e;
+  --accent:#17616e; --accent-soft:#e3eef0; --line:#e2ddd2; --mark:#b4530a;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:16px;line-height:1.85}
+.topbar{position:sticky;top:0;z-index:10;display:flex;gap:1.5rem;align-items:center;
+  background:var(--card);border-bottom:1px solid var(--line);padding:.7rem 1.4rem}
+.brand{font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.05em}
+.topbar nav{display:flex;gap:.2rem;flex-wrap:wrap}
+.topbar nav a{color:var(--muted);text-decoration:none;padding:.3rem .7rem;border-radius:6px;font-size:.92rem}
+.topbar nav a:hover{background:var(--accent-soft);color:var(--accent)}
+.topbar nav a.active{background:var(--accent);color:#fff}
+.layout{display:flex;max-width:1200px;margin:0 auto;align-items:flex-start}
+.sidebar{position:sticky;top:3.6rem;width:230px;flex:none;padding:1.6rem 1rem;
+  max-height:calc(100vh - 4rem);overflow:auto}
+.sidebar-title{font-size:.78rem;letter-spacing:.15em;color:var(--muted);margin-bottom:.5rem}
+.sidebar ul{list-style:none;margin:0 0 1.2rem;padding:0}
+.sidebar li{margin:.15rem 0}
+.sidebar a{color:var(--muted);text-decoration:none;font-size:.88rem;display:block;
+  padding:.22rem .5rem;border-left:2px solid transparent;border-radius:0 6px 6px 0}
+.sidebar a:hover{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+.content{flex:1;min-width:0;padding:2rem 2.4rem 4rem}
+article{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:2.4rem 2.8rem;box-shadow:0 1px 3px rgba(60,50,30,.05)}
+h1{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.75rem;line-height:1.4;
+  border-bottom:3px double var(--line);padding-bottom:.7rem;margin-top:0}
+h2{font-family:"Noto Serif TC","PingFang TC",serif;font-size:1.32rem;margin-top:2.6em;
+  padding-left:.65rem;border-left:4px solid var(--accent)}
+h3{font-size:1.08rem;margin-top:2em;color:var(--accent)}
+a{color:var(--accent)}
+blockquote{margin:1.2em 0;padding:.8em 1.2em;background:var(--accent-soft);
+  border-left:4px solid var(--accent);border-radius:0 8px 8px 0;color:#3c4b4e}
+blockquote p{margin:.3em 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:.92rem}
+th,td{border:1px solid var(--line);padding:.5em .8em;text-align:left;vertical-align:top}
+th{background:#efece3}
+tr:nth-child(even) td{background:#fbf9f3}
+code{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:.86em;
+  background:#eeeae0;padding:.12em .4em;border-radius:4px}
+.hl{background:#2d2a24;border-radius:10px;padding:1em 1.2em;overflow-x:auto;
+  margin:1.2em 0;font-size:.85rem;line-height:1.65}
+.hl code{background:none;padding:0;color:#e8e3d8}
+.hl pre{margin:0}
+details.exercise{margin:1.4em 0;border:1px solid #d8b98f;border-radius:10px;
+  background:#fdf6ea;overflow:hidden}
+details.exercise summary{cursor:pointer;padding:.75em 1.1em;font-weight:600;
+  color:var(--mark);list-style:none;user-select:none}
+details.exercise summary::before{content:"▸ ";transition:.15s}
+details.exercise[open] summary::before{content:"▾ "}
+details.exercise summary:hover{background:#f8edda}
+.exercise-body{padding:.2em 1.3em 1em;border-top:1px dashed #e4cfa8}
+figure.diagram{margin:1.6em 0;padding:1.2em;background:#fff;border:1px solid var(--line);
+  border-radius:10px;text-align:center;overflow-x:auto}
+li.check{list-style:none;margin-left:-1.2em}
+li.check label{display:flex;gap:.6em;align-items:baseline;cursor:pointer;
+  padding:.3em .6em;border-radius:8px}
+li.check label:hover{background:var(--accent-soft)}
+li.check input{accent-color:var(--accent);transform:translateY(2px) scale(1.15)}
+li.check input:checked + *{}
+li.check:has(input:checked) label{color:var(--muted);text-decoration:line-through}
+.pager{display:flex;justify-content:space-between;margin-top:1.6rem;gap:1rem}
+.pager a{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.8rem 1.1rem;text-decoration:none;color:var(--ink)}
+.pager a:hover{border-color:var(--accent)}
+.pager .dir{display:block;font-size:.75rem;color:var(--muted);letter-spacing:.1em}
+.pager .next{text-align:right}
+.progress-track{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--accent);transition:width .25s}
+.progress-text{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+@media(max-width:900px){
+  .sidebar{display:none}
+  .content{padding:1rem}
+  article{padding:1.4rem 1.2rem}
+}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ebdbb2 }
+.hl { background: #282828; color: #DDD }
+.hl .c { color: #928374; font-style: italic } /* Comment */
+.hl .err { color: #282828; background-color: #FB4934 } /* Error */
+.hl .esc { color: #DDD } /* Escape */
+.hl .g { color: #DDD } /* Generic */
+.hl .k { color: #FB4934 } /* Keyword */
+.hl .l { color: #DDD } /* Literal */
+.hl .n { color: #DDD } /* Name */
+.hl .o { color: #DDD } /* Operator */
+.hl .x { color: #DDD } /* Other */
+.hl .p { color: #DDD } /* Punctuation */
+.hl .ch { color: #928374; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #928374; font-style: italic } /* Comment.Multiline */
+.hl .c-PreProc { color: #8EC07C; font-style: italic } /* Comment.PreProc */
+.hl .cp { color: #928374; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #928374; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #928374; font-style: italic } /* Comment.Single */
+.hl .cs { color: #EBDBB2; font-weight: bold; font-style: italic } /* Comment.Special */
+.hl .gd { color: #282828; background-color: #FB4934 } /* Generic.Deleted */
+.hl .ge { color: #DDD; font-style: italic } /* Generic.Emph */
+.hl .ges { color: #DDD; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.hl .gr { color: #FB4934 } /* Generic.Error */
+.hl .gh { color: #EBDBB2; font-weight: bold } /* Generic.Heading */
+.hl .gi { color: #282828; background-color: #B8BB26 } /* Generic.Inserted */
+.hl .go { color: #F2E5BC } /* Generic.Output */
+.hl .gp { color: #A89984 } /* Generic.Prompt */
+.hl .gs { color: #DDD; font-weight: bold } /* Generic.Strong */
+.hl .gu { color: #EBDBB2; text-decoration: underline } /* Generic.Subheading */
+.hl .gt { color: #FB4934 } /* Generic.Traceback */
+.hl .kc { color: #FB4934 } /* Keyword.Constant */
+.hl .kd { color: #FB4934 } /* Keyword.Declaration */
+.hl .kn { color: #FB4934 } /* Keyword.Namespace */
+.hl .kp { color: #FB4934 } /* Keyword.Pseudo */
+.hl .kr { color: #FB4934 } /* Keyword.Reserved */
+.hl .kt { color: #FB4934 } /* Keyword.Type */
+.hl .ld { color: #DDD } /* Literal.Date */
+.hl .m { color: #D3869B } /* Literal.Number */
+.hl .s { color: #B8BB26 } /* Literal.String */
+.hl .na { color: #FABD2F } /* Name.Attribute */
+.hl .nb { color: #FE8019 } /* Name.Builtin */
+.hl .nc { color: #8EC07C } /* Name.Class */
+.hl .no { color: #D3869B } /* Name.Constant */
+.hl .nd { color: #FB4934 } /* Name.Decorator */
+.hl .ni { color: #DDD } /* Name.Entity */
+.hl .ne { color: #FB4934 } /* Name.Exception */
+.hl .nf { color: #8EC07C } /* Name.Function */
+.hl .nl { color: #DDD } /* Name.Label */
+.hl .nn { color: #8EC07C } /* Name.Namespace */
+.hl .nx { color: #DDD } /* Name.Other */
+.hl .py { color: #DDD } /* Name.Property */
+.hl .nt { color: #8EC07C } /* Name.Tag */
+.hl .nv { color: #83A598 } /* Name.Variable */
+.hl .ow { color: #FB4934 } /* Operator.Word */
+.hl .pm { color: #DDD } /* Punctuation.Marker */
+.hl .w { color: #DDD } /* Text.Whitespace */
+.hl .mb { color: #D3869B } /* Literal.Number.Bin */
+.hl .mf { color: #D3869B } /* Literal.Number.Float */
+.hl .mh { color: #D3869B } /* Literal.Number.Hex */
+.hl .mi { color: #D3869B } /* Literal.Number.Integer */
+.hl .mo { color: #D3869B } /* Literal.Number.Oct */
+.hl .sa { color: #B8BB26 } /* Literal.String.Affix */
+.hl .sb { color: #B8BB26 } /* Literal.String.Backtick */
+.hl .sc { color: #B8BB26 } /* Literal.String.Char */
+.hl .dl { color: #B8BB26 } /* Literal.String.Delimiter */
+.hl .sd { color: #B8BB26 } /* Literal.String.Doc */
+.hl .s2 { color: #B8BB26 } /* Literal.String.Double */
+.hl .se { color: #FE8019 } /* Literal.String.Escape */
+.hl .sh { color: #B8BB26 } /* Literal.String.Heredoc */
+.hl .si { color: #B8BB26 } /* Literal.String.Interpol */
+.hl .sx { color: #B8BB26 } /* Literal.String.Other */
+.hl .sr { color: #B8BB26 } /* Literal.String.Regex */
+.hl .s1 { color: #B8BB26 } /* Literal.String.Single */
+.hl .ss { color: #B8BB26 } /* Literal.String.Symbol */
+.hl .bp { color: #FE8019 } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8EC07C } /* Name.Function.Magic */
+.hl .vc { color: #83A598 } /* Name.Variable.Class */
+.hl .vg { color: #83A598 } /* Name.Variable.Global */
+.hl .vi { color: #83A598 } /* Name.Variable.Instance */
+.hl .vm { color: #83A598 } /* Name.Variable.Magic */
+.hl .il { color: #D3869B } /* Literal.Number.Integer.Long */</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">面試強化手冊</a>
+  <nav><a href="index.html" class="">首頁</a><a href="java.html" class="">Java</a><a href="objc.html" class="">Objective-C</a><a href="architecture.html" class="">架構設計</a><a href="ds.html" class="">資料結構</a><a href="concurrency.html" class="active">多執行緒</a></nav>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">本章目錄</div>
+    <ul><li><a href="#1">1. 問題的本質:三件會出錯的事</a></li><li><a href="#2-pricecache">2. 共同場景:最新價快取(PriceCache)</a></li><li><a href="#3-java">3. Java</a></li><li><a href="#4-kotlinandroid">4. Kotlin(Android 實務)</a></li><li><a href="#5-objective-c">5. Objective-C</a></li><li><a href="#6-swift">6. Swift</a></li><li><a href="#7">7. 四語言總對照表(面試前看這張)</a></li><li><a href="#8">8. 實務事故案例(從症狀反推,面試官最愛)</a></li><li><a href="#_1">自我檢核清單</a></li></ul>
+    <div class="progress-box" id="progressBox" hidden>
+      <div class="sidebar-title">檢核進度</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+  </aside>
+  <main class="content">
+    <article><h1 id="swift-objective-c-java-kotlin">多執行緒安全:Swift / Objective-C / Java / Kotlin 對照</h1>
+<blockquote>
+<p>本章目標:把「執行緒安全」這件事講一次通,然後看四個語言各自的工具。主軸是<strong>同一個實務場景——交易所 App 的「最新價快取」</strong>(行情執行緒高頻寫入、UI 與多處邏輯同時讀取),用四種語言各實作一遍,面試時無論被用哪個語言問,都答得出來。</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 問題的本質:三件會出錯的事</h2>
+<p>不管什麼語言,多執行緒出事都是這三類(面試先講這個,展現你懂原理而不是背 API):</p>
+<table>
+<thead>
+<tr>
+<th>問題</th>
+<th>說明</th>
+<th>經典症狀</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>原子性(Atomicity)</strong></td>
+<td>「讀→改→寫」不是一步完成,中間被插隊</td>
+<td>兩個執行緒同時 <code>count++</code>,少加一次</td>
+</tr>
+<tr>
+<td><strong>可見性(Visibility)</strong></td>
+<td>一個執行緒改了,另一個看到的還是舊值(CPU 快取/編譯器最佳化)</td>
+<td>旗標改成 true 了,另一條執行緒的 while 迴圈永遠跑不完</td>
+</tr>
+<tr>
+<td><strong>順序性(Ordering)</strong></td>
+<td>指令被重排,別的執行緒看到「不合理的中間狀態」</td>
+<td>物件還沒初始化完,參考已經被看到</td>
+</tr>
+</tbody>
+</table>
+<p>再加上兩個「工具用錯」造成的病:</p>
+<ul>
+<li><strong>死結(Deadlock)</strong>:互相等對方的鎖。四條件:互斥、持有並等待、不可剝奪、循環等待;破解最實用的一招是<strong>固定加鎖順序</strong>。</li>
+<li><strong>競態條件(Race Condition)</strong>:結果取決於執行順序。「check-then-act」是溫床:<code>if (map 沒有 key) { 放入 }</code> 兩步之間被插隊。</li>
+</ul>
+<p><strong>通用解法分三派</strong>,四個語言都是這三派的變形:
+1. <strong>互斥(鎖)</strong>:同一時間只有一人能進 → synchronized、NSLock、Mutex。
+2. <strong>別共享,排隊</strong>:把所有存取丟進同一條串列隊伍 → GCD serial queue、Kotlin 單執行緒 dispatcher、Actor。
+3. <strong>不可變/複製</strong>:資料根本不會變,就不用保護 → immutable、值型別複製、快照。</p>
+<hr />
+<h2 id="2-pricecache">2. 共同場景:最新價快取(PriceCache)</h2>
+<p>需求:</p>
+<ul>
+<li><code>update(symbol, price)</code>:行情執行緒每秒呼叫數十次(寫)。</li>
+<li><code>price(symbol)</code>:UI、下單檢查、警報多處同時呼叫(讀,次數遠多於寫)。</li>
+<li>要求:讀寫安全、讀取快、不能死結。</li>
+</ul>
+<p>這是典型的<strong>讀多寫少</strong>,最佳策略是「並發讀 + 互斥寫」。下面看各語言。</p>
+<hr />
+<h2 id="3-java">3. Java</h2>
+<h3 id="31">3.1 工具箱速覽</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>解決什麼</th>
+<th>備註</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>synchronized</code></td>
+<td>原子性+可見性(互斥鎖)</td>
+<td>方法或區塊;鎖的是「某個物件」</td>
+</tr>
+<tr>
+<td><code>volatile</code></td>
+<td>只有可見性+禁止重排</td>
+<td><code>count++</code> 仍會錯;適合旗標</td>
+</tr>
+<tr>
+<td><code>Atomic*</code></td>
+<td>無鎖的原子更新(用 CAS,見 3.5)</td>
+<td>計數器、序號產生</td>
+</tr>
+<tr>
+<td><code>java.util.concurrent</code> 容器</td>
+<td>現成的執行緒安全集合</td>
+<td><code>ConcurrentHashMap</code>、<code>CopyOnWriteArrayList</code></td>
+</tr>
+<tr>
+<td><code>ReentrantReadWriteLock</code></td>
+<td>讀寫分離鎖</td>
+<td>讀多寫少</td>
+</tr>
+<tr>
+<td><code>ExecutorService</code></td>
+<td>執行緒的管理</td>
+<td>不手動 new Thread</td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-pricecache">3.2 PriceCache 實作</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 首選:直接用 ConcurrentHashMap,內部已做分段/CAS 最佳化</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">PriceCache</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">ConcurrentHashMap</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;</span><span class="w"> </span><span class="n">prices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConcurrentHashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">prices</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">prices</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">symbol</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// 複合操作不要 check-then-act,用原子方法:</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">highest</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">candidate</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">prices</span><span class="p">.</span><span class="na">merge</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">candidate</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">::</span><span class="n">max</span><span class="p">);</span><span class="w">   </span><span class="c1">// 原子的「讀改寫」</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// 面試加分版:若需要自己控制,讀寫鎖示範「並發讀+互斥寫」</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">PriceCacheRW</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;</span><span class="w"> </span><span class="n">prices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">ReentrantReadWriteLock</span><span class="w"> </span><span class="n">lock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ReentrantReadWriteLock</span><span class="p">();</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">price</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">lock</span><span class="p">.</span><span class="na">writeLock</span><span class="p">().</span><span class="na">lock</span><span class="p">();</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">prices</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">lock</span><span class="p">.</span><span class="na">writeLock</span><span class="p">().</span><span class="na">unlock</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w">     </span><span class="c1">// 一定放 finally!</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">symbol</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">lock</span><span class="p">.</span><span class="na">readLock</span><span class="p">().</span><span class="na">lock</span><span class="p">();</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">prices</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">symbol</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">lock</span><span class="p">.</span><span class="na">readLock</span><span class="p">().</span><span class="na">unlock</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="33-synchronized">3.3 詳解:<code>synchronized</code> 到底鎖了「哪個物件」?</h3>
+<p>先建立一個觀念:<strong>鎖(lock)不是掛在「程式碼」上,是掛在「某個物件」上的</strong>。Java 裡每個物件天生自帶一把鎖(術語叫 monitor lock 或 intrinsic lock)。</p>
+<p><code>synchronized</code> 的意思是:「執行這段程式碼之前,先去<strong>拿某個物件的鎖</strong>;執行完歸還」。別的執行緒(thread)要拿<strong>同一把鎖</strong>時,就必須排隊等。</p>
+<p>所以關鍵問題永遠是:<strong>「這段 synchronized,拿的是哪個物件的鎖?」</strong> 三種寫法對應三個答案:</p>
+<div class="hl"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Counter</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1">// 寫法 1:加在「實例方法」(instance method)上</span>
+<span class="w">    </span><span class="c1">// → 拿的鎖 = this(「呼叫這個方法的那個物件」)</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">synchronized</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">add</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">count</span><span class="o">++</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// 上面完全等同於這樣寫:</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">addSame</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="k">this</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">      </span><span class="c1">// 明寫出來:鎖的是 this</span>
+<span class="w">            </span><span class="n">count</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 寫法 2:加在「靜態方法」(static method)上</span>
+<span class="w">    </span><span class="c1">// → 拿的鎖 = Counter.class(整個類別只有一份的 Class 物件)</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">synchronized</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">resetAll</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// ...</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// 等同於:</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">resetAllSame</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">Counter</span><span class="p">.</span><span class="na">class</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">    </span><span class="c1">// 鎖的是 Class 物件</span>
+<span class="w">            </span><span class="c1">// ...</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// 寫法 3:自己準備一個專用的鎖物件(lock object)——實務上最推薦,意圖最清楚</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">lock</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Object</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">addWithLock</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">synchronized</span><span class="w"> </span><span class="p">(</span><span class="n">lock</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">count</span><span class="o">++</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>白話比喻</strong>:鎖就像廁所的門鎖。<code>synchronized (x)</code> = 「進 x 這一間,把門鎖上」。兩個人進<strong>不同間</strong>(不同物件的鎖),互不影響;搶<strong>同一間</strong>(同一把鎖),後到的才需要等。</p>
+<p>這就是為什麼「兩個不同物件的 synchronized 方法互不影響」:</p>
+<div class="hl"><pre><span></span><code><span class="n">Counter</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Counter</span><span class="p">();</span>
+<span class="n">Counter</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Counter</span><span class="p">();</span>
+
+<span class="c1">// 情況 1:執行緒 1 呼叫 a.add(),執行緒 2 呼叫 b.add()</span>
+<span class="c1">// → 不會互相等!執行緒 1 拿的是「a 的鎖」,執行緒 2 拿的是「b 的鎖」,</span>
+<span class="c1">//   是兩把不同的鎖(兩間不同的廁所)。</span>
+
+<span class="c1">// 情況 2:執行緒 1 和執行緒 2 都呼叫 a.add()</span>
+<span class="c1">// → 會排隊。兩邊搶的都是「a 的鎖」,這才真的有保護效果。</span>
+</code></pre></div>
+
+<p><strong>由此推出最重要的實務規則</strong>:要保護某份共享資料,<strong>所有碰那份資料的程式碼,必須拿同一把鎖</strong>。A 方法鎖 <code>this</code>、B 方法鎖另一個物件,等於 A 鎖了前門、B 從後門進來——form 上有 synchronized,實際上沒有保護。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:下面的類別執行緒安全嗎?為什麼?(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Wallet</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">balance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">.</span><span class="na">ZERO</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">synchronized</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">deposit</span><span class="p">(</span><span class="n">BigDecimal</span><span class="w"> </span><span class="n">amount</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">balance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">balance</span><span class="p">.</span><span class="na">add</span><span class="p">(</span><span class="n">amount</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">BigDecimal</span><span class="w"> </span><span class="nf">getBalance</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">       </span><span class="c1">// ← 注意:沒加 synchronized</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">balance</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>不安全</strong>,有兩個問題:
+1. <code>deposit</code> 拿了 <code>this</code> 的鎖,但 <code>getBalance</code> <strong>沒拿任何鎖</strong>——讀的那條執行緒不排隊、也沒有可見性(visibility)保證,可能讀到舊值。
+2. 修法:<code>getBalance</code> 也加 <code>synchronized</code>(讀寫都過同一把鎖,同時解決互斥與可見性)。</p>
+<p>記住口訣:<strong>「只鎖寫、不鎖讀」是常見錯誤——同一份資料,讀和寫要用同一把鎖</strong>。</p></div></details>
+<h3 id="34-java">3.4 其他 Java 高頻追問(白話版)</h3>
+<p><strong>Q:<code>ConcurrentHashMap</code> 為什麼比「整個 Map 加一把大鎖」快?</strong>
+想像一個有 64 個抽屜(bucket)的櫃子。笨方法是「誰要用櫃子,整個櫃子上鎖」(這就是遠古的 <code>Hashtable</code>)——一次只有一個人能用。<code>ConcurrentHashMap</code>(Java 8+)改成「<strong>只鎖你正在改的那一個抽屜</strong>」(對該 bucket 的第一個節點用 CAS 或 synchronized,CAS 見下一節 3.5):兩條執行緒改不同抽屜,完全不用等;而且<strong>讀取(get)根本不上鎖</strong>(靠 volatile 讀保證看到最新值)。所以讀多寫少時效能極好。</p>
+<p><strong>Q:多執行緒直接用 <code>HashMap</code> 會怎樣?</strong>
+<code>HashMap</code> 的內部操作(放入、擴容搬家)都假設「只有我一個人在動」。兩條執行緒同時 put,可能互相覆蓋對方剛寫的節點(資料遺失)、<code>size()</code> 數字錯亂;Java 7 時代兩條執行緒同時觸發擴容(resize),甚至會把鏈結串列接成環,之後任何一次 get 走到那個環就<strong>無限迴圈、CPU 100%</strong>(真實生產事故)。結論:<strong>多執行緒環境永遠不要裸用 HashMap</strong>,改用 <code>ConcurrentHashMap</code>。</p>
+<details class="exercise"><summary>✏️ 隨堂練習:這段程式有什麼問題?怎麼修?(點擊看解答)</summary><div class="exercise-body"><div class="hl"><pre><span></span><code><span class="kd">private</span><span class="w"> </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">User</span><span class="o">&gt;</span><span class="w"> </span><span class="n">cache</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ConcurrentHashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="n">User</span><span class="w"> </span><span class="nf">getUser</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">cache</span><span class="p">.</span><span class="na">containsKey</span><span class="p">(</span><span class="n">id</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w">        </span><span class="c1">// ①</span>
+<span class="w">        </span><span class="n">cache</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">loadFromDb</span><span class="p">(</span><span class="n">id</span><span class="p">));</span><span class="w">   </span><span class="c1">// ②</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">cache</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>問題</strong>:雖然 map 本身執行緒安全,但 ①② 合起來是 check-then-act 競態——兩個執行緒同時通過 ①,<code>loadFromDb</code> 被做兩次(快取擊穿)。<strong>容器安全 ≠ 複合操作安全</strong>,這是最重要的觀念。</p>
+<p><strong>修法</strong>:</p>
+<div class="hl"><pre><span></span><code><span class="k">return</span><span class="w"> </span><span class="n">cache</span><span class="p">.</span><span class="na">computeIfAbsent</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="k">this</span><span class="p">::</span><span class="n">loadFromDb</span><span class="p">);</span><span class="w">   </span><span class="c1">// 整個「查無則算入」是原子的</span>
+</code></pre></div></div></details>
+<h3 id="35-cascompare-and-swap">3.5 詳解:CAS(Compare-And-Swap,比較並交換)</h3>
+<p>CAS 是一種「<strong>不用鎖也能安全更新變數</strong>」的技巧,所以叫無鎖(lock-free)操作。它一次做三件事,而且<strong>由 CPU 硬體保證這三件事是一個原子動作、中間不會被插隊</strong>:</p>
+<ol>
+<li>看一眼記憶體裡的值,是不是還等於「我預期的舊值」(<strong>Compare</strong>)</li>
+<li>是 → 換成新值(<strong>Swap</strong>),回報成功</li>
+<li>不是 → 代表有人搶先改過了,什麼都不做,回報失敗(呼叫方通常會重讀最新值再試一次)</li>
+</ol>
+<p><strong>白話比喻</strong>:你要改共用白板上的數字。<strong>鎖</strong>的做法是「把整間會議室鎖起來慢慢改」;<strong>CAS</strong> 的做法是「我記得白板上是 5,走過去的瞬間瞄一眼——還是 5 就直接改成 6;已經變 7(有人先改了)就不改,回去重新讀再試」。</p>
+<p>這就是 <code>AtomicInteger</code> 能安全做 <code>count++</code> 的原因:</p>
+<div class="hl"><pre><span></span><code><span class="n">AtomicInteger</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AtomicInteger</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="n">count</span><span class="p">.</span><span class="na">incrementAndGet</span><span class="p">();</span><span class="w">   </span><span class="c1">// 內部大概長這樣:</span>
+
+<span class="c1">// 一個不斷重試的迴圈(術語叫 CAS loop):</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">old</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">count</span><span class="p">.</span><span class="na">get</span><span class="p">();</span><span class="w">             </span><span class="c1">// ① 讀目前值,例如 5</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">updated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">old</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w">             </span><span class="c1">// ② 算新值 6</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">count</span><span class="p">.</span><span class="na">compareAndSet</span><span class="p">(</span><span class="n">old</span><span class="p">,</span><span class="w"> </span><span class="n">updated</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w">   </span><span class="c1">// ③ CAS:「還是 5 嗎?是就改成 6」</span>
+<span class="w">        </span><span class="k">break</span><span class="p">;</span><span class="w">                         </span><span class="c1">// 成功,離開</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// 失敗 = 有別的執行緒搶先改了 → 迴圈重來,重新讀最新值再算一次</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>對比普通 <code>count++</code> 為什麼會錯:它的「讀→加→寫回」三步間可能被插隊,而且<strong>寫回時不檢查值有沒有被動過</strong>,直接覆蓋。CAS 的關鍵在第 ③ 步:寫回前檢查「還跟我讀到的時候一樣嗎」,不一樣就放棄重試——所以永遠不會蓋掉別人的更新。</p>
+<p><strong>跟鎖的取捨</strong>(面試加分):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>CAS</th>
+<th>鎖(synchronized 等)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>衝突少時</td>
+<td>極快(不排隊、執行緒不掛起)</td>
+<td>較慢(有排隊成本)</td>
+</tr>
+<tr>
+<td>衝突激烈時</td>
+<td>一直重試空轉,浪費 CPU</td>
+<td>乖乖排隊反而穩定</td>
+</tr>
+<tr>
+<td>能保護的範圍</td>
+<td>一個變數的一次更新</td>
+<td>任意長的一段程式碼</td>
+</tr>
+</tbody>
+</table>
+<p>哪些東西底層是 CAS:Java 的 <code>Atomic*</code> 全家、<code>ConcurrentHashMap</code> 往空桶放值、Kotlin <code>StateFlow.update {}</code>、各語言的無鎖資料結構。</p>
+<p><strong>一句話版</strong>:CAS 是 CPU 提供的原子指令——「值還等於我預期的舊值,才換成新值,否則失敗重試」,是 Atomic 類別與多數無鎖結構的基礎。</p>
+<hr />
+<h2 id="4-kotlinandroid">4. Kotlin(Android 實務)</h2>
+<p>Kotlin 跑在 JVM 上,<strong>Java 那套全部可用</strong>(<code>@Volatile</code>、<code>synchronized(lock){}</code>、ConcurrentHashMap…)。但現代 Android 的主役是 <strong>Coroutines</strong>:</p>
+<h3 id="41">4.1 工具箱速覽</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>解決什麼</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Dispatchers.Main / IO / Default</code></td>
+<td>指定跑在哪(主執行緒/IO/CPU)</td>
+</tr>
+<tr>
+<td><code>withContext(Dispatchers.IO)</code></td>
+<td>切執行緒做事,完了自動切回來</td>
+</tr>
+<tr>
+<td><code>Mutex</code> + <code>withLock</code></td>
+<td>協程版互斥鎖(掛起而非阻塞)</td>
+</tr>
+<tr>
+<td>限定單執行緒 dispatcher</td>
+<td>「排隊」派:所有存取同一條線</td>
+</tr>
+<tr>
+<td><code>StateFlow / SharedFlow</code></td>
+<td>執行緒安全的狀態流,UI 訂閱</td>
+</tr>
+<tr>
+<td><code>@Volatile</code>、<code>AtomicInteger</code></td>
+<td>同 Java</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-pricecache">4.2 PriceCache 實作</h3>
+<div class="hl"><pre><span></span><code><span class="c1">// 現代 Android 寫法:StateFlow 當單一真相來源,天生執行緒安全</span>
+<span class="kd">class</span><span class="w"> </span><span class="nc">PriceCache</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">val</span><span class="w"> </span><span class="nv">_prices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MutableStateFlow</span><span class="o">&lt;</span><span class="n">Map</span><span class="o">&lt;</span><span class="kt">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="n">emptyMap</span><span class="p">())</span>
+<span class="w">    </span><span class="kd">val</span><span class="w"> </span><span class="nv">prices</span><span class="p">:</span><span class="w"> </span><span class="n">StateFlow</span><span class="o">&lt;</span><span class="n">Map</span><span class="o">&lt;</span><span class="kt">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">_prices</span><span class="p">.</span><span class="na">asStateFlow</span><span class="p">()</span>
+
+<span class="w">    </span><span class="kd">fun</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="kt">String</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">:</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">_prices</span><span class="p">.</span><span class="na">update</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">it</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">symbol</span><span class="w"> </span><span class="n">to</span><span class="w"> </span><span class="n">price</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w">   </span><span class="c1">// update{} 是原子的 CAS 迴圈</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">fun</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="kt">String</span><span class="p">):</span><span class="w"> </span><span class="n">BigDecimal?</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">_prices</span><span class="p">.</span><span class="na">value</span><span class="o">[</span><span class="n">symbol</span><span class="o">]</span>
+<span class="p">}</span>
+
+<span class="c1">// UI(Compose / ViewModel)直接收流,自動在正確執行緒:</span>
+<span class="n">viewModelScope</span><span class="p">.</span><span class="na">launch</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">cache</span><span class="p">.</span><span class="na">prices</span><span class="p">.</span><span class="na">collect</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">map</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">render</span><span class="p">(</span><span class="n">map</span><span class="o">[</span><span class="s">"BTC/JPY"</span><span class="o">]</span><span class="p">)</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// 互斥鎖版本:Mutex 是「掛起」而非「阻塞」,不佔用執行緒</span>
+<span class="kd">class</span><span class="w"> </span><span class="nc">PriceCacheMutex</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">val</span><span class="w"> </span><span class="nv">mutex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Mutex</span><span class="p">()</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">val</span><span class="w"> </span><span class="nv">prices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mutableMapOf</span><span class="o">&lt;</span><span class="kt">String</span><span class="p">,</span><span class="w"> </span><span class="n">BigDecimal</span><span class="o">&gt;</span><span class="p">()</span>
+
+<span class="w">    </span><span class="kd">suspend</span><span class="w"> </span><span class="kd">fun</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="kt">String</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">:</span><span class="w"> </span><span class="n">BigDecimal</span><span class="p">)</span><span class="w"> </span><span class="o">=</span>
+<span class="w">        </span><span class="n">mutex</span><span class="p">.</span><span class="na">withLock</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">prices</span><span class="o">[</span><span class="n">symbol</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">price</span><span class="w"> </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kd">suspend</span><span class="w"> </span><span class="kd">fun</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="kt">String</span><span class="p">):</span><span class="w"> </span><span class="n">BigDecimal?</span><span class="w"> </span><span class="o">=</span>
+<span class="w">        </span><span class="n">mutex</span><span class="p">.</span><span class="na">withLock</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">prices</span><span class="o">[</span><span class="n">symbol</span><span class="o">]</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Android 鐵律</strong>:UI 只能在主執行緒碰;網路/磁碟不准在主執行緒——主執行緒卡住幾秒,系統會跳出「應用程式無回應」對話框(ANR,Application Not Responding)。模板:</p>
+<div class="hl"><pre><span></span><code><span class="n">viewModelScope</span><span class="p">.</span><span class="na">launch</span><span class="w"> </span><span class="p">{</span><span class="w">                        </span><span class="c1">// 預設主執行緒</span>
+<span class="w">    </span><span class="kd">val</span><span class="w"> </span><span class="nv">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">withContext</span><span class="p">(</span><span class="n">Dispatchers</span><span class="p">.</span><span class="na">IO</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">   </span><span class="c1">// 切到 IO 執行緒池</span>
+<span class="w">        </span><span class="n">api</span><span class="p">.</span><span class="na">fetchTicker</span><span class="p">(</span><span class="s">"BTC/JPY"</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="n">textView</span><span class="p">.</span><span class="na">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="na">price</span><span class="p">.</span><span class="na">toString</span><span class="p">()</span><span class="w">      </span><span class="c1">// 自動回到主執行緒</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>面試常問</strong>:</p>
+<ul>
+<li>Coroutine 和 Thread 差別?→ 協程是「可掛起的輕量工作」,幾萬個協程可以跑在少數執行緒上;<code>suspend</code> 掛起時<strong>不佔用執行緒</strong>,等待 IO 時執行緒被釋放去做別的事。</li>
+<li><code>Mutex</code> vs <code>synchronized</code>?→ <code>synchronized</code> 阻塞整條執行緒;<code>Mutex.withLock</code> 只掛起協程,執行緒可以去跑別的協程。協程世界用 Mutex。</li>
+<li><code>launch</code> vs <code>async</code>?→ <code>launch</code> 射後不理回 Job;<code>async</code> 回 <code>Deferred&lt;T&gt;</code>,<code>await()</code> 拿結果(常用於平行請求再合併)。</li>
+</ul>
+<hr />
+<h2 id="5-objective-c">5. Objective-C</h2>
+<p>沒有語言級的 async/await,靠 <strong>GCD</strong>(Grand Central Dispatch,Apple 的工作佇列框架:把工作丟進佇列 queue,由系統分配執行緒執行)與鎖。Obj-C 章學過 GCD 基礎,這裡進到執行緒安全的核心用法。</p>
+<h3 id="51">5.1 工具箱速覽</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>解決什麼</th>
+<th>備註</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GCD serial queue</td>
+<td>「排隊」派:天然互斥</td>
+<td>最推薦、最不易錯</td>
+</tr>
+<tr>
+<td><code>dispatch_barrier_async</code></td>
+<td>並發佇列上的「並發讀+獨占寫」</td>
+<td>本場景的標準解</td>
+</tr>
+<tr>
+<td><code>@synchronized(self)</code></td>
+<td>快速互斥</td>
+<td>方便但較慢</td>
+</tr>
+<tr>
+<td><code>NSLock</code> / <code>NSRecursiveLock</code></td>
+<td>傳統鎖</td>
+<td>遞迴呼叫用 Recursive</td>
+</tr>
+<tr>
+<td><code>atomic</code> property</td>
+<td>單一屬性讀寫原子</td>
+<td><strong>不等於</strong>執行緒安全(見下)</td>
+</tr>
+<tr>
+<td><code>dispatch_semaphore</code></td>
+<td>限流、等待</td>
+<td>也可當鎖用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-pricecache-concurrent-queue-barrier">5.2 PriceCache 實作(concurrent queue + barrier,經典面試題)</h3>
+<div class="hl"><pre><span></span><code><span class="k">@interface</span> <span class="nc">PriceCache</span><span class="w"> </span><span class="p">()</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSMutableDictionary</span><span class="o">&lt;</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="bp">NSDecimalNumber</span><span class="w"> </span><span class="o">*&gt;</span><span class="w"> </span><span class="o">*</span><span class="n">prices</span><span class="p">;</span>
+<span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">nonatomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="n">dispatch_queue_t</span><span class="w"> </span><span class="n">queue</span><span class="p">;</span>
+<span class="k">@end</span>
+
+<span class="k">@implementation</span> <span class="nc">PriceCache</span>
+
+<span class="p">-</span> <span class="p">(</span><span class="kt">instancetype</span><span class="p">)</span><span class="nf">init</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">self</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nb">super</span><span class="w"> </span><span class="n">init</span><span class="p">];</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">_prices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="bp">NSMutableDictionary</span><span class="w"> </span><span class="n">dictionary</span><span class="p">];</span>
+<span class="w">        </span><span class="c1">// 並發佇列:多個讀可以同時跑</span>
+<span class="w">        </span><span class="n">_queue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dispatch_queue_create</span><span class="p">(</span><span class="s">"com.app.pricecache"</span><span class="p">,</span><span class="w"> </span><span class="n">DISPATCH_QUEUE_CONCURRENT</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">self</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// 讀:同步丟進並發佇列 → 多讀並行,又能拿到回傳值</span>
+<span class="p">-</span> <span class="p">(</span><span class="bp">NSDecimalNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nf">priceForSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">__block</span><span class="w"> </span><span class="bp">NSDecimalNumber</span><span class="w"> </span><span class="o">*</span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nil</span><span class="p">;</span>
+<span class="w">    </span><span class="n">dispatch_sync</span><span class="p">(</span><span class="nb">self</span><span class="p">.</span><span class="n">queue</span><span class="p">,</span><span class="w"> </span><span class="o">^</span><span class="p">{</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">prices</span><span class="p">[</span><span class="n">symbol</span><span class="p">];</span><span class="w"> </span><span class="p">});</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// 寫:barrier = 等前面的讀全部做完,獨占執行,做完才放行後面</span>
+<span class="p">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">updateSymbol:</span><span class="p">(</span><span class="bp">NSString</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">symbol</span><span class="w"> </span><span class="nf">price:</span><span class="p">(</span><span class="bp">NSDecimalNumber</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="nv">price</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">dispatch_barrier_async</span><span class="p">(</span><span class="nb">self</span><span class="p">.</span><span class="n">queue</span><span class="p">,</span><span class="w"> </span><span class="o">^</span><span class="p">{</span><span class="w"> </span><span class="nb">self</span><span class="p">.</span><span class="n">prices</span><span class="p">[</span><span class="n">symbol</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">price</span><span class="p">;</span><span class="w"> </span><span class="p">});</span>
+<span class="p">}</span>
+
+<span class="k">@end</span>
+</code></pre></div>
+
+<p><strong>為什麼這樣設計</strong>(面試要講得出來):</p>
+<ul>
+<li>讀用 <code>dispatch_sync</code> 到<strong>並發</strong>佇列:多個讀互不擋。</li>
+<li>寫用 <code>dispatch_barrier_async</code>:柵欄會「排空」佇列後獨占執行——等效於讀寫鎖,但不用管鎖的配對與死結。</li>
+<li>⚠️ 死結陷阱:<strong>在某佇列上執行的程式碼,再 <code>dispatch_sync</code> 回同一條佇列 = 自己等自己</strong>,必死。串列佇列上這是最常見的事故。</li>
+</ul>
+<h3 id="53-atomic">5.3 atomic 的真相(高頻考題)</h3>
+<div class="hl"><pre><span></span><code><span class="k">@property</span><span class="w"> </span><span class="p">(</span><span class="k">atomic</span><span class="p">,</span><span class="w"> </span><span class="k">strong</span><span class="p">)</span><span class="w"> </span><span class="bp">NSMutableArray</span><span class="w"> </span><span class="o">*</span><span class="n">orders</span><span class="p">;</span>
+</code></pre></div>
+
+<p><code>atomic</code> 只保證 <strong>getter/setter 這一步</strong>是原子的:不會讀到寫一半的指標。但:</p>
+<ul>
+<li><code>[self.orders addObject:x]</code>:先原子地「取出陣列」,再對陣列 addObject——<strong>第二步完全沒保護</strong>,照樣爆。</li>
+<li><code>count++</code> 類的讀改寫也一樣不安全。</li>
+</ul>
+<p>結論:atomic ≠ 執行緒安全,實務上幾乎都寫 <code>nonatomic</code>,安全交給佇列或鎖。</p>
+<hr />
+<h2 id="6-swift">6. Swift</h2>
+<p>Swift 有三代工具:GCD(同 Obj-C,語法更好看)→ 鎖 → <strong>Swift Concurrency(async/await + Actor,現代首選)</strong>。</p>
+<h3 id="61">6.1 工具箱速覽</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>解決什麼</th>
+<th>備註</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>actor</code></td>
+<td>「排隊」派的語言級支援</td>
+<td>編譯器強制保護內部狀態</td>
+</tr>
+<tr>
+<td><code>@MainActor</code></td>
+<td>保證在主執行緒</td>
+<td>UI 類/方法標上去</td>
+</tr>
+<tr>
+<td><code>async/await</code>、<code>Task</code></td>
+<td>結構化並發</td>
+<td>取代 completion handler</td>
+</tr>
+<tr>
+<td><code>Sendable</code></td>
+<td>編譯期檢查「能否安全跨執行緒」</td>
+<td>Swift 6 嚴格模式</td>
+</tr>
+<tr>
+<td>GCD(<code>DispatchQueue</code>)</td>
+<td>同 Obj-C</td>
+<td>舊碼大量存在</td>
+</tr>
+<tr>
+<td><code>NSLock</code> / <code>os_unfair_lock</code></td>
+<td>傳統鎖</td>
+<td>效能關鍵處</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-pricecache-actor">6.2 PriceCache 實作(Actor:現代標準答案)</h3>
+<div class="hl"><pre><span></span><code><span class="kd">actor</span><span class="w"> </span><span class="n">PriceCache</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">var</span><span class="w"> </span><span class="nv">prices</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="nb">String</span><span class="p">:</span><span class="w"> </span><span class="n">Decimal</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[:]</span>
+
+<span class="w">    </span><span class="kd">func</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">:</span><span class="w"> </span><span class="n">Decimal</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">prices</span><span class="p">[</span><span class="n">symbol</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">price</span><span class="w">              </span><span class="c1">// actor 內部,天然安全</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">func</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="k">for</span><span class="w"> </span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">Decimal</span><span class="p">?</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">prices</span><span class="p">[</span><span class="n">symbol</span><span class="p">]</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// 使用:跨入 actor 要 await(編譯器強迫你,忘了直接編譯錯誤)</span>
+<span class="kd">let</span><span class="w"> </span><span class="nv">cache</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">PriceCache</span><span class="p">()</span>
+
+<span class="n">Task</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="n">cache</span><span class="p">.</span><span class="n">update</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="s">"BTC/JPY"</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">:</span><span class="w"> </span><span class="mi">16_500_000</span><span class="p">)</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nv">p</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">cache</span><span class="p">.</span><span class="n">price</span><span class="p">(</span><span class="k">for</span><span class="p">:</span><span class="w"> </span><span class="s">"BTC/JPY"</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="n">MainActor</span><span class="p">.</span><span class="n">run</span><span class="w"> </span><span class="p">{</span><span class="w">                   </span><span class="c1">// 更新 UI 回主執行緒</span>
+<span class="w">        </span><span class="n">label</span><span class="p">.</span><span class="n">text</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="bp">map</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">"</span><span class="si">\(</span><span class="nv">$0</span><span class="si">)</span><span class="s">"</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Actor 的本質</strong>:把「GCD 串列佇列保護狀態」做成語言特性——所有進入 actor 的呼叫自動排隊,而且<strong>編譯器擋住</strong>任何繞過的存取。Obj-C 靠紀律,Swift 靠編譯器,這是演進方向(面試講出這句很加分)。</p>
+<div class="hl"><pre><span></span><code><span class="c1">// GCD 版(舊專案常見,等同 Obj-C 的 barrier 寫法)</span>
+<span class="kr">final</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="nc">PriceCacheGCD</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">var</span><span class="w"> </span><span class="nv">prices</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="nb">String</span><span class="p">:</span><span class="w"> </span><span class="n">Decimal</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[:]</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nv">queue</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">DispatchQueue</span><span class="p">(</span><span class="n">label</span><span class="p">:</span><span class="w"> </span><span class="s">"com.app.pricecache"</span><span class="p">,</span><span class="w"> </span><span class="n">attributes</span><span class="p">:</span><span class="w"> </span><span class="p">.</span><span class="n">concurrent</span><span class="p">)</span>
+
+<span class="w">    </span><span class="kd">func</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="n">price</span><span class="p">:</span><span class="w"> </span><span class="n">Decimal</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">queue</span><span class="p">.</span><span class="k">async</span><span class="p">(</span><span class="n">flags</span><span class="p">:</span><span class="w"> </span><span class="p">.</span><span class="n">barrier</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kc">self</span><span class="p">.</span><span class="n">prices</span><span class="p">[</span><span class="n">symbol</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="n">price</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">func</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="k">for</span><span class="w"> </span><span class="n">symbol</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">Decimal</span><span class="p">?</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">queue</span><span class="p">.</span><span class="n">sync</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">prices</span><span class="p">[</span><span class="n">symbol</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>面試常問</strong>:</p>
+<ul>
+<li><code>@MainActor</code> 是什麼?→ 一個全域 actor,綁定主執行緒;標在 ViewModel/UI 方法上,編譯器保證這些程式碼在主執行緒跑,取代到處手寫 <code>DispatchQueue.main.async</code>。</li>
+<li><code>Sendable</code> 是什麼?→ 「可以安全跨並發域傳遞」的標記:值型別、不可變類別天生符合;可變類別要自己保證並標 <code>@unchecked Sendable</code>(等於向編譯器立軍令狀)。</li>
+<li>Swift 的 struct(值型別)為什麼對執行緒安全有幫助?→ 傳遞時<strong>複製</strong>,各執行緒改各的副本,從根本上避免共享。這是「不可變/複製」派。</li>
+</ul>
+<hr />
+<h2 id="7">7. 四語言總對照表(面試前看這張)</h2>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>Java</th>
+<th>Kotlin</th>
+<th>Objective-C</th>
+<th>Swift</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>互斥鎖</td>
+<td><code>synchronized</code> / <code>ReentrantLock</code></td>
+<td>同 Java + <code>Mutex</code>(協程)</td>
+<td><code>@synchronized</code> / <code>NSLock</code></td>
+<td><code>NSLock</code> / <code>os_unfair_lock</code></td>
+</tr>
+<tr>
+<td>「排隊」串列化</td>
+<td>單執行緒 Executor</td>
+<td>單執行緒 dispatcher / actor</td>
+<td>GCD serial queue</td>
+<td>GCD serial queue / <strong>actor</strong></td>
+</tr>
+<tr>
+<td>讀多寫少</td>
+<td>讀寫鎖 <code>ReadWriteLock</code> / ConcurrentHashMap</td>
+<td>StateFlow / 同 Java</td>
+<td>concurrent queue + <strong>barrier</strong></td>
+<td>concurrent queue + barrier / actor</td>
+</tr>
+<tr>
+<td>原子變數</td>
+<td><code>AtomicInteger</code> 等</td>
+<td>同 Java + <code>atomic-fu</code></td>
+<td><code>atomic</code> property(弱)</td>
+<td>無內建(用 actor 或鎖)</td>
+</tr>
+<tr>
+<td>可見性旗標</td>
+<td><code>volatile</code></td>
+<td><code>@Volatile</code></td>
+<td>無對應(用佇列)</td>
+<td>無對應(用 actor)</td>
+</tr>
+<tr>
+<td>回主執行緒</td>
+<td>(桌面/後端少此概念)</td>
+<td><code>Dispatchers.Main</code> / <code>withContext</code></td>
+<td><code>dispatch_get_main_queue()</code></td>
+<td><code>MainActor</code> / <code>DispatchQueue.main</code></td>
+</tr>
+<tr>
+<td>非同步模型</td>
+<td><code>CompletableFuture</code> / 虛擬執行緒</td>
+<td><strong>Coroutines</strong></td>
+<td>GCD + block callback</td>
+<td><strong>async/await + Task</strong></td>
+</tr>
+<tr>
+<td>編譯器幫你抓錯</td>
+<td>✗</td>
+<td>部分(suspend 檢查)</td>
+<td>✗</td>
+<td>✅ Sendable / actor 隔離</td>
+</tr>
+</tbody>
+</table>
+<p>共同心法一句話:<strong>能不共享就不共享(不可變、複製、流);必須共享就排隊(串列佇列/actor);要並行讀就讀寫分離(讀寫鎖/barrier);鎖是最後手段且永遠 finally 解鎖、固定順序取鎖。</strong></p>
+<hr />
+<h2 id="8">8. 實務事故案例(從症狀反推,面試官最愛)</h2>
+<details class="exercise"><summary>✏️ 案例 1:App 偶爾閃退,log 顯示 NSMutableArray 在 enumerate 時被修改("Collection was mutated while being enumerated")。怎麼回事?怎麼修?(點擊看解答)</summary><div class="exercise-body"><p><strong>成因</strong>:一條執行緒在 for-in 走訪陣列,另一條同時 add/remove——典型共享可變集合未保護。
+<strong>修法(擇一)</strong>:
+1. 所有存取集中到一條 serial queue(排隊派,建議)。
+2. 走訪前先拷貝快照:<code>NSArray *snapshot = [self.items copy];</code> 走訪 snapshot(複製派,讀多寫少時好用)。
+3. 讀寫全部加同一把鎖(最後手段)。
+加分:說明為什麼「偶爾」才閃退——競態只在時序剛好重疊時發生,這正是並發 bug 難查的原因,壓力測試/TSan(Thread Sanitizer)才能穩定重現。</p></div></details>
+<details class="exercise"><summary>✏️ 案例 2:Android App 在背景執行緒把運算結果設給 TextView,有時正常有時崩潰。為什麼「有時正常」?正確寫法?(點擊看解答)</summary><div class="exercise-body"><p><strong>成因</strong>:UI toolkit 不是執行緒安全的,背景執行緒碰 View 是未定義行為——檢查沒抓到時「碰巧沒事」,抓到就 <code>CalledFromWrongThreadException</code>。
+<strong>正確寫法(Kotlin)</strong>:</p>
+<div class="hl"><pre><span></span><code><span class="n">viewModelScope</span><span class="p">.</span><span class="na">launch</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">val</span><span class="w"> </span><span class="nv">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">withContext</span><span class="p">(</span><span class="n">Dispatchers</span><span class="p">.</span><span class="na">Default</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">heavyCompute</span><span class="p">()</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="n">textView</span><span class="p">.</span><span class="na">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">result</span><span class="w">   </span><span class="c1">// 回到 Main</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>更好的架構:ViewModel 暴露 <code>StateFlow</code>,UI 收流;背景只改資料流,永遠不直接碰 View。iOS 對應:<code>@MainActor</code> / <code>DispatchQueue.main.async</code>,道理完全相同——<strong>所有平台的 UI 框架都是單執行緒模型</strong>。</p></div></details>
+<details class="exercise"><summary>✏️ 案例 3:Java 服務上線後 CPU 正常但部分請求永遠不回應,執行緒 dump 看到兩條執行緒互相 WAITING。是什麼?怎麼預防?(點擊看解答)</summary><div class="exercise-body"><p><strong>死結</strong>:執行緒 A 持有鎖 1 等鎖 2,執行緒 B 持有鎖 2 等鎖 1(循環等待)。
+<strong>預防</strong>:
+1. <strong>固定全域加鎖順序</strong>(例:永遠先鎖 id 小的帳戶再鎖 id 大的——轉帳題標準答案)。
+2. 用 <code>tryLock(timeout)</code> 拿不到就放棄重試,打破「不可剝奪」。
+3. 縮小鎖範圍、減少鎖數量,或改用無鎖結構/佇列化。
+加分:說出怎麼診斷——<code>jstack</code> 執行緒 dump 會直接標出 "Found one Java-level deadlock"。</p></div></details>
+<details class="exercise"><summary>✏️ 案例 4(綜合):行情 WebSocket 執行緒更新快取,UI 每秒讀取;上線後發現 iOS 版用 Swift Dictionary 直接讀寫,偶發崩潰(EXC_BAD_ACCESS)。四個語言各給一個你會採用的修法。(點擊看解答)</summary><div class="exercise-body"><p>Swift 的 Dictionary 非執行緒安全,並發讀寫會直接記憶體錯誤。修法:
+- <strong>Swift</strong>:包成 <code>actor PriceCache</code>(首選);舊碼風格則 concurrent queue + barrier。
+- <strong>Objective-C</strong>:concurrent queue + <code>dispatch_barrier_async</code> 寫、<code>dispatch_sync</code> 讀。
+- <strong>Kotlin/Android</strong>:<code>MutableStateFlow&lt;Map&lt;...&gt;&gt;</code> + <code>update{}</code>,UI collect;或 ConcurrentHashMap。
+- <strong>Java 後端</strong>:<code>ConcurrentHashMap</code>,複合操作用 <code>compute/merge</code>。
+共同點:都是「並發讀 + 獨占/原子寫」,只是語言提供的外衣不同——面試把這句講出來,就證明你懂的是原理。</p></div></details>
+<hr />
+<h2 id="_1">自我檢核清單</h2>
+<ul>
+<li class="check"><label><input type="checkbox" data-key="concurrency-0"> 能解釋原子性/可見性/順序性三種問題,各舉一個症狀</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-1"> 能說出死結四條件與「固定加鎖順序」的破解法</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-2"> 能解釋為什麼「容器執行緒安全 ≠ 複合操作安全」(check-then-act)</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-3"> Java:能寫 ConcurrentHashMap + computeIfAbsent,講出 synchronized 鎖的是哪個物件</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-4"> Kotlin:能寫 withContext 切執行緒模板、說明 Mutex 與 synchronized 的差異(掛起 vs 阻塞)</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-5"> Objective-C:能手寫 concurrent queue + barrier 的讀寫快取,講出 atomic 為何不等於安全</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-6"> Swift:能用 actor 重寫同一個快取,說明 @MainActor 與 Sendable</label></li>
+<li class="check"><label><input type="checkbox" data-key="concurrency-7"> 能背出「不共享→排隊→讀寫分離→鎖」的決策順序,並用四語言對照表舉例</label></li>
+</ul></article>
+    <nav class="pager"><a href="ds.html"><span class="dir">← 上一章</span>資料結構基礎到進階</a></nav>
+  </main>
+</div>
+<script>
+(function(){
+  var store = {get:function(k){try{return localStorage.getItem(k)}catch(e){return this._m&&this._m[k]||null}},
+               set:function(k,v){try{localStorage.setItem(k,v)}catch(e){this._m=this._m||{};this._m[k]=v}}};
+  var boxes = document.querySelectorAll('li.check input');
+  function refresh(){
+    if(!boxes.length) return;
+    var done = 0;
+    boxes.forEach(function(b){ if(b.checked) done++; });
+    var pb = document.getElementById('progressBox');
+    if(pb){ pb.hidden = false;
+      document.getElementById('progressFill').style.width = Math.round(done/boxes.length*100)+'%';
+      document.getElementById('progressText').textContent = '已完成 '+done+' / '+boxes.length+' 項';
+    }
+  }
+  boxes.forEach(function(b){
+    if(store.get('chk-'+b.dataset.key)==='1') b.checked = true;
+    b.addEventListener('change',function(){
+      store.set('chk-'+b.dataset.key, b.checked?'1':'0'); refresh();
+    });
+  });
+  refresh();
+  // PWA:支援的環境(如 GitHub Pages)註冊 service worker;不支援時靜默略過
+  try {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
